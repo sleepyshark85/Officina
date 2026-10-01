@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.Extensions.Time.Testing;
 using Sleepyshark.Officina.Core.Configuration;
+using Sleepyshark.Officina.Core.Events;
 using Sleepyshark.Officina.Core.Extensibility;
 using Sleepyshark.Officina.Core.Tools;
 using Sleepyshark.Officina.Testing;
@@ -36,6 +37,7 @@ public class GovernanceTests
             new Dictionary<string, IGate>(),
             new Dictionary<string, IKnowledgeSource> { ["handbook"] = new FakeKnowledgeSource(Coverage.Covered, ("hb-1", "x")) },
             audit,
+            new EventBus(new InMemoryEventLog(), options.Storage, new FakeTimeProvider()),
             human,
             ReferenceServer.Secrets(),
             new FakeTimeProvider());

@@ -1,7 +1,10 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using Sleepyshark.Officina.Core.Configuration;
+using Sleepyshark.Officina.Core.Events;
 using Sleepyshark.Officina.Core.Extensibility;
 using Sleepyshark.Officina.Core.Messages;
+using Sleepyshark.Officina.Core.Observability;
 using Sleepyshark.Officina.Core.Tools;
 
 namespace Sleepyshark.Officina.Core.Running;
@@ -14,7 +17,7 @@ namespace Sleepyshark.Officina.Core.Running;
 public sealed class AgentRunner
 {
     private readonly IReadOnlyDictionary<string, IModelProvider> providers;
-    private readonly IRunStore runs;
+    private readonly IStorage storage;
     private readonly TimeProvider time;
     private readonly ToolPipeline pipeline;
     private readonly IReadOnlyDictionary<string, IKnowledgeSource> knowledge;
@@ -24,14 +27,13 @@ public sealed class AgentRunner
     /// <summary>Validates the configuration in full, with the application's tools and gates; nothing runs if it has errors (CFG-06).</summary>
     /// <param name="options">The configuration, fixed for the runner's lifetime. A changed configuration needs a new runner (CFG-08).</param>
     /// <param name="providers">The provider implementations, by their name in <c>providers</c>.</param>
-    /// <param name="runs">Where each run is recorded with the configuration it used (CFG-07).</param>
+    /// <param name="storage">Where each run is recorded with the configuration it used (CFG-07), with its events and audit entries.</param>
     /// <param name="tools">
     /// The application's tools, by the id that <c>extension:&lt;id&gt;</c> sources name, and the tool servers' tools, by
     /// the <c>&lt;server&gt;/&lt;tool&gt;</c> that <c>mcp:</c> sources name.
     /// </param>
     /// <param name="gates">The application's gates, by the id that <c>extension:&lt;id&gt;</c> gates name.</param>
     /// <param name="knowledge">The application's knowledge sources, by the id that <c>extension:&lt;id&gt;</c> sources name.</param>
-    /// <param name="audit">Where every write-tool attempt is recorded.</param>
     /// <param name="human">Who approves tool calls that need approval.</param>
     /// <param name="secrets">Where tools read credentials.</param>
     /// <param name="time">The clock for budgets, time limits and audit times.</param>
@@ -39,26 +41,30 @@ public sealed class AgentRunner
     public AgentRunner(
         OfficinaOptions options,
         IReadOnlyDictionary<string, IModelProvider> providers,
-        IRunStore runs,
+        IStorage storage,
         IReadOnlyDictionary<string, ITool> tools,
         IReadOnlyDictionary<string, IGate> gates,
         IReadOnlyDictionary<string, IKnowledgeSource> knowledge,
-        IAuditLog audit,
         IHumanChannel human,
         ISecretSource secrets,
         TimeProvider time)
     {
         ArgumentNullException.ThrowIfNull(providers);
-        ArgumentNullException.ThrowIfNull(runs);
+        ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(storage);
         this.providers = providers;
-        this.runs = runs;
+        this.storage = storage;
         this.time = time;
-        pipeline = new ToolPipeline(options, tools, gates, knowledge, audit, human, secrets, time);
+        Events = new EventBus(storage.Events, options.Storage, time);
+        pipeline = new ToolPipeline(options, tools, gates, knowledge, storage.Audit, Events, human, secrets, time);
         this.knowledge = knowledge;
         Options = options;
     }
 
     public OfficinaOptions Options { get; }
+
+    /// <summary>What the runs do, live and from the start of each stored run (EVT-01, EVT-03).</summary>
+    public EventBus Events { get; }
 
     /// <param name="agentName">The agent, by its name in <c>agents</c>.</param>
     /// <param name="input">The work.</param>
@@ -107,26 +113,31 @@ public sealed class AgentRunner
             ? registered
             : throw new InvalidOperationException($"Agent \"{name}\" uses provider \"{profile.Provider}\", which has no implementation registered.");
 
-        var started = new RunStarted(Guid.CreateVersion7().ToString(), name, CoreVersion.Value, Options);
+        var context = new ToolContext(Guid.CreateVersion7().ToString(), name, caller);
         var instructions = InstructionPlaceholders.Fill(agent.Instructions, Options.Project, name, agent);
-
-        var turn = new Turn(new ToolContext(started.RunId, name, caller), Options, provider, pipeline, knowledge, instructions, input, Inbox(name), time);
+        var turn = new Turn(context, Options, provider, pipeline, knowledge, Events, instructions, input, Inbox(name), time);
         var oneAtATime = turns.GetOrAdd(name, _ => new SemaphoreSlim(1, 1));
         var entered = false;
+        Activity? activity = null;
+        AgentResult result;
         try
         {
             await oneAtATime.WaitAsync(ct).ConfigureAwait(false);
             entered = true;
-            await runs.RecordStartAsync(started, ct).ConfigureAwait(false);
-            return await turn.RunAsync(ct).ConfigureAwait(false);
+            activity = Telemetry.StartTurn(context); // after the wait, so the span covers the turn only
+            await storage.DeleteExpiredAsync(Options.Storage.Retention, time.GetUtcNow(), ct).ConfigureAwait(false);
+            var started = new RunStarted(context.RunId, name, context.Caller.Id, time.GetUtcNow(), CoreVersion.Value, Options);
+            await storage.Runs.RecordStartAsync(context.Caller.Tenant, started, ct).ConfigureAwait(false);
+            await Events.PublishAsync(context, new TurnStarted(), ct).ConfigureAwait(false);
+            result = await turn.RunAsync(ct).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
-            return turn.HandOff(HandoffReason.RequestedByHuman, "the turn was cancelled");
+            result = turn.HandOff(HandoffReason.RequestedByHuman, "the turn was cancelled");
         }
         catch (Exception exception)
         {
-            return turn.Fail(exception);
+            result = turn.Fail(exception);
         }
         finally
         {
@@ -135,5 +146,21 @@ public sealed class AgentRunner
                 oneAtATime.Release();
             }
         }
+
+        try
+        {
+            // Published even when the turn was cancelled, so readers see every turn end.
+            await Events.PublishAsync(context, new TurnEnded(result.Outcome, result.Handoff?.Reason), CancellationToken.None).ConfigureAwait(false);
+        }
+        catch (Exception exception)
+        {
+            result = turn.Fail(exception);
+        }
+
+        var reason = result.Handoff?.Reason.ToString() ?? (result.Outcome == AgentOutcome.Failed ? result.Output : "");
+        Telemetry.TurnEnded(activity, context, result.Outcome.ToString(), result.Handoff?.Reason.ToString());
+        OfficinaLog.Log.TurnEnded(context.RunId, name, result.Outcome.ToString(), reason);
+        activity?.Dispose();
+        return result;
     }
 }

@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json;
+using Sleepyshark.Officina.Core.Events;
 
 namespace Sleepyshark.Officina.Core.Configuration;
 
@@ -90,6 +91,11 @@ public sealed partial record OfficinaOptions : IValidatableObject
 
             errors = errors.Concat(References("capabilities.sandbox.secrets", "agent", sandbox.Secrets.Keys, "agents", Agents.Keys));
         }
+
+        errors = errors.Concat(Annotations(Storage.Retention, "storage.retention"))
+            .Concat(Storage.UnstoredEvents.Where(kind => !EventPayload.Kinds.Contains(kind)).Select(kind => new ConfigurationError(
+                ValidationPhase.Shape, "storage.unstoredEvents", $"\"{kind}\" is not a kind of event.",
+                $"Use one of: {string.Join(", ", EventPayload.Kinds.Order(StringComparer.Ordinal))}.")));
 
         return errors.Concat(ToolSettings()).Concat(InstructionPlaceholders.Check(this));
     }

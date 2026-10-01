@@ -2,11 +2,11 @@ using Sleepyshark.Officina.Core.Running;
 
 namespace Sleepyshark.Officina.Core.Extensibility;
 
-/// <summary>
-/// Where runs are stored. For now it records how each run started, with its resolved configuration (CFG-07); storage
-/// (S08) adds the rest of <c>IStorage</c>.
-/// </summary>
+/// <summary>Where runs are stored, each with the configuration it used (CFG-07).</summary>
 public interface IRunStore
 {
-    ValueTask RecordStartAsync(RunStarted run, CancellationToken ct);
+    /// <param name="tenant">The owner's tenant, or null; the run is visible only within it (SEC-02).</param>
+    /// <param name="run">How the run started.</param>
+    /// <param name="ct">Cancels the write.</param>
+    ValueTask RecordStartAsync(string? tenant, RunStarted run, CancellationToken ct);
 }

@@ -17,7 +17,7 @@ public class OptionsTests
             .SelectMany(type => type.GetProperties(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly))
             .ToArray();
 
-        Assert.Equal(29, OptionsTypes.Length);
+        Assert.Equal(31, OptionsTypes.Length);
         Assert.All(settings, property => Assert.DoesNotMatch(RequirementId, property.GetCustomAttribute<SettingAttribute>()?.Description ?? ""));
         Assert.All(settings, property =>
         {
@@ -41,6 +41,8 @@ public class OptionsTests
         Assert.Empty(new SandboxOptions().AllowedHosts);
         Assert.Equal(25m, options.Run.Budget.Cost);
         Assert.Equal(TimeSpan.FromHours(8), options.Run.Budget.Time);
+        Assert.Equal(["textGenerated"], options.Storage.UnstoredEvents);
+        Assert.Equal(TimeSpan.FromDays(365), options.Storage.Retention.Audit); // PRIV-02: deleted owners' audit entries expire
         Assert.Equal("claude-opus-5-5", options.Models[ModelProfile.DefaultName].Model);
         Assert.Equal(new SecretReference("ANTHROPIC_API_KEY"), options.Providers["claude"].ApiKey);
 

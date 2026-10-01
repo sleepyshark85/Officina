@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.Extensions.Time.Testing;
 using Sleepyshark.Officina.Core.Configuration;
+using Sleepyshark.Officina.Core.Events;
 using Sleepyshark.Officina.Core.Extensibility;
 using Sleepyshark.Officina.Core.Tools;
 using Sleepyshark.Officina.Testing;
@@ -30,7 +31,7 @@ internal sealed class Agent : IAsyncDisposable
             Options, Tools.Tools.Concat(others).ToDictionary(),
             new Dictionary<string, IGate> { [CommandRules.Id] = new CommandRules(Options.Capabilities.Sandbox!) },
             new Dictionary<string, IKnowledgeSource>(),
-            Audit, Human, new InMemorySecretSource(new Dictionary<string, string> { ["NUGET_TOKEN"] = "t0ken" }), Time);
+            Audit, new EventBus(new InMemoryEventLog(), Options.Storage, Time), Human, new InMemorySecretSource(new Dictionary<string, string> { ["NUGET_TOKEN"] = "t0ken" }), Time);
     }
 
     public OfficinaOptions Options { get; }

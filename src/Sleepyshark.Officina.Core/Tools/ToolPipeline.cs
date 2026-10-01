@@ -1,10 +1,13 @@
+using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Json.Schema;
 using Sleepyshark.Officina.Core.Configuration;
+using Sleepyshark.Officina.Core.Events;
 using Sleepyshark.Officina.Core.Extensibility;
+using Sleepyshark.Officina.Core.Observability;
 
 namespace Sleepyshark.Officina.Core.Tools;
 
@@ -12,7 +15,8 @@ namespace Sleepyshark.Officina.Core.Tools;
 /// The one path every tool call takes (TOOL-07, DESIGN.md §5): argument validation, permission rules, the gates for all
 /// tools and then the tool's own, human approval, the idempotency lookup, the audit intent, the call itself with its
 /// time limit and retries, and finally trimming and the audit outcome. The first step that does not allow a call
-/// decides it. Every write-tool attempt is audited, whichever step it stops at (TOOL-11). Events arrive with S08.
+/// decides it. Every write-tool attempt is audited, whichever step it stops at (TOOL-11). Each call is published
+/// as it starts and ends, and traced (EVT-01, OBS-01).
 /// </summary>
 public sealed class ToolPipeline
 {
@@ -20,6 +24,7 @@ public sealed class ToolPipeline
     private readonly ToolCatalog catalog;
     private readonly IReadOnlyDictionary<string, IGate> gates;
     private readonly IAuditLog audit;
+    private readonly EventBus events;
     private readonly IHumanChannel human;
     private readonly KnownSecrets secrets;
     private readonly TimeProvider time;
@@ -32,6 +37,7 @@ public sealed class ToolPipeline
     /// <param name="gates">The application's gates, by the id that <c>extension:&lt;id&gt;</c> gates name.</param>
     /// <param name="knowledge">The application's knowledge sources, by the id that <c>extension:&lt;id&gt;</c> sources name.</param>
     /// <param name="audit">Where every write-tool attempt is recorded.</param>
+    /// <param name="events">Where tool calls and approvals are published.</param>
     /// <param name="human">Who approves calls that need approval.</param>
     /// <param name="secrets">Where tools read credentials.</param>
     /// <param name="time">The clock for time limits and audit times.</param>
@@ -42,6 +48,7 @@ public sealed class ToolPipeline
         IReadOnlyDictionary<string, IGate> gates,
         IReadOnlyDictionary<string, IKnowledgeSource> knowledge,
         IAuditLog audit,
+        EventBus events,
         IHumanChannel human,
         ISecretSource secrets,
         TimeProvider time)
@@ -54,6 +61,7 @@ public sealed class ToolPipeline
         this.options = options;
         this.gates = gates;
         this.audit = audit ?? throw new ArgumentNullException(nameof(audit));
+        this.events = events ?? throw new ArgumentNullException(nameof(events));
         this.human = human ?? throw new ArgumentNullException(nameof(human));
         this.secrets = new KnownSecrets(secrets ?? throw new ArgumentNullException(nameof(secrets)));
         this.time = time ?? throw new ArgumentNullException(nameof(time));
@@ -89,10 +97,21 @@ public sealed class ToolPipeline
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(request);
         var entry = Entry(context, request.Name, request.Arguments, "provider", AuditOutcome.Completed) with { Detail = secrets.Remove(result) };
-        return audit.AppendAsync(entry, ct);
+        return audit.AppendAsync(context.Caller.Tenant, entry, ct);
     }
 
     private async Task<ToolResult> RunAsync(ToolContext context, ToolRequest request, CancellationToken ct)
+    {
+        using var activity = Telemetry.StartToolCall(context, request.Name);
+        var started = time.GetTimestamp();
+        await events.PublishAsync(context, new ToolCallStarted(request.Name, secrets.Remove(request.Arguments.GetRawText())), ct).ConfigureAwait(false);
+        var result = await DecideAndRunAsync(context, request, activity, ct).ConfigureAwait(false);
+        Telemetry.ToolCallEnded(activity, context, request.Name, result.Error?.ToString() ?? "ok", time.GetElapsedTime(started));
+        await events.PublishAsync(context, new ToolCallEnded(request.Name, result.Error), ct).ConfigureAwait(false);
+        return result;
+    }
+
+    private async Task<ToolResult> DecideAndRunAsync(ToolContext context, ToolRequest request, Activity? activity, CancellationToken ct)
     {
         if (!catalog.TryGet(context.Agent, request.Name, out var tool) || tool.Implementation is null)
         {
@@ -109,6 +128,7 @@ public sealed class ToolPipeline
                 continue;
             }
 
+            Telemetry.Decided(activity, stop.DecidedBy, stop.Action.ToString());
             await AuditAsync(context, tool, arguments, stop.DecidedBy, stop.Action switch
             {
                 PolicyAction.Ask => AuditOutcome.Asked,
@@ -125,17 +145,18 @@ public sealed class ToolPipeline
                 return ToolResult.Failed(stop.Category, stop.Reason);
             }
 
-            if (!(await human.AskAsync(new HumanRequest(context.Agent, tool.Name, arguments, stop.Reason), ct).ConfigureAwait(false)).Approved)
+            await events.PublishAsync(context, new ApprovalRequested(tool.Name, stop.Reason), ct).ConfigureAwait(false);
+            approved = (await human.AskAsync(new HumanRequest(context.Agent, tool.Name, arguments, stop.Reason), ct).ConfigureAwait(false)).Approved;
+            await events.PublishAsync(context, new ApprovalAnswered(tool.Name, approved), ct).ConfigureAwait(false);
+            if (!approved)
             {
                 await AuditAsync(context, tool, arguments, "human", AuditOutcome.Denied, ct).ConfigureAwait(false);
                 return ToolResult.Failed(ToolErrorCategory.PolicyViolation, "approval denied");
             }
-
-            approved = true;
         }
 
         var key = IdempotencyKey(context.RunId, tool.Name, arguments);
-        if (tool.Options.Irreversible && (await audit.ReadAsync(context.RunId, ct).ConfigureAwait(false))
+        if (tool.Options.Irreversible && (await audit.ReadAsync(context.Caller.Tenant, context.RunId, ct).ConfigureAwait(false))
             .Any(entry => entry.IdempotencyKey == key && entry.Outcome == AuditOutcome.Intent))
         {
             // TOOL-10, RUN-07: an earlier attempt may have taken effect, so it is never repeated; a human decides.
@@ -146,6 +167,12 @@ public sealed class ToolPipeline
         await AuditAsync(context, tool, arguments, approved ? "human" : null, AuditOutcome.Intent, ct).ConfigureAwait(false);
         var (result, detail) = await InvokeAsync(tool, new ToolCall(arguments, context.Caller, key, secrets), ct).ConfigureAwait(false);
         var outcome = result.Error is null ? AuditOutcome.Completed : AuditOutcome.Failed;
+        if (detail is not null)
+        {
+            // TOOL-08: a read tool's details are not audited, so the log is where they are kept.
+            OfficinaLog.Log.ToolFailed(context.RunId, context.Agent, tool.Name, $"{result.Error}", detail);
+        }
+
         await AuditAsync(context, tool, arguments, null, outcome, ct, detail).ConfigureAwait(false);
 
         // Secrets are removed before trimming, so a secret cut in half cannot leave its start behind (INV-06).
@@ -247,7 +274,7 @@ public sealed class ToolPipeline
     private ValueTask AuditAsync(
         ToolContext context, CatalogTool tool, JsonElement arguments, string? decidedBy, AuditOutcome outcome, CancellationToken ct, string? detail = null) =>
         tool.Kind == ToolKind.Write
-            ? audit.AppendAsync(Entry(context, tool.Name, arguments, decidedBy, outcome) with { Detail = detail }, ct)
+            ? audit.AppendAsync(context.Caller.Tenant, Entry(context, tool.Name, arguments, decidedBy, outcome) with { Detail = detail }, ct)
             : ValueTask.CompletedTask;
 
     private AuditEntry Entry(ToolContext context, string tool, JsonElement arguments, string? decidedBy, AuditOutcome outcome) =>

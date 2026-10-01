@@ -57,9 +57,14 @@ Dependency rules, enforced by the dependency check, which runs as a test in CI (
   CONC-01).
 - **Model gateway.** Per provider, it runs a token bucket fed by the provider's rate-limit
   responses. Agents are served round-robin, with the lead first (MDL-08).
-- **Event bus.** Events are appended to the stored log with a sequence number per agent. Each live
-  consumer has a bounded queue. A consumer that falls behind is detached and catches up from the
-  log, so it never blocks an agent (EVT-03, EVT-04).
+- **Event bus.** Each event takes the runner's next sequence number, so every agent's events are in
+  order, and is appended to the stored log. A reader (`EventBus.ReadAsync`, an `IAsyncEnumerable`)
+  gets the stored events after a sequence number, then live ones from its own bounded queue. A
+  reader that falls behind is detached and catches up from the log, so it never blocks an agent
+  (EVT-03, EVT-04).
+- **Telemetry.** Traces and metrics use the base library's `ActivitySource` and `Meter`, named
+  `Sleepyshark.Officina`, with the OpenTelemetry GenAI names (OBS-01, OBS-02). Logs are an
+  `EventSource`, `Sleepyshark-Officina` (OBS-03). The host chooses the exporters; Core has none.
 
 ## 3. Model request and caching
 
@@ -117,10 +122,12 @@ public interface ICheck            { ValueTask<CheckResult> RunAsync(CheckContex
 public interface IKnowledgeSource  { ValueTask<Retrieval> RetrieveAsync(RetrievalQuery query, CancellationToken ct); }
 public interface ILoopPattern      { ValueTask<StepOutcome> RunAsync(PatternContext context, CancellationToken ct); }
 public interface IHumanChannel     { ValueTask<HumanAnswer> AskAsync(HumanRequest request, CancellationToken ct); }
-public interface IEventConsumer    { ValueTask OnEventAsync(CoreEvent e, CancellationToken ct); }
 public interface IStorage          { IRunStore Runs { get; }  IConversationStore Conversations { get; }  IRecordStore Records { get; }
                                      ITaskStore Tasks { get; }  IMemoryStore Memory { get; }  ICheckpointStore Checkpoints { get; }
-                                     IEventLog Events { get; }  IAuditLog Audit { get; }  IArtifactStore Artifacts { get; } }
+                                     IEventLog Events { get; }  IAuditLog Audit { get; }  IArtifactStore Artifacts { get; }
+                                     ValueTask<OwnerData> ExportAsync(string? tenant, string owner, CancellationToken ct);
+                                     ValueTask DeleteAsync(string? tenant, string owner, CancellationToken ct);
+                                     ValueTask DeleteExpiredAsync(RetentionOptions retention, DateTimeOffset now, CancellationToken ct); }
 public interface IMasker           { MaskResult Mask(string text, MaskScope scope);
                                      string Restore(string text, MaskScope scope); }
 public interface IHistoryShortener { ValueTask<History> ShortenAsync(History history, ShortenRequest request, CancellationToken ct); }
@@ -142,8 +149,7 @@ public interface ISecretSource     { ValueTask<SecretValue> GetAsync(string name
 | `IKnowledgeSource` | Search the application's own data | Before a turn, or when the agent calls a `knowledge:` tool (CTX-04) | `RetrievalQuery`: question, caller, maximum passages | `Retrieval`: passages, citations, and covered, partly covered or not covered (CTX-05) | Results are labelled as data (INV-08). It sees only the caller's tenant (SEC-02). |
 | `ILoopPattern` | Add a loop pattern | A step selects the pattern by name (PAT-07) | `PatternContext`: `RunTurnAsync`, nested-step runner, step outcomes, budget drawn from the parent | `StepOutcome`: completed, handed off, failed or cancelled | It can only call the core's primitives, so budgets, cancellation, events and handoffs apply (PAT-06). |
 | `IHumanChannel` | Change how humans are reached | An approval, question, sign-off or owner message is needed (HITL) | `HumanRequest`: kind, agent, summary, pending action, deadline | `HumanAnswer`: approve, approve a changed version, deny, or text | The core applies timeouts (HITL-02). A changed version goes through the checks again. |
-| `IEventConsumer` | Display or forward events | For each event, from its own bounded queue | `CoreEvent`: run, agent, step, sequence number, payload | Nothing | A slow or failing consumer is detached and catches up from the log; it never slows agents (EVT-04). |
-| `IStorage` | Store state elsewhere | Whenever state is read or written | One store per kind of data: runs, conversations, records, tasks, memory, checkpoints, events, audit, artifacts | — | Conversations and the audit log are append-only. Every row carries its tenant (SEC-02) and format version (REL-04). Writes for one run are serialized. |
+| `IStorage` | Store state elsewhere | Whenever state is read or written | One store per kind of data: runs, conversations, records, tasks, memory, checkpoints, events, audit, artifacts | — | Conversations and the audit log are append-only. Every row carries its tenant, and every read and write names one (SEC-02). Stored data carries its format version, and data in an unknown version is refused (REL-04). Deleting an owner's data on request leaves audit entries to their retention (PRIV-02). |
 | `IMasker` | Replace masking | Work is admitted, or a configured tool result or passage arrives (ING-02) | Text and the run's masking scope | Masked text, and later the restored text for a tool allowed to see it (ING-06) | Restored values never reach the model, history or logs. |
 | `IHistoryShortener` | Replace history shortening | History is too long, or the provider reports the input is too long (HIST-04) | The history and a target size | Shortened history | The result is checked (HIST-02). It cannot change the run record, tasks or memory (HIST-03). |
 | `IWorkspace` | Replace the git workspace | File tools run, a task starts or ends, a change is integrated, or a checkpoint is taken | Task, agent, working copy, snapshot | `IWorkingCopy` (read, read range, search, edit with the expected content hash, write, delete, move), integration result, snapshot | Edits fail if the file changed since it was read (WS-07). Integration is queued (WS-09). Protected paths are enforced (WS-05). |

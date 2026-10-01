@@ -214,7 +214,7 @@ public class TurnTests
         var result = await kit.RunAsync(Agent, "work", Ct);
 
         Assert.Equal((HandoffReason.BudgetExhausted, 1), (result.Handoff!.Reason, result.Statistics.ToolCalls));
-        var entry = Assert.Single(kit.Audit.Entries);
+        var entry = Assert.Single(kit.Storage.Audit.Entries);
         Assert.Equal(("web_search", "provider", "3 results"), (entry.Tool, entry.DecidedBy, entry.Detail));
     }
 

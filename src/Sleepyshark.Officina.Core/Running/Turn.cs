@@ -2,8 +2,10 @@ using System.Collections.Concurrent;
 using System.Text;
 using System.Text.Json;
 using Sleepyshark.Officina.Core.Configuration;
+using Sleepyshark.Officina.Core.Events;
 using Sleepyshark.Officina.Core.Extensibility;
 using Sleepyshark.Officina.Core.Messages;
+using Sleepyshark.Officina.Core.Observability;
 using Sleepyshark.Officina.Core.Tools;
 
 namespace Sleepyshark.Officina.Core.Running;
@@ -28,6 +30,7 @@ internal sealed class Turn
     private readonly ModelPrice? price;
     private readonly ToolPipeline tools;
     private readonly IReadOnlyList<(string Name, IKnowledgeSource Source)> beforeTurn;
+    private readonly EventBus events;
     private readonly TimeProvider time;
     private readonly string work;
     private readonly List<ToolAttempt> attempts = [];
@@ -47,6 +50,7 @@ internal sealed class Turn
     /// <param name="provider">The provider of the agent's model profile.</param>
     /// <param name="tools">The tool pipeline built from <paramref name="options"/>.</param>
     /// <param name="knowledge">The application's knowledge sources, by extension id.</param>
+    /// <param name="events">Where model text and model calls are published.</param>
     /// <param name="instructions">The agent's instructions, placeholders filled.</param>
     /// <param name="work">What the turn is asked to do.</param>
     /// <param name="inbox">Messages sent to the agent, which the turn adds to its history before each model call.</param>
@@ -57,6 +61,7 @@ internal sealed class Turn
         IModelProvider provider,
         ToolPipeline tools,
         IReadOnlyDictionary<string, IKnowledgeSource> knowledge,
+        EventBus events,
         string instructions,
         string work,
         ConcurrentQueue<Message> inbox,
@@ -75,6 +80,7 @@ internal sealed class Turn
         this.provider = provider;
         this.tools = tools;
         beforeTurn = [.. agent.Context.Retrieval.BeforeTurn.Select(name => (name, knowledge[options.Knowledge[name].ExtensionId()!]))];
+        this.events = events;
         this.time = time;
         this.work = work;
     }
@@ -200,21 +206,25 @@ internal sealed class Turn
     }
 
     /// <summary>
-    /// Calls the model, and adds the reply to the conversation. Text arrives in pieces as it is generated; the turn acts
-    /// only once the reply is complete (MDL-07).
+    /// Calls the model, and adds the reply to the conversation. Text arrives in pieces as it is generated, and is
+    /// published as it arrives; the turn acts only once the reply is complete (MDL-07).
     /// </summary>
     private async Task<StopReason> CallModelAsync(ModelRequest request, CancellationToken ct)
     {
+        using var activity = Telemetry.StartModelCall(context, request.Profile.Provider, request.Profile.Model);
+        var callStarted = time.GetTimestamp();
+        var callUsage = Usage.None;
+        var callCost = 0m;
         var stop = StopReason.Unknown;
         var reply = new List<Content>();
         var text = new StringBuilder();
-        var callUsage = Usage.None;
         await foreach (var modelEvent in provider.StreamAsync(request, ct).WithCancellation(ct).ConfigureAwait(false))
         {
             switch (modelEvent)
             {
                 case TextDelta delta:
                     text.Append(delta.Text);
+                    await events.PublishAsync(context, new TextGenerated(delta.Text), ct).ConfigureAwait(false);
                     break;
                 case ContentReceived received:
                     AddText();
@@ -226,9 +236,9 @@ internal sealed class Turn
                     await tools.AuditProviderToolAsync(context, used.Request, used.Result, ct).ConfigureAwait(false);
                     break;
                 case UsageReported reported:
-                    callUsage += reported.Usage;
-                    usage += reported.Usage;
-                    cost += price?.Cost(reported.Usage) ?? 0m;
+                    var spent = price?.Cost(reported.Usage) ?? 0m;
+                    (callUsage, callCost) = (callUsage + reported.Usage, callCost + spent);
+                    (usage, cost) = (usage + reported.Usage, cost + spent);
                     break;
                 case Stopped stopped:
                     stop = stopped.Reason;
@@ -236,8 +246,14 @@ internal sealed class Turn
             }
         }
 
+        Telemetry.ModelCallEnded(activity, context, request.Profile.Provider, request.Profile.Model, stop, callUsage, callCost, time.GetElapsedTime(callStarted));
+        await events.PublishAsync(context, new ModelCallEnded(stop, callUsage, callCost), ct).ConfigureAwait(false);
         AddText();
-        CheckCacheHits(callUsage);
+        if (CheckCacheHits(callUsage) is { } warning)
+        {
+            await events.PublishAsync(context, new CacheHitWarning(warning), ct).ConfigureAwait(false);
+        }
+
         if (reply.Count > 0)
         {
             conversation.Add(new Message(Role.Assistant, reply));
@@ -264,13 +280,16 @@ internal sealed class Turn
     /// COST-01: every call after the first of a turn should read from the cache all that the previous call sent, so a
     /// low share read from it means the cache is broken. The first call may have to write the conversation's cache.
     /// </summary>
-    private void CheckCacheHits(Usage call)
+    private CacheWarning? CheckCacheHits(Usage call)
     {
         var input = call.Input + call.CacheRead + call.CacheWrite;
         if (iterations > 1 && input > 0 && (double)call.CacheRead / input is var rate && rate < cacheHitWarning)
         {
             cacheWarnings.Add(new CacheWarning(iterations, rate));
+            return cacheWarnings[^1];
         }
+
+        return null;
     }
 
     /// <summary>Runs the calls of the last reply, and decides whether the turn ends with them; null when it goes on.</summary>

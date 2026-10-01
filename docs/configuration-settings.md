@@ -22,6 +22,7 @@ It lists the settings the code has today. Settings that later slices add are spe
 | `knowledge` | named entries | `{}` | Knowledge sources, by name. | `{"handbook":{"use":"extension:Acme.HandbookIndex"}}` |
 | `run` | section | `{"budget":{"cost":25,"time":"08:00:00"},"permissionMode":"ask"}` | Defaults for every run. | `{"permissionMode":"ask"}` |
 | `operations` | section | `{"telemetry":{"cacheHitWarning":0.7}}` | How the engine is operated. | `{"telemetry":{"cacheHitWarning":0.7}}` |
+| `storage` | section | `{"unstoredEvents":["textGenerated"],"retention":{"audit":"365.00:00:00"}}` | What is stored, and for how long. | `{"unstoredEvents":["textGenerated"],"retention":{"events":"30.00:00:00"}}` |
 | `capabilities` | section | `{}` | Optional capabilities and their settings. All are off by default. | `{"workspace":{"keepWorkingCopies":true}}` |
 
 ## `project`
@@ -129,6 +130,13 @@ It lists the settings the code has today. Settings that later slices add are spe
 |---|---|---|---|---|
 | `telemetry` | section | `{"cacheHitWarning":0.7}` | Measurements and the warnings raised from them. Required. | `{"cacheHitWarning":0.7}` |
 
+## `storage`
+
+| Setting | Allowed values | Default | Description | Example |
+|---|---|---|---|---|
+| `unstoredEvents` | list | `["textGenerated"]` | Kinds of event that are published live but not stored, so a reader that joins late or falls behind does not see them. Streamed text is not stored by default: storing each piece slows the agent, and the conversation keeps the text. | `["textGenerated","modelCallEnded"]` |
+| `retention` | section | `{"audit":"365.00:00:00"}` | How long each kind of stored data is kept. Runs and events without a period are kept until they are deleted. | `{"events":"30.00:00:00"}` |
+
 ## `capabilities`
 
 | Setting | Allowed values | Default | Description | Example |
@@ -217,6 +225,14 @@ It lists the settings the code has today. Settings that later slices add are spe
 | Setting | Allowed values | Default | Description | Example |
 |---|---|---|---|---|
 | `cacheHitWarning` | number, ≥ 0, ≤ 1 | `0.7` | The share of a model call's input read from the provider's cache, from 0 to 1, below which a warning is raised. The first call of a turn is not checked. | `0.7` |
+
+## `storage.retention`
+
+| Setting | Allowed values | Default | Description | Example |
+|---|---|---|---|---|
+| `runs` | time span (`hh:mm:ss` or `d.hh:mm:ss`) |  | How long a run, with the configuration it used, is kept after it starts, as `d.hh:mm:ss`. | `"90.00:00:00"` |
+| `events` | time span (`hh:mm:ss` or `d.hh:mm:ss`) |  | How long an event is kept after it happens, as `d.hh:mm:ss`. | `"30.00:00:00"` |
+| `audit` | time span (`hh:mm:ss` or `d.hh:mm:ss`) | `"365.00:00:00"` | How long an audit entry is kept after it is written, as `d.hh:mm:ss`. A request to delete an owner's data leaves audit entries to this period. | `"730.00:00:00"` |
 
 ## `capabilities.workspace`
 
