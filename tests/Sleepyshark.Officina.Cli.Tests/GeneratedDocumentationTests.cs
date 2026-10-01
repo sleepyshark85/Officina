@@ -1,47 +1,47 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Json.Schema;
-using Sleepyshark.Officina.Core.Configuration.Model;
 using Sleepyshark.Officina.Hosting.Documentation;
 
 namespace Sleepyshark.Officina.Cli.Tests;
 
 /// <summary>
-/// The JSON Schema and the settings reference are generated from the Options classes, and the committed
-/// copies must be current (CFG-15, DOC-01). To regenerate them, run the tests with OFFICINA_UPDATE_GENERATED=1.
+/// The JSON Schema and the settings reference are generated from the Options classes, and the committed copies
+/// must be current (CFG-15, DOC-01). To regenerate them, run the tests with OFFICINA_UPDATE_GENERATED=1.
 /// </summary>
 public sealed partial class GeneratedDocumentationTests
 {
     private const string UpdateVariable = "OFFICINA_UPDATE_GENERATED";
 
-    private static readonly SettingsModel Model = SettingsModel.For(SofApplication.Capabilities);
     private static readonly string Root = FindRoot();
-    private static readonly Lazy<JsonSchema> Schema = new(() => JsonSchema.FromText(SchemaGenerator.Generate(Model)));
+    private static readonly Lazy<JsonSchema> Schema = new(() => JsonSchema.FromText(SchemaGenerator.GenerateText()));
 
     [Fact]
     public void The_committed_JSON_Schema_is_generated_from_the_Options_classes() =>
-        AssertCurrent("docs/officina.schema.json", SchemaGenerator.Generate(Model));
+        AssertCurrent("docs/officina.schema.json", SchemaGenerator.GenerateText());
 
     [Fact]
-    public void The_committed_settings_reference_is_generated_from_the_Options_classes() =>
-        AssertCurrent("docs/configuration-settings.md", SettingsReferenceGenerator.Generate(Model));
+    public void The_committed_settings_reference_is_generated_from_the_schema() =>
+        AssertCurrent("docs/configuration-settings.md", SettingsReferenceGenerator.Generate(SchemaGenerator.Generate()));
 
     [Fact]
     public void The_examples_in_the_configuration_guide_validate_against_the_schema()
     {
-        var examples = JsonBlock().Matches(File.ReadAllText(Path.Combine(Root, "CONFIGURATION.md")).ReplaceLineEndings("\n")).Select(match => match.Groups["json"].Value).ToArray();
+        var guide = File.ReadAllText(Path.Combine(Root, "CONFIGURATION.md")).ReplaceLineEndings("\n");
+        var examples = JsonBlock().Matches(guide).Select(match => match.Groups["json"].Value).ToArray();
 
         Assert.NotEmpty(examples);
-        Assert.All(examples, example => AssertValid(example));
+        Assert.All(examples, AssertValid);
     }
 
     [Fact]
     public void The_schema_accepts_a_partial_layer_and_rejects_unknown_settings()
     {
-        AssertValid("""{ "agents": { "a": { "model": "strong" } }, "project": { "name": null }, "capabilities": {} }""");
+        AssertValid("""{ "agents": { "a": { "model": "strong" } }, "project": { "name": null }, "extends": ["base.json"] }""");
         Assert.False(Evaluate("""{ "agents": { "a": { "instruction": "x" } } }""").IsValid);
         Assert.False(Evaluate("""{ "providers": { "claude": { "apiKey": "sk-ant-literal" } } }""").IsValid);
         Assert.False(Evaluate("""{ "run": { "budget": { "cost": null } } }""").IsValid);
+        Assert.False(Evaluate("""{ "run": { "budget": { "time": "8 hours" } } }""").IsValid);
     }
 
     private static void AssertCurrent(string relativePath, string generated)

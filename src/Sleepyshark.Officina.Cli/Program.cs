@@ -7,4 +7,4 @@ foreach (DictionaryEntry variable in Environment.GetEnvironmentVariables())
     variables[(string)variable.Key] = (string?)variable.Value ?? "";
 }
 
-return await SofCommandLine.RunAsync(args, new SofConsole(Console.Out, Console.Error, Environment.CurrentDirectory, variables));
+return SofCommandLine.Run(args, new SofConsole(Console.Out, Console.Error, Environment.CurrentDirectory, variables));

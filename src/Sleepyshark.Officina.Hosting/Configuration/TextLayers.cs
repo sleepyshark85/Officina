@@ -1,99 +1,88 @@
 using System.Text.Json;
-using Sleepyshark.Officina.Core.Configuration.Validation;
+using System.Text.Json.Nodes;
+using Sleepyshark.Officina.Core.Configuration;
 
 namespace Sleepyshark.Officina.Hosting.Configuration;
 
-/// <summary>A setting given as text outside a file: an environment variable or a run option.</summary>
-/// <param name="Path">The setting, as dotted names, such as <c>run.budget.cost</c>.</param>
-/// <param name="Value">The value. JSON where it parses as JSON, otherwise text.</param>
-/// <param name="Source">What set it, such as <c>--budget</c>, shown as its origin.</param>
-public sealed record RunOption(string Path, string Value, string Source);
-
-/// <summary>Builds the environment-variable and run-option layers (configuration reference §13).</summary>
+/// <summary>
+/// Layers from settings given as text: <c>SOF__run__budget__cost=8</c> environment variables, and run options such
+/// as <c>run.budget.cost</c>. A value is JSON where it parses as JSON, otherwise text (§13).
+/// </summary>
 internal static class TextLayers
 {
-    public const string EnvironmentPrefix = "SOF__";
+    private const string Prefix = "SOF__";
 
-    /// <summary>
-    /// Variables of the form <c>SOF__section__setting=value</c>. Setting names are matched ignoring case;
-    /// names of agents, models and other named items are matched exactly.
-    /// </summary>
-    public static ConfigObject? FromEnvironment(IReadOnlyDictionary<string, string> variables, ICollection<ConfigurationError> errors)
+    public static Layer? FromEnvironment(IReadOnlyDictionary<string, string> variables, ConfigurationErrors errors) =>
+        Build("environment variables", LayerKind.EnvironmentVariable,
+            variables.Where(variable => variable.Key.StartsWith(Prefix, StringComparison.Ordinal))
+                .OrderBy(variable => variable.Key, StringComparer.Ordinal)
+                .Select(variable => (variable.Key[Prefix.Length..].Split("__"), variable.Value, variable.Key)),
+            errors);
+
+    public static Layer? FromRunOptions(IEnumerable<RunOption> options, ConfigurationErrors errors) =>
+        Build("run options", LayerKind.RunOption, options.Select(option => (option.Path.Split('.'), option.Value, option.Source)), errors);
+
+    private static Layer? Build(string description, LayerKind kind, IEnumerable<(string[] Names, string Value, string Source)> settings, ConfigurationErrors errors)
     {
-        var settings = variables
-            .Where(variable => variable.Key.StartsWith(EnvironmentPrefix, StringComparison.OrdinalIgnoreCase))
-            .OrderBy(variable => variable.Key, StringComparer.Ordinal)
-            .Select(variable => (Segments: variable.Key[EnvironmentPrefix.Length..].Split("__"), variable.Value,
-                Origin: new ConfigOrigin(LayerKind.EnvironmentVariable, variable.Key)));
-        return Build(settings, LayerKind.EnvironmentVariable, errors);
-    }
-
-    public static ConfigObject? FromRunOptions(IEnumerable<RunOption> options, ICollection<ConfigurationError> errors) =>
-        Build(options.Select(option => (option.Path.Split('.'), option.Value, new ConfigOrigin(LayerKind.RunOption, option.Source))), LayerKind.RunOption, errors);
-
-    private static ConfigObject? Build(IEnumerable<(string[] Segments, string Value, ConfigOrigin Origin)> settings, LayerKind layer, ICollection<ConfigurationError> errors)
-    {
-        var root = new Dictionary<string, object>(StringComparer.Ordinal);
-        var any = false;
-        foreach (var (segments, value, origin) in settings)
+        var root = new JsonObject();
+        var positions = new Dictionary<string, ConfigOrigin>(StringComparer.Ordinal);
+        foreach (var (names, value, source) in settings)
         {
-            any = true;
-            if (segments.Length == 0 || segments.Any(segment => segment.Length == 0))
+            var origin = new ConfigOrigin(kind, source);
+            if (!TryPlace(root, names, ParseOrText(value)))
             {
-                errors.Add(new ConfigurationError(ValidationPhase.Shape, "", $"\"{origin.Source}\" does not name a setting.",
-                    "Separate setting names with \"__\" in variables and \".\" in run options, such as SOF__run__permissionMode.") { Location = origin.Location });
+                errors.Add(ValidationPhase.Shape, "", $"\"{source}\" does not name a single setting.",
+                    "Separate setting names with \"__\" in variables and \".\" in run options, and set each value once.", origin);
                 continue;
             }
 
-            var level = root;
-            var conflict = false;
-            foreach (var segment in segments[..^1])
-            {
-                if (!level.TryGetValue(segment, out var child))
-                {
-                    child = new Dictionary<string, object>(StringComparer.Ordinal);
-                    level[segment] = child;
-                }
-
-                if (child is not Dictionary<string, object> nested)
-                {
-                    conflict = true;
-                    break;
-                }
-
-                level = nested;
-            }
-
-            if (conflict || level.ContainsKey(segments[^1]))
-            {
-                errors.Add(new ConfigurationError(ValidationPhase.Shape, string.Join('.', segments), $"\"{origin.Source}\" sets part of a value that another variable or option also sets.",
-                    "Set the value once, either whole or by its parts.") { Location = origin.Location });
-                continue;
-            }
-
-            level[segments[^1]] = Parse(value, origin);
+            positions[string.Join('.', names)] = origin;
         }
 
-        return any ? ToNode(root, new ConfigOrigin(layer)) : null;
+        return positions.Count == 0 ? null : new Layer(description, new ConfigOrigin(kind), root, positions);
     }
 
-    private static ConfigNode Parse(string value, ConfigOrigin origin)
+    private static bool TryPlace(JsonObject root, string[] names, JsonNode? value)
+    {
+        if (names.Any(name => name.Length == 0))
+        {
+            return false;
+        }
+
+        var target = root;
+        foreach (var name in names[..^1])
+        {
+            if (!target.ContainsKey(name))
+            {
+                target[name] = new JsonObject();
+            }
+
+            if (target[name] is not JsonObject next)
+            {
+                return false;
+            }
+
+            target = next;
+        }
+
+        if (target.ContainsKey(names[^1]))
+        {
+            return false;
+        }
+
+        target[names[^1]] = value;
+        return true;
+    }
+
+    private static JsonNode? ParseOrText(string value)
     {
         try
         {
-            using var document = JsonDocument.Parse(value);
-            return Lenient(ConfigNode.FromJson(System.Text.Json.Nodes.JsonNode.Parse(document.RootElement.GetRawText()), origin));
+            return JsonNode.Parse(value);
         }
         catch (JsonException)
         {
-            return ConfigScalar.Text(value, origin, lenient: true);
+            return JsonValue.Create(value);
         }
     }
-
-    private static ConfigNode Lenient(ConfigNode node) => node is ConfigScalar scalar
-        ? new ConfigScalar(scalar.Origin, scalar.Kind, scalar.Raw, lenient: true)
-        : node;
-
-    private static ConfigObject ToNode(Dictionary<string, object> level, ConfigOrigin origin) =>
-        new(origin, level.Select(entry => KeyValuePair.Create(entry.Key, entry.Value is Dictionary<string, object> nested ? ToNode(nested, origin) : (ConfigNode)entry.Value)));
 }

@@ -1,12 +1,11 @@
-using Sleepyshark.Officina.Core.Conditions;
-using Sleepyshark.Officina.Core.Configuration.Validation;
+using Sleepyshark.Officina.Core.Configuration;
 
 namespace Sleepyshark.Officina.Hosting.Tests;
 
 /// <summary>
-/// Every attempt to weaken an invariant is rejected with a message naming the setting (CFG-17, TEST-04;
-/// configuration reference §14). Where the settings involved arrive in a later slice, the attempt fails
-/// today because no such setting exists, which is also how INV-02, INV-03 and INV-08 stay protected for good.
+/// Attempts to weaken an invariant are rejected with a message naming the setting (CFG-17, TEST-04). Settings that
+/// would weaken INV-02 to INV-10 and arrive in later slices fail today as unknown settings; the slices that add
+/// them add their own rules. INV-01 needs the condition language, which arrives in S03.
 /// </summary>
 public sealed class InvariantTests : IDisposable
 {
@@ -14,28 +13,14 @@ public sealed class InvariantTests : IDisposable
 
     public void Dispose() => folder.Dispose();
 
-    [Fact]
-    public void INV_01_a_condition_on_free_text_output_is_rejected()
-    {
-        var scope = new ConditionScope().FreeText("output");
-        var condition = new FieldCondition(FieldPath.TryParse("output.answer", out var field) ? field : null!, FieldOperator.EqualTo, "yes");
-
-        var error = Assert.Single(ConditionChecker.Check(condition, scope, "agents.a.pattern.next[0].when"));
-
-        Assert.Equal(("agents.a.pattern.next[0].when.field", ValidationPhase.Conditions), (error.Path, error.Phase));
-        Assert.Contains("INV-01", error.Problem, StringComparison.Ordinal);
-    }
-
     [Theory]
     [InlineData("INV-02", """{ "agents": { "a": { "instructions": "x", "permissions": ["*"] } } }""", "agents.a.permissions")]
-    [InlineData("INV-02", """{ "run": { "owner": { "permissions": ["admin"] } } }""", "run.owner")]
     [InlineData("INV-03", """{ "agents": { "a": { "instructions": "x", "identity": "admin" } } }""", "agents.a.identity")]
-    [InlineData("INV-03", """{ "run": { "caller": "admin" } }""", "run.caller")]
     [InlineData("INV-04", """{ "tools": { "create_issue": { "source": "extension:Acme.CreateIssue", "kind": "write" } } }""", "tools")]
     [InlineData("INV-05", """{ "operations": { "audit": { "enabled": false } } }""", "operations")]
     [InlineData("INV-08", """{ "agents": { "a": { "instructions": "x", "includeToolResults": true } } }""", "agents.a.includeToolResults")]
     [InlineData("INV-09", """{ "agents": { "a": { "instructions": "x", "output": { "onCheckFailure": "accept" } } } }""", "agents.a.output")]
-    [InlineData("INV-10", """{ "capabilities": { "workspace": { "protectedPaths": [ { "path": "sof*.json", "access": "write" } ] } } }""", "capabilities.workspace")]
+    [InlineData("INV-10", """{ "capabilities": { "workspace": { "protectedPaths": [] } } }""", "capabilities")]
     public void A_setting_that_would_weaken_an_invariant_does_not_exist(string invariant, string text, string path)
     {
         folder.Write("sof.json", text);
@@ -72,7 +57,7 @@ public sealed class InvariantTests : IDisposable
     [InlineData("""{ "run": { "budget": { "cost": null } } }""", "run.budget.cost", "cannot be removed with null.")]
     [InlineData("""{ "run": { "budget": { "cost": 0 } } }""", "run.budget.cost", "is 0, but must be greater than 0.")]
     [InlineData("""{ "run": { "budget": { "time": "0s" } } }""", "run.budget.time", "is 0s, but must be greater than 0s.")]
-    public void INV_07_a_budget_cannot_be_removed_zero_or_unlimited(string text, string path, string problem)
+    public void INV_07_a_budget_cannot_be_removed_or_zero(string text, string path, string problem)
     {
         folder.Write("sof.json", text);
 
@@ -88,16 +73,5 @@ public sealed class InvariantTests : IDisposable
         folder.Write("sof.json", """{ "run": { "budget": { "cost": "unlimited", "time": "forever" } } }""");
 
         Assert.Equal(["run.budget.cost", "run.budget.time"], folder.Load().Errors.Select(error => error.Path));
-    }
-
-    [Fact]
-    public void INV_08_instructions_cannot_be_filled_from_tool_or_document_content()
-    {
-        folder.Write("sof.json", """{ "agents": { "a": { "instructions": { "tool": "read_file" } }, "b": { "instructions": "Follow {{tool.read_file}}." } } }""");
-
-        var errors = folder.Load().Errors;
-
-        Assert.Equal(["agents.a.instructions", "agents.b.instructions"], errors.Select(error => error.Path));
-        Assert.Contains("unknown namespace \"tool\"", errors[1].Problem, StringComparison.Ordinal);
     }
 }

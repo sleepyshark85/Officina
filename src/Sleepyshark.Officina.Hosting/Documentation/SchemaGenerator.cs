@@ -1,257 +1,134 @@
-using System.Text.Encodings.Web;
+using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.Json.Schema;
 using Sleepyshark.Officina.Core.Configuration;
-using Sleepyshark.Officina.Core.Configuration.Model;
 
 namespace Sleepyshark.Officina.Hosting.Documentation;
 
 /// <summary>
-/// Generates the JSON Schema of configuration files from the Options classes (CFG-15). It is for editor
-/// completion and early feedback; full validation is still CFG-06. Every file is a layer that may set
-/// only some settings, so the schema requires nothing.
+/// Generates the JSON Schema of configuration files from the Options classes with the built-in exporter, adding
+/// the descriptions, examples, defaults and ranges of <see cref="SettingAttribute"/> (CFG-15). Every file is a
+/// layer that may set only some settings, or remove one with <c>null</c>, so the schema requires nothing.
 /// </summary>
 public static class SchemaGenerator
 {
     public const string SchemaId = "https://raw.githubusercontent.com/sleepyshark85/Officina/main/docs/officina.schema.json";
 
-    private static readonly JsonSerializerOptions Indented = new() { WriteIndented = true, Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
-
-    public static string Generate(SettingsModel model)
+    public static JsonObject Generate()
     {
-        ArgumentNullException.ThrowIfNull(model);
-        var definitions = new SortedDictionary<string, JsonNode>(StringComparer.Ordinal);
-        var generator = new Generator(model, definitions);
-        var root = generator.Section(model.Root);
-        var schema = new JsonObject
+        var exporter = new JsonSchemaExporterOptions { TreatNullObliviousAsNonNullable = true, TransformSchemaNode = Transform };
+        var schema = JsonSchemaExporter.GetJsonSchemaAsNode(OfficinaJson.Options, typeof(OfficinaOptions), exporter).AsObject();
+        schema["type"] = "object";
+        var root = new JsonObject
         {
             ["$schema"] = "https://json-schema.org/draft/2020-12/schema",
             ["$id"] = SchemaId,
             ["title"] = "Officina configuration",
-            ["description"] = "Generated from the Options classes of Sleepyshark.Officina.Core. Do not edit; see docs/configuration-settings.md.",
+            ["description"] = "Generated from the Options classes of Sleepyshark.Officina.Core; see docs/configuration-settings.md.",
         };
-
-        foreach (var (key, value) in root)
+        foreach (var (key, value) in schema.ToArray())
         {
-            schema[key] = value?.DeepClone();
+            schema.Remove(key);
+            root[key] = value;
         }
 
-        schema["$defs"] = new JsonObject(definitions.Select(entry => KeyValuePair.Create(entry.Key, (JsonNode?)entry.Value)));
-        return schema.ToJsonString(Indented).ReplaceLineEndings("\n") + "\n";
+        return root;
     }
 
-    private sealed class Generator(SettingsModel model, SortedDictionary<string, JsonNode> definitions)
+    public static string GenerateText() => Generate().ToJsonString(OfficinaJson.Options).ReplaceLineEndings("\n") + "\n";
+
+    private static JsonNode Transform(JsonSchemaExporterContext context, JsonNode schema)
     {
-        public JsonObject Section(ObjectShape shape)
+        if (context.TypeInfo.Type == typeof(TimeSpan))
         {
-            var defaults = shape.Type.IsAbstract ? null : shape.CreateDefault();
-            var properties = new JsonObject();
-            foreach (var key in shape.FileOnly)
-            {
-                properties[key.Name] = Describe(
-                    key.Kind == FileOnlySettingKind.Text
-                        ? new JsonObject { ["type"] = "string" }
-                        : new JsonObject { ["type"] = "array", ["items"] = new JsonObject { ["type"] = "string" } },
-                    key.Description, key.Example);
-            }
-
-            foreach (var property in shape.Properties)
-            {
-                var schema = Describe(Value(property.Type, property), property.Info.Description, property.Info.Example);
-                if (defaults is not null && property.GetValue(defaults) is { } value)
-                {
-                    schema["default"] = OptionsWriter.WriteValue(value, property.Type, model);
-                }
-
-                // null removes a value in a higher layer (§13), except where it would weaken an invariant.
-                properties[property.Name] = property.Info.Invariant is null ? AllowNull(schema) : schema;
-            }
-
-            return new JsonObject { ["type"] = "object", ["properties"] = properties, ["additionalProperties"] = false };
+            schema = new JsonObject { ["type"] = "string", ["pattern"] = "^[0-9]+(\\.[0-9]+)?(ms|s|m|h|d)$" };
         }
 
-        private JsonObject Value(SettingType type, SettingProperty? property)
+        if (schema is not JsonObject node)
         {
-            var info = property?.Info;
-            switch (type.Kind)
-            {
-                case SettingKind.Section:
-                    return Reference(type.Shape!);
-                case SettingKind.Map:
-                    return new JsonObject
-                    {
-                        ["type"] = "object",
-                        ["propertyNames"] = new JsonObject { ["pattern"] = "^[A-Za-z0-9_][A-Za-z0-9_-]*$" },
-                        ["additionalProperties"] = AllowNull(Value(type.Element!, null)),
-                    };
-                case SettingKind.List:
-                    return new JsonObject { ["type"] = "array", ["items"] = Value(type.Element!, null) };
-                case SettingKind.Text when info?.AllowFile == true:
-                    return new JsonObject { ["anyOf"] = new JsonArray(new JsonObject { ["type"] = "string" }, Definition("fileInclude", FileInclude)) };
-                case SettingKind.Text:
-                    return new JsonObject { ["type"] = "string" };
-                case SettingKind.WholeNumber:
-                    return Range(new JsonObject { ["type"] = "integer" }, info);
-                case SettingKind.Number:
-                    return Range(new JsonObject { ["type"] = "number" }, info);
-                case SettingKind.Boolean:
-                    return new JsonObject { ["type"] = "boolean" };
-                case SettingKind.Choice:
-                    return new JsonObject { ["type"] = "string", ["enum"] = new JsonArray([.. type.Choices.Select(choice => (JsonNode)choice)]) };
-                case SettingKind.Duration:
-                    return Definition("duration", () => new JsonObject
-                    {
-                        ["type"] = "string",
-                        ["pattern"] = Durations.Pattern,
-                        ["description"] = "A number with a unit: ms, s, m, h or d.",
-                    });
-                case SettingKind.Secret:
-                    return Definition("secret", () => new JsonObject
-                    {
-                        ["type"] = "object",
-                        ["description"] = "A secret, by name. Its value is read from the secret source when it is used (CFG-09).",
-                        ["properties"] = new JsonObject { ["secret"] = new JsonObject { ["type"] = "string", ["pattern"] = "^[A-Za-z_][A-Za-z0-9_]*$" } },
-                        ["required"] = new JsonArray("secret"),
-                        ["additionalProperties"] = false,
-                    });
-                case SettingKind.ModelReference:
-                    return new JsonObject { ["anyOf"] = new JsonArray(new JsonObject { ["type"] = "string", ["minLength"] = 1 }, Reference(type.Shape!)) };
-                case SettingKind.Capabilities:
-                    var capabilities = new JsonObject();
-                    foreach (var capability in model.Capabilities.All)
-                    {
-                        capabilities[capability.Name] = AllowNull(new JsonObject
-                        {
-                            ["description"] = capability.Description,
-                            ["anyOf"] = new JsonArray(new JsonObject { ["type"] = "boolean" }, Reference(model.ShapeOf(capability.SettingsType))),
-                        });
-                    }
-
-                    return new JsonObject { ["type"] = "object", ["properties"] = capabilities, ["additionalProperties"] = false };
-                case SettingKind.Condition:
-                    return Definition("condition", Condition);
-                default:
-                    return new JsonObject();
-            }
-        }
-
-        private JsonObject Reference(ObjectShape shape)
-        {
-            var name = shape.Type.Name;
-            if (!definitions.ContainsKey(name))
-            {
-                definitions[name] = new JsonObject();
-                definitions[name] = Section(shape);
-            }
-
-            return new JsonObject { ["$ref"] = "#/$defs/" + name };
-        }
-
-        private JsonObject Definition(string name, Func<JsonObject> create)
-        {
-            if (!definitions.ContainsKey(name))
-            {
-                definitions[name] = new JsonObject();
-                definitions[name] = create();
-            }
-
-            return new JsonObject { ["$ref"] = "#/$defs/" + name };
-        }
-
-        private static JsonObject FileInclude() => new()
-        {
-            ["type"] = "object",
-            ["description"] = "The contents of a file, relative to the file that contains this value.",
-            ["properties"] = new JsonObject { ["file"] = new JsonObject { ["type"] = "string", ["minLength"] = 1 } },
-            ["required"] = new JsonArray("file"),
-            ["additionalProperties"] = false,
-        };
-
-        private static JsonObject Condition()
-        {
-            var self = new JsonObject { ["$ref"] = "#/$defs/condition" };
-            JsonObject Combinator(string key, JsonNode body) => new()
-            {
-                ["type"] = "object",
-                ["properties"] = new JsonObject { [key] = body },
-                ["required"] = new JsonArray(key),
-                ["additionalProperties"] = false,
-            };
-
-            var number = new JsonObject { ["type"] = "number" };
-            return new JsonObject
-            {
-                ["description"] = "A condition in the condition language (CFG-13).",
-                ["oneOf"] = new JsonArray(
-                    new JsonObject
-                    {
-                        ["type"] = "object",
-                        ["properties"] = new JsonObject
-                        {
-                            ["field"] = new JsonObject { ["type"] = "string" },
-                            ["equals"] = new JsonObject { ["type"] = new JsonArray("string", "number", "boolean", "null") },
-                            ["in"] = new JsonObject { ["type"] = "array" },
-                            ["gt"] = number.DeepClone(), ["gte"] = number.DeepClone(), ["lt"] = number.DeepClone(), ["lte"] = number.DeepClone(),
-                            ["exists"] = new JsonObject { ["type"] = "boolean" },
-                        },
-                        ["required"] = new JsonArray("field"),
-                        ["minProperties"] = 2,
-                        ["maxProperties"] = 2,
-                        ["additionalProperties"] = false,
-                    },
-                    Combinator("all", new JsonObject { ["type"] = "array", ["minItems"] = 1, ["items"] = self.DeepClone() }),
-                    Combinator("any", new JsonObject { ["type"] = "array", ["minItems"] = 1, ["items"] = self.DeepClone() }),
-                    Combinator("not", self.DeepClone())),
-            };
-        }
-
-        private static JsonObject Range(JsonObject schema, SettingAttribute? info)
-        {
-            if (info is null)
-            {
-                return schema;
-            }
-
-            if (!double.IsNaN(info.Minimum))
-            {
-                schema[info.ExclusiveMinimum ? "exclusiveMinimum" : "minimum"] = info.Minimum;
-            }
-
-            if (!double.IsNaN(info.Maximum))
-            {
-                schema["maximum"] = info.Maximum;
-            }
-
             return schema;
         }
 
-        private static JsonObject Describe(JsonObject schema, string description, string? example)
+        node.Remove("required");
+        if (context.PropertyInfo is null)
         {
-            var described = new JsonObject { ["description"] = description };
-            foreach (var (key, value) in schema)
-            {
-                described[key] = value?.DeepClone();
-            }
-
-            if (example is not null)
-            {
-                described["examples"] = new JsonArray(JsonNode.Parse(example));
-            }
-
-            return described;
+            AddFileOnlyKeys(context.TypeInfo.Type, node);
+        }
+        else if (context.PropertyInfo.AttributeProvider is PropertyInfo property && property.GetCustomAttribute<SettingAttribute>() is { } setting)
+        {
+            Describe(node, property, setting);
         }
 
-        private static JsonObject AllowNull(JsonObject schema)
-        {
-            var nullable = new JsonObject();
-            var keywords = new JsonObject();
-            foreach (var (key, value) in schema)
-            {
-                (key is "description" or "default" or "examples" ? nullable : keywords)[key] = value?.DeepClone();
-            }
+        return node;
+    }
 
-            nullable["anyOf"] = new JsonArray(keywords, new JsonObject { ["type"] = "null" });
-            return nullable;
+    private static void Describe(JsonObject node, PropertyInfo property, SettingAttribute setting)
+    {
+        var description = setting.Description
+            + (setting.Live ? " Live: the owner may change it during a run." : "")
+            + (setting.Invariant is { } invariant ? $" Cannot be removed or unlimited ({invariant})." : "");
+        node.Insert(0, "description", description);
+        node["examples"] = new JsonArray(JsonNode.Parse(setting.Example));
+        if (property.DeclaringType!.GetConstructor(Type.EmptyTypes) is { } create && property.GetValue(create.Invoke(null)) is { } value)
+        {
+            node["default"] = JsonSerializer.SerializeToNode(value, property.PropertyType, OfficinaJson.Options);
+        }
+
+        if (!double.IsNaN(setting.Minimum) && node["type"]?.ToJsonString().Contains("string", StringComparison.Ordinal) != true)
+        {
+            node[setting.ExclusiveMinimum ? "exclusiveMinimum" : "minimum"] = setting.Minimum;
+        }
+
+        // In a layer, null removes a value so the code default applies (§13), except where that weakens an invariant.
+        if (setting.Invariant is null)
+        {
+            switch (node["type"])
+            {
+                case JsonValue type:
+                    node["type"] = new JsonArray(type.GetValue<string>(), "null");
+                    break;
+                case JsonArray types when !types.Any(type => type?.GetValue<string>() == "null"):
+                    types.Add("null");
+                    break;
+                case null when node["enum"] is JsonArray choices:
+                    choices.Add(null);
+                    break;
+            }
+        }
+        else if (node["type"] is JsonArray types)
+        {
+            node["type"] = new JsonArray([.. types.Where(type => type?.GetValue<string>() != "null").Select(type => type!.DeepClone())]);
+        }
+    }
+
+    /// <summary>Keys that exist only in files and are resolved while loading.</summary>
+    private static void AddFileOnlyKeys(Type type, JsonObject node)
+    {
+        if (node["properties"] is not JsonObject properties)
+        {
+            return;
+        }
+
+        if (type == typeof(OfficinaOptions))
+        {
+            properties.Insert(0, "$schema", new JsonObject { ["description"] = "The JSON Schema of the file, for editor completion. Files only.", ["type"] = "string" });
+            properties.Insert(1, "extends", new JsonObject
+            {
+                ["description"] = "Other files, relative to this one, that this file builds on. Each is a lower layer; later entries override earlier ones. Files only.",
+                ["type"] = "array",
+                ["items"] = new JsonObject { ["type"] = "string" },
+                ["examples"] = new JsonArray(new JsonArray("base.json")),
+            });
+        }
+        else if (type == typeof(AgentDefinition))
+        {
+            properties.Insert(0, "extends", new JsonObject
+            {
+                ["description"] = "Another agent definition this one builds on (CFG-05). Its settings are the lower layer; cycles are rejected. Files only.",
+                ["type"] = "string",
+                ["examples"] = new JsonArray("base-coder"),
+            });
         }
     }
 }

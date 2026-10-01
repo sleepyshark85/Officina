@@ -1,5 +1,4 @@
 using Sleepyshark.Officina.Core.Configuration;
-using Sleepyshark.Officina.Core.Configuration.Validation;
 using Sleepyshark.Officina.Core.Extensibility;
 using Sleepyshark.Officina.Core.Messages;
 using Sleepyshark.Officina.Core.Running;
@@ -31,7 +30,7 @@ public class AgentRunnerTests
         await kit.RunAsync(new AgentDefinition { Instructions = Instructions }, "Invoice A-17", TestContext.Current.CancellationToken);
 
         var request = Assert.Single(kit.Model.Requests);
-        Assert.Equal(new ModelProfile(), request.Profile);
+        Assert.Same(kit.Runner.Options.Models[ModelProfile.DefaultName], request.Profile);
         Assert.Equal(Instructions, request.Instructions);
         Assert.Equal([Message.User("Invoice A-17")], request.Messages);
     }
@@ -43,7 +42,7 @@ public class AgentRunnerTests
         var second = new ScriptedModelProvider().Reply("from second");
         var options = new OfficinaOptions
         {
-            Providers = new Dictionary<string, ProviderOptions> { ["first"] = new() { Type = "scripted" }, ["second"] = new() { Type = "scripted" } },
+            Providers = new Dictionary<string, ProviderOptions> { ["first"] = new(), ["second"] = new() },
             Models = new Dictionary<string, ModelProfile>
             {
                 ["cheap"] = new() { Provider = "first", Model = "small" },
@@ -60,18 +59,6 @@ public class AgentRunnerTests
         Assert.Equal("from second", strong.Output);
         Assert.Equal("small", Assert.Single(first.Requests).Profile.Model);
         Assert.Equal("large", Assert.Single(second.Requests).Profile.Model);
-    }
-
-    [Fact]
-    public async Task A_model_slot_can_have_its_profile_inline()
-    {
-        var kit = new TestKit();
-        kit.Model.Reply("done");
-        var profile = new ModelProfile { Model = "claude-haiku-4-5", Effort = "low" };
-
-        await kit.RunAsync(new AgentDefinition { Instructions = Instructions, Model = profile }, "Invoice A-17", TestContext.Current.CancellationToken);
-
-        Assert.Equal(profile, Assert.Single(kit.Model.Requests).Profile);
     }
 
     [Fact]

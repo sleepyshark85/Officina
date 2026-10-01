@@ -2,13 +2,9 @@
 
   <!--
     Binds sof.json, environment variables and run options onto the Options classes of Core (CFG-16).
-    It has its own JSON layer merge rather than Microsoft.Extensions.Configuration, which merges lists
-    by index, cannot remove a value with null, and does not keep file positions (configuration reference §13).
+    Layers are merged as System.Text.Json nodes rather than with Microsoft.Extensions.Configuration, which merges
+    lists by index, cannot remove a value with null, and keeps no file positions (configuration reference §13).
   -->
-
-  <ItemGroup>
-    <InternalsVisibleTo Include="Sleepyshark.Officina.Hosting.Tests" />
-  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Sleepyshark.Officina.Core\Sleepyshark.Officina.Core.csproj" />

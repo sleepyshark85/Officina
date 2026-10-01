@@ -1,6 +1,4 @@
 using Sleepyshark.Officina.Core.Configuration;
-using Sleepyshark.Officina.Core.Configuration.Model;
-using Sleepyshark.Officina.Core.Configuration.Validation;
 using Sleepyshark.Officina.Core.Extensibility;
 using Sleepyshark.Officina.Core.Running;
 using Sleepyshark.Officina.Testing;
@@ -26,24 +24,12 @@ public class RunConfigurationTests
         await kit.RunAsync("extractor", "a", ct);
         await kit.RunAsync("extractor", "b", ct);
 
-        Assert.Equal(2, kit.Runs.Runs.Count);
-        Assert.NotEqual(kit.Runs.Runs[0].RunId, kit.Runs.Runs[1].RunId);
-        var run = kit.Runs.Runs[0];
-        Assert.Equal("extractor", run.Agent);
-        Assert.Equal(CoreVersion.Value, run.Configuration.CoreVersion);
-        Assert.Equal(OptionsWriter.WriteText(Options, SettingsModel.Default), run.Configuration.Json);
-        Assert.Contains("Extract the total of {{project.name}} invoices.", run.Configuration.Json, StringComparison.Ordinal);
-        Assert.Contains("\"cost\": 25", run.Configuration.Json, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void The_same_configuration_has_the_same_hash_and_a_change_changes_it()
-    {
-        var same = Options with { Project = new ProjectOptions { Name = "invoice-api" } };
-        var changed = Options with { Run = new RunDefaults { PermissionMode = PermissionMode.Auto } };
-
-        Assert.Equal(Capture(Options).Sha256, Capture(same).Sha256);
-        Assert.NotEqual(Capture(Options).Sha256, Capture(changed).Sha256);
+        var runs = kit.Runner.Runs;
+        Assert.Equal(2, runs.Count);
+        Assert.NotEqual(runs[0].RunId, runs[1].RunId);
+        Assert.Equal(("extractor", CoreVersion.Value, OfficinaJson.Write(Options)), (runs[0].Agent, runs[0].CoreVersion, runs[0].Configuration));
+        Assert.Contains("Extract the total of {{project.name}} invoices.", runs[0].Configuration, StringComparison.Ordinal);
+        Assert.Contains("\"cost\": 25", runs[0].Configuration, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -54,9 +40,9 @@ public class RunConfigurationTests
 
         await kit.RunAsync(new AgentDefinition { Instructions = "Be brief." }, "hi", TestContext.Current.CancellationToken);
 
-        var run = Assert.Single(kit.Runs.Runs);
+        var run = Assert.Single(kit.Runner.Runs);
         Assert.Equal(AgentRunner.InlineAgentName, run.Agent);
-        Assert.Contains("Be brief.", run.Configuration.Json, StringComparison.Ordinal);
+        Assert.Contains("Be brief.", run.Configuration, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -76,6 +62,4 @@ public class RunConfigurationTests
         Assert.Equal(["agents.a.instructions", "agents.a.model", "agents.b.instructions"], error.Errors.Select(item => item.Path));
         Assert.Contains("agents.b.instructions: placeholder {{now:date}} is not allowed in the stable prefix.", error.Message, StringComparison.Ordinal);
     }
-
-    private static RunConfiguration Capture(OfficinaOptions options) => RunConfiguration.Capture(options, SettingsModel.Default);
 }

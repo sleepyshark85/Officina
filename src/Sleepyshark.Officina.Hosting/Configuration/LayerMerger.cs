@@ -1,47 +1,110 @@
+using System.Reflection;
+using System.Text.Json;
+using System.Text.Json.Nodes;
+using Sleepyshark.Officina.Core.Configuration;
+
 namespace Sleepyshark.Officina.Hosting.Configuration;
 
 /// <summary>
-/// Merges layers by the rules of configuration reference §13: objects and named maps key by key, lists
-/// and other values replaced as a whole, and <c>null</c> removing a value so the code default applies.
-/// Every value keeps the origin of the layer that set it.
+/// Merges layers by the rules of configuration reference §13 and keeps the origin of every value: objects and named
+/// maps key by key, anything else replaced as a whole, and <c>null</c> restoring the code default. Settings that
+/// protect an invariant cannot be removed (INV-07).
 /// </summary>
-internal static class LayerMerger
+internal sealed class LayerMerger
 {
-    /// <param name="lower">The merged lower layers.</param>
-    /// <param name="upper">The next layer, in normal form.</param>
-    /// <param name="defaults">The code default at the same place, which <c>null</c> restores.</param>
-    public static ConfigNode Merge(ConfigNode? lower, ConfigNode upper, ConfigNode? defaults)
+    private static readonly Dictionary<string, string> Protected = ProtectedSettings(typeof(OfficinaOptions), "").ToDictionary(StringComparer.Ordinal);
+
+    private readonly JsonObject defaults;
+    private readonly OriginMap origins;
+    private readonly ConfigurationErrors errors;
+
+    /// <param name="defaults">The code defaults, the lowest layer.</param>
+    /// <param name="origins">Where the origin of each merged value is kept.</param>
+    /// <param name="errors">Where attempts to remove a protected setting are reported.</param>
+    public LayerMerger(JsonObject defaults, OriginMap origins, ConfigurationErrors errors)
     {
-        if (upper is ConfigNull)
+        this.defaults = defaults;
+        this.origins = origins;
+        this.errors = errors;
+        Merged = (JsonObject)defaults.DeepClone();
+    }
+
+    /// <summary>The layers merged so far. A removed value without a default stays as a null marker.</summary>
+    public JsonObject Merged { get; }
+
+    public void Apply(Layer layer)
+    {
+        foreach (var (path, origin) in layer.Positions)
         {
-            // Where there is no default, the null stays as a marker, so a definition that extends
-            // another still removes the base's value (§13); binding skips it.
-            return defaults ?? upper;
+            origins.Written(path, origin);
         }
 
-        if (upper is not ConfigObject upperObject)
-        {
-            return upper;
-        }
+        Merge(Merged, layer.Root, defaults, "", layer.OriginOf);
+    }
 
-        var lowerObject = lower as ConfigObject;
-        var properties = new List<KeyValuePair<string, ConfigNode>>(lowerObject?.Properties ?? []);
-        foreach (var (key, value) in upperObject.Properties)
+    /// <summary>Merges <paramref name="upper"/> into <paramref name="target"/>; the origin of each value it sets comes from <paramref name="originOf"/>.</summary>
+    public void Merge(JsonObject target, JsonObject upper, JsonNode? lowerDefaults, string path, Func<string, ConfigOrigin> originOf)
+    {
+        foreach (var (key, value) in upper.ToArray())
         {
-            var index = properties.FindIndex(property => property.Key == key);
-            var merged = Merge(index >= 0 ? properties[index].Value : null, value, (defaults as ConfigObject)?.Get(key));
-            if (index >= 0)
+            var childPath = SettingPaths.Join(path, key);
+            var childDefaults = (lowerDefaults as JsonObject)?[key];
+            if (value is JsonObject upperObject)
             {
-                properties[index] = KeyValuePair.Create(key, merged);
+                if (target[key] is not JsonObject)
+                {
+                    origins.Take(childPath);
+                    target[key] = new JsonObject();
+                }
+
+                Merge(target[key]!.AsObject(), upperObject, childDefaults, childPath, originOf);
+                continue;
+            }
+
+            if (value is null && Protected.TryGetValue(childPath, out var invariant))
+            {
+                errors.Add(ValidationPhase.Invariants, childPath, "cannot be removed with null.",
+                    $"Set a limit; it can be high, but it always exists ({invariant}). Leave the setting out to use the default.", originOf(childPath));
+                continue;
+            }
+
+            origins.Take(childPath);
+
+            // Without a default the null stays, so a definition that extends another still removes the base's value.
+            target[key] = value is null ? childDefaults?.DeepClone() : value.DeepClone();
+            if (value is not null)
+            {
+                origins.Set(childPath, originOf(childPath));
+            }
+        }
+    }
+
+    /// <summary>Removes the null markers once nothing more is merged.</summary>
+    public static void RemoveNulls(JsonNode? node)
+    {
+        if (node is not JsonObject obj)
+        {
+            return;
+        }
+
+        foreach (var (key, value) in obj.ToArray())
+        {
+            if (value is null)
+            {
+                obj.Remove(key);
             }
             else
             {
-                properties.Add(KeyValuePair.Create(key, merged));
+                RemoveNulls(value);
             }
         }
-
-        // An object is located where it was first written, which is where readers look for it.
-        var origin = lowerObject is { Origin.Layer: not LayerKind.CodeDefault } ? lowerObject.Origin : upperObject.Origin;
-        return new ConfigObject(origin, properties);
     }
+
+    private static IEnumerable<KeyValuePair<string, string>> ProtectedSettings(Type type, string path) =>
+        type.GetProperties().SelectMany(property =>
+        {
+            var childPath = SettingPaths.Join(path, JsonNamingPolicy.CamelCase.ConvertName(property.Name));
+            IEnumerable<KeyValuePair<string, string>> own = property.GetCustomAttribute<SettingAttribute>()?.Invariant is { } invariant ? [KeyValuePair.Create(childPath, invariant)] : [];
+            return property.PropertyType.Namespace == type.Namespace && property.PropertyType.IsClass ? own.Concat(ProtectedSettings(property.PropertyType, childPath)) : own;
+        });
 }

@@ -6,7 +6,7 @@
 
 The single-agent loop: stop reasons, stop conditions, budgets, stall detection, cancellation and handoffs.
 
-**Closes:** LOOP-01, LOOP-02, LOOP-03, LOOP-04, LOOP-05, LOOP-06, LOOP-07, LOOP-09, LOOP-10, LOOP-11, MSG-02, MSG-05, MSG-06, MDL-07, MDL-09, INV-01, INV-07, EGR-01, EGR-02, EGR-03, EGR-04, COST-02, REL-02, TEST-03, TEST-14
+**Closes:** LOOP-01, LOOP-02, LOOP-03, LOOP-04, LOOP-05, LOOP-06, LOOP-07, LOOP-09, LOOP-10, LOOP-11, MSG-02, MSG-05, MSG-06, MDL-07, MDL-09, INV-01, INV-07, EGR-01, EGR-02, EGR-03, EGR-04, COST-02, REL-02, CFG-12, TEST-03, TEST-14
 
 ## Acceptance criteria
 
@@ -17,3 +17,4 @@ The single-agent loop: stop reasons, stop conditions, budgets, stall detection, 
 - [ ] Each agent processes one turn at a time, and work that arrives meanwhile waits.
 - [ ] Exceptions become results (failed or handed off), never crashes.
 - [ ] Model output is streamed, and usage is priced.
+- [ ] `sof config dry-run` validates a configuration, shows it, and runs an agent against scripted models.

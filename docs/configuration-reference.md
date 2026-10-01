@@ -41,8 +41,7 @@ constant in code, and can be dropped from this draft rather than built speculati
 | Environment file | `sof.<environment>.json`, merged on top of the main file when that environment is selected: by the host (the CLI's `--environment`), or else by the `SOF_ENVIRONMENT` variable. |
 | Schema | `"$schema"` may point to the published schema, which gives editor completion and validation. |
 | Format version | `"formatVersion": 1`. Unknown versions are rejected. A newer core reads the previous format version (REL-04). |
-| Includes | Large values can live in their own files: `{ "file": "prompts/developer.md" }` for text, and the same form for JSON Schemas. Paths are relative to the file that contains them, or to the application's directory for values from environment variables, run options and presets. |
-| Names | Names of named items (agents, models, …) use letters, digits, `-` and `_`, and start with a letter, digit or `_`. |
+| Includes | Large values can live in their own files: `{ "file": "prompts/developer.md" }` for text, and the same form for JSON Schemas. Paths are relative to the file that contains them. |
 | Encoding | UTF-8. Text loaded from files is normalised to `\n` line endings, so the stable prefix is byte-identical on Linux and Windows (COST-01). |
 
 ### Value forms
@@ -93,14 +92,13 @@ looks like a credential in any setting is rejected (CFG-09).
 }
 ```
 
-Every section is optional. The smallest valid configuration (CFG-03) is one agent with a model
-and instructions:
+Every section is optional. The smallest valid configuration (CFG-03) is one agent with
+instructions:
 
 ```json
 {
   "agents": {
     "extractor": {
-      "model": { "provider": "claude", "model": "claude-opus-5-5" },
       "instructions": "Extract the invoice number, date and total from the document."
     }
   }
@@ -108,7 +106,7 @@ and instructions:
 ```
 
 This works because the core defaults include a `claude` provider that reads the secret
-`ANTHROPIC_API_KEY`, and a model profile may be written inline instead of by name.
+`ANTHROPIC_API_KEY`, and a `default` model profile that agents use when they name none.
 
 ---
 
@@ -138,7 +136,7 @@ A placeholder from a volatile-only namespace inside instructions, tool descripti
 memory is a validation error that names the setting and suggests `context.operatingFacts` (§7.3).
 An unknown placeholder is an error, never an empty string.
 
-- `project.*` has `name` and `values.<name>`; `agent.*` has `name` and `description`. Only `now` takes a format.
+- `project.*` has `name` and `values.<name>`; `agent.*` has `name` and `description`.
 - Placeholders are filled once: a value that itself contains `{{…}}` is not filled again.
 - Text between `{{` and `}}` that is not a dotted name, such as `{{ example }}`, is left as it is.
 - There is no secret namespace: `{{secret.…}}`, `{{secrets.…}}` and `{{env.…}}` are rejected (INV-06).
@@ -728,9 +726,8 @@ code defaults (Options classes) < presets (extends) < application file < environ
 ```
 
 - **Environment variables** use the form `SOF__agents__developer__budget__turn__cost=8`.
-  Their values are parsed as JSON where possible, otherwise as strings, and read as the type the
-  setting expects (`SOF__project__name=123` is the text `"123"`). Setting names are matched ignoring
-  case; names of agents, models and other named items are matched exactly.
+  Their values are parsed as JSON where possible, otherwise as strings, so text that looks like a
+  number or `true` is quoted: `SOF__project__name='"123"'`. Names are matched exactly.
 - **`extends`** at the top of a file lists presets and other files. Each is expanded just below the
   file that names it, in order, so a later entry overrides an earlier one.
 - **Run options** are what the host passes when it starts a run, for example the CLI's `--budget 40`.
@@ -774,7 +771,7 @@ Validation runs in this order:
 | 1 | Parse | Invalid JSON, unknown `formatVersion` |
 | 2 | Shape | Unknown settings, wrong types, values outside allowed ranges, credential-like literals |
 | 3 | Merge | Cycles in `extends`, missing presets |
-| 4 | References | Missing models, tools, tool sets, gates, checks, knowledge sources, agents, tool servers, extensions, secrets (by name only; secrets are not read), included files, unknown placeholders |
+| 4 | References | Missing models, tools, tool sets, gates, checks, knowledge sources, agents, tool servers, extensions, secrets (by name only; secrets are not read), unknown placeholders |
 | 5 | Capabilities | Capabilities used but not enabled, unmet dependencies (§9) |
 | 6 | Provider | Settings or features the model or platform does not support (MDL-06), fallbacks that cannot serve their slots (MDL-04), models without prices when a cost budget is set |
 | 7 | Tools | Duplicate names after merging MCP tools, invalid input formats, write tools without gates or exemptions (TOOL-02) |

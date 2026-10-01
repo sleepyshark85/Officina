@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 namespace Sleepyshark.Officina.Core.Configuration;
 
 /// <summary>Which provider and model a model slot uses, and how (MDL-02).</summary>
@@ -12,18 +14,18 @@ public sealed record ModelProfile
     [Setting("The provider's model id.", Example = "\"claude-opus-5-5\"")]
     public string Model { get; init; } = "claude-opus-5-5";
 
-    [Setting("Reasoning effort, from the values the provider declares, such as `low`, `medium`, `high`, `xhigh` or `max`. Unset uses the provider's default.", Example = "\"high\"")]
+    [Setting("Reasoning effort, such as `low`, `medium` or `high`. Unset uses the provider's default.", Example = "\"high\"")]
     public string? Effort { get; init; }
 
     [Setting("The most tokens one reply may have. Unset uses the provider's default.", Example = "64000", Minimum = 1)]
     public int? MaxOutputTokens { get; init; }
 
-    [Setting("Whether the model may call tools: `auto` or `none`. Other modes only where the provider declares them.", Example = "\"auto\"")]
+    [Setting("Whether the model may call tools: `auto` or `none`.", Example = "\"auto\"")]
     public string ToolChoice { get; init; } = "auto";
 
-    [Setting("Any other setting the provider declares for the model, such as a temperature. Checked against the provider's declaration (MDL-02).", Example = "{ \"thinkingDisplay\": \"summarized\" }")]
-    public NamedMap<SettingValue> Settings { get; init; } = NamedMap<SettingValue>.Empty;
+    [Setting("Any other setting the provider declares for the model, such as a temperature (MDL-02).", Example = """{ "temperature": 0.2 }""")]
+    public IReadOnlyDictionary<string, JsonElement> Settings { get; init; } = new Dictionary<string, JsonElement>();
 
-    [Setting("Profiles to use instead, in order, when this one is unavailable (MDL-04).", Example = "[\"strong-backup\"]")]
-    public ValueList<string> Fallbacks { get; init; } = ValueList<string>.Empty;
+    [Setting("Profiles to use instead, in order, when this one is unavailable (MDL-04).", Example = """["backup"]""")]
+    public IReadOnlyList<string> Fallbacks { get; init; } = [];
 }

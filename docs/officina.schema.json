@@ -2,47 +2,71 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/sleepyshark85/Officina/main/docs/officina.schema.json",
   "title": "Officina configuration",
-  "description": "Generated from the Options classes of Sleepyshark.Officina.Core. Do not edit; see docs/configuration-settings.md.",
+  "description": "Generated from the Options classes of Sleepyshark.Officina.Core; see docs/configuration-settings.md.",
   "type": "object",
   "properties": {
     "$schema": {
-      "description": "The JSON Schema of the file, for editor completion. Ignored when loading.",
-      "type": "string",
-      "examples": [
-        "https://raw.githubusercontent.com/sleepyshark85/Officina/main/docs/officina.schema.json"
-      ]
+      "description": "The JSON Schema of the file, for editor completion. Files only.",
+      "type": "string"
     },
     "extends": {
-      "description": "Presets (`preset:<id>`) and other files (paths relative to this one) this file builds on. Each is a lower layer; later entries override earlier ones.",
+      "description": "Other files, relative to this one, that this file builds on. Each is a lower layer; later entries override earlier ones. Files only.",
       "type": "array",
       "items": {
         "type": "string"
       },
       "examples": [
         [
-          "preset:coding-team"
+          "base.json"
         ]
       ]
     },
     "formatVersion": {
       "description": "The configuration format version. Unknown versions are rejected.",
+      "type": [
+        "integer",
+        "null"
+      ],
       "examples": [
         1
       ],
-      "default": 1,
-      "anyOf": [
-        {
-          "type": "integer",
-          "minimum": 1,
-          "maximum": 1
-        },
-        {
-          "type": "null"
-        }
-      ]
+      "default": 1
     },
     "project": {
       "description": "The project's identity, and values usable in placeholders (CFG-14).",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "name": {
+          "description": "The project's name. Usable as `{{project.name}}`.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "examples": [
+            "invoice-api"
+          ]
+        },
+        "values": {
+          "description": "Free-form text values. Usable as `{{project.values.<name>}}`.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": {
+            "type": "string"
+          },
+          "examples": [
+            {
+              "testCommand": "dotnet test"
+            }
+          ],
+          "default": {}
+        }
+      },
+      "additionalProperties": false,
       "examples": [
         {
           "name": "invoice-api"
@@ -50,22 +74,48 @@
       ],
       "default": {
         "values": {}
-      },
-      "anyOf": [
-        {
-          "$ref": "#/$defs/ProjectOptions"
-        },
-        {
-          "type": "null"
-        }
-      ]
+      }
     },
     "providers": {
       "description": "Model providers, by name.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "apiKey": {
+            "description": "The provider's credential, as the name of a secret. A literal key is rejected (CFG-09).",
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "secret": {
+                "description": "The secret's name: letters, digits and underscores.",
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "examples": [
+                  "ANTHROPIC_API_KEY"
+                ]
+              }
+            },
+            "additionalProperties": false,
+            "examples": [
+              {
+                "secret": "ANTHROPIC_API_KEY"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
       "examples": [
         {
           "claude": {
-            "type": "claude",
             "apiKey": {
               "secret": "ANTHROPIC_API_KEY"
             }
@@ -74,40 +124,110 @@
       ],
       "default": {
         "claude": {
-          "type": "claude",
           "apiKey": {
             "secret": "ANTHROPIC_API_KEY"
           }
         }
-      },
-      "anyOf": [
-        {
-          "type": "object",
-          "propertyNames": {
-            "pattern": "^[A-Za-z0-9_][A-Za-z0-9_-]*$"
-          },
-          "additionalProperties": {
-            "anyOf": [
-              {
-                "$ref": "#/$defs/ProviderOptions"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          }
-        },
-        {
-          "type": "null"
-        }
-      ]
+      }
     },
     "models": {
       "description": "Model profiles, by name. Agents refer to them by name (MDL-02, MDL-03).",
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "provider": {
+            "description": "The provider that serves this profile, by its name in `providers`.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "examples": [
+              "claude"
+            ],
+            "default": "claude"
+          },
+          "model": {
+            "description": "The provider's model id.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "examples": [
+              "claude-opus-5-5"
+            ],
+            "default": "claude-opus-5-5"
+          },
+          "effort": {
+            "description": "Reasoning effort, such as `low`, `medium` or `high`. Unset uses the provider's default.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "examples": [
+              "high"
+            ]
+          },
+          "maxOutputTokens": {
+            "description": "The most tokens one reply may have. Unset uses the provider's default.",
+            "type": [
+              "integer",
+              "null"
+            ],
+            "examples": [
+              64000
+            ],
+            "minimum": 1
+          },
+          "toolChoice": {
+            "description": "Whether the model may call tools: `auto` or `none`.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "examples": [
+              "auto"
+            ],
+            "default": "auto"
+          },
+          "settings": {
+            "description": "Any other setting the provider declares for the model, such as a temperature (MDL-02).",
+            "type": [
+              "object",
+              "null"
+            ],
+            "examples": [
+              {
+                "temperature": 0.2
+              }
+            ],
+            "default": {}
+          },
+          "fallbacks": {
+            "description": "Profiles to use instead, in order, when this one is unavailable (MDL-04).",
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "examples": [
+              [
+                "backup"
+              ]
+            ],
+            "default": []
+          }
+        },
+        "additionalProperties": false
+      },
       "examples": [
         {
           "strong": {
-            "model": "claude-opus-5-5",
             "effort": "high"
           }
         }
@@ -120,31 +240,58 @@
           "settings": {},
           "fallbacks": []
         }
-      },
-      "anyOf": [
-        {
-          "type": "object",
-          "propertyNames": {
-            "pattern": "^[A-Za-z0-9_][A-Za-z0-9_-]*$"
-          },
-          "additionalProperties": {
-            "anyOf": [
-              {
-                "$ref": "#/$defs/ModelProfile"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          }
-        },
-        {
-          "type": "null"
-        }
-      ]
+      }
     },
     "agents": {
       "description": "Agent definitions, by name (CFG-01).",
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "extends": {
+            "description": "Another agent definition this one builds on (CFG-05). Its settings are the lower layer; cycles are rejected. Files only.",
+            "type": "string",
+            "examples": [
+              "base-coder"
+            ]
+          },
+          "description": {
+            "description": "What the agent is for. Usable in instructions as `{{agent.description}}`.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "examples": [
+              "Implements one task."
+            ]
+          },
+          "instructions": {
+            "description": "The agent's job. Required: only the application knows it (CFG-17). Placeholders may use the `project` and `agent` namespaces only (CFG-14).",
+            "type": [
+              "string",
+              "null"
+            ],
+            "examples": [
+              "Extract the invoice number, date and total. Reply as JSON."
+            ]
+          },
+          "model": {
+            "description": "The name of the model profile the agent runs on (MDL-03).",
+            "type": [
+              "string",
+              "null"
+            ],
+            "examples": [
+              "strong"
+            ],
+            "default": "default"
+          }
+        },
+        "additionalProperties": false
+      },
       "examples": [
         {
           "extractor": {
@@ -152,424 +299,39 @@
           }
         }
       ],
-      "default": {},
-      "anyOf": [
-        {
-          "type": "object",
-          "propertyNames": {
-            "pattern": "^[A-Za-z0-9_][A-Za-z0-9_-]*$"
-          },
-          "additionalProperties": {
-            "anyOf": [
-              {
-                "$ref": "#/$defs/AgentDefinition"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          }
-        },
-        {
-          "type": "null"
-        }
-      ]
+      "default": {}
     },
     "run": {
       "description": "Defaults for every run.",
-      "examples": [
-        {
-          "permissionMode": "ask"
-        }
+      "type": [
+        "object",
+        "null"
       ],
-      "default": {
+      "properties": {
         "budget": {
-          "cost": 25,
-          "time": "8h"
-        },
-        "permissionMode": "ask"
-      },
-      "anyOf": [
-        {
-          "$ref": "#/$defs/RunDefaults"
-        },
-        {
-          "type": "null"
-        }
-      ]
-    },
-    "capabilities": {
-      "description": "Optional capabilities, by name. All are off by default (CAP-01).",
-      "examples": [
-        {
-          "conversationStore": true
-        }
-      ],
-      "default": {},
-      "anyOf": [
-        {
+          "description": "The run's budget. It can be high, but never removed or unlimited (RUN-05). Live: the owner may change it during a run. Cannot be removed or unlimited (INV-07).",
           "type": "object",
-          "properties": {},
-          "additionalProperties": false
-        },
-        {
-          "type": "null"
-        }
-      ]
-    }
-  },
-  "additionalProperties": false,
-  "$defs": {
-    "AgentDefinition": {
-      "type": "object",
-      "properties": {
-        "extends": {
-          "description": "Another agent definition this one builds on (CFG-05). Its settings are the lower layer; cycles are rejected.",
-          "type": "string",
-          "examples": [
-            "base-coder"
-          ]
-        },
-        "description": {
-          "description": "What the agent is for. Usable in instructions as `{{agent.description}}`.",
-          "examples": [
-            "Implements one task in its own working copy."
-          ],
-          "anyOf": [
-            {
-              "type": "string"
+          "properties": {
+            "cost": {
+              "description": "The most the run may spend, in USD. Live: the owner may change it during a run. Cannot be removed or unlimited (INV-07).",
+              "type": "number",
+              "examples": [
+                25
+              ],
+              "default": 25,
+              "exclusiveMinimum": 0
             },
-            {
-              "type": "null"
+            "time": {
+              "description": "The longest the run may take: a number with a unit, `ms`, `s`, `m`, `h` or `d`. Live: the owner may change it during a run. Cannot be removed or unlimited (INV-07).",
+              "type": "string",
+              "pattern": "^[0-9]+(\\.[0-9]+)?(ms|s|m|h|d)$",
+              "examples": [
+                "8h"
+              ],
+              "default": "8h"
             }
-          ]
-        },
-        "instructions": {
-          "description": "The agent's job, in its own words. Required: only the application knows it (CFG-17). Placeholders may use the `project` and `agent` namespaces only (CFG-14).",
-          "examples": [
-            "Extract the invoice number, date and total. Reply as JSON."
-          ],
-          "anyOf": [
-            {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "$ref": "#/$defs/fileInclude"
-                }
-              ]
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "model": {
-          "description": "The model profile of the agent's default model slot: a profile name, or a profile written inline (MDL-03).",
-          "examples": [
-            "strong"
-          ],
-          "default": "default",
-          "anyOf": [
-            {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "minLength": 1
-                },
-                {
-                  "$ref": "#/$defs/ModelProfile"
-                }
-              ]
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "capabilities": {
-          "description": "Which of the application's enabled capabilities the agent uses. Unset means all of them (CAP-01, CAP-03).",
-          "examples": [
-            [
-              "workspace",
-              "sandbox"
-            ]
-          ],
-          "anyOf": [
-            {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
-            },
-            {
-              "type": "null"
-            }
-          ]
-        }
-      },
-      "additionalProperties": false
-    },
-    "ModelProfile": {
-      "type": "object",
-      "properties": {
-        "provider": {
-          "description": "The provider that serves this profile, by its name in `providers`.",
-          "examples": [
-            "claude"
-          ],
-          "default": "claude",
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "model": {
-          "description": "The provider's model id.",
-          "examples": [
-            "claude-opus-5-5"
-          ],
-          "default": "claude-opus-5-5",
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "effort": {
-          "description": "Reasoning effort, from the values the provider declares, such as `low`, `medium`, `high`, `xhigh` or `max`. Unset uses the provider's default.",
-          "examples": [
-            "high"
-          ],
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "maxOutputTokens": {
-          "description": "The most tokens one reply may have. Unset uses the provider's default.",
-          "examples": [
-            64000
-          ],
-          "anyOf": [
-            {
-              "type": "integer",
-              "minimum": 1
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "toolChoice": {
-          "description": "Whether the model may call tools: `auto` or `none`. Other modes only where the provider declares them.",
-          "examples": [
-            "auto"
-          ],
-          "default": "auto",
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "settings": {
-          "description": "Any other setting the provider declares for the model, such as a temperature. Checked against the provider's declaration (MDL-02).",
-          "examples": [
-            {
-              "thinkingDisplay": "summarized"
-            }
-          ],
-          "default": {},
-          "anyOf": [
-            {
-              "type": "object",
-              "propertyNames": {
-                "pattern": "^[A-Za-z0-9_][A-Za-z0-9_-]*$"
-              },
-              "additionalProperties": {
-                "anyOf": [
-                  {},
-                  {
-                    "type": "null"
-                  }
-                ]
-              }
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "fallbacks": {
-          "description": "Profiles to use instead, in order, when this one is unavailable (MDL-04).",
-          "examples": [
-            [
-              "strong-backup"
-            ]
-          ],
-          "default": [],
-          "anyOf": [
-            {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
-            },
-            {
-              "type": "null"
-            }
-          ]
-        }
-      },
-      "additionalProperties": false
-    },
-    "ProjectOptions": {
-      "type": "object",
-      "properties": {
-        "name": {
-          "description": "The project's name. Usable as `{{project.name}}`.",
-          "examples": [
-            "invoice-api"
-          ],
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "values": {
-          "description": "Free-form text values. Usable as `{{project.values.<name>}}`.",
-          "examples": [
-            {
-              "buildCommand": "dotnet build",
-              "testCommand": "dotnet test"
-            }
-          ],
-          "default": {},
-          "anyOf": [
-            {
-              "type": "object",
-              "propertyNames": {
-                "pattern": "^[A-Za-z0-9_][A-Za-z0-9_-]*$"
-              },
-              "additionalProperties": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ]
-              }
-            },
-            {
-              "type": "null"
-            }
-          ]
-        }
-      },
-      "additionalProperties": false
-    },
-    "ProviderOptions": {
-      "type": "object",
-      "properties": {
-        "type": {
-          "description": "The provider implementation.",
-          "examples": [
-            "claude"
-          ],
-          "default": "claude",
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "apiKey": {
-          "description": "The provider's credential, as the name of a secret. A literal key is rejected (CFG-09).",
-          "examples": [
-            {
-              "secret": "ANTHROPIC_API_KEY"
-            }
-          ],
-          "anyOf": [
-            {
-              "$ref": "#/$defs/secret"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "baseUrl": {
-          "description": "Overrides the provider's endpoint. Unset uses the provider's own.",
-          "examples": [
-            "https://llm-proxy.example.com"
-          ],
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        }
-      },
-      "additionalProperties": false
-    },
-    "RunBudget": {
-      "type": "object",
-      "properties": {
-        "cost": {
-          "description": "The most the run may spend, in the currency of the price table (USD by default).",
-          "type": "number",
-          "exclusiveMinimum": 0,
-          "examples": [
-            25
-          ],
-          "default": 25
-        },
-        "time": {
-          "description": "The longest the run may take.",
-          "$ref": "#/$defs/duration",
-          "examples": [
-            "8h"
-          ],
-          "default": "8h"
-        }
-      },
-      "additionalProperties": false
-    },
-    "RunDefaults": {
-      "type": "object",
-      "properties": {
-        "budget": {
-          "description": "The run's budget. Every run has one; it can be high, but never unlimited (RUN-05, INV-07).",
-          "$ref": "#/$defs/RunBudget",
+          },
+          "additionalProperties": false,
           "examples": [
             {
               "cost": 25,
@@ -582,60 +344,33 @@
           }
         },
         "permissionMode": {
-          "description": "How tool calls that need permission are decided: `ask` the owner, decide `auto`matically by the rules, or allow `readOnly` tools only (HITL-01).",
+          "description": "How tool calls that need permission are decided: `ask` the owner, `auto` by the rules, or `readOnly` (HITL-01). Live: the owner may change it during a run.",
+          "enum": [
+            "ask",
+            "auto",
+            "readOnly",
+            null
+          ],
           "examples": [
             "ask"
           ],
-          "default": "ask",
-          "anyOf": [
-            {
-              "type": "string",
-              "enum": [
-                "ask",
-                "auto",
-                "readOnly"
-              ]
-            },
-            {
-              "type": "null"
-            }
-          ]
+          "default": "ask"
         }
       },
-      "additionalProperties": false
-    },
-    "duration": {
-      "type": "string",
-      "pattern": "^[0-9]+(\\.[0-9]+)?(ms|s|m|h|d)$",
-      "description": "A number with a unit: ms, s, m, h or d."
-    },
-    "fileInclude": {
-      "type": "object",
-      "description": "The contents of a file, relative to the file that contains this value.",
-      "properties": {
-        "file": {
-          "type": "string",
-          "minLength": 1
+      "additionalProperties": false,
+      "examples": [
+        {
+          "permissionMode": "ask"
         }
-      },
-      "required": [
-        "file"
       ],
-      "additionalProperties": false
-    },
-    "secret": {
-      "type": "object",
-      "description": "A secret, by name. Its value is read from the secret source when it is used (CFG-09).",
-      "properties": {
-        "secret": {
-          "type": "string",
-          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
-        }
-      },
-      "required": [
-        "secret"
-      ],
-      "additionalProperties": false
+      "default": {
+        "budget": {
+          "cost": 25,
+          "time": "8h"
+        },
+        "permissionMode": "ask"
+      }
     }
-  }
+  },
+  "additionalProperties": false
 }

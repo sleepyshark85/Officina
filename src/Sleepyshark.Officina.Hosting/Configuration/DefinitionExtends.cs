@@ -1,109 +1,65 @@
 using System.Text.Json;
-using Sleepyshark.Officina.Core.Configuration.Model;
-using Sleepyshark.Officina.Core.Configuration.Validation;
+using System.Text.Json.Nodes;
+using Sleepyshark.Officina.Core.Configuration;
 
 namespace Sleepyshark.Officina.Hosting.Configuration;
 
 /// <summary>
-/// Resolves <c>extends</c> between agent definitions (CFG-05): the base definition is the lower layer,
-/// with the same merge rules as layers. Missing bases and cycles are merge errors (phase 3).
+/// Resolves <c>extends</c> between agent definitions (CFG-05): the base definition is the lower layer, under the same
+/// merge rules, and inherited values say where they came from. Missing bases and cycles are merge errors.
 /// </summary>
-internal sealed class DefinitionExtends(ICollection<ConfigurationError> errors, ISet<string> badPaths)
+internal sealed class DefinitionExtends(LayerMerger merger, OriginMap origins, ConfigurationErrors errors)
 {
-    private const string Key = "extends";
-
-    private readonly Dictionary<string, ConfigObject> resolved = new(StringComparer.Ordinal);
-    private readonly List<string> visiting = [];
-    private ConfigObject agents = null!;
-
-    public ConfigObject Resolve(ConfigObject root)
+    public void Resolve(JsonObject root)
     {
-        if (root.Get("agents") is not ConfigObject definitions)
+        if (root["agents"] is not JsonObject agents)
         {
-            return root;
+            return;
         }
 
-        agents = definitions;
-        foreach (var (name, definition) in agents.Properties)
+        var resolved = new HashSet<string>(StringComparer.Ordinal);
+        var visiting = new List<string>();
+        foreach (var name in agents.Select(entry => entry.Key).ToArray())
         {
-            if (definition is ConfigObject)
-            {
-                ResolveAgent(name);
-            }
+            Resolve(agents, name, resolved, visiting);
         }
-
-        // An entry removed with null stays as it is; binding skips it.
-        var resolvedAgents = new ConfigObject(agents.Origin, agents.Properties.Select(entry =>
-            KeyValuePair.Create(entry.Key, resolved.TryGetValue(entry.Key, out var definition) ? definition : entry.Value)));
-        return new ConfigObject(root.Origin, root.Properties.Select(property => property.Key == "agents" ? KeyValuePair.Create("agents", (ConfigNode)resolvedAgents) : property));
     }
 
-    private ConfigObject ResolveAgent(string name)
+    private void Resolve(JsonObject agents, string name, HashSet<string> resolved, List<string> visiting)
     {
-        if (resolved.TryGetValue(name, out var done))
+        if (!resolved.Add(name) || agents[name] is not JsonObject definition || definition["extends"] is not { } extends)
         {
-            return done;
+            return;
         }
 
-        var definition = (ConfigObject)agents.Get(name)!;
-        if (definition.Get(Key) is not ConfigScalar { Kind: JsonValueKind.String } extends)
+        var path = $"agents.{name}.extends";
+        var baseName = extends.GetValueKind() == JsonValueKind.String ? extends.GetValue<string>() : null;
+        definition.Remove("extends");
+        origins.Take(path);
+        if (baseName is null || baseName == name || visiting.Contains(baseName) || agents[baseName] is not JsonObject)
         {
-            return resolved[name] = definition;
-        }
-
-        var path = SettingPath.Child(SettingPath.Child("agents", name), Key);
-        var baseName = extends.Raw;
-        if (visiting.Contains(baseName) || baseName == name)
-        {
-            var cycle = visiting.Contains(baseName) ? visiting[visiting.IndexOf(baseName)..] : [];
-            Error(path, extends, $"agent definitions {string.Join(" → ", cycle.Append(name).Append(baseName))} extend each other in a cycle.",
-                "Remove extends from one of them.");
-            foreach (var member in cycle.Append(name))
-            {
-                badPaths.Add(SettingPath.Child("agents", member));
-            }
-
-            return resolved[name] = definition.Without(Key);
-        }
-
-        if (agents.Get(baseName) is not ConfigObject)
-        {
-            Error(path, extends, $"agent definition \"{baseName}\" does not exist.",
-                "Name another agent definition." + Suggestions.DidYouMean(baseName, agents.Properties.Select(entry => entry.Key)));
-            badPaths.Add(SettingPath.Child("agents", name));
-            return resolved[name] = definition.Without(Key);
+            var problem = baseName is null ? "is not the name of an agent definition."
+                : agents[baseName] is JsonObject ? $"agent definitions {string.Join(" → ", visiting.SkipWhile(item => item != baseName).Append(name).Append(baseName))} extend each other in a cycle."
+                : $"agent definition \"{baseName}\" does not exist.";
+            errors.Add(ValidationPhase.Merge, path, problem, "Name another agent definition, without cycles.", origins.LocationOf(path));
+            errors.Reject($"agents.{name}");
+            return;
         }
 
         visiting.Add(name);
-        var baseDefinition = ResolveAgent(baseName);
-        visiting.RemoveAt(visiting.Count - 1);
-        if (resolved.TryGetValue(name, out var meanwhile))
+        Resolve(agents, baseName, resolved, visiting);
+        visiting.Remove(name);
+
+        // The base's values come first, marked as inherited; the definition's own values merge on top.
+        var own = origins.Take($"agents.{name}");
+        foreach (var (basePath, origin) in origins.Take($"agents.{baseName}"))
         {
-            // The cycle was found further down and already settled this definition.
-            return meanwhile;
+            origins.Set(basePath, origin);
+            origins.Set($"agents.{name}{basePath[$"agents.{baseName}".Length..]}", origin with { Via = origin.Via ?? $"agents.{baseName}" });
         }
 
-        var inherited = (ConfigObject)Inherited(baseDefinition.Without(Key), SettingPath.Child("agents", baseName));
-        var merged = (ConfigObject)LayerMerger.Merge(inherited, definition, null);
-        return resolved[name] = new ConfigObject(definition.Origin, merged.Properties);
-    }
-
-    /// <summary>The base definition's values, marked as inherited so their origin says so (CFG-04).</summary>
-    private static ConfigNode Inherited(ConfigNode node, string via)
-    {
-        var origin = node.Origin.Via is null ? node.Origin with { Via = via } : node.Origin;
-        return node switch
-        {
-            ConfigObject obj => new ConfigObject(origin, obj.Properties.Select(property => KeyValuePair.Create(property.Key, Inherited(property.Value, via)))),
-            ConfigArray array => new ConfigArray(origin, array.Items.Select(item => Inherited(item, via))),
-            ConfigScalar scalar => new ConfigScalar(origin, scalar.Kind, scalar.Raw, scalar.Lenient),
-            _ => new ConfigNull(origin),
-        };
-    }
-
-    private void Error(string path, ConfigNode node, string problem, string fix)
-    {
-        errors.Add(new ConfigurationError(ValidationPhase.Merge, path, problem, fix) { Location = node.Origin.Location });
-        badPaths.Add(path);
+        var combined = agents[baseName]!.DeepClone().AsObject();
+        merger.Merge(combined, definition, null, $"agents.{name}", ownPath => own.GetValueOrDefault(ownPath) ?? ConfigOrigin.CodeDefault);
+        agents[name] = combined;
     }
 }
