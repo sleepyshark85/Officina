@@ -15,18 +15,23 @@ internal static class ShowCommand
         command.SetAction(parse =>
         {
             var configuration = shared.Load(parse, host);
-            var settings = configuration.Settings();
-            var pathWidth = settings.Max(setting => setting.Path.Length);
-            var valueWidth = settings.Max(setting => Shorten(setting.Value).Length);
-            foreach (var (path, value) in settings)
-            {
-                var line = $"{path.PadRight(pathWidth)}  {Shorten(value)}";
-                host.Out.WriteLine(parse.GetValue(origin) ? $"{line.PadRight(pathWidth + valueWidth + 2)}  {configuration.SourceOf(path)}" : line);
-            }
-
+            Print(configuration, host.Out, parse.GetValue(origin));
             return ConfigurationCommandOptions.ReportErrors(configuration, host);
         });
         return command;
+    }
+
+    /// <summary>Prints every effective setting, one per line, with its source when <paramref name="origin"/> is set.</summary>
+    public static void Print(SofConfiguration configuration, TextWriter output, bool origin)
+    {
+        var settings = configuration.Settings();
+        var pathWidth = settings.Max(setting => setting.Path.Length);
+        var valueWidth = settings.Max(setting => Shorten(setting.Value).Length);
+        foreach (var (path, value) in settings)
+        {
+            var line = $"{path.PadRight(pathWidth)}  {Shorten(value)}";
+            output.WriteLine(origin ? $"{line.PadRight(pathWidth + valueWidth + 2)}  {configuration.SourceOf(path)}" : line);
+        }
     }
 
     private static string Shorten(string value) => value.Length <= ValueWidth ? value : $"{value[..(ValueWidth - 14)]}… ({value.Length} chars)";

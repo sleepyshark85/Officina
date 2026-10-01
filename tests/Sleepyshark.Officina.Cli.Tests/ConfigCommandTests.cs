@@ -73,6 +73,30 @@ public sealed partial class ConfigCommandTests : IDisposable
             error);
     }
 
+    // CFG-12.
+    [Fact]
+    public void Dry_run_shows_the_configuration_and_runs_the_agent_against_scripted_replies()
+    {
+        sof.Write("sof.json", Smallest);
+
+        var (exitCode, output, error) = sof.Run("config", "dry-run", "--input", "Invoice A-17", "--reply", """{"total":42}""");
+
+        Assert.Equal((0, ""), (exitCode, error));
+        Assert.Contains("project.name", output, StringComparison.Ordinal);
+        Assert.EndsWith("\nextractor: Completed\n{\"total\":42}\n", output, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Dry_run_runs_nothing_on_an_invalid_configuration()
+    {
+        sof.Write("sof.json", Smallest);
+
+        var (exitCode, output, _) = sof.Run("config", "dry-run", "--budget", "0", "--reply", "never");
+
+        Assert.Equal(1, exitCode);
+        Assert.DoesNotContain("extractor:", output, StringComparison.Ordinal);
+    }
+
     [Theory]
     [InlineData("config", "explode")]
     [InlineData("config", "show", "--colour")]
