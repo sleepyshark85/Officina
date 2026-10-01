@@ -11,21 +11,6 @@ namespace Sleepyshark.Officina.Workspace;
 /// </summary>
 public sealed class GitWorkspace : IDisposable
 {
-    /// <summary>The folder at the root where the workspace keeps its lock and worktrees.</summary>
-    internal const string StateFolder = ".sof";
-
-    // Git's own files, secrets files (INV-06) and Officina's state are hidden, and its configuration is read-only (INV-10).
-    // Configuration can add protected paths, never remove these.
-    private static readonly ProtectedPath[] Fixed =
-    [
-        new() { Path = ".git" },
-        new() { Path = ".git/**" },
-        new() { Path = "**/.env*" },
-        new() { Path = $"{StateFolder}/**" },
-        new() { Path = "sof.json", Access = PathAccess.ReadOnly },
-        new() { Path = "sof.*.json", Access = PathAccess.ReadOnly },
-    ];
-
     private readonly string root;
     private readonly WorkspaceOptions options;
     private readonly FileStream runLock;
@@ -39,7 +24,7 @@ public sealed class GitWorkspace : IDisposable
         this.options = options;
         this.runLock = runLock;
         queue = new IntegrationQueue(root, baseline, runId, baselineChecks, time);
-        var paths = Fixed.Concat(options.ProtectedPaths).ToList();
+        var paths = WorkspaceOptions.FixedProtectedPaths.Concat(options.ProtectedPaths).ToList();
         hidden = Globs(paths.Where(path => path.Access == PathAccess.Hidden));
         readOnly = Globs(paths.Where(path => path.Access == PathAccess.ReadOnly));
     }
@@ -63,7 +48,7 @@ public sealed class GitWorkspace : IDisposable
         ArgumentNullException.ThrowIfNull(baselineChecks);
         ArgumentNullException.ThrowIfNull(time);
         root = Path.GetFullPath(root);
-        var state = Directory.CreateDirectory(Path.Combine(root, StateFolder)).FullName;
+        var state = Directory.CreateDirectory(Path.Combine(root, WorkspaceOptions.StateFolder)).FullName;
         var activeRun = Path.Combine(state, "run");
         FileStream runLock;
         try
@@ -105,7 +90,7 @@ public sealed class GitWorkspace : IDisposable
     /// <summary>Creates the working copy where an agent does a task, from the baseline as it is now (WS-01).</summary>
     public async Task<WorkingCopy> OpenWorkingCopyAsync(string taskId, string agent, CancellationToken ct = default)
     {
-        var copy = new WorkingCopy(taskId, agent, Path.Combine(root, StateFolder, "worktrees", taskId), hidden, readOnly);
+        var copy = new WorkingCopy(taskId, agent, Path.Combine(root, WorkspaceOptions.StateFolder, "worktrees", taskId), hidden, readOnly);
         await Git.RunAsync(root, ct, "worktree", "add", "-b", copy.Branch, copy.Directory, "HEAD").ConfigureAwait(false);
         return copy;
     }

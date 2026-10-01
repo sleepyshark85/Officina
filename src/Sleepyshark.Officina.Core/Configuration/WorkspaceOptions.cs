@@ -5,6 +5,23 @@ namespace Sleepyshark.Officina.Core.Configuration;
 /// <summary>The git workspace (WS).</summary>
 public sealed record WorkspaceOptions
 {
+    /// <summary>The folder at the workspace root where Officina keeps its lock and worktrees.</summary>
+    public const string StateFolder = ".sof";
+
+    /// <summary>
+    /// The paths protected whatever the configuration says: git's own files, secrets files (INV-06) and Officina's state
+    /// are hidden, and its configuration is read-only (INV-10). Configuration can add protected paths, never remove these.
+    /// </summary>
+    public static IReadOnlyList<ProtectedPath> FixedProtectedPaths { get; } =
+    [
+        new() { Path = ".git" },
+        new() { Path = ".git/**" },
+        new() { Path = "**/.env*" },
+        new() { Path = $"{StateFolder}/**" },
+        new() { Path = "sof.json", Access = PathAccess.ReadOnly },
+        new() { Path = "sof.*.json", Access = PathAccess.ReadOnly },
+    ];
+
     [Setting("Paths agents cannot see or change, in addition to the fixed ones: `.git`, `**/.env*` and `.sof/**` are hidden, and `sof.json` and `sof.*.json` are read-only.",
         Example = """[{ "path": "secrets/**", "access": "hidden" }]""")]
     public IReadOnlyList<ProtectedPath> ProtectedPaths { get; init; } = [];

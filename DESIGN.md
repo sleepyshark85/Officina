@@ -128,7 +128,7 @@ public interface IWorkspace        { ValueTask<IWorkingCopy> OpenWorkingCopyAsyn
                                      ValueTask<IntegrationResult> IntegrateAsync(IWorkingCopy copy, CancellationToken ct);
                                      ValueTask<WorkspaceSnapshot> SnapshotAsync(CancellationToken ct);
                                      ValueTask RestoreAsync(WorkspaceSnapshot snapshot, CancellationToken ct); }
-public interface ISandbox          { SandboxSupport Probe();
+public interface ISandbox          { string? Probe();
                                      ValueTask<ISandboxProcess> StartAsync(SandboxCommand command, CancellationToken ct); }
 public interface ISecretSource     { ValueTask<SecretValue> GetAsync(string name, CancellationToken ct); }
 ```
@@ -147,7 +147,7 @@ public interface ISecretSource     { ValueTask<SecretValue> GetAsync(string name
 | `IMasker` | Replace masking | Work is admitted, or a configured tool result or passage arrives (ING-02) | Text and the run's masking scope | Masked text, and later the restored text for a tool allowed to see it (ING-06) | Restored values never reach the model, history or logs. |
 | `IHistoryShortener` | Replace history shortening | History is too long, or the provider reports the input is too long (HIST-04) | The history and a target size | Shortened history | The result is checked (HIST-02). It cannot change the run record, tasks or memory (HIST-03). |
 | `IWorkspace` | Replace the git workspace | File tools run, a task starts or ends, a change is integrated, or a checkpoint is taken | Task, agent, working copy, snapshot | `IWorkingCopy` (read, read range, search, edit with the expected content hash, write, delete, move), integration result, snapshot | Edits fail if the file changed since it was read (WS-07). Integration is queued (WS-09). Protected paths are enforced (WS-05). |
-| `ISandbox` | Replace OS isolation | A command tool or a check runs a command | `SandboxCommand`: command, working copy, limits, network allow list, permitted secrets | `ISandboxProcess`: streamed output, exit code, stop | `Probe` must report whether isolation is available, and the core refuses to run commands without it (SBX-07). |
+| `ISandbox` | Replace OS isolation | A command tool or a check runs a command | `SandboxCommand`: command, working copy and its protected paths, limits, network allow list, permitted secrets | `ISandboxProcess`: streamed output and exit code; disposing it stops the command | `Probe` must report whether isolation is available, and the core refuses to run commands without it (SBX-07). |
 | `ISecretSource` | Read secrets from elsewhere | A secret is needed, at the moment of use | The secret's name | The value | Values are never logged or placed in model input (INV-06). |
 
 ## 5. Tool call path (TOOL-05, TOOL-07)
@@ -189,7 +189,7 @@ decides the outcome.
 | Baseline and working copies | The baseline is a git branch. Each working copy is a `git worktree` on `agent/<task>`. The core uses the git CLI, because libgit2's worktree support is limited. |
 | Integration (WS-09) | A single queue per workspace. Each change is rebased onto the current baseline in a scratch worktree, then the baseline checks run, then the baseline fast-forwards. A failure or conflict goes back to the task. |
 | Edit safety (WS-07) | The core keeps a content hash for each agent and file at read time. An edit whose hash no longer matches fails. |
-| Linux sandbox | bubblewrap (user namespaces). Only the working copy and toolchains are mounted, and the network namespace is empty. Allowed traffic goes through a host-side filtering proxy reached over a Unix socket in `$XDG_RUNTIME_DIR` (socket paths are limited to 108 bytes), bind-mounted into the sandbox and forwarded by socat. Limits use cgroups v2 through `systemd-run --user`, and cancel uses `cgroup.kill`. |
+| Linux sandbox | bubblewrap (user namespaces). Only the working copy and toolchains are mounted, and the network namespace is empty. Allowed traffic goes through a host-side filtering proxy reached over a Unix socket in `$XDG_RUNTIME_DIR` (socket paths are limited to 108 bytes), bind-mounted into the sandbox and forwarded by socat. Limits use cgroups v2 through `systemd-run --user`. Stopping a command kills bubblewrap, which ends its PID namespace and everything in it. |
 | Linux host setup | Done once by the installer, as root: an AppArmor profile that lets bubblewrap create user namespaces (Ubuntu 23.10 and later restrict them); `loginctl enable-linger` for service accounts, so they get a systemd user manager; socat installed. Everything else runs unprivileged (S00a). |
 | Windows sandbox | An AppContainer with ACLs granting the working copy only, and a Job Object for CPU, memory, process count and kill-on-close. The network capability is removed. Allowed traffic goes through the filtering proxy over a named pipe whose access list admits only the container, with a small forwarder inside the sandbox. No admin rights are needed. A loopback exemption also works, but it would expose every local service on the host, so it is not used (S00a). |
 | No isolation available | Startup refuses to run with a clear reason. Commands never run unsandboxed (SBX-07). |

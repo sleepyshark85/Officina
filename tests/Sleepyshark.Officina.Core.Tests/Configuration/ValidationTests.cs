@@ -111,6 +111,22 @@ public class ValidationTests
     }
 
     [Fact]
+    public void A_command_rule_needs_a_pattern_and_secrets_go_to_agents_that_exist()
+    {
+        var sandbox = new SandboxOptions
+        {
+            CommandRules = [new() { Match = null! }],
+            Secrets = new Dictionary<string, IReadOnlyList<string>> { ["develper"] = ["NUGET_TOKEN"] },
+        };
+
+        var options = WithAgent(Extractor) with { Capabilities = new() { Sandbox = sandbox } };
+
+        Assert.Equal(
+            [("capabilities.sandbox.commandRules[0].match", "is required but not set. Add it; it has no default."), ("capabilities.sandbox.secrets", "agent \"develper\" does not exist.")],
+            options.Validate().Select(error => (error.Path, error.Problem)));
+    }
+
+    [Fact]
     public void Every_error_is_reported_ordered_by_phase()
     {
         var options = WithAgent(Extractor with { Instructions = "Hello {{caller.id}}", Model = "missing" }) with

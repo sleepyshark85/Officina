@@ -49,6 +49,16 @@ public sealed partial record OfficinaOptions : IValidatableObject
             errors = errors.Concat(Annotations(path, $"capabilities.workspace.protectedPaths[{index}]"));
         }
 
+        if (Capabilities.Sandbox is { } sandbox)
+        {
+            foreach (var (index, rule) in sandbox.CommandRules.Index())
+            {
+                errors = errors.Concat(Annotations(rule, $"capabilities.sandbox.commandRules[{index}]"));
+            }
+
+            errors = errors.Concat(References("capabilities.sandbox.secrets", "agent", sandbox.Secrets.Keys, "agents", Agents.Keys));
+        }
+
         return errors.Concat(ToolSettings()).Concat(InstructionPlaceholders.Check(this));
     }
 

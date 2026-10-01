@@ -114,6 +114,7 @@ It lists the settings the code has today. Settings that later slices add are spe
 | Setting | Allowed values | Default | Description | Example |
 |---|---|---|---|---|
 | `workspace` | section |  | The git workspace: a working copy per agent, and an integration queue into the baseline. Off when unset. | `{"protectedPaths":[{"path":"secrets/**","access":"hidden"}]}` |
+| `sandbox` | section |  | The sandbox that commands run in: no network unless allowed, and command rules. Off when unset. | `{"allowedHosts":["api.nuget.org"]}` |
 
 ## `providers.<name>.apiKey`
 
@@ -203,6 +204,14 @@ It lists the settings the code has today. Settings that later slices add are spe
 | `protectedPaths` | list | `[]` | Paths agents cannot see or change, in addition to the fixed ones: `.git`, `**/.env*` and `.sof/**` are hidden, and `sof.json` and `sof.*.json` are read-only. | `[{"path":"secrets/**","access":"hidden"}]` |
 | `keepWorkingCopies` | boolean | `false` | Whether an agent's working copy is kept when its task ends, so the owner can look at it. | `true` |
 
+## `capabilities.sandbox`
+
+| Setting | Allowed values | Default | Description | Example |
+|---|---|---|---|---|
+| `allowedHosts` | list | `[]` | The hosts commands may reach, through a filtering proxy. `*.` matches any subdomain. Empty means no network. | `["api.nuget.org","*.nuget.org"]` |
+| `commandRules` | list | `[]` | Rules for commands, in order. Each command of a command line is decided by the first rule that matches it, and the strictest decision applies. A command no rule matches is asked about. | `[{"match":"dotnet build*","action":"allow"},{"match":"git push*","action":"deny"}]` |
+| `secrets` | named entries | `{}` | The secrets each agent's commands receive as environment variables, by agent name. Other agents' commands never see them. | `{"developer":["NUGET_TOKEN"]}` |
+
 ## `agents.<name>.budget.turn`
 
 | Setting | Allowed values | Default | Description | Example |
@@ -219,3 +228,10 @@ It lists the settings the code has today. Settings that later slices add are spe
 |---|---|---|---|---|
 | `path` | text |  | A glob relative to the workspace root, where `**` matches any number of folders. Required. | `"secrets/**"` |
 | `access` | `"hidden"`, `"readOnly"` | `"hidden"` | `hidden`: agents cannot see it at all; `readOnly`: they can read it but not change it. | `"readOnly"` |
+
+## `capabilities.sandbox.commandRules[]`
+
+| Setting | Allowed values | Default | Description | Example |
+|---|---|---|---|---|
+| `match` | text |  | The command it applies to, where `*` matches any text and `?` any one character. Required. | `"dotnet test*"` |
+| `action` | `"allow"`, `"ask"`, `"deny"` | `"deny"` | What a match decides: `allow`, `ask` a human, or `deny`. | `"allow"` |

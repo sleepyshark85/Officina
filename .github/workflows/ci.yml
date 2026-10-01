@@ -35,5 +35,20 @@ jobs:
       - name: Build
         run: dotnet build --no-restore --configuration Release
 
+      # The Linux sandbox tests need the one-time root setup an installer does (DESIGN.md §7, S00a).
+      - name: Set up the Linux sandbox host
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q bubblewrap socat
+          # Ubuntu restricts unprivileged user namespaces; an AppArmor profile allows them for bwrap only.
+          printf 'abi <abi/4.0>,\ninclude <tunables/global>\nprofile bwrap /usr/bin/bwrap flags=(unconfined) {\n  userns,\n}\n' | sudo tee /etc/apparmor.d/bwrap
+          sudo apparmor_parser -r /etc/apparmor.d/bwrap
+          # A systemd user manager delegates the cgroup controllers that limit commands.
+          sudo loginctl enable-linger "$USER"
+          for i in $(seq 1 30); do [ -S "/run/user/$(id -u)/bus" ] && break; sleep 1; done
+          echo "XDG_RUNTIME_DIR=/run/user/$(id -u)" >> "$GITHUB_ENV"
+          echo "DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$(id -u)/bus" >> "$GITHUB_ENV"
+
       - name: Test
         run: dotnet test --no-build --configuration Release
