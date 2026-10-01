@@ -56,6 +56,19 @@ public sealed class WindowsSandboxTests : IDisposable
     }
 
     [Fact(Skip = WindowsOnly, SkipUnless = nameof(OnWindows))]
+    public async Task A_toolchain_outside_the_system_folders_can_be_run()
+    {
+        var toolchain = Directory.CreateDirectory(Path.Combine(real.Host, "sdk")).FullName;
+        var tool = Path.Combine(toolchain, "sdk-tool.cmd");
+        await File.WriteAllTextAsync(tool, "@echo tool ran", Ct);
+
+        var (output, _) = await real.RunAsync($"sdk-tool & echo x> \"{tool}\"", toolchains: [toolchain]);
+
+        Assert.StartsWith("tool ran\n", output, StringComparison.Ordinal);
+        Assert.Equal("@echo tool ran", await File.ReadAllTextAsync(tool, Ct));
+    }
+
+    [Fact(Skip = WindowsOnly, SkipUnless = nameof(OnWindows))]
     public async Task Commands_see_only_the_environment_they_are_given()
     {
         var (output, _) = await real.RunAsync("set", environment: new Dictionary<string, string> { ["NUGET_TOKEN"] = "t0ken" });
@@ -81,7 +94,7 @@ public sealed class WindowsSandboxTests : IDisposable
         using var server = new Server();
 
         var (output, _) = await real.RunAsync(
-            $"curl -s -m 20 http://127.0.0.1:{server.Port}/ & curl -s -i -m 20 http://example.com/ & curl -s -m 5 --noproxy * http://127.0.0.1:{server.Port}/",
+            $"curl -s http://127.0.0.1:{server.Port}/ & curl -s -i http://example.com/ & curl -s -m 5 --noproxy * http://127.0.0.1:{server.Port}/",
             ["127.0.0.1"]);
 
         Assert.Single(output.Split('\n'), line => line == Server.Greeting);
@@ -103,19 +116,20 @@ public sealed class WindowsSandboxTests : IDisposable
     [Fact(Skip = WindowsOnly, SkipUnless = nameof(OnWindows))]
     public async Task A_command_cannot_start_more_processes_than_its_limit()
     {
-        await using var process = await real.StartAsync("for /l %i in (1,1,30) do @start \"\" /b cmd /d /c \"for /l %j in (0,0,1) do @rem\"", limits: Small);
+        await using var process = await real.StartAsync(
+            "(for /l %i in (1,1,30) do @start \"\" /b cmd /d /c \"for /l %j in (0,0,1) do @rem\" || echo refused) & echo done", limits: Small);
 
-        var refused = false;
+        var lines = new List<string>();
         await foreach (var line in process.Output.ReadAllAsync(Ct))
         {
-            if (line.Contains("quota", StringComparison.OrdinalIgnoreCase))
+            lines.Add(line.Trim());
+            if (line.Trim() == "done")
             {
-                refused = true;
                 break;
             }
         }
 
-        Assert.True(refused);
+        Assert.Contains("refused", lines);
     }
 
     [Fact(Skip = WindowsOnly, SkipUnless = nameof(OnWindows))]

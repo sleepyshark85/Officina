@@ -45,8 +45,10 @@ Last updated 2026-10-02.
     copy and its `SandboxTools`, disposes them when the agent, task or run ends (SBX-03), wires the
     sandbox tools and the command rules gate as built-ins, and shows the integration queue (WS-09).
     It probes the sandbox once at startup (SBX-07), rather than once per agent's `SandboxTools`.
-  - S19 deletes the AppContainer profile of a working copy that is cleaned up; each working copy
-    has its own, and they stay until then.
+  - S19 cleans up what the Windows sandbox leaves outside a cleaned-up working copy: its AppContainer
+    profile, its home folder `%TEMP%\officina-<hash>`, and its read-and-execute grants on `toolchains` folders.
+  - S21 runs the Windows sandbox tests once as a standard user in CI (the S00a recipe), tests the CPU
+    limit on both systems with limit reporting, and proves HTTPS through the proxy (a CONNECT tunnel).
   - S18 turns an integration conflict or failed check into work for the author or the lead (WS-03),
     and integrates a task only after its verification checks pass (TASK-05).
   - S19 snapshots and restores the workspace, and cleans up worktrees left by a crash.

@@ -54,7 +54,10 @@ internal sealed class RealSandbox(ISandbox sandbox) : IDisposable
         return (output.ToString(), await process.ExitCode);
     }
 
-    /// <summary>An HTTP server on the host's loopback, which a sandbox can reach only through the proxy.</summary>
+    /// <summary>
+    /// An HTTP server on the host's loopback, which a sandbox can reach only through the proxy. Its reply ends only when it
+    /// closes the connection, so the client sees it end only if every hop passes the close on.
+    /// </summary>
     public sealed class Server : IDisposable
     {
         public const string Greeting = "hello from the host";
@@ -79,7 +82,7 @@ internal sealed class RealSandbox(ISandbox sandbox) : IDisposable
                 var stream = client.GetStream();
                 using var request = new StreamReader(stream, leaveOpen: true);
                 await request.ReadLineAsync();
-                await stream.WriteAsync(Encoding.ASCII.GetBytes($"HTTP/1.0 200 OK\r\nContent-Length: {Greeting.Length + 1}\r\n\r\n{Greeting}\n"));
+                await stream.WriteAsync(Encoding.ASCII.GetBytes($"HTTP/1.0 200 OK\r\n\r\n{Greeting}\n"));
             }
         }
     }

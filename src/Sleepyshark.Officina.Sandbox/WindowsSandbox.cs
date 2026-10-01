@@ -22,13 +22,19 @@ namespace Sleepyshark.Officina.Sandbox;
 [SupportedOSPlatform("windows")]
 public sealed class WindowsSandbox : ISandbox
 {
-    // Listens on a free loopback port, says which, and carries each connection to the proxy's pipe.
+    // Listens on a free loopback port, says which, and carries each connection to the proxy's pipe. When either direction
+    // of a connection ends, both ends are closed, so the client sees the server's close and the proxy the client's.
     private const string Forwarder = """
         $l = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback, 0); $l.Start(); [Console]::WriteLine($l.LocalEndpoint.Port)
+        $open = [Collections.ArrayList]::new()
         while ($true) {
-            $c = $l.AcceptTcpClient(); $s = $c.GetStream()
-            $p = [IO.Pipes.NamedPipeClientStream]::new('.', '{0}', [IO.Pipes.PipeDirection]::InOut, [IO.Pipes.PipeOptions]::Asynchronous); $p.Connect(5000)
-            $null = $s.CopyToAsync($p); $null = $p.CopyToAsync($s)
+            if ($l.Pending()) {
+                $c = $l.AcceptTcpClient(); $s = $c.GetStream()
+                $p = [IO.Pipes.NamedPipeClientStream]::new('.', '{0}', [IO.Pipes.PipeDirection]::InOut, [IO.Pipes.PipeOptions]::Asynchronous); $p.Connect(5000)
+                $null = $open.Add(@($c, $p, $s.CopyToAsync($p), $p.CopyToAsync($s)))
+            }
+            foreach ($o in @($open)) { if ($o[2].IsCompleted -or $o[3].IsCompleted) { $o[0].Close(); $o[1].Dispose(); $open.Remove($o) } }
+            Start-Sleep -Milliseconds 20
         }
         """;
 
@@ -38,7 +44,8 @@ public sealed class WindowsSandbox : ISandbox
 
     public string? Probe()
     {
-        var directory = Directory.CreateTempSubdirectory("officina-probe-");
+        // One fixed folder, so every probe reuses the same AppContainer and home folder.
+        var directory = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "officina-probe"));
         try
         {
             var process = StartAsync(new("exit 7", directory.FullName, SandboxLimits.Default, [], new Dictionary<string, string>(), [], [], []), default)
@@ -49,10 +56,6 @@ public sealed class WindowsSandbox : ISandbox
         catch (Win32Exception exception)
         {
             return $"commands cannot run in an AppContainer ({exception.Message}). Windows 10 or later is needed.";
-        }
-        finally
-        {
-            directory.Delete(recursive: true);
         }
     }
 
@@ -109,8 +112,15 @@ public sealed class WindowsSandbox : ISandbox
                 proxy = FilterProxy.OnNamedPipe(pipe, container, command.AllowedHosts, line => sandboxed?.Add(line));
                 var script = Convert.ToBase64String(Encoding.Unicode.GetBytes(Forwarder.Replace("{0}", pipe, StringComparison.Ordinal)));
                 var (_, forwarder) = Launch($"powershell.exe -NoLogo -NoProfile -NonInteractive -EncodedCommand {script}", home.FullName, environment, container, job);
-                var port = forwarder.ReadLine() ?? throw new Win32Exception("The proxy forwarder did not start.");
-                environment["HTTP_PROXY"] = environment["HTTPS_PROXY"] = $"http://127.0.0.1:{port.Trim()}";
+                var line = forwarder.ReadLine();
+                if (!int.TryParse(line, out var port))
+                {
+                    throw new InvalidOperationException($"The proxy forwarder did not start: {line ?? "no output"}");
+                }
+
+                // Whatever else it writes is read and dropped, so it never blocks on a full pipe.
+                _ = forwarder.ReadToEndAsync(CancellationToken.None);
+                environment["HTTP_PROXY"] = environment["HTTPS_PROXY"] = $"http://127.0.0.1:{port}";
             }
 
             foreach (var (variable, value) in command.Environment)
@@ -181,7 +191,9 @@ public sealed class WindowsSandbox : ISandbox
     {
         FileSystemInfo item = Directory.Exists(path) ? new DirectoryInfo(path) : new FileInfo(path);
         var security = Read(item);
-        if (security.AreAccessRulesProtected)
+        var held = security.GetAccessRules(true, true, typeof(SecurityIdentifier)).Cast<FileSystemAccessRule>()
+            .Where(rule => rule.IdentityReference == container).ToList();
+        if (security.AreAccessRulesProtected && held.All(rule => (rule.FileSystemRights & ~FileSystemRights.Synchronize) == rights))
         {
             return;
         }
