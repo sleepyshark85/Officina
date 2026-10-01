@@ -7,6 +7,9 @@ Status: draft for M0 design review · 2026-09-30 · companion to `REQUIREMENTS.m
 - **Every setting has a default in code.** Each section of the configuration is a plain C# Options
   class (a record with initialized properties) in `Sleepyshark.Officina.Core`. Those initializers are the defaults
   (CFG-16).
+- **Settings exist only when needed.** A value becomes a setting when there is a known case that needs
+  a different value. Until then it is a constant in code. Adding a setting later is cheap; removing one
+  is not.
 - **A configuration file only holds what differs.** `sof.json` is merged on top of the code
   defaults. It is JSON, and comments are allowed.
 - **Presets are ready-made files** that sit between the code defaults and your file. For example,
