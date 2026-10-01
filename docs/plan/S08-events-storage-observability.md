@@ -15,3 +15,7 @@ Durable storage, the event stream, telemetry, and data rules.
 - [ ] Traces and metrics follow the OpenTelemetry naming, and logs contain no conversation content by default.
 - [ ] Retention, export and deletion on request work. Tenants cannot see each other's data.
 - [ ] Stored data from an unknown format version is refused.
+
+## Notes
+
+S02 records each run with its resolved `OfficinaOptions` object (CFG-07); writing it as text belongs to the durable run store here.

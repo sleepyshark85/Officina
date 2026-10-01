@@ -6,7 +6,7 @@
 
 The lead, roles, parallel agents and the coding team preset.
 
-**Closes:** TEAM-01, TEAM-02, TEAM-03, TEAM-04, TEAM-05, TEAM-06, TEAM-07, TEAM-08, TEAM-09, TEAM-10, CFG-11, TEST-26, TEST-29
+**Closes:** TEAM-01, TEAM-02, TEAM-03, TEAM-04, TEAM-05, TEAM-06, TEAM-07, TEAM-08, TEAM-09, TEAM-10, CFG-05, CFG-11, TEST-26, TEST-29
 
 ## Acceptance criteria
 
@@ -15,6 +15,7 @@ The lead, roles, parallel agents and the coding team preset.
 - [ ] Helper agents respect depth, count, permission and budget limits.
 - [ ] No agent can change any definition, permission, budget, rule or check (TEST-26).
 - [ ] The three v1 presets ship.
+- [ ] An agent definition can build on another one and override parts of it (the coding team roles share a base).
 
 ## Notes
 

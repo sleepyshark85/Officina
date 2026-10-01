@@ -17,7 +17,6 @@ namespace is its name.
 | Project | Box in the diagram | What it contains | Depends on | Loaded when |
 |---|---|---|---|---|
 | `Sleepyshark.Officina.Core` | Core | Options classes and validation; turn engine; built-in loop patterns; context builder; tool pipeline; run record; budgets; events; audit; extension interfaces (§4); built-in `record.*`, `control.*` and `artifact.*` tools | .NET base library and a JSON Schema validator only | Always |
-| `Sleepyshark.Officina.Hosting` | not drawn | Binds `sof.json`, environment variables and CLI flags onto the Options classes. Registers services and loads extension assemblies. | Core, `Microsoft.Extensions.Configuration` | By any host application |
 | `Sleepyshark.Officina.Team` | Capabilities | Team pattern, lead role support, task board, helper agents; `tasks.*` and `team.*` tools | Core | `team` or `taskBoard` is on |
 | `Sleepyshark.Officina.Workspace` | Capabilities | Git-backed workspace: baseline, working copies, integration queue, edit safety; `workspace.*` tools | Core; the git CLI at run time | `workspace` is on |
 | `Sleepyshark.Officina.Sandbox` | Capabilities | Linux sandbox (bubblewrap, cgroups v2) and Windows sandbox (AppContainer, Job Objects); filtering network proxy; `sandbox.*` tools | Core | `sandbox` is on |
@@ -26,7 +25,7 @@ namespace is its name.
 | `Sleepyshark.Officina.Mcp` | Mcp | Own MCP client for stdio and Streamable HTTP. Turns each server tool into a core tool. | Core | `toolServers` are configured |
 | `Sleepyshark.Officina.Providers.Claude` | Providers.Claude | The Claude provider: maps requests (§9), places cache markers, streams, classifies errors, ships the price table | Core, Anthropic C# SDK | A `claude` provider is configured (the default) |
 | `Sleepyshark.Officina.Testing` | Testing | Test kit: scripted models, controllable clock, fake tools, in-memory workspace, sandbox and storage, record and replay (TEST-01, TEST-02) | Core | In tests only |
-| `Sleepyshark.Officina.Cli` | Cli | The coding team CLI: `init`, `run`, `resume`, `config`; approvals, questions, task board and cost views; the CLI human-interaction channel | Every project except Testing; it receives the Anthropic SDK only transitively, through the Claude provider | — |
+| `Sleepyshark.Officina.Cli` | Cli | The coding team CLI: `init`, `run`, `resume`, `config`; loads configuration with Microsoft.Extensions.Configuration; approvals, questions, task board and cost views; the CLI human-interaction channel | Every project except Testing, Microsoft.Extensions.Configuration and System.CommandLine; it receives the Anthropic SDK only transitively, through the Claude provider | — |
 | `Anthropic` (NuGet) | Anthropic SDK | The official Claude SDK | `Microsoft.Extensions.AI.Abstractions` (transitive) | With the Claude provider only |
 
 Dependency rules, enforced by the dependency check, which runs as a test in CI (TEST-32):

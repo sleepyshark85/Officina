@@ -5,9 +5,10 @@ Status: draft for M0 design review · 2026-09-30 · companion to `../REQUIREMENT
 This is the full catalogue of settings. **Most applications never need it**: start with
 `../CONFIGURATION.md`, which lists the few settings a new application must specify.
 
-Every setting here has its default defined in code, in the core's Options classes (CFG-16). Once
-the code exists, this reference and the JSON Schema are generated from those classes (CFG-15,
-DOC-01). Until then this draft is the specification they must match.
+Every setting here has its default defined in code, in the core's Options classes (CFG-16). The
+settings implemented so far are listed in the generated [settings reference](configuration-settings.md),
+and the generated JSON Schema is [`officina.schema.json`](officina.schema.json) (CFG-15, DOC-01). For
+settings not implemented yet, this draft is the specification they must match.
 
 Settings are added when the slice that needs them is built. A setting no slice needs yet stays a
 constant in code, and can be dropped from this draft rather than built speculatively.
@@ -37,7 +38,7 @@ constant in code, and can be dropped from this draft rather than built speculati
 |---|---|
 | Format | JSON. Comments (`//`, `/* */`) and trailing commas are accepted and ignored. |
 | Main file | `sof.json` in the application's directory (the coding team CLI: the project root). |
-| Environment file | `sof.<environment>.json`, merged on top of the main file when that environment is selected. |
+| Environment file | `sof.<environment>.json`, merged on top of the main file when that environment is selected: by the host (the CLI's `--environment`), or else by the `SOF_ENVIRONMENT` variable. |
 | Schema | `"$schema"` may point to the published schema, which gives editor completion and validation. |
 | Format version | `"formatVersion": 1`. Unknown versions are rejected. A newer core reads the previous format version (REL-04). |
 | Includes | Large values can live in their own files: `{ "file": "prompts/developer.md" }` for text, and the same form for JSON Schemas. Paths are relative to the file that contains them. |
@@ -55,12 +56,15 @@ constant in code, and can be dropped from this draft rather than built speculati
 | `"mcp:<server>/<tool>"` | A tool from an external tool server; `*` selects all its tools | `"mcp:github/*"` |
 | `"provider:<tool>"` | A provider server-side tool (TOOL-13) | `"provider:web_search"` |
 | `"preset:<id>"` | A preset shipped with the core | `"preset:coding-team"` |
-| Durations | A number with a unit: `ms`, `s`, `m`, `h`, `d` | `"30m"` |
+| Durations | A .NET time span: `"hh:mm:ss"`, or `"d.hh:mm:ss"` with days | `"00:30:00"`, `"1.00:00:00"` |
 | Sizes | A number with a unit: `B`, `KiB`, `MiB`, `GiB` | `"4GiB"` |
 | Money | A number in the currency of the price table (default USD) | `25` |
 
-A secret is never accepted as a plain string where a `{ "secret": … }` is expected. A value that
-looks like a credential in any setting is rejected (CFG-09).
+A secret is never accepted as a plain string where a `{ "secret": … }` is expected (CFG-09).
+Configuration should not hold secret values; the core does not scan it for them.
+
+Names of named items (agents, models, providers, …) cannot contain `.`, `[` or `]`, which setting
+paths use.
 
 ---
 
@@ -91,14 +95,13 @@ looks like a credential in any setting is rejected (CFG-09).
 }
 ```
 
-Every section is optional. The smallest valid configuration (CFG-03) is one agent with a model
-and instructions:
+Every section is optional. The smallest valid configuration (CFG-03) is one agent with
+instructions:
 
 ```json
 {
   "agents": {
     "extractor": {
-      "model": { "provider": "claude", "model": "claude-opus-5-5" },
       "instructions": "Extract the invoice number, date and total from the document."
     }
   }
@@ -106,7 +109,7 @@ and instructions:
 ```
 
 This works because the core defaults include a `claude` provider that reads the secret
-`ANTHROPIC_API_KEY`, and a model profile may be written inline instead of by name.
+`ANTHROPIC_API_KEY`, and a `default` model profile that agents use when they name none.
 
 ---
 
@@ -136,6 +139,11 @@ A placeholder from a volatile-only namespace inside instructions, tool descripti
 memory is a validation error that names the setting and suggests `context.operatingFacts` (§7.3).
 An unknown placeholder is an error, never an empty string.
 
+- `project.*` has `name` and `values.<name>`; `agent.*` has `name` and `description`.
+- Placeholders are filled once: a value that itself contains `{{…}}` is not filled again.
+- Text between `{{` and `}}` that is not a dotted name, such as `{{ example }}`, is left as it is.
+- There is no secret namespace: `{{secret.…}}`, `{{secrets.…}}` and `{{env.…}}` are rejected (INV-06).
+
 ---
 
 ## 5. Shared definitions
@@ -148,8 +156,8 @@ An unknown placeholder is an error, never an empty string.
     "type": "claude",                                  // provider implementation
     "apiKey": { "secret": "ANTHROPIC_API_KEY" },
     "baseUrl": null,                                   // optional override
-    "retry": { "maxAttempts": 5, "initialDelay": "1s", "maxDelay": "60s" },   // REL-01, MDL-05
-    "timeout": "10m",
+    "retry": { "maxAttempts": 5, "initialDelay": "00:00:01", "maxDelay": "00:01:00" },   // REL-01, MDL-05
+    "timeout": "00:10:00",
     "features": {                                      // provider features to use, when models support them
       "midConversationSystemMessages": true,           // CLD-03
       "turnScopedSystemMessages": true,                // CLD-03, CTX-10 (beta)
@@ -212,7 +220,7 @@ An unknown placeholder is an error, never an empty string.
     "command": "github-mcp-server",
     "args": ["stdio"],
     "env": { "GITHUB_TOKEN": { "secret": "GITHUB_TOKEN" } },
-    "startTimeout": "20s"
+    "startTimeout": "00:00:20"
   },
   "tracker": {
     "transport": "http",
@@ -239,7 +247,7 @@ example, a tool that declares itself `write` cannot be configured as `read`.
   "edit_file":   { "source": "builtin:workspace.edit_file" },     // has built-in gates (WS-07)
   "run_command": {
     "source": "builtin:sandbox.run",
-    "timeout": "15m",
+    "timeout": "00:15:00",
     "trim": { "maxTokens": 4000, "keep": "headAndTail" }           // TOOL-09
   },
   "create_issue": {
@@ -332,8 +340,8 @@ The built-in gates are:
 
 ```jsonc
 "checks": {
-  "build":  { "use": "builtin:command", "settings": { "command": "{{project.values.buildCommand}}", "timeout": "10m" } },
-  "tests":  { "use": "builtin:command", "settings": { "command": "{{project.values.testCommand}}", "timeout": "20m" } },
+  "build":  { "use": "builtin:command", "settings": { "command": "{{project.values.buildCommand}}", "timeout": "00:10:00" } },
+  "tests":  { "use": "builtin:command", "settings": { "command": "{{project.values.testCommand}}", "timeout": "00:20:00" } },
   "review": { "use": "builtin:agent-review", "settings": { "reviewer": "reviewer" } },
   "cites":  { "use": "builtin:citations-resolve" }
 }
@@ -383,7 +391,12 @@ arguments and task fields. A condition that refers to free-text output fails val
 | `task` | The current task's fields (gates, when the task board is on) |
 
 Paths are dotted names with an optional `[n]` index. There are no variables, functions or
-arithmetic. Validation checks every path against the schema of the value it reads.
+arithmetic. Validation checks every path against the schema of the value it reads, and rejects a
+comparison that can never hold (a value of the wrong type, or one outside the field's `enum`).
+
+`equals` and `in` compare JSON values, numbers by value (`1` equals `1.0`). `gt`, `gte`, `lt` and `lte`
+compare numbers only. `exists: true` holds when the field is present and not `null`. A field that is
+missing makes every other test false.
 
 ---
 
@@ -418,8 +431,8 @@ every model slot. A step inside a pattern that calls a model is its own slot: it
 only on that slot's configuration and the enabled capabilities, never on the caller.
 
 **Capabilities per agent.** `capabilities` lists which of the application's enabled capabilities
-this agent uses. Listing a capability the application has not enabled is a validation error
-(CAP-03).
+this agent uses; when it is not set, the agent uses all of them. Listing a capability the
+application has not enabled is a validation error (CAP-03).
 
 ### 7.2 Patterns (PAT-01)
 
@@ -500,7 +513,7 @@ PAT-02). Data moves only through declared `input` and `output` (PAT-04).
     "Today: {{now:date}}"
   ],
   "recordScope": "all",               // REC-06: all | "task" | { "kinds": [...] }
-  "cache": { "prefixTtl": "1h", "historyTtl": "5m" }   // CTX-11
+  "cache": { "prefixTtl": "01:00:00", "historyTtl": "00:05:00" }   // CTX-11
 }
 ```
 
@@ -528,9 +541,9 @@ There is no setting that accepts work while a configured check fails (INV-09).
 
 ```jsonc
 "budget": {
-  "turn":  { "iterations": 50, "toolCalls": 200, "tokens": 3000000, "cost": 5, "time": "45m" },
+  "turn":  { "iterations": 50, "toolCalls": 200, "tokens": 3000000, "cost": 5, "time": "00:45:00" },
   "agent": { "cost": 15 },
-  "task":  { "cost": 8, "time": "2h" }
+  "task":  { "cost": 8, "time": "02:00:00" }
 },
 "stall": { "iterationsWithoutProgress": 3 }
 ```
@@ -545,10 +558,10 @@ but it always exists.
 ```jsonc
 "run": {
   "entry": "team",                                 // the agent definition a run starts with
-  "budget": { "cost": 25, "time": "8h" },          // RUN-05
+  "budget": { "cost": 25, "time": "08:00:00" },          // RUN-05
   "permissionMode": "ask",                         // HITL-01: ask | auto | readOnly   (live)
   "onBudgetExhausted": "askOwner",                 // askOwner | handoff
-  "cancelWithin": "10s"                            // RUN-06
+  "cancelWithin": "00:00:10"                            // RUN-06
 }
 ```
 
@@ -580,7 +593,7 @@ object with `"enabled"` plus its own settings. `true` is shorthand for `{ "enabl
   "conversationStore": true,                                        // CAP-05
   "humanInteraction": {
     "channel": "builtin:cli",                                       // or extension:<id>
-    "approvalTimeout": "30m",                                       // HITL-02
+    "approvalTimeout": "00:30:00",                                       // HITL-02
     "signOffs": ["planApproval", "runBudgetExceeded", "irreversibleAction"]   // HITL-04
   },
   "checkpoints": { "at": ["turn", "integration"] },                 // RUN-03; also "step", "tool"
@@ -601,7 +614,7 @@ object with `"enabled"` plus its own settings. `true` is shorthand for `{ "enabl
   "sandbox": {
     "type": "builtin:auto",                                         // Linux or Windows isolation (SBX-07)
     "network": { "allow": ["api.nuget.org", "*.nuget.org"] },       // SBX-01, off by default
-    "limits": { "cpus": 2, "memory": "4GiB", "time": "20m", "output": "10MiB" },
+    "limits": { "cpus": 2, "memory": "4GiB", "time": "00:20:00", "output": "10MiB" },
     "commandRules": [                                               // SBX-02; first match wins
       { "match": "dotnet build*", "action": "allow" },
       { "match": "dotnet test*",  "action": "allow" },
@@ -624,7 +637,7 @@ Dependencies checked at validation (CAP-03):
 | `sandbox` | `workspace` |
 | `checkpoints` | `conversationStore` |
 | `projectMemory` | nothing; requires `humanInteraction` if `approveBy` is `owner` |
-| Any `signOffs`, `approval` other than `never`, or `permissionMode: ask` | `humanInteraction` |
+| Any `signOffs`, `approval` other than `never`, or `permissionMode: ask` while an agent has a tool that may need permission | `humanInteraction` |
 | `history.strategy` other than `none` across requests | `conversationStore` |
 
 ---
@@ -688,7 +701,7 @@ id, or an extension of the wrong kind for the setting, is a validation error (CF
   },
   "secrets": { "source": "builtin:environment" },    // builtin:environment | builtin:file | extension:<id>
   "retention": {                                     // PRIV-01
-    "conversations": "90d", "runRecords": "365d", "artifacts": "90d", "events": "30d", "audit": "365d"
+    "conversations": "90.00:00:00", "runRecords": "365.00:00:00", "artifacts": "90.00:00:00", "events": "30.00:00:00", "audit": "365.00:00:00"
   },
   "events": {                                        // EVT-05
     "store": ["status", "tool", "approval", "message", "handoff", "budget", "cost", "fileChange"],
@@ -707,19 +720,19 @@ workspace hides it from agents.
 
 ---
 
-## 13. Layering and merging (CFG-04, CFG-05)
+## 13. Layering and merging (CFG-04)
 
-Layers, lowest to highest:
+The CLI loads configuration with Microsoft.Extensions.Configuration. Layers, lowest to highest:
 
 ```
-code defaults (Options classes) < presets (extends) < application file < environment file < environment variables < run options < agent definition
+code defaults (Options classes) < sof.json < sof.<environment>.json < environment variables < command-line options
 ```
 
 - **Environment variables** use the form `SOF__agents__developer__budget__turn__cost=8`.
-  Their values are parsed as JSON where possible, otherwise as strings.
-- **Run options** are what the host passes when it starts a run, for example the CLI's `--budget 40`.
-- **The agent definition** is the top layer for its own settings: run defaults such as the budget
-  apply to an agent only where the agent does not set them.
+- **Command-line options** are what the CLI passes, for example `--budget 40`.
+- **Setting names match ignoring case**, in files and variables alike.
+- **Unknown settings are ignored.**
+- **Presets and `extends`** (between files or agent definitions) are not available yet; they arrive with the coding team.
 
 Merge rules:
 
@@ -727,19 +740,21 @@ Merge rules:
 |---|---|
 | Object | Merged key by key |
 | Named map (`agents`, `tools`, …) | Merged by name; a new name adds an entry |
-| Array | Replaced as a whole |
-| `null` | Removes the value, so the next lower layer's value applies (for a default, the core default) |
-| `extends` on a definition | The same rules, with the base definition as the lower layer; cycles are rejected |
+| List | Merged by position, so set a list in one layer only |
+| `null` | Makes a setting that may be unset unset. It does not remove other values, and it never removes a budget. |
 
-`sof config show [--agent <name>] [--origin]` prints the effective configuration. With
-`--origin`, each value shows the layer and file position it came from (CFG-04, TEST-05).
+`sof config show` lists every effective setting, defaults included. With `--origin`, each one also shows
+its source: the file, environment variable or option that set it, or `code default, core 0.1.0`.
 
 ---
 
 ## 14. Validation (CFG-06)
 
-Validation runs in full before anything runs, and it reports **all** errors, not the first. Each
-error names the setting path, the problem and the fix. For example:
+Validation runs in full before anything runs, and it reports every error it can find at once. Each
+error names the setting path, the problem and the fix, and the file, variable or option that set it.
+A value that cannot be converted to its type (text where a number belongs, for example) is reported
+one at a time, with the binder's message; the rest of the configuration then uses its defaults until it
+is fixed. For example:
 
 ```
 agents.developer.tools[2]: tool set "shel" does not exist. Did you mean "shell"?
@@ -752,9 +767,9 @@ Validation runs in this order:
 | # | Phase | Rejects |
 |---|---|---|
 | 1 | Parse | Invalid JSON, unknown `formatVersion` |
-| 2 | Shape | Unknown settings, wrong types, values outside allowed ranges, credential-like literals |
-| 3 | Merge | Cycles in `extends`, missing presets |
-| 4 | References | Missing models, tools, tool sets, gates, checks, knowledge sources, agents, tool servers, extensions, secrets (by name only; secrets are not read) |
+| 2 | Shape | Wrong types, values outside allowed ranges, missing required settings (unknown settings are ignored) |
+| 3 | Merge | Cycles in `extends`, missing presets (with presets) |
+| 4 | References | Missing models, tools, tool sets, gates, checks, knowledge sources, agents, tool servers, extensions, secrets (by name only; secrets are not read), unknown placeholders |
 | 5 | Capabilities | Capabilities used but not enabled, unmet dependencies (§9) |
 | 6 | Provider | Settings or features the model or platform does not support (MDL-06), fallbacks that cannot serve their slots (MDL-04), models without prices when a cost budget is set |
 | 7 | Tools | Duplicate names after merging MCP tools, invalid input formats, write tools without gates or exemptions (TOOL-02) |
@@ -771,13 +786,14 @@ Attempts to weaken an invariant, and how each is rejected:
 | INV-04 | A write tool with neither gates nor an exemption with a reason |
 | INV-05 | Any setting that would switch audit off for write tools (`operations.retention.audit` can shorten retention, not remove entries before it) |
 | INV-06 | A secret used as a literal; a secret placeholder in instructions |
-| INV-07 | A budget set to `null`, zero-limit loops, or "unlimited" |
+| INV-07 | A budget of zero or less, zero-limit loops, or "unlimited"; `null` cannot remove a budget |
 | INV-08 | Settings that would place tool or document content in instructions (none exist) |
 | INV-09 | `onCheckFailure: accept`, or a task transition to `done` that skips its checks |
 | INV-10 | Workspace settings that expose the configuration files to agents as writable |
 
-`sof config validate` runs all phases and exits non-zero on any error. `sof config dry-run`
-also runs the configuration against scripted models (CFG-12).
+Each error is reported once: a setting rejected in an early phase is not reported again by later
+phases. `sof config validate` runs all phases and exits non-zero on any error. `sof config dry-run
+[--agent <name>] [--input <text>] [--reply <text>]…` also runs an agent against a scripted model (CFG-12).
 
 ---
 

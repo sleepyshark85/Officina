@@ -1,12 +1,10 @@
-using System.Reflection;
+using System.Collections;
+using Sleepyshark.Officina.Cli;
 
-var version = typeof(Program).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "unknown";
-
-if (args is ["--version"])
+var variables = new Dictionary<string, string>(StringComparer.Ordinal);
+foreach (DictionaryEntry variable in Environment.GetEnvironmentVariables())
 {
-    Console.WriteLine(version);
-    return 0;
+    variables[(string)variable.Key] = (string?)variable.Value ?? "";
 }
 
-Console.WriteLine($"sof {version} - the Officina coding team CLI. Commands arrive in later slices.");
-return 0;
+return SofCommandLine.Run(args, new SofEnvironment(Console.Out, Console.Error, Environment.CurrentDirectory, variables));

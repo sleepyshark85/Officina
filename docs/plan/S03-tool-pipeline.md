@@ -6,7 +6,7 @@
 
 Every tool call goes through one governed path (DESIGN.md §5).
 
-**Closes:** TOOL-01, TOOL-02, TOOL-03, TOOL-04, TOOL-05, TOOL-06, TOOL-07, TOOL-08, TOOL-09, TOOL-10, TOOL-11, TOOL-13, LOOP-08, MSG-07, INV-02, INV-03, INV-04, INV-05, INV-06, INV-10, ING-05, SEC-05, TEST-10, TEST-13
+**Closes:** TOOL-01, TOOL-02, TOOL-03, TOOL-04, TOOL-05, TOOL-06, TOOL-07, TOOL-08, TOOL-09, TOOL-10, TOOL-11, TOOL-13, LOOP-08, MSG-07, INV-02, INV-03, INV-04, INV-05, INV-06, INV-10, ING-05, SEC-05, CFG-13, TEST-10, TEST-13
 
 ## Acceptance criteria
 
@@ -17,6 +17,7 @@ Every tool call goes through one governed path (DESIGN.md §5).
 - [ ] Calls marked safe run in parallel, and their results come back in the order requested.
 - [ ] Provider server-side tools are enabled only explicitly and are audited after the fact.
 - [ ] A write tool without a gate fails validation.
+- [ ] The condition language (approval rules and gate conditions) is implemented, checked against the schema it reads, and tested.
 
 ## Notes
 

@@ -30,7 +30,7 @@ public class AgentRunnerTests
         await kit.RunAsync(new AgentDefinition { Instructions = Instructions }, "Invoice A-17", TestContext.Current.CancellationToken);
 
         var request = Assert.Single(kit.Model.Requests);
-        Assert.Equal(new ModelProfile(), request.Profile);
+        Assert.Same(kit.Runner.Options.Models[ModelProfile.DefaultName], request.Profile);
         Assert.Equal(Instructions, request.Instructions);
         Assert.Equal([Message.User("Invoice A-17")], request.Messages);
     }
@@ -40,13 +40,17 @@ public class AgentRunnerTests
     {
         var first = new ScriptedModelProvider().Reply("from first");
         var second = new ScriptedModelProvider().Reply("from second");
-        var runner = new AgentRunner(
-            new Dictionary<string, IModelProvider> { ["first"] = first, ["second"] = second },
-            new Dictionary<string, ModelProfile>
+        var options = new OfficinaOptions
+        {
+            Providers = new Dictionary<string, ProviderOptions> { ["first"] = new(), ["second"] = new() },
+            Models = new Dictionary<string, ModelProfile>
             {
                 ["cheap"] = new() { Provider = "first", Model = "small" },
                 ["strong"] = new() { Provider = "second", Model = "large" },
-            });
+            },
+        };
+        var providers = new Dictionary<string, IModelProvider> { ["first"] = first, ["second"] = second };
+        var runner = new AgentRunner(options, providers, new InMemoryRunStore());
         var ct = TestContext.Current.CancellationToken;
 
         var cheap = await runner.RunAsync(new AgentDefinition { Instructions = "Classify.", Model = "cheap" }, "input", ct);
@@ -63,9 +67,10 @@ public class AgentRunnerTests
     {
         var kit = new TestKit();
 
-        var error = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => kit.RunAsync(new AgentDefinition { Instructions = Instructions, Model = "missing" }, "input", TestContext.Current.CancellationToken));
+        var error = await Assert.ThrowsAsync<ConfigurationException>(
+            () => kit.RunAsync(
+                new AgentDefinition { Instructions = Instructions, Model = "missing" }, "input", TestContext.Current.CancellationToken));
 
-        Assert.Contains("'missing'", error.Message, StringComparison.Ordinal);
+        Assert.Contains("\"missing\"", error.Message, StringComparison.Ordinal);
     }
 }

@@ -13,17 +13,21 @@ Status: draft for M0 design review · 2026-09-30 · companion to `REQUIREMENTS.m
 - **A configuration file only holds what differs.** `sof.json` is merged on top of the code
   defaults. It is JSON, and comments are allowed.
 - **Presets are ready-made files** that sit between the code defaults and your file. For example,
-  `preset:coding-team` sets up the whole team.
-- **Layers, lowest to highest:** code defaults < presets < `sof.json` < `sof.<environment>.json`
-  < environment variables (`SOF__section__setting`) < run options (CLI flags) < the agent
-  definition. The agent definition only overrides for that agent.
-- **To see what is in effect,** run `sof config show --origin`. It prints the effective value of
-  every setting and where it came from, down to "code default, core 1.2.0" (CFG-04).
+  `preset:coding-team` will set up the whole team; presets arrive with the coding team.
+- **Layers, lowest to highest:** code defaults < `sof.json` < `sof.<environment>.json`
+  < environment variables (`SOF__section__setting`) < CLI options. Loading uses
+  Microsoft.Extensions.Configuration, so setting names match ignoring case, unknown settings are ignored,
+  a list should be set in one layer only (lists merge by position), and `null` only unsets a setting that
+  may be unset. Agent definitions cannot build on each other yet.
+- **To see what is in effect,** run `sof config show --origin`. It lists every setting with its effective
+  value and the file, variable or option it came from, down to "code default, core 1.2.0" (CFG-04).
 - **Everything is validated before anything runs** (CFG-06). `sof config validate` checks a
-  file without running it.
+  file without running it. A value of the wrong type is reported one at a time.
 
 The full list of settings is in [`docs/configuration-reference.md`](docs/configuration-reference.md).
-It is generated from the Options classes once they exist (DOC-01).
+The settings implemented so far are in [`docs/configuration-settings.md`](docs/configuration-settings.md),
+generated from the Options classes with the JSON Schema [`docs/officina.schema.json`](docs/officina.schema.json)
+(CFG-15, DOC-01).
 
 ## What you must specify (CFG-17)
 
@@ -51,7 +55,9 @@ One agent, which runs on the default model profile (`claude-opus-5-5`):
 
 The coding team:
 
-```json
+Presets arrive with the coding team; until then this is how the team will be set up:
+
+```jsonc
 {
   "extends": ["preset:coding-team"],
   "project": { "values": { "buildCommand": "dotnet build", "testCommand": "dotnet test" } }
@@ -67,7 +73,7 @@ The coding team:
 | `agents.<name>.tools` | no tools | The agent should act |
 | `tools.<name>.approval` | `always` for irreversible tools, otherwise `never` | A tool needs human sign-off |
 | `toolServers` | none | You use MCP tool servers |
-| `run.budget` | $25 and 8 hours | Runs are bigger or smaller |
+| `run.budget` | $25 and 8 hours (`"08:00:00"`) | Runs are bigger or smaller |
 | `run.permissionMode` | `ask` | You trust the rules enough for `auto`, or want `readOnly` |
 | `capabilities.sandbox.network.allow` | none (network off) | Builds download packages |
 | `capabilities.sandbox.commandRules` | the preset's rules; anything unmatched is asked about | You want fewer or more prompts |
