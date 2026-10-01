@@ -6,24 +6,28 @@ Status: draft · 2026-10-01 · slices `REQUIREMENTS.md` (revision 2) into delive
 
 Last updated 2026-10-02.
 
-- **Done:** M0 spikes S00a and S00b; M1 slices S01 (walking skeleton) and S02 (configuration); S03 (tool pipeline); S14 (git workspace).
+- **Done:** M0 spikes S00a and S00b; M1 slices S01 (walking skeleton) and S02 (configuration); S03 (tool pipeline); S04 (turn loop); S14 (git workspace).
 - **Waiting:** the M0 design review sign-off on `REQUIREMENTS.md`, `CONFIGURATION.md` and `DESIGN.md`.
-- **Next:** S04 (turn loop). S15 (sandbox) can run alongside it.
+- **Next:** S05, S06, S08 and S10; S07 once S05 is done. S15 (sandbox) can run alongside them.
 - **Open follow-ups:**
   - S02 kept a `formatVersion` check, though only version 1 exists. Consider removing the setting
     until a version 2 exists (principle 13).
   - S02 rejects a plain-text `apiKey`, because the binder would otherwise skip it silently and
     fall back to the default secret reference. Kept on purpose.
   - S08 writes each run's resolved configuration as text when it adds durable storage (CFG-07).
-  - S04 calls `ToolPipeline` from the turn loop: a routed result ends the turn in a handoff, and
-    provider-tool calls are passed to `AuditProviderToolAsync` and counted towards budgets (TOOL-13).
   - S06 keeps a trimmed result's full text as an artifact (TOOL-09) and gives gates the run record
     (TOOL-06); S18 adds the task board to `GateContext`.
   - S08 adds the durable `IAuditLog`, tool-call events, and a log for read tools' internal error details.
   - S11 maps provider tools and their limits, such as maximum uses, to the Claude request.
   - S11: secrets declared in configuration, such as the provider API key, must join the tool
     pipeline's redaction set when they are resolved, so they are removed like secrets tools read (INV-06).
-  - S16 adds the approval timeout and the permission modes (HITL-01, HITL-02).
+  - S16 adds the approval timeout and the permission modes (HITL-01, HITL-02). A denied or timed-out approval
+    should then hand off as "approval denied or timed out"; S04 counts it as a refusal towards a policy gap.
+  - S04 left parts of its requirements to the slices that add the state they need; its Notes list them
+    (S06, S07, S09, S14, S16, S18, S19).
+  - S08 publishes streamed model text as events (EVT-01, MDL-07).
+  - S11 ships the price table, requires a price when a cost budget is set, and splits `prices.*.cacheWrite`
+    by cache lifetime (MDL-09). Until then a model without a configured price costs nothing.
   - S06 adds the `checks` section; `capabilities.workspace.baselineChecks` then names the checks
     `GitWorkspace` runs, which the host passes in code today (WS-02).
   - S15 adds `IWorkspace` to Core when the sandbox needs the working copy (DESIGN.md §4), and the
@@ -72,7 +76,7 @@ A slice is **done** when:
 | [S01](S01-walking-skeleton.md) | Walking skeleton | M1 | M | — | [#3](https://github.com/sleepyshark85/Officina/issues/3) | done |
 | [S02](S02-configuration.md) | Configuration | M1 | M | S01 | [#4](https://github.com/sleepyshark85/Officina/issues/4) | done |
 | [S03](S03-tool-pipeline.md) | Tool pipeline | M2 | M | S02 | [#5](https://github.com/sleepyshark85/Officina/issues/5) | done |
-| [S04](S04-turn-loop.md) | Turn loop | M2 | M | S03 | [#6](https://github.com/sleepyshark85/Officina/issues/6) | todo |
+| [S04](S04-turn-loop.md) | Turn loop | M2 | M | S03 | [#6](https://github.com/sleepyshark85/Officina/issues/6) | done |
 | [S05](S05-context-and-caching.md) | Context and caching | M2 | M | S04 | [#7](https://github.com/sleepyshark85/Officina/issues/7) | todo |
 | [S06](S06-run-record-and-output.md) | Run record and output | M2 | M | S04 | [#8](https://github.com/sleepyshark85/Officina/issues/8) | todo |
 | [S07](S07-history-and-conversations.md) | History and conversation store | M2 | S | S05 | [#9](https://github.com/sleepyshark85/Officina/issues/9) | todo |
