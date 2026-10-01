@@ -9,6 +9,9 @@ Every setting here has its default defined in code, in the core's Options classe
 the code exists, this reference and the JSON Schema are generated from those classes (CFG-15,
 DOC-01). Until then this draft is the specification they must match.
 
+Settings are added when the slice that needs them is built. A setting no slice needs yet stays a
+constant in code, and can be dropped from this draft rather than built speculatively.
+
 ---
 
 ## 1. Principles

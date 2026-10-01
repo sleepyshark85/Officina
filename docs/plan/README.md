@@ -14,6 +14,8 @@ A slice is **done** when:
 - its acceptance criteria pass in CI on Linux and Windows;
 - every requirement it closes has a test or a recorded review;
 - its tests replace only system boundaries, never internal types (DESIGN.md §11);
+- it builds nothing its acceptance criteria don't need: no unused abstractions, no settings without a
+  known case, no optimization without a measured target (principle 13);
 - its settings appear in the generated reference.
 
 ## Milestones
