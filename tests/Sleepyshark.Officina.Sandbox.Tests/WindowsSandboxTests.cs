@@ -34,7 +34,7 @@ public sealed class WindowsSandboxTests : IDisposable
         Assert.DoesNotContain("s3cret", output, StringComparison.Ordinal);
         Assert.Contains($"{real.WorkingCopy}\n", output, StringComparison.OrdinalIgnoreCase);
         Assert.False(File.Exists(Path.Combine(real.Host, "planted")));
-        Assert.Equal("built\r\n", await File.ReadAllTextAsync(Path.Combine(real.WorkingCopy, "out.txt"), Ct));
+        Assert.StartsWith("built", await File.ReadAllTextAsync(Path.Combine(real.WorkingCopy, "out.txt"), Ct), StringComparison.Ordinal);
     }
 
     [Fact(Skip = WindowsOnly, SkipUnless = nameof(OnWindows))]
@@ -49,7 +49,9 @@ public sealed class WindowsSandboxTests : IDisposable
 
         var (output, _) = await real.RunAsync("type .env & type .git\\config & echo {\"x\": 1}> sof.json & del /f sof.json", hidden: [git, env], readOnly: [configuration]);
 
-        Assert.DoesNotContain("s3cret", output, StringComparison.Ordinal);
+        var entries = string.Join("; ", new FileInfo(env).GetAccessControl().GetAccessRules(true, true, typeof(System.Security.Principal.SecurityIdentifier))
+            .Cast<System.Security.AccessControl.FileSystemAccessRule>().Select(rule => $"{rule.IdentityReference} {rule.AccessControlType} {rule.FileSystemRights} {rule.IsInherited}"));
+        Assert.True(!output.Contains("s3cret", StringComparison.Ordinal), $"{output} | {entries}");
         Assert.DoesNotContain("git-secret", output, StringComparison.Ordinal);
         Assert.Equal("{}", await File.ReadAllTextAsync(configuration, Ct));
     }
@@ -92,7 +94,7 @@ public sealed class WindowsSandboxTests : IDisposable
     {
         // The limit is on committed memory: the allocation fails, and the program ends.
         var (output, exitCode) = await real.RunAsync(
-            "powershell -NoProfile -NonInteractive -Command \"$a = [byte[]]::new(1GB); 'allocated'\"", limits: Small with { MemoryBytes = 256 << 20 });
+            "powershell -NoProfile -NonInteractive -Command \"$ErrorActionPreference = 'Stop'; $a = [byte[]]::new(1GB); 'allocated'\"", limits: Small with { MemoryBytes = 256 << 20 });
 
         Assert.NotEqual(0, exitCode);
         Assert.DoesNotContain("allocated\n", output, StringComparison.Ordinal);

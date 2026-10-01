@@ -105,7 +105,7 @@ public sealed class WindowsSandbox : ISandbox
                 var pipe = $"officina-{Guid.NewGuid():N}";
                 proxy = FilterProxy.OnNamedPipe(pipe, container, command.AllowedHosts);
                 var script = Convert.ToBase64String(Encoding.Unicode.GetBytes(Forwarder.Replace("{0}", pipe, StringComparison.Ordinal)));
-                var (_, forwarder) = Launch($"powershell.exe -NoLogo -NoProfile -NonInteractive -EncodedCommand {script}", command.Directory, environment, container, job);
+                var (_, forwarder) = Launch($"powershell.exe -NoLogo -NoProfile -NonInteractive -EncodedCommand {script}", home.FullName, environment, container, job);
                 var port = forwarder.ReadLine() ?? throw new Win32Exception("The proxy forwarder did not start.");
                 environment["HTTP_PROXY"] = environment["HTTPS_PROXY"] = $"http://127.0.0.1:{port.Trim()}";
             }
