@@ -70,6 +70,26 @@ public class ValidationTests
         Assert.Equal((ValidationPhase.Invariants, "run.budget"), (error.Phase, error.Path));
     }
 
+    // INV-07, LOOP-05.
+    [Fact]
+    public void A_turn_needs_a_budget_above_zero_and_a_way_to_complete()
+    {
+        var options = WithAgent(Extractor with
+        {
+            Budget = new() { Turn = new() { Tokens = 0 } },
+            StopWhen = new() { Finished = false },
+            Stall = new() { IterationsWithoutProgress = 0 },
+        });
+
+        Assert.Equal(
+            [(ValidationPhase.Shape, "agents.extractor.stall.iterationsWithoutProgress"), (ValidationPhase.Shape, "agents.extractor.stopWhen"),
+                (ValidationPhase.Invariants, "agents.extractor.budget.turn.tokens")],
+            options.Validate().Select(error => (error.Phase, error.Path)));
+        Assert.Equal(
+            "tool \"submit\" does not exist.",
+            Assert.Single(WithAgent(Extractor with { StopWhen = new() { FinishTool = "submit" } }).Validate()).Problem);
+    }
+
     [Fact]
     public void A_range_is_checked_wherever_the_setting_is()
     {

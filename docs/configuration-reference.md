@@ -444,8 +444,7 @@ PAT-02). Data moves only through declared `input` and `output` (PAT-04).
 ```jsonc
 { "type": "singleCall" }
 
-{ "type": "toolLoop",
-  "stopWhen": ["finished"] }        // finished | "finishTool" | "checksPass" | { "maxIterations": n }
+{ "type": "toolLoop" }              // ends by the agent's stop conditions (§7.5)
 
 { "type": "workflow",
   "steps": [
@@ -546,11 +545,13 @@ There is no setting that accepts work while a configured check fails (INV-09).
   "agent": { "cost": 15 },
   "task":  { "cost": 8, "time": "02:00:00" }
 },
-"stall": { "iterationsWithoutProgress": 3 }
+"stall": { "iterationsWithoutProgress": 3 },
+"stopWhen": { "finished": true, "finishTool": null, "maxIterations": null },  // LOOP-05; the first that holds completes the turn
+"handOffOnPolicyGap": true                                                     // LOOP-11
 ```
 
 Every level has a default, and none can be `null` or unlimited (INV-07). A budget can be very high,
-but it always exists.
+but it always exists. The stop condition "the output passes its checks" arrives with output checks (S06).
 
 ---
 
