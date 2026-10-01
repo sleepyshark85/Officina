@@ -116,6 +116,12 @@ public sealed partial record OfficinaOptions : IValidatableObject
             errors = errors.Concat(References("capabilities.sandbox.secrets", "agent", sandbox.Secrets.Keys, "agents", Agents.Keys));
         }
 
+        if (Capabilities.TaskBoard is { Enabled: true } board)
+        {
+            // INV-07: a task's budget is a budget level.
+            errors = errors.Concat(Annotations(board, "capabilities.taskBoard", ValidationPhase.Invariants));
+        }
+
         errors = errors.Concat(AdmissionSettings()).Concat(Annotations(Storage.Retention, "storage.retention"))
             .Concat(Storage.Unstored.Where(kind => !EventPayload.Kinds.Contains(kind)).Select(kind => new ConfigurationError(
                 ValidationPhase.Shape, "storage.unstoredEvents", $"\"{kind}\" is not a kind of event.",
@@ -134,6 +140,11 @@ public sealed partial record OfficinaOptions : IValidatableObject
         if (Knowledge.Count > 0 && !on.Contains("knowledge"))
         {
             errors = errors.Append(Off("knowledge", "knowledge"));
+        }
+
+        foreach (var name in Tools.Where(tool => tool.Value.BuiltinTool()?.StartsWith("tasks.", StringComparison.Ordinal) == true).Select(tool => tool.Key))
+        {
+            errors = on.Contains("taskBoard") ? errors : errors.Append(Off($"tools.{name}.source", "taskBoard"));
         }
 
         foreach (var (name, agent) in Agents)

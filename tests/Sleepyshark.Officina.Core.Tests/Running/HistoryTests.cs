@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.Extensions.Time.Testing;
 using Sleepyshark.Officina.Core.Configuration;
 using Sleepyshark.Officina.Core.Extensibility;
@@ -169,14 +170,16 @@ public class HistoryTests
         Assert.Equal(["1", "", "", "one", "2"], result.Transcript.Select(Text));
     }
 
-    // HIST-03, TEST-15: S06 adds the run record, S18 tasks and S17 memory.
+    // HIST-03, TEST-15: S17 adds memory.
     [Fact]
-    public async Task Shortening_leaves_the_stored_runs_events_and_audit_entries_as_they_were()
+    public async Task Shortening_leaves_the_stored_runs_events_audit_entries_and_task_boards_as_they_were()
     {
         var kit = Kit(new() { Strategy = HistoryStrategy.Shortened });
         kit.Model.CallTools(("edit", """{ "path": "a.cs" }""")).Reply("one").Reply(TooLong).Reply("two");
         kit.Model.Shorten(history => [Message.User("Summary: a.cs was edited."), history[^1]]);
-        await kit.Runner.RunAsync(Agent, "1", Owner, Ct);
+        var first = new Work(Agent, "1") { Caller = Owner, TaskId = "t1" };
+        await kit.Runner.Board(Owner.Tenant, first.RunId).AddAsync("t1", new() { Title = "Edit a.cs" }, "planned", Ct);
+        await kit.Runner.RunAsync(first, Ct);
         var before = await kit.Storage.ExportAsync(Owner.Tenant, Owner.Id!, Ct);
 
         await kit.Runner.RunAsync(Agent, "2", Owner, Ct);
@@ -186,6 +189,8 @@ public class HistoryTests
         Assert.Equal(before.Runs, after.Runs.Take(before.Runs.Count));
         Assert.Equal(before.Events, after.Events.Take(before.Events.Count));
         Assert.Equal(before.Audit, after.Audit);
+        Assert.NotEmpty(before.Tasks);
+        Assert.Equal(JsonSerializer.Serialize(before.Tasks), JsonSerializer.Serialize(after.Tasks));
     }
 
     // HIST-01.
@@ -226,7 +231,7 @@ public class HistoryTests
         return options with
         {
             Agents = new Dictionary<string, AgentDefinition> { [Agent] = options.Agents[Agent] with { Context = new() { History = history } } },
-            Capabilities = new() { ConversationStore = new() { Enabled = true } },
+            Capabilities = new() { ConversationStore = new() { Enabled = true }, TaskBoard = new() { Enabled = true } },
         };
     }
 

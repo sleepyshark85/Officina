@@ -39,6 +39,11 @@ public sealed record RetentionOptions
     [Range(typeof(TimeSpan), "00:00:00", "10675199.02:48:05.4775807", MinimumIsExclusive = true, ErrorMessage = Positive)]
     public TimeSpan? RunRecords { get; init; }
 
+    [Setting("How long a run's task board, with each task's history, is kept after its last change, as `d.hh:mm:ss`. It is kept or deleted whole.",
+        Example = "\"365.00:00:00\"")]
+    [Range(typeof(TimeSpan), "00:00:00", "10675199.02:48:05.4775807", MinimumIsExclusive = true, ErrorMessage = Positive)]
+    public TimeSpan? TaskBoards { get; init; }
+
     [Setting("How long an artifact, such as the full text of a trimmed tool result, is kept after it is made, as `d.hh:mm:ss`.",
         Example = "\"90.00:00:00\"")]
     [Range(typeof(TimeSpan), "00:00:00", "10675199.02:48:05.4775807", MinimumIsExclusive = true, ErrorMessage = Positive)]

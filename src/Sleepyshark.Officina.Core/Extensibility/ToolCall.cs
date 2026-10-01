@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Sleepyshark.Officina.Core.Records;
+using Sleepyshark.Officina.Core.Tasks;
 
 namespace Sleepyshark.Officina.Core.Extensibility;
 
@@ -12,6 +13,8 @@ namespace Sleepyshark.Officina.Core.Extensibility;
 /// audit log and errors (INV-06).
 /// </param>
 /// <param name="Record">The run record, to read; only the core's record tools propose changes to it (REC-02).</param>
+/// <param name="Board">The task board, to read, with the task the agent works on; null when the task board is off.</param>
 /// <param name="Output">Publishes a line of the tool's output as it is produced, as an event, with known secrets removed.</param>
 public sealed record ToolCall(
-    JsonElement Arguments, Caller Caller, string IdempotencyKey, ISecretSource Secrets, RunRecord Record, Func<string, CancellationToken, ValueTask> Output);
+    JsonElement Arguments, Caller Caller, string IdempotencyKey, ISecretSource Secrets, RunRecord Record, TaskBoard? Board,
+    Func<string, CancellationToken, ValueTask> Output);

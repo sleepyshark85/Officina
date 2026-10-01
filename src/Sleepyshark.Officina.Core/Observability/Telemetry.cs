@@ -50,6 +50,11 @@ public static class Telemetry
         {
             { "gen_ai.operation.name", "chat" }, { "gen_ai.provider.name", provider }, { "gen_ai.request.model", model }, { "gen_ai.agent.name", context.Agent },
         };
+        if (context.TaskId is not null)
+        {
+            tags.Add("officina.task.id", context.TaskId); // OBS-02: tokens and cost by task
+        }
+
         Duration.Record(elapsed.TotalSeconds, tags);
         Iterations.Add(1, tags);
         Cost.Add((double)cost, tags);

@@ -6,6 +6,7 @@ using Sleepyshark.Officina.Core.Extensibility;
 using Sleepyshark.Officina.Core.Messages;
 using Sleepyshark.Officina.Core.Observability;
 using Sleepyshark.Officina.Core.Records;
+using Sleepyshark.Officina.Core.Tasks;
 using Sleepyshark.Officina.Core.Tools;
 
 namespace Sleepyshark.Officina.Core.Running;
@@ -70,14 +71,7 @@ public sealed class AgentRunner
         this.storage = storage;
         this.time = time;
         Events = new EventBus(storage.Events, options.Storage, time);
-        pipeline = new ToolPipeline(options, tools, gates, knowledge, storage, Events, human, secrets, time);
-        var unregistered = options.Checks.Where(check => !checks.ContainsKey(check.Value.ExtensionId()!))
-            .Select(check => ToolCatalog.Unregistered($"checks.{check.Key}.use", "check", check.Value.ExtensionId()!)).ToList();
-        if (unregistered.Count > 0)
-        {
-            throw new ConfigurationException(unregistered);
-        }
-
+        pipeline = new ToolPipeline(options, tools, gates, knowledge, checks, storage, Events, human, secrets, time);
         this.checks = checks;
         this.knowledge = knowledge;
         shortening = Shortening(options, providers, shorteners ?? new Dictionary<string, IHistoryShortener>());
@@ -89,6 +83,12 @@ public sealed class AgentRunner
 
     /// <summary>What the runs do, live and from the start of each stored run (EVT-01, EVT-03).</summary>
     public EventBus Events { get; }
+
+    /// <summary>A run's task board, as the owner or the host changes it (TASK-08, WS-03).</summary>
+    /// <param name="tenant">The run's tenant.</param>
+    /// <param name="runId">The run.</param>
+    /// <exception cref="InvalidOperationException">The task board is off.</exception>
+    public TaskBoard Board(string? tenant, string runId) => pipeline.Board(tenant, runId);
 
     /// <summary>Runs a single request.</summary>
     /// <param name="agentName">The agent, by its name in <c>agents</c>.</param>
@@ -105,6 +105,11 @@ public sealed class AgentRunner
     {
         ArgumentNullException.ThrowIfNull(work);
         KnownAgent(work.Agent);
+        if (work.TaskId is not null && !Options.Capabilities.TaskBoard.Enabled)
+        {
+            throw new ArgumentException("The work is for a task, but the task board is off.", nameof(work));
+        }
+
         return RunCoreAsync(work, ct);
     }
 
@@ -201,11 +206,11 @@ public sealed class AgentRunner
             return new AgentResult(AgentOutcome.Rejected, rejection, new TurnStatistics(0, 0, Usage.None, 0m, TimeSpan.Zero), [], [], [], []);
         }
 
-        var context = new ToolContext(work.RunId, name, work.Caller) { Masker = masker };
+        var context = new ToolContext(work.RunId, name, work.Caller) { Masker = masker, TaskId = work.TaskId };
         var instructions = InstructionPlaceholders.Fill(agent.Instructions, Options.Project, name, agent);
         var record = new RunRecord(storage.Records, context, time);
         var turn = new Turn(
-            context, Options, provider, pipeline, record, checks, knowledge, storage.Conversations, shortening.GetValueOrDefault(name), Events, instructions, admitted,
+            context, Options, provider, pipeline, record, pipeline.Board(context), checks, knowledge, storage.Conversations, shortening.GetValueOrDefault(name), Events, instructions, admitted,
             Inbox(name), time);
         var oneAtATime = turns.GetOrAdd(name, _ => new SemaphoreSlim(1, 1));
         var entered = false;

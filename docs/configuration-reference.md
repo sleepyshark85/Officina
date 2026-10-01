@@ -604,7 +604,7 @@ object with `"enabled"` plus its own settings.
   },
   "checkpoints": { "at": ["turn", "integration"] },                 // RUN-03; also "step", "tool"
   "team":        { "maxParallelAgents": 4, "helperDepth": 2, "helperCount": 4 },
-  "taskBoard":   { "maxAttempts": 3, "requireReview": true, "transitions": "default" },
+  "taskBoard":   { "maxAttempts": 3, "budget": 8 },                // TASK-09; the transitions are fixed (TASK-02), and each task says whether it needs a review
   "workspace": {
     "type": "builtin:git",
     "root": ".",

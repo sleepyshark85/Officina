@@ -24,7 +24,7 @@ It lists the settings the code has today. Settings that later slices add are spe
 | `run` | section | `{"budget":{"cost":25,"time":"08:00:00"},"permissionMode":"ask"}` | Defaults for every run. | `{"permissionMode":"ask"}` |
 | `operations` | section | `{"telemetry":{"cacheHitWarning":0.7}}` | How the engine is operated. | `{"telemetry":{"cacheHitWarning":0.7}}` |
 | `storage` | section | `{"retention":{"audit":"365.00:00:00"}}` | What is stored, and for how long. | `{"unstoredEvents":["textGenerated"],"retention":{"events":"30.00:00:00"}}` |
-| `capabilities` | section | `{"conversationStore":{"enabled":false},"knowledge":{"enabled":false},"workspace":{"enabled":false,"protectedPaths":[],"keepWorkingCopies":false},"sandbox":{"enabled":false,"allowedHosts":[],"toolchains":[],"commandRules":[],"secrets":{}}}` | Optional capabilities and their settings. All are off by default. | `{"conversationStore":{"enabled":true}}` |
+| `capabilities` | section | `{"conversationStore":{"enabled":false},"knowledge":{"enabled":false},"workspace":{"enabled":false,"protectedPaths":[],"keepWorkingCopies":false},"sandbox":{"enabled":false,"allowedHosts":[],"toolchains":[],"commandRules":[],"secrets":{}},"taskBoard":{"enabled":false,"maxAttempts":3,"budget":8}}` | Optional capabilities and their settings. All are off by default. | `{"conversationStore":{"enabled":true}}` |
 
 ## `project`
 
@@ -64,7 +64,7 @@ It lists the settings the code has today. Settings that later slices add are spe
 | `toolDescriptionsOnDemand` | boolean | `false` | Whether the model is offered only the tools' names, and reads a tool's description and arguments with `describe_tool` when it needs them. For agents with many tools. | `true` |
 | `permissions` | list |  | Narrows the caller's permissions for this agent's tool calls: a permission counts only if the caller holds it and it is listed here. Unset keeps the caller's. | `["issues:write"]` |
 | `maxParallelToolCalls` | whole number, ≥ 1 | `4` | The most tool calls from one reply that run at the same time, when every tool called is safe to run in parallel. | `4` |
-| `context` | section | `{"operatingFacts":[],"historyCacheLifetime":"00:05:00","retrieval":{"beforeTurn":[],"handOffWhenNotCovered":false},"history":{"strategy":"none","shortening":"provider","lastTurns":10}}` | How the agent's model input is built. Required. | `{"operatingFacts":["Today is {{now:date}}."]}` |
+| `context` | section | `{"operatingFacts":[],"historyCacheLifetime":"00:05:00","recordScope":"all","currentTask":true,"retrieval":{"beforeTurn":[],"handOffWhenNotCovered":false},"history":{"strategy":"none","shortening":"provider","lastTurns":10}}` | How the agent's model input is built. Required. | `{"operatingFacts":["Today is {{now:date}}."]}` |
 | `output` | section | `{"format":"text","attempts":2,"checks":[]}` | What the output must be before a turn completes with it. Required. | `{"format":"structured","schema":"{ \u0022type\u0022: \u0022object\u0022 }"}` |
 | `stopWhen` | section | `{"finished":true,"checksPass":false}` | When a turn is complete. They combine: the first that holds completes the turn. Required. | `{"finished":false,"finishTool":"submit_report"}` |
 | `budget` | section | `{"turn":{"iterations":50,"toolCalls":200,"tokens":3000000,"cost":5,"time":"00:45:00"}}` | The agent's budgets. They can be high, but they cannot be removed or unlimited. Required. | `{"turn":{"iterations":50,"cost":5}}` |
@@ -160,6 +160,7 @@ It lists the settings the code has today. Settings that later slices add are spe
 | `knowledge` | section | `{"enabled":false}` | Knowledge retrieval: the sources in `knowledge`, searched before a turn or through `knowledge:` tools. | `{"enabled":true}` |
 | `workspace` | section | `{"enabled":false,"protectedPaths":[],"keepWorkingCopies":false}` | The git workspace: a working copy per agent, and an integration queue into the baseline. | `{"enabled":true,"protectedPaths":[{"path":"secrets/**","access":"hidden"}]}` |
 | `sandbox` | section | `{"enabled":false,"allowedHosts":[],"toolchains":[],"commandRules":[],"secrets":{}}` | The sandbox that commands run in: no network unless allowed, and command rules. It needs the workspace. | `{"enabled":true,"allowedHosts":["api.nuget.org"]}` |
+| `taskBoard` | section | `{"enabled":false,"maxAttempts":3,"budget":8}` | The task board: tasks with dependencies, verification checks and review, which agents change through the `tasks.*` tools and the owner at any time. | `{"enabled":true,"maxAttempts":2}` |
 
 ## `providers.<name>.apiKey`
 
@@ -183,6 +184,8 @@ It lists the settings the code has today. Settings that later slices add are spe
 | `operatingFacts` | list | `[]` | Facts added after the history for every model call, in this order, such as limits or the date. Placeholders may use `{{now}}` and `{{now:date}}`, and the project and agent values. | `["Today is {{now:date}}.","Replies are limited to 300 words."]` |
 | `historyCacheLifetime` | time span (`hh:mm:ss` or `d.hh:mm:ss`) | `"00:05:00"` | How long the provider keeps the conversation cached between model calls, as `hh:mm:ss`, at most one hour. Agents that often wait for approvals benefit from longer. | `"01:00:00"` |
 | `record` | list |  | The kinds of run record entry the agent sees in its model input: `fact`, `finding`, `decision` and `citation`; unset for `fact`, `finding` and `decision`; list `citation` to show citations too. Facts come before retrieved knowledge, and the rest after it. | `["fact","decision"]` |
+| `recordScope` | `"all"`, `"task"` | `"all"` | `all`: the agent sees the run record's entries of the kinds in `record`. `task`: only those made for the task it works on. | `"task"` |
+| `currentTask` | boolean | `true` | Whether the volatile context shows the status and acceptance criteria of the task the agent works on. | `false` |
 | `retrieval` | section | `{"beforeTurn":[],"handOffWhenNotCovered":false}` | Knowledge retrieved before each turn. Required. | `{"beforeTurn":["handbook"],"handOffWhenNotCovered":true}` |
 | `history` | section | `{"strategy":"none","shortening":"provider","lastTurns":10}` | What history a request starts with, and how it is shortened. Required. | `{"strategy":"shortened"}` |
 
@@ -278,6 +281,7 @@ It lists the settings the code has today. Settings that later slices add are spe
 | `events` | time span (`hh:mm:ss` or `d.hh:mm:ss`) |  | How long an event is kept after it happens, as `d.hh:mm:ss`. | `"30.00:00:00"` |
 | `conversations` | time span (`hh:mm:ss` or `d.hh:mm:ss`) |  | How long a turn of a stored conversation is kept after it ends, as `d.hh:mm:ss`. Once its earliest turns are deleted, a conversation continues from the turns kept. | `"90.00:00:00"` |
 | `runRecords` | time span (`hh:mm:ss` or `d.hh:mm:ss`) |  | How long a run's record is kept after its last change, as `d.hh:mm:ss`. It is kept or deleted whole, never trimmed. | `"365.00:00:00"` |
+| `taskBoards` | time span (`hh:mm:ss` or `d.hh:mm:ss`) |  | How long a run's task board, with each task's history, is kept after its last change, as `d.hh:mm:ss`. It is kept or deleted whole. | `"365.00:00:00"` |
 | `artifacts` | time span (`hh:mm:ss` or `d.hh:mm:ss`) |  | How long an artifact, such as the full text of a trimmed tool result, is kept after it is made, as `d.hh:mm:ss`. | `"90.00:00:00"` |
 | `audit` | time span (`hh:mm:ss` or `d.hh:mm:ss`) | `"365.00:00:00"` | How long an audit entry is kept after it is written, as `d.hh:mm:ss`. A request to delete an owner's data leaves audit entries to this period. | `"730.00:00:00"` |
 
@@ -304,6 +308,14 @@ It lists the settings the code has today. Settings that later slices add are spe
 | `toolchains` | list | `[]` | Folders of toolchains installed outside the system folders, such as an SDK in the home folder. Commands can read and run them, and find them on the path. | `["/home/dev/.dotnet"]` |
 | `commandRules` | list | `[]` | Rules for commands, in order. Each command of a command line is decided by the first rule that matches it, and the strictest decision applies. A command no rule matches is asked about. | `[{"match":"dotnet build*","action":"allow"},{"match":"git push*","action":"deny"}]` |
 | `secrets` | named entries | `{}` | The secrets each agent's commands receive as environment variables, by agent name. Other agents' commands never see them. | `{"developer":["NUGET_TOKEN"]}` |
+
+## `capabilities.taskBoard`
+
+| Setting | Allowed values | Default | Description | Example |
+|---|---|---|---|---|
+| `enabled` | boolean | `false` | Whether the task board is on. | `true` |
+| `maxAttempts` | whole number, ≥ 1 | `3` | How many attempts of a task may fail a check, a review or an integration before it goes back to the lead. | `3` |
+| `budget` | number, > 0 | `8` | The most a task's turns may cost, in USD, unless the owner gives the task another budget. A task whose budget is used up goes back to the lead. | `8` |
 
 ## `agents.<name>.context.retrieval`
 

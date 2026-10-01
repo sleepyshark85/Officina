@@ -8,6 +8,7 @@ using Sleepyshark.Officina.Core.Extensibility;
 using Sleepyshark.Officina.Core.Messages;
 using Sleepyshark.Officina.Core.Records;
 using Sleepyshark.Officina.Core.Running;
+using Sleepyshark.Officina.Core.Tasks;
 
 namespace Sleepyshark.Officina.Storage.Sqlite;
 
@@ -16,10 +17,10 @@ namespace Sleepyshark.Officina.Storage.Sqlite;
 /// every statement filters by it (SEC-02). The file carries the format version of what it holds, and a file in any
 /// other version is refused rather than misread (REL-04).
 /// </summary>
-public sealed class SqliteStorage : IStorage, IRunStore, IConversationStore, IEventLog, IAuditLog, IRecordStore, IArtifactStore
+public sealed class SqliteStorage : IStorage, IRunStore, IConversationStore, IEventLog, IAuditLog, IRecordStore, IArtifactStore, ITaskStore
 {
     /// <summary>The only format version this storage reads and writes.</summary>
-    public const int FormatVersion = 2;
+    public const int FormatVersion = 3;
 
     private const string Schema = """
         CREATE TABLE runs (
@@ -40,11 +41,14 @@ public sealed class SqliteStorage : IStorage, IRunStore, IConversationStore, IEv
             shortened INTEGER NOT NULL, messages TEXT NOT NULL);
         CREATE INDEX conversations_owner ON conversations (tenant, owner, agent);
         CREATE TABLE record (
-            tenant TEXT, run_id TEXT NOT NULL, revision INTEGER NOT NULL, agent TEXT NOT NULL, time INTEGER NOT NULL, item TEXT NOT NULL,
+            tenant TEXT, run_id TEXT NOT NULL, revision INTEGER NOT NULL, agent TEXT NOT NULL, time INTEGER NOT NULL, item TEXT NOT NULL, task TEXT,
             PRIMARY KEY (run_id, revision));
         CREATE TABLE artifacts (
             id INTEGER PRIMARY KEY, tenant TEXT, run_id TEXT NOT NULL, time INTEGER NOT NULL, name TEXT NOT NULL, content TEXT NOT NULL);
         CREATE INDEX artifacts_run ON artifacts (tenant, run_id);
+        CREATE TABLE task_changes (
+            tenant TEXT, run_id TEXT NOT NULL, revision INTEGER NOT NULL, by TEXT NOT NULL, time INTEGER NOT NULL, what TEXT NOT NULL,
+            reason TEXT NOT NULL, tasks TEXT NOT NULL, PRIMARY KEY (run_id, revision));
         """;
 
     private const string Conversation = "tenant IS $tenant AND agent = $agent AND owner IS $owner";
@@ -68,6 +72,8 @@ public sealed class SqliteStorage : IStorage, IRunStore, IConversationStore, IEv
     IRecordStore IStorage.Records => this;
 
     IArtifactStore IStorage.Artifacts => this;
+
+    ITaskStore IStorage.Tasks => this;
 
     /// <summary>Opens the storage in a file, creating it if it does not exist.</summary>
     /// <exception cref="InvalidDataException">The file holds data in another format version.</exception>
@@ -142,16 +148,34 @@ public sealed class SqliteStorage : IStorage, IRunStore, IConversationStore, IEv
         // The key (run, revision) lets only the first of two updates with the same revision in (REC-04); the other
         // inserts nothing, so it returns no row. Any other constraint violation still throws.
         var added = await QueryAsync(
-            "INSERT INTO record VALUES ($tenant, $run_id, $revision, $agent, $time, $item) ON CONFLICT (run_id, revision) DO NOTHING RETURNING revision",
+            "INSERT INTO record VALUES ($tenant, $run_id, $revision, $agent, $time, $item, $task) ON CONFLICT (run_id, revision) DO NOTHING RETURNING revision",
             row => row.GetInt64(0), ct,
             ("$tenant", tenant), ("$run_id", entry.RunId), ("$revision", entry.Revision), ("$agent", entry.Agent), ("$time", entry.Time.UtcTicks),
-            ("$item", JsonSerializer.Serialize(entry.Item, StoredJson))).ConfigureAwait(false);
+            ("$item", JsonSerializer.Serialize(entry.Item, StoredJson)), ("$task", entry.Task)).ConfigureAwait(false);
         return added.Count == 1;
     }
 
     async ValueTask<IReadOnlyList<RecordEntry>> IRecordStore.ReadAsync(string? tenant, string runId, CancellationToken ct) =>
         await QueryAsync(
             "SELECT * FROM record WHERE tenant IS $tenant AND run_id = $run_id ORDER BY revision", ReadRecordEntry, ct,
+            ("$tenant", tenant), ("$run_id", runId)).ConfigureAwait(false);
+
+    public async ValueTask<bool> TryAppendAsync(string? tenant, TaskChange change, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(change);
+
+        // As for the record: the key (run, revision) lets only the first of two changes with the same revision in.
+        var added = await QueryAsync(
+            "INSERT INTO task_changes VALUES ($tenant, $run_id, $revision, $by, $time, $what, $reason, $tasks) ON CONFLICT (run_id, revision) DO NOTHING RETURNING revision",
+            row => row.GetInt64(0), ct,
+            ("$tenant", tenant), ("$run_id", change.RunId), ("$revision", change.Revision), ("$by", change.By), ("$time", change.Time.UtcTicks),
+            ("$what", change.What), ("$reason", change.Reason), ("$tasks", JsonSerializer.Serialize(change.Tasks, StoredJson))).ConfigureAwait(false);
+        return added.Count == 1;
+    }
+
+    async ValueTask<IReadOnlyList<TaskChange>> ITaskStore.ReadAsync(string? tenant, string runId, CancellationToken ct) =>
+        await QueryAsync(
+            "SELECT * FROM task_changes WHERE tenant IS $tenant AND run_id = $run_id ORDER BY revision", ReadTaskChange, ct,
             ("$tenant", tenant), ("$run_id", runId)).ConfigureAwait(false);
 
     public async ValueTask<long> SaveAsync(string? tenant, string runId, Artifact artifact, DateTimeOffset time, CancellationToken ct)
@@ -184,7 +208,9 @@ public sealed class SqliteStorage : IStorage, IRunStore, IConversationStore, IEv
             $"SELECT * FROM record WHERE tenant IS $tenant AND run_id IN ({OwnerRuns}) ORDER BY run_id, revision", ReadRecordEntry, ct, parameters).ConfigureAwait(false);
         var artifacts = await QueryAsync(
             $"SELECT * FROM artifacts WHERE tenant IS $tenant AND run_id IN ({OwnerRuns}) ORDER BY id", ReadArtifact, ct, parameters).ConfigureAwait(false);
-        return new OwnerData(runs, events, audit, conversations, record, artifacts);
+        var tasks = await QueryAsync(
+            $"SELECT * FROM task_changes WHERE tenant IS $tenant AND run_id IN ({OwnerRuns}) ORDER BY run_id, revision", ReadTaskChange, ct, parameters).ConfigureAwait(false);
+        return new OwnerData(runs, events, audit, conversations, record, artifacts, tasks);
     }
 
     public ValueTask AppendAsync(string? tenant, ConversationTurn turn, CancellationToken ct)
@@ -209,6 +235,7 @@ public sealed class SqliteStorage : IStorage, IRunStore, IConversationStore, IEv
             DELETE FROM events WHERE tenant IS $tenant AND run_id IN ({OwnerRuns});
             DELETE FROM record WHERE tenant IS $tenant AND run_id IN ({OwnerRuns});
             DELETE FROM artifacts WHERE tenant IS $tenant AND run_id IN ({OwnerRuns});
+            DELETE FROM task_changes WHERE tenant IS $tenant AND run_id IN ({OwnerRuns});
             DELETE FROM runs WHERE tenant IS $tenant AND owner = $owner;
             DELETE FROM conversations WHERE tenant IS $tenant AND owner = $owner;
             """, ct,
@@ -220,7 +247,7 @@ public sealed class SqliteStorage : IStorage, IRunStore, IConversationStore, IEv
 
         // A kind without a retention period is kept, so it needs no statement. Audit always has a period, so the
         // statement is never empty. A record is deleted whole, once its last change is older than its period, so it is
-        // never trimmed (REC-05).
+        // never trimmed (REC-05), and so is a task board.
         (string Table, TimeSpan? Period, string Statement)[] kinds =
         [
             ("runs", retention.Runs, "DELETE FROM runs WHERE time < $runs;"),
@@ -229,6 +256,8 @@ public sealed class SqliteStorage : IStorage, IRunStore, IConversationStore, IEv
             ("audit", retention.Audit, "DELETE FROM audit WHERE time < $audit;"),
             ("artifacts", retention.Artifacts, "DELETE FROM artifacts WHERE time < $artifacts;"),
             ("record", retention.RunRecords, "DELETE FROM record WHERE run_id IN (SELECT run_id FROM record GROUP BY run_id HAVING MAX(time) < $record);"),
+            ("tasks", retention.TaskBoards,
+                "DELETE FROM task_changes WHERE run_id IN (SELECT run_id FROM task_changes GROUP BY run_id HAVING MAX(time) < $tasks);"),
         ];
         var expired = kinds.Where(kind => kind.Period is not null).ToList();
 
@@ -259,7 +288,12 @@ public sealed class SqliteStorage : IStorage, IRunStore, IConversationStore, IEv
 
     private static RecordEntry ReadRecordEntry(SqliteDataReader row) => new(
         row.GetString(row.GetOrdinal("run_id")), row.GetInt64(row.GetOrdinal("revision")), row.GetString(row.GetOrdinal("agent")), Time(row),
-        JsonSerializer.Deserialize<RecordItem>(row.GetString(row.GetOrdinal("item")), StoredJson)!);
+        JsonSerializer.Deserialize<RecordItem>(row.GetString(row.GetOrdinal("item")), StoredJson)!, Text(row, "task"));
+
+    private static TaskChange ReadTaskChange(SqliteDataReader row) => new(
+        row.GetString(row.GetOrdinal("run_id")), row.GetInt64(row.GetOrdinal("revision")), row.GetString(row.GetOrdinal("by")), Time(row),
+        row.GetString(row.GetOrdinal("what")), row.GetString(row.GetOrdinal("reason")),
+        JsonSerializer.Deserialize<List<BoardTask>>(row.GetString(row.GetOrdinal("tasks")), StoredJson)!);
 
     private static Artifact ReadArtifact(SqliteDataReader row) => new(row.GetString(row.GetOrdinal("name")), row.GetString(row.GetOrdinal("content")));
 

@@ -8,6 +8,7 @@ using Sleepyshark.Officina.Core.Extensibility;
 using Sleepyshark.Officina.Core.Messages;
 using Sleepyshark.Officina.Core.Records;
 using Sleepyshark.Officina.Core.Running;
+using Sleepyshark.Officina.Core.Tasks;
 using Sleepyshark.Officina.Core.Tools;
 using Sleepyshark.Officina.Testing;
 
@@ -105,6 +106,20 @@ public abstract class StorageContract
         Assert.Equal([Fact("run-1", 1), Fact("run-1", 2)], await storage.Records.ReadAsync("acme", "run-1", Ct));
     }
 
+    // TASK-07, TASK-04.
+    [Fact]
+    public async Task A_task_board_is_read_in_revision_order_and_a_taken_revision_is_refused()
+    {
+        var storage = await CreateAsync();
+        Assert.True(await storage.Tasks.TryAppendAsync("acme", Change("run-1", 1), Ct));
+        Assert.True(await storage.Tasks.TryAppendAsync("acme", Change("run-1", 2), Ct));
+        Assert.True(await storage.Tasks.TryAppendAsync("acme", Change("run-2", 1), Ct));
+
+        Assert.False(await storage.Tasks.TryAppendAsync("acme", Change("run-1", 2) with { By = "reviewer" }, Ct));
+
+        Assert.Equal(Json(Change("run-1", 1), Change("run-1", 2)), Json([.. await storage.Tasks.ReadAsync("acme", "run-1", Ct)]));
+    }
+
     // TOOL-09, OUT-05.
     [Fact]
     public async Task An_artifact_is_read_by_its_id_within_its_run()
@@ -133,7 +148,7 @@ public abstract class StorageContract
         };
         var time = new FakeTimeProvider(Start);
         var pipeline = new ToolPipeline(
-            options, new Dictionary<string, ITool>(), new Dictionary<string, IGate>(), new Dictionary<string, IKnowledgeSource>(), storage,
+            options, new Dictionary<string, ITool>(), new Dictionary<string, IGate>(), new Dictionary<string, IKnowledgeSource>(), new Dictionary<string, ICheck>(), storage,
             new EventBus(storage.Events, options.Storage, time), new ScriptedHuman(), new InMemorySecretSource(new Dictionary<string, string>()), time);
         var caller = new Caller("ann", "acme", new HashSet<string>(), new Dictionary<string, string>());
         var errors = new ConcurrentBag<string>();
@@ -163,6 +178,45 @@ public abstract class StorageContract
         Assert.Equal(Writers * Proposals, record.Select(entry => ((Fact)entry.Item).Subject).Distinct().Count());
     }
 
+    // TASK-04, CONC-01: real threads claim one task through the real pipeline, task tool and store.
+    [Fact]
+    public async Task Only_one_of_many_agents_claiming_a_task_at_once_gets_it()
+    {
+        const int Agents = 4;
+        var storage = await CreateAsync();
+        var options = new OfficinaOptions
+        {
+            Agents = Enumerable.Range(0, Agents).ToDictionary(agent => $"agent-{agent}", _ => new AgentDefinition { Instructions = "Claim.", Tools = ["tasks"] }),
+            Tools = new Dictionary<string, ToolOptions> { ["claim"] = new() { Source = "builtin:tasks.claim" } },
+            ToolSets = new Dictionary<string, IReadOnlyList<string>> { ["tasks"] = ["claim"] },
+            Capabilities = new() { TaskBoard = new() { Enabled = true } },
+        };
+        var time = new FakeTimeProvider(Start);
+        var pipeline = new ToolPipeline(
+            options, new Dictionary<string, ITool>(), new Dictionary<string, IGate>(), new Dictionary<string, IKnowledgeSource>(), new Dictionary<string, ICheck>(), storage,
+            new EventBus(storage.Events, options.Storage, time), new ScriptedHuman(), new InMemorySecretSource(new Dictionary<string, string>()), time);
+        await pipeline.Board("acme", "run-1").AddAsync("t1", new() { Title = "Fix the parser" }, "planned", Ct);
+        var caller = new Caller("ann", "acme", new HashSet<string>(), new Dictionary<string, string>());
+        var claimed = new ConcurrentBag<string>();
+        using var start = new Barrier(Agents);
+        var threads = Enumerable.Range(0, Agents).Select(agent => new Thread(() =>
+        {
+            start.SignalAndWait();
+            var context = new ToolContext("run-1", $"agent-{agent}", caller);
+            var arguments = JsonDocument.Parse("""{ "id": "t1" }""").RootElement;
+            if (pipeline.RunAsync(context, [new ToolRequest("claim", arguments)], CancellationToken.None).GetAwaiter().GetResult()[0].Error is null)
+            {
+                claimed.Add(context.Agent);
+            }
+        })).ToList();
+
+        threads.ForEach(thread => thread.Start());
+        threads.ForEach(thread => thread.Join());
+
+        var task = Assert.Single(await pipeline.Board("acme", "run-1").ReadAsync(Ct));
+        Assert.Equal((TaskState.InProgress, Assert.Single(claimed)), (task.State, task.Assignee));
+    }
+
     // SEC-02, TEST-18.
     [Fact]
     public async Task A_tenant_cannot_see_another_tenants_data()
@@ -177,6 +231,7 @@ public abstract class StorageContract
             Assert.Empty(await storage.Conversations.ReadAsync(other, "extractor", "ann", Ct));
             Assert.Empty(await storage.Records.ReadAsync(other, "run-1", Ct));
             Assert.Null(await storage.Artifacts.ReadAsync(other, "run-1", 1, Ct));
+            Assert.Empty(await storage.Tasks.ReadAsync(other, "run-1", Ct));
             Assert.Equal(0, await CountAsync(storage, other, "ann"));
             await storage.DeleteAsync(other, "ann", Ct);
         }
@@ -200,6 +255,7 @@ public abstract class StorageContract
         Assert.Equal(["ann"], export.Conversations.Select(turn => turn.Owner));
         Assert.Equal([Fact("run-1", 1)], export.Records);
         Assert.Equal([new Artifact("run-1 result", "full text")], export.Artifacts);
+        Assert.Equal(Json(Change("run-1", 1)), Json([.. export.Tasks]));
     }
 
     // PRIV-02, TEST-18.
@@ -216,6 +272,7 @@ public abstract class StorageContract
         Assert.Empty(await storage.Events.ReadAsync("acme", "run-1", 0, Ct));
         Assert.Empty(await storage.Conversations.ReadAsync("acme", "extractor", "ann", Ct));
         Assert.Empty(await storage.Records.ReadAsync("acme", "run-1", Ct));
+        Assert.Empty(await storage.Tasks.ReadAsync("acme", "run-1", Ct));
         Assert.Equal([Entry("run-1", AuditOutcome.Intent)], await storage.Audit.ReadAsync("acme", "run-1", Ct));
         Assert.Single((await storage.ExportAsync("acme", "bob", Ct)).Runs);
     }
@@ -228,11 +285,12 @@ public abstract class StorageContract
         await StoreRunAsync(storage, "acme", "old", "ann");
         await StoreRunAsync(storage, "acme", "long", "ann");
         await storage.Records.TryAppendAsync("acme", Fact("long", 2, Start.AddDays(20)), Ct);
+        await storage.Tasks.TryAppendAsync("acme", Change("long", 2, Start.AddDays(20)), Ct);
         await StoreRunAsync(storage, "acme", "new", "ann", Start.AddDays(20));
         var retention = new RetentionOptions
         {
             Events = TimeSpan.FromDays(10), Conversations = TimeSpan.FromDays(10), Audit = TimeSpan.FromDays(30), RunRecords = TimeSpan.FromDays(10),
-            Artifacts = TimeSpan.FromDays(10),
+            Artifacts = TimeSpan.FromDays(10), TaskBoards = TimeSpan.FromDays(10),
         };
 
         await storage.DeleteExpiredAsync(retention, Start.AddDays(25), Ct);
@@ -244,6 +302,7 @@ public abstract class StorageContract
         Assert.Equal([Start.AddDays(20)], export.Conversations.Select(turn => turn.Time));
         Assert.Equal([("long", 1L), ("long", 2L), ("new", 1L)], export.Records.Select(entry => (entry.RunId, entry.Revision)).Order());
         Assert.Equal(["new result"], export.Artifacts.Select(artifact => artifact.Name));
+        Assert.Equal([("long", 1L), ("long", 2L), ("new", 1L)], export.Tasks.Select(change => (change.RunId, change.Revision)).Order());
     }
 
     protected static RunStarted Run(string runId, string? owner, DateTimeOffset? time = null) =>
@@ -260,9 +319,13 @@ public abstract class StorageContract
     protected static RecordEntry Fact(string runId, long revision, DateTimeOffset? time = null) =>
         new(runId, revision, "extractor", time ?? Start, new Fact("invoice.total", "42", "invoice.pdf", null));
 
+    protected static TaskChange Change(string runId, long revision, DateTimeOffset? time = null) =>
+        new(runId, revision, "lead", time ?? Start, "t1 added as Ready", "planned",
+            [new BoardTask { Id = "t1", Title = "Fix the parser", Checks = ["tests"], DependsOn = ["t0"], Budget = 8, State = TaskState.Ready }]);
+
     /// <summary>
-    /// A run with one event, one audit entry, one turn of the owner's conversation, a record of one fact and one artifact,
-    /// all at <paramref name="time"/>.
+    /// A run with one event, one audit entry, one turn of the owner's conversation, a record of one fact, one artifact and a
+    /// task board of one change, all at <paramref name="time"/>.
     /// </summary>
     private static async Task StoreRunAsync(IStorage storage, string tenant, string runId, string owner, DateTimeOffset? time = null)
     {
@@ -272,18 +335,22 @@ public abstract class StorageContract
         await storage.Conversations.AppendAsync(tenant, Turn(owner, Message.User(runId)) with { Time = time ?? Start }, Ct);
         await storage.Records.TryAppendAsync(tenant, Fact(runId, 1, time), Ct);
         await storage.Artifacts.SaveAsync(tenant, runId, new($"{runId} result", "full text"), time ?? Start, Ct);
+        await storage.Tasks.TryAppendAsync(tenant, Change(runId, 1, time), Ct);
     }
 
     /// <summary>How many items an export of the owner's data holds.</summary>
     private static async Task<int> CountAsync(IStorage storage, string? tenant, string owner)
     {
         var data = await storage.ExportAsync(tenant, owner, Ct);
-        return data.Runs.Count + data.Events.Count + data.Audit.Count + data.Conversations.Count + data.Records.Count + data.Artifacts.Count;
+        return data.Runs.Count + data.Events.Count + data.Audit.Count + data.Conversations.Count + data.Records.Count + data.Artifacts.Count + data.Tasks.Count;
     }
 
     private static JsonElement Args => JsonDocument.Parse("""{ "path": "a.cs" }""").RootElement;
 
     private static string Json(OfficinaOptions options) => JsonSerializer.Serialize(options, ConfigurationJson.Options);
+
+    /// <summary>Changes compare by their JSON: their lists of tasks are new on every read.</summary>
+    private static string Json(params TaskChange[] changes) => JsonSerializer.Serialize(changes);
 }
 
 public sealed class InMemoryStorageTests : StorageContract

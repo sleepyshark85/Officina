@@ -6,7 +6,7 @@ Status: draft · 2026-10-01 · slices `REQUIREMENTS.md` (revision 2) into delive
 
 Last updated 2026-10-02.
 
-- **Done:** M0 spikes S00a and S00b; M1 slices S01 (walking skeleton) and S02 (configuration); S03 (tool pipeline); S04 (turn loop); S05 (context and caching); S06 (run record and output); S07 (history and conversation store); S08 (events, storage and observability); S09 (triggers and admission); S10 (MCP and knowledge); S14 (git workspace); S15 (sandbox).
+- **Done:** M0 spikes S00a and S00b; M1 slices S01 (walking skeleton) and S02 (configuration); S03 (tool pipeline); S04 (turn loop); S05 (context and caching); S06 (run record and output); S07 (history and conversation store); S08 (events, storage and observability); S09 (triggers and admission); S10 (MCP and knowledge); S14 (git workspace); S15 (sandbox); S18 (task board).
 - **Waiting:** the M0 design review sign-off on `REQUIREMENTS.md`, `CONFIGURATION.md` and `DESIGN.md`.
 - **Next:** S16.
 - **Open follow-ups:**
@@ -15,7 +15,6 @@ Last updated 2026-10-02.
     reference's `{ "file": … }` form, that is a format change.
   - S02 rejects a plain-text `apiKey`, because the binder would otherwise skip it silently and
     fall back to the default secret reference. Kept on purpose.
-  - S18 adds the task board to `GateContext` (TOOL-06), and the `task` record scope (REC-06).
   - S13 adds the output-check failure outcome "revise" where the pattern supports it (OUT-03); until then a failed check
     hands off.
   - The configuration binder adds a file's items to a list setting's default instead of replacing it, so
@@ -26,15 +25,15 @@ Last updated 2026-10-02.
     secrets tools read (INV-06).
   - S16 connects the tool servers in `sof run`, and offers the workspace and sandbox tools only when their
     capability is on (CAP-02).
-  - S07 left the run record (S06), memory (S17) and tasks (S18) to join the shortening test (HIST-03, TEST-15);
+  - S07 left memory (S17) to join the shortening test (HIST-03, TEST-15);
     S11 makes the Claude provider an `IHistoryShortener`; the capability slices (S16–S20) add their switches and
     dependencies to `CapabilitiesOptions`. Its Notes list the rest.
   - S16 adds the approval timeout and the permission modes (HITL-01, HITL-02). A denied or timed-out approval
     should then hand off as "approval denied or timed out"; S04 counts it as a refusal towards a policy gap.
   - S04 left parts of its requirements to the slices that add the state they need; its Notes list them
-    (S06, S07, S09, S14, S16, S18, S19).
+    (S06, S07, S09, S14, S16, S19).
   - S08 left parts of its requirements to the slices that add the state they need; its Notes list them
-    (S06, S07, S09, S11, S13, S16–S20).
+    (S06, S07, S09, S11, S13, S16, S17, S19, S20).
   - S11 ships the price table, requires a price when a cost budget is set, and splits `prices.*.cacheWrite`
     by cache lifetime (MDL-09). Until then a model without a configured price costs nothing.
   - S16: `capabilities.workspace.baselineChecks` names checks from the `checks` section (added by S06) for
@@ -49,11 +48,15 @@ Last updated 2026-10-02.
     profile, its home folder `%TEMP%\officina-<hash>`, and its read-and-execute grants on `toolchains` folders.
   - S21 runs the Windows sandbox tests once as a standard user in CI (the S00a recipe), tests the CPU
     limit on both systems with limit reporting, and proves HTTPS through the proxy (a CONNECT tunnel).
-  - S18 turns an integration conflict or failed check into work for the author or the lead (WS-03),
-    and integrates a task only after its verification checks pass (TASK-05).
+  - S20 runs the team on the task board: it claims and assigns tasks, gives each a working copy that its checks
+    look at, integrates a task in review once verified and approved, then calls `CompleteAsync`, or `ReturnAsync` on
+    a conflict or failed baseline check (WS-03, TASK-05). A team's agents share one run, and so one board, and `team`
+    requires `taskBoard`. S18's Notes list the rest.
+  - S18 moved the SQLite format version to 3. A slice that adds a table bumps it again, unless an unmerged PR has
+    already bumped it past the version on main.
   - S19 snapshots and restores the workspace, and cleans up worktrees left by a crash.
   - S05 moved CTX-06 to S07 and CTX-07 to S06, and left boundary ② and the memory-change case of TEST-09 to S17;
-    its Notes list the rest (S06, S09, S18).
+    its Notes list the rest (S06, S09).
   - S11 maps cache boundaries to `cache_control`, putting boundary ③ on the last cacheable block before a
     turn-scoped message; maps `Role.System` to mid-conversation system messages and `TurnScoped` to `clear_at`; and
     reports `CacheBoundaries` and `TurnScopedMessages` in its capabilities.
@@ -121,7 +124,7 @@ A slice is **done** when:
 | [S15](S15-sandbox.md) | Sandbox | M5 | M ×2 | S00a, S14 | [#17](https://github.com/sleepyshark85/Officina/issues/17) | done |
 | [S16](S16-human-interaction-cli.md) | Human interaction and CLI | M5 | M | S04, S08 | [#18](https://github.com/sleepyshark85/Officina/issues/18) | todo |
 | [S17](S17-project-memory.md) | Project memory | M5 | S | S05, S16 | [#19](https://github.com/sleepyshark85/Officina/issues/19) | todo |
-| [S18](S18-task-board.md) | Task board | M6 | M | S06, S08 | [#20](https://github.com/sleepyshark85/Officina/issues/20) | todo |
+| [S18](S18-task-board.md) | Task board | M6 | M | S06, S08 | [#20](https://github.com/sleepyshark85/Officina/issues/20) | done |
 | [S19](S19-checkpoints-long-runs.md) | Checkpoints and long runs | M6 | M | S08, S14 | [#21](https://github.com/sleepyshark85/Officina/issues/21) | todo |
 | [S20](S20-team.md) | Team | M6 | M | S13, S18, S19 | [#22](https://github.com/sleepyshark85/Officina/issues/22) | todo |
 | [S21](S21-hardening.md) | Hardening and benchmark | M7 | M | S20 | [#23](https://github.com/sleepyshark85/Officina/issues/23) | todo |

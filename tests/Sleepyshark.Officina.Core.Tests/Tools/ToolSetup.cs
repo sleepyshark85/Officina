@@ -38,6 +38,8 @@ internal sealed class ToolSetup
 
     public Dictionary<string, IKnowledgeSource> Knowledge { get; } = [];
 
+    public Dictionary<string, ICheck> Checks { get; } = [];
+
     /// <summary>A configuration whose agent <c>dev</c> is offered every tool given.</summary>
     public static OfficinaOptions Options(params (string Name, ToolOptions Tool)[] tools) => new()
     {
@@ -50,7 +52,7 @@ internal sealed class ToolSetup
     public static ToolOptions Extension(string name) => new() { Source = $"extension:{name}" };
 
     public ToolPipeline Create(OfficinaOptions options) =>
-        new(options, Tools, Gates, Knowledge, Storage, new EventBus(Events, options.Storage, Time), Human, new InMemorySecretSource(Secrets), Time);
+        new(options, Tools, Gates, Knowledge, Checks, Storage, new EventBus(Events, options.Storage, Time), Human, new InMemorySecretSource(Secrets), Time);
 
     public static JsonElement Args(string text) => JsonDocument.Parse(text).RootElement.Clone();
 
