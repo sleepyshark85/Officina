@@ -11,8 +11,8 @@ namespace Sleepyshark.Officina.Core.Tests.Records;
 /// <summary>
 /// The run record (REC): agents propose changes through the record tools, and the core validates and applies them. The
 /// agent <c>dev</c> is offered the record tools as <c>fact</c>, <c>finding</c>, <c>decision</c> and <c>cite</c>, and
-/// <c>edit</c>, whose gate allows it only once the record holds a decision (TOOL-06). Concurrent writers are in the
-/// storage contract tests.
+/// <c>edit</c>, whose gate allows it only once the record holds a decision (TOOL-06). Record tools run in parallel, so
+/// each reply here makes one call, for a known order. Concurrent writers are in the storage contract tests.
 /// </summary>
 public class RunRecordTests
 {
@@ -48,13 +48,11 @@ public class RunRecordTests
     public async Task A_proposal_that_does_not_validate_is_rejected_with_the_reason()
     {
         var kit = Kit();
-        kit.Model.CallTools(
-                ("finding", """{ "text": "The total is wrong [cite:inv-1]." }"""),
-                ("cite", """{ "id": "inv-1", "document": "invoice.pdf", "location": "page 1", "quote": "Total: 42" }"""))
-            .CallTools(
-                ("cite", """{ "id": "inv-1", "document": "order.pdf", "location": "page 2", "quote": "Total: 40" }"""),
-                ("decision", """{ "subject": "total", "choice": "42", "reason": "invoice", "replaces": 1 }"""),
-                ("finding", """{ "text": "The total is wrong [cite:inv-1]." }"""))
+        kit.Model.CallTools(("finding", """{ "text": "The total is wrong [cite:inv-1]." }"""))
+            .CallTools(("cite", """{ "id": "inv-1", "document": "invoice.pdf", "location": "page 1", "quote": "Total: 42" }"""))
+            .CallTools(("cite", """{ "id": "inv-1", "document": "order.pdf", "location": "page 2", "quote": "Total: 40" }"""))
+            .CallTools(("decision", """{ "subject": "total", "choice": "42", "reason": "invoice", "replaces": 1 }"""))
+            .CallTools(("finding", """{ "text": "The total is wrong [cite:inv-1]." }"""))
             .Reply("Done.");
 
         var result = await kit.RunAsync(Agent, "Check the invoice.", Ct);
