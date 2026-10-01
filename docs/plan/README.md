@@ -56,10 +56,10 @@ Last updated 2026-10-02.
     (S06, S11, S19, S20).
   - REQUIREMENTS.md §4.3 lists masking as replaceable, but DESIGN.md §4 keeps it in Core and not replaceable in v1.
     The owner decides at revision 3.
-  - Masking tokens are numbered per run, but S07 keeps history across runs. With a history strategy other than
-    `none` and masking on, a token in earlier history can name a different value in a later run, and a tool that
-    receives masked values would get the later one. Keep the token table with the conversation, or make tokens
-    unique per value, before masking and kept history are used together.
+  - Masking tokens are numbered per run, but S07 keeps history across runs, so a token in earlier history could
+    name a different value in a later run. Until the token table is kept with the conversation, validation refuses
+    a history strategy other than `none` for an agent with a `receivesMaskedValues` tool while masking is on.
+    Keeping the table with the conversation lifts that restriction.
   - The configuration binder appends a configured list to a non-empty default list, so list settings default to
     unset and code supplies the default (S09 fixed `storage.unstoredEvents`). Dictionaries merge into their defaults on
     purpose: `providers.claude` and `models.default` rely on it.

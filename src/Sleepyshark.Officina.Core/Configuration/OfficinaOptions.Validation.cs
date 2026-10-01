@@ -53,6 +53,15 @@ public sealed partial record OfficinaOptions : IValidatableObject
                 errors = errors.Append(new(ValidationPhase.Tools, $"agents.{name}.toolDescriptionsOnDemand", $"needs the tool name {DescribeTool}, which the agent is offered already.",
                     $"Rename the tool {DescribeTool}."));
             }
+
+            // ING-06: masking tokens are numbered per run, so a token in kept history could be restored to a later run's value.
+            if (Policies.Masking?.Enabled == true && agent.Context?.History is { Strategy: not HistoryStrategy.None }
+                && agent.Tools.Where(ToolSets.ContainsKey).SelectMany(set => ToolSets[set]).Any(tool => Tools.GetValueOrDefault(tool)?.ReceivesMaskedValues == true))
+            {
+                errors = errors.Append(new(ValidationPhase.Tools, $"agents.{name}.context.history.strategy",
+                    "cannot keep history while masking is on and the agent has a tool that receives masked values.",
+                    "Set the strategy to none, turn policies.masking.enabled off, or remove receivesMaskedValues from the agent's tools."));
+            }
         }
 
         foreach (var (name, server) in ToolServers)

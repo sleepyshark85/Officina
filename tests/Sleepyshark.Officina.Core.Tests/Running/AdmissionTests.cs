@@ -139,6 +139,21 @@ public class AdmissionTests
             new OfficinaOptions { Policies = policies, Tools = tools }.Validate().Select(error => error.Path).Order(StringComparer.Ordinal));
     }
 
+    // ING-06: tokens are numbered per run, so kept history could name another run's value.
+    [Fact]
+    public void Kept_history_is_refused_while_masked_values_reach_a_tool()
+    {
+        var options = Options(("send", Extension("send") with { ReceivesMaskedValues = true, GateExemption = "Tests only." }));
+        options = options with
+        {
+            Capabilities = new() { ConversationStore = new() { Enabled = true } },
+            Agents = new Dictionary<string, AgentDefinition> { [Agent] = options.Agents[Agent] with { Context = new() { History = new() { Strategy = HistoryStrategy.Full } } } },
+        };
+
+        Assert.Equal($"agents.{Agent}.context.history.strategy", Assert.Single(options.Validate()).Path);
+        Assert.Empty((options with { Policies = new() { Masking = new() { Enabled = false } } }).Validate());
+    }
+
     // SEC-04: whether the core or the provider runs the untrusted tool.
     [Theory]
     [InlineData(false)]
