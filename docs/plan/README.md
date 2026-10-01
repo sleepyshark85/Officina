@@ -7,8 +7,9 @@ Status: draft · 2026-10-01 · slices `REQUIREMENTS.md` (revision 2) into delive
 Last updated 2026-10-02.
 
 - **Done:** M0 spikes S00a and S00b; M1 slices S01 (walking skeleton) and S02 (configuration); S03 (tool pipeline); S04 (turn loop); S05 (context and caching); S14 (git workspace).
+- **Doing:** S15 (sandbox). The Linux piece is in review; the Windows piece follows.
 - **Waiting:** the M0 design review sign-off on `REQUIREMENTS.md`, `CONFIGURATION.md` and `DESIGN.md`.
-- **Next:** S06, S07, S08 and S10; S07 can start now that S05 is done. S15 (sandbox) can run alongside them.
+- **Next:** S06, S07, S08 and S10; S07 can start now that S05 is done. The Windows piece of S15 can run alongside them.
 - **Open follow-ups:**
   - S02 kept a `formatVersion` check, though only version 1 exists. Consider removing the setting
     until a version 2 exists (principle 13).
@@ -30,8 +31,13 @@ Last updated 2026-10-02.
     by cache lifetime (MDL-09). Until then a model without a configured price costs nothing.
   - S06 adds the `checks` section; `capabilities.workspace.baselineChecks` then names the checks
     `GitWorkspace` runs, which the host passes in code today (WS-02).
-  - S15 adds `IWorkspace` to Core when the sandbox needs the working copy (DESIGN.md §4), and the
-    test kit's in-memory workspace (TEST-01).
+  - S16 adds `IWorkspace` to Core with its first user, the `workspace.*` tools, and the test kit's
+    in-memory workspace (TEST-01, moved from S15: the sandbox needs only the working copy's folder).
+  - S16 gives each agent its `SandboxTools` over its working copy, disposes them when the agent, task
+    or run ends (SBX-03), and wires the tools and the command rules gate as built-ins. It also keeps
+    protected paths out of sandboxed commands, which today see the whole working copy (WS-05), and
+    mounts toolchains installed outside `/usr`.
+  - S08 publishes sandboxed command output and the proxy's allow and deny decisions as events (SBX-04).
   - S16 offers the `workspace.*` tools over `WorkingCopy` (read, search, edit, write; delete and
     move with them), gives each agent its working copy, and shows the integration queue (WS-09).
   - S18 turns an integration conflict or failed check into work for the author or the lead (WS-03),
@@ -95,7 +101,7 @@ A slice is **done** when:
 | [S12](S12-model-gateway.md) | Model gateway | M3 | S | S11 | [#14](https://github.com/sleepyshark85/Officina/issues/14) | todo |
 | [S13](S13-loop-patterns.md) | Loop patterns | M4 | M | S04, S06 | [#15](https://github.com/sleepyshark85/Officina/issues/15) | todo |
 | [S14](S14-git-workspace.md) | Git workspace | M5 | M | S03 | [#16](https://github.com/sleepyshark85/Officina/issues/16) | done |
-| [S15](S15-sandbox.md) | Sandbox | M5 | M ×2 | S00a, S14 | [#17](https://github.com/sleepyshark85/Officina/issues/17) | todo |
+| [S15](S15-sandbox.md) | Sandbox | M5 | M ×2 | S00a, S14 | [#17](https://github.com/sleepyshark85/Officina/issues/17) | doing |
 | [S16](S16-human-interaction-cli.md) | Human interaction and CLI | M5 | M | S04, S08 | [#18](https://github.com/sleepyshark85/Officina/issues/18) | todo |
 | [S17](S17-project-memory.md) | Project memory | M5 | S | S05, S16 | [#19](https://github.com/sleepyshark85/Officina/issues/19) | todo |
 | [S18](S18-task-board.md) | Task board | M6 | M | S06, S08 | [#20](https://github.com/sleepyshark85/Officina/issues/20) | todo |

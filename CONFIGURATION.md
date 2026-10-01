@@ -75,7 +75,7 @@ Presets arrive with the coding team; until then this is how the team will be set
 | `toolServers` | none | You use MCP tool servers |
 | `run.budget` | $25 and 8 hours (`"08:00:00"`) | Runs are bigger or smaller |
 | `run.permissionMode` | `ask` | You trust the rules enough for `auto`, or want `readOnly` |
-| `capabilities.sandbox.network.allow` | none (network off) | Builds download packages |
+| `capabilities.sandbox.allowedHosts` | none (network off) | Builds download packages |
 | `capabilities.sandbox.commandRules` | the preset's rules; anything unmatched is asked about | You want fewer or more prompts |
 | `capabilities.workspace.protectedPaths` | `.git`, `.env*` and `.sof/` hidden; `sof.json` and `sof.*.json` read-only | More files must stay out of reach |
 | `capabilities.humanInteraction.signOffs` | plan approval, run budget exceeded, irreversible action | You want more or fewer checkpoints with the owner |

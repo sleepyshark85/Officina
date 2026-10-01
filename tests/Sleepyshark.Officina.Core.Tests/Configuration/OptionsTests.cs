@@ -17,7 +17,7 @@ public class OptionsTests
             .SelectMany(type => type.GetProperties(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly))
             .ToArray();
 
-        Assert.Equal(24, OptionsTypes.Length);
+        Assert.Equal(26, OptionsTypes.Length);
         Assert.All(settings, property => Assert.DoesNotMatch(RequirementId, property.GetCustomAttribute<SettingAttribute>()?.Description ?? ""));
         Assert.All(settings, property =>
         {
@@ -38,6 +38,7 @@ public class OptionsTests
 
         Assert.Equal(PermissionMode.Ask, options.Run.PermissionMode);
         Assert.Empty(options.Agents);
+        Assert.Empty(new SandboxOptions().AllowedHosts);
         Assert.Equal(25m, options.Run.Budget.Cost);
         Assert.Equal(TimeSpan.FromHours(8), options.Run.Budget.Time);
         Assert.Equal("claude-opus-5-5", options.Models[ModelProfile.DefaultName].Model);

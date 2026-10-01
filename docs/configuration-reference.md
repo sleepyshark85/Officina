@@ -615,16 +615,15 @@ object with `"enabled"` plus its own settings. `true` is shorthand for `{ "enabl
     "keepWorkingCopies": false                                      // WS-08
   },
   "sandbox": {
-    "type": "builtin:auto",                                         // Linux or Windows isolation (SBX-07)
-    "network": { "allow": ["api.nuget.org", "*.nuget.org"] },       // SBX-01, off by default
-    "limits": { "cpus": 2, "memory": "4GiB", "time": "00:20:00", "output": "10MiB" },
-    "commandRules": [                                               // SBX-02; first match wins
+    "allowedHosts": ["api.nuget.org", "*.nuget.org"],               // SBX-01, network off by default
+    "commandRules": [                                               // SBX-02; first match wins, unmatched is asked about
       { "match": "dotnet build*", "action": "allow" },
       { "match": "dotnet test*",  "action": "allow" },
       { "match": "git push*",     "action": "deny" }
     ],
-    "unmatched": "ask",                                             // fixed: anything not covered is asked about
     "secrets": { "developer": ["NUGET_TOKEN"] }                     // SBX-05, per role
+    // Limits are constants until a case needs another value: 2 CPUs, 4 GiB, 1024 processes and
+    // 10 Mi characters of output. A command's time is its tool's timeout.
   },
   "projectMemory": { "scope": "project", "maxTokens": 20000, "approveBy": "lead" },   // MEM
   "knowledge": false
@@ -845,7 +844,7 @@ An application using the coding team preset needs only:
     "values": { "buildCommand": "dotnet build", "testCommand": "dotnet test" }
   },
   "capabilities": {
-    "sandbox": { "network": { "allow": ["api.nuget.org", "*.nuget.org"] } }
+    "sandbox": { "allowedHosts": ["api.nuget.org", "*.nuget.org"] }
   }
 }
 ```
