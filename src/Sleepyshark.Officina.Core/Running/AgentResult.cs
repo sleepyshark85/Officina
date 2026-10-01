@@ -18,9 +18,20 @@ public enum AgentOutcome
 /// <param name="Output">The agent's output when completed; otherwise why it was not.</param>
 /// <param name="Statistics">What the turn used.</param>
 /// <param name="Transcript">The conversation, in which every tool request has its result (LOOP-09).</param>
+/// <param name="CacheWarnings">The model calls that read too little of their input from the cache (COST-01).</param>
 /// <param name="Handoff">The handoff, when handed off. With this result's statistics and transcript it is everything EGR-02 lists.</param>
 public sealed record AgentResult(
-    AgentOutcome Outcome, string Output, TurnStatistics Statistics, ImmutableArray<Message> Transcript, Handoff? Handoff = null);
+    AgentOutcome Outcome,
+    string Output,
+    TurnStatistics Statistics,
+    ImmutableArray<Message> Transcript,
+    ImmutableArray<CacheWarning> CacheWarnings,
+    Handoff? Handoff = null);
+
+/// <summary>A model call that read less of its input from the cache than <c>operations.telemetry.cacheHitWarning</c> (COST-01).</summary>
+/// <param name="Iteration">Which call of the turn, from 1.</param>
+/// <param name="HitRate">The share of the call's input read from the cache.</param>
+public sealed record CacheWarning(int Iteration, double HitRate);
 
 /// <summary>What a turn used (EGR-01).</summary>
 /// <param name="Iterations">Model calls.</param>

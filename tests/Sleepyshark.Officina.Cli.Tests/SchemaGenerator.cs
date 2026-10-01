@@ -81,6 +81,13 @@ internal static class SchemaGenerator
         {
             var minimum = Convert.ToDouble(range.Minimum, System.Globalization.CultureInfo.InvariantCulture);
             node[range.MinimumIsExclusive ? "exclusiveMinimum" : "minimum"] = minimum;
+
+            // A range up to the type's largest value, such as int.MaxValue for a budget, has no real maximum.
+            var maximum = Convert.ToDouble(range.Maximum, System.Globalization.CultureInfo.InvariantCulture);
+            if (maximum < int.MaxValue)
+            {
+                node[range.MaximumIsExclusive ? "exclusiveMaximum" : "maximum"] = maximum;
+            }
         }
     }
 

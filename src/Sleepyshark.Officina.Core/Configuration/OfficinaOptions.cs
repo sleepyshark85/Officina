@@ -42,6 +42,9 @@ public sealed partial record OfficinaOptions
     [Setting("Defaults for every run.", Example = """{ "permissionMode": "ask" }""")]
     public RunDefaults Run { get; init; } = new();
 
+    [Setting("How the engine is operated.", Example = """{ "telemetry": { "cacheHitWarning": 0.7 } }""")]
+    public OperationsOptions Operations { get; init; } = new();
+
     [Setting("Optional capabilities and their settings. All are off by default.", Example = """{ "workspace": { "keepWorkingCopies": true } }""")]
     public CapabilitiesOptions Capabilities { get; init; } = new();
 }

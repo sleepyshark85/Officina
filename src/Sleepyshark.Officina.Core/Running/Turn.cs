@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Text;
 using System.Text.Json;
 using Sleepyshark.Officina.Core.Configuration;
@@ -11,21 +12,25 @@ namespace Sleepyshark.Officina.Core.Running;
 /// One turn of one agent, the primitive every pattern is built from (REQUIREMENTS.md §4.4). It calls the model, decides
 /// the next step by the stop reason alone (LOOP-03, INV-01), runs the tools the model asks for through the tool
 /// pipeline, and repeats until a stop condition holds (LOOP-05) or the turn must be handed off. The budget is checked
-/// before every model call (LOOP-06), and the turn always ends in a result (INV-07).
+/// before every model call (LOOP-06), and the turn always ends in a result (INV-07). Each call's input is built by the
+/// turn's <see cref="Conversation"/>, with the messages that arrived since the last call (CTX-08).
 /// </summary>
 internal sealed class Turn
 {
     private readonly ToolContext context;
+    private readonly ProjectOptions project;
     private readonly AgentDefinition agent;
     private readonly RunBudget runBudget;
-    private readonly ModelRequest request;
+    private readonly double cacheHitWarning;
+    private readonly Conversation conversation;
+    private readonly ConcurrentQueue<Message> inbox;
     private readonly IModelProvider provider;
     private readonly ModelPrice? price;
     private readonly ToolPipeline tools;
     private readonly TimeProvider time;
     private readonly string work;
-    private readonly List<Message> transcript;
     private readonly List<ToolAttempt> attempts = [];
+    private readonly List<CacheWarning> cacheWarnings = [];
     private List<ToolUseContent> pending = [];
     private long? started;
     private int iterations;
@@ -41,20 +46,25 @@ internal sealed class Turn
     /// <param name="tools">The tool pipeline built from <paramref name="options"/>.</param>
     /// <param name="instructions">The agent's instructions, placeholders filled.</param>
     /// <param name="work">What the turn is asked to do.</param>
-    /// <param name="time">The clock for the time budgets.</param>
-    public Turn(ToolContext context, OfficinaOptions options, IModelProvider provider, ToolPipeline tools, string instructions, string work, TimeProvider time)
+    /// <param name="inbox">Messages sent to the agent, which the turn adds to its history before each model call.</param>
+    /// <param name="time">The clock for the time budgets and the operating facts.</param>
+    public Turn(
+        ToolContext context, OfficinaOptions options, IModelProvider provider, ToolPipeline tools, string instructions, string work, ConcurrentQueue<Message> inbox, TimeProvider time)
     {
         this.context = context;
+        project = options.Project;
         agent = options.Agents[context.Agent];
         runBudget = options.Run.Budget;
+        cacheHitWarning = options.Operations.Telemetry.CacheHitWarning;
         var profile = options.Models[agent.Model];
         price = options.Providers[profile.Provider].Prices.GetValueOrDefault(profile.Model);
-        request = new ModelRequest(profile, instructions, [], [.. tools.Offered(context.Agent)]);
+        conversation = new Conversation(profile, [.. tools.Offered(context.Agent)], instructions, agent.Context, provider.Capabilities);
+        conversation.Add(Message.User(work));
+        this.inbox = inbox;
         this.provider = provider;
         this.tools = tools;
         this.time = time;
         this.work = work;
-        transcript = [Message.User(work)];
     }
 
     public async Task<AgentResult> RunAsync(CancellationToken ct)
@@ -68,10 +78,16 @@ internal sealed class Turn
             }
 
             iterations++;
+            while (inbox.TryDequeue(out var message))
+            {
+                conversation.Add(message);
+            }
+
+            var request = conversation.Next(OperatingFacts());
             StopReason stop;
             try
             {
-                stop = await CallModelAsync(ct).ConfigureAwait(false);
+                stop = await CallModelAsync(request, ct).ConfigureAwait(false);
             }
             catch (Exception exception) when (exception is not OperationCanceledException || !ct.IsCancellationRequested)
             {
@@ -118,7 +134,7 @@ internal sealed class Turn
     {
         CancelPending();
         var statistics = new TurnStatistics(iterations, toolCalls, usage, cost, Elapsed);
-        return new AgentResult(outcome, output, statistics, [.. transcript], handoff?.Invoke());
+        return new AgentResult(outcome, output, statistics, conversation.History, [.. cacheWarnings], handoff?.Invoke());
     }
 
     /// <summary>Time since the turn started; zero for a turn cancelled before it started.</summary>
@@ -139,16 +155,24 @@ internal sealed class Turn
             : null;
     }
 
+    /// <summary>The agent's operating facts, filled for this call (CTX-09).</summary>
+    private List<string> OperatingFacts()
+    {
+        var now = time.GetUtcNow();
+        return [.. agent.Context.OperatingFacts.Select(fact => InstructionPlaceholders.Fill(fact, project, context.Agent, agent, now))];
+    }
+
     /// <summary>
-    /// Calls the model with input rebuilt from the transcript (LOOP-10), and adds the reply to it. Text arrives in
-    /// pieces as it is generated; the turn acts only once the reply is complete (MDL-07).
+    /// Calls the model, and adds the reply to the conversation. Text arrives in pieces as it is generated; the turn acts
+    /// only once the reply is complete (MDL-07).
     /// </summary>
-    private async Task<StopReason> CallModelAsync(CancellationToken ct)
+    private async Task<StopReason> CallModelAsync(ModelRequest request, CancellationToken ct)
     {
         var stop = StopReason.Unknown;
         var reply = new List<Content>();
         var text = new StringBuilder();
-        await foreach (var modelEvent in provider.StreamAsync(request with { Messages = [.. transcript] }, ct).WithCancellation(ct).ConfigureAwait(false))
+        var callUsage = Usage.None;
+        await foreach (var modelEvent in provider.StreamAsync(request, ct).WithCancellation(ct).ConfigureAwait(false))
         {
             switch (modelEvent)
             {
@@ -165,6 +189,7 @@ internal sealed class Turn
                     await tools.AuditProviderToolAsync(context, used.Request, used.Result, ct).ConfigureAwait(false);
                     break;
                 case UsageReported reported:
+                    callUsage += reported.Usage;
                     usage += reported.Usage;
                     cost += price?.Cost(reported.Usage) ?? 0m;
                     break;
@@ -175,9 +200,10 @@ internal sealed class Turn
         }
 
         AddText();
+        CheckCacheHits(callUsage);
         if (reply.Count > 0)
         {
-            transcript.Add(new Message(Role.Assistant, reply));
+            conversation.Add(new Message(Role.Assistant, reply));
             pending = [.. reply.OfType<ToolUseContent>()];
             if (reply.OfType<TextContent>().Any())
             {
@@ -197,6 +223,19 @@ internal sealed class Turn
         }
     }
 
+    /// <summary>
+    /// COST-01: every call after the first of a turn should read from the cache all that the previous call sent, so a
+    /// low share read from it means the cache is broken. The first call may have to write the conversation's cache.
+    /// </summary>
+    private void CheckCacheHits(Usage call)
+    {
+        var input = call.Input + call.CacheRead + call.CacheWrite;
+        if (iterations > 1 && input > 0 && (double)call.CacheRead / input is var rate && rate < cacheHitWarning)
+        {
+            cacheWarnings.Add(new CacheWarning(iterations, rate));
+        }
+    }
+
     /// <summary>Runs the calls of the last reply, and decides whether the turn ends with them; null when it goes on.</summary>
     private async Task<AgentResult?> RunToolsAsync(CancellationToken ct)
     {
@@ -207,7 +246,8 @@ internal sealed class Turn
 
         var requests = pending.Select(call => new ToolRequest(call.Name, call.Arguments)).ToList();
         var results = await tools.RunAsync(context, requests, ct).ConfigureAwait(false);
-        transcript.Add(new Message(Role.User, pending.Zip(results, (call, result) => new ToolResultContent(call.Id, result.Content, result.Error is not null))));
+        conversation.Add(new Message(
+            Role.User, pending.Zip(results, (call, result) => new ToolResultContent(call.Id, Labels.Data($"tool:{call.Name}", result.Content), result.Error is not null))));
         pending = [];
         toolCalls += requests.Count;
         var batch = requests.Zip(results, (call, result) => new ToolAttempt(call, result)).ToList();
@@ -244,7 +284,7 @@ internal sealed class Turn
             && JsonElement.DeepEquals(earlier.Request.Arguments, attempt.Request.Arguments)) is not { } previous
         || previous.Result.Content != attempt.Result.Content;
 
-    /// <summary>Gives every tool request still without a result a cancelled one, so the transcript stays valid (LOOP-09).</summary>
+    /// <summary>Gives every tool request still without a result a cancelled one, so the conversation stays valid (LOOP-09).</summary>
     private void CancelPending()
     {
         if (pending.Count == 0)
@@ -253,7 +293,7 @@ internal sealed class Turn
         }
 
         var cancelled = ToolResult.Failed(ToolErrorCategory.Cancelled);
-        transcript.Add(new Message(Role.User, pending.Select(call => new ToolResultContent(call.Id, cancelled.Content, isError: true))));
+        conversation.Add(new Message(Role.User, pending.Select(call => new ToolResultContent(call.Id, cancelled.Content, isError: true))));
         attempts.AddRange(pending.Select(call => new ToolAttempt(new ToolRequest(call.Name, call.Arguments), cancelled)));
         pending = [];
     }

@@ -85,7 +85,7 @@ public class PlaceholderTests
 
         await kit.RunAsync("tester", "go", TestContext.Current.CancellationToken);
 
-        Assert.Equal("Run dotnet test as tester.", Assert.Single(kit.Model.Requests).Instructions);
+        Assert.StartsWith("Run dotnet test as tester.\n\n", Assert.Single(kit.Model.Requests).Instructions);
     }
 
     private static ConfigurationError[] Check(string instructions) =>

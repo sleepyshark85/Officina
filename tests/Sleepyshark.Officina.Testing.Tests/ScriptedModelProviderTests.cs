@@ -6,7 +6,7 @@ namespace Sleepyshark.Officina.Testing.Tests;
 
 public class ScriptedModelProviderTests
 {
-    private static readonly ModelRequest Request = new(new ModelProfile(), "Be brief.", [Message.User("hi")], []);
+    private static readonly ModelRequest Request = new(new ModelProfile(), [], "Be brief.", [Message.User("hi")], []);
 
     [Fact]
     public async Task Replies_are_given_in_script_order()

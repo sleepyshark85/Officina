@@ -149,8 +149,8 @@ public sealed class LayeringTests : IDisposable
         await running.RunAsync("a", "go", ct);
         await next.RunAsync("a", "go", ct);
 
-        Assert.Equal("First.", Assert.Single(running.Model.Requests).Instructions);
-        Assert.Equal("Second.", Assert.Single(next.Model.Requests).Instructions);
+        Assert.StartsWith("First.\n", Assert.Single(running.Model.Requests).Instructions);
+        Assert.StartsWith("Second.\n", Assert.Single(next.Model.Requests).Instructions);
     }
 
     [Fact]

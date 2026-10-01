@@ -10,7 +10,9 @@ Durable project knowledge shared across runs.
 
 ## Acceptance criteria
 
-- [ ] Memory is in the stable prefix of the definitions that use it.
+- [ ] Memory is in the stable prefix of the definitions that use it, followed by cache boundary ② (CTX-11; left
+  over from S05).
+- [ ] A memory change does not edit the prefix of a running conversation (the last TEST-09 case, left over from S05).
 - [ ] Approved changes reach running conversations as appended messages, and new conversations get them in the prefix.
 - [ ] Project-wide decisions are recorded with reason, author and date.
 - [ ] Exceeding the size limit triggers condensing, which the owner reviews; nothing is dropped silently.

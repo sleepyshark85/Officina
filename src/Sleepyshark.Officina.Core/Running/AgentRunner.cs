@@ -1,13 +1,15 @@
 using System.Collections.Concurrent;
 using Sleepyshark.Officina.Core.Configuration;
 using Sleepyshark.Officina.Core.Extensibility;
+using Sleepyshark.Officina.Core.Messages;
 using Sleepyshark.Officina.Core.Tools;
 
 namespace Sleepyshark.Officina.Core.Running;
 
 /// <summary>
 /// Runs agents, each in its own turns, and many at once (LOOP-01). Turns of the same agent run one at a time: work that
-/// arrives during a turn waits for it (LOOP-02). Every run ends in a result, never an exception (REL-02).
+/// arrives during a turn waits for it (LOOP-02), while messages sent during a turn join it (CTX-08). Every run ends in a
+/// result, never an exception (REL-02).
 /// </summary>
 public sealed class AgentRunner
 {
@@ -16,6 +18,7 @@ public sealed class AgentRunner
     private readonly TimeProvider time;
     private readonly ToolPipeline pipeline;
     private readonly ConcurrentDictionary<string, SemaphoreSlim> turns = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, ConcurrentQueue<Message>> inboxes = new(StringComparer.Ordinal);
 
     /// <summary>Validates the configuration in full, with the application's tools and gates; nothing runs if it has errors (CFG-06).</summary>
     /// <param name="options">The configuration, fixed for the runner's lifetime. A changed configuration needs a new runner (CFG-08).</param>
@@ -50,7 +53,11 @@ public sealed class AgentRunner
 
     public OfficinaOptions Options { get; }
 
-    public Task<AgentResult> RunAsync(string agentName, string input, CancellationToken ct = default)
+    /// <param name="agentName">The agent, by its name in <c>agents</c>.</param>
+    /// <param name="input">The work.</param>
+    /// <param name="caller">Who the run acts for; an anonymous caller when null.</param>
+    /// <param name="ct">Cancels the run, which then ends in a handoff.</param>
+    public Task<AgentResult> RunAsync(string agentName, string input, Caller? caller = null, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(agentName);
         if (!Options.Agents.ContainsKey(agentName))
@@ -58,10 +65,34 @@ public sealed class AgentRunner
             throw ConfigurationException.UnknownAgent(agentName, Options.Agents.Keys);
         }
 
-        return RunCoreAsync(agentName, input, ct);
+        return RunCoreAsync(agentName, input, caller ?? Caller.Anonymous, ct);
     }
 
-    private async Task<AgentResult> RunCoreAsync(string name, string input, CancellationToken ct)
+    /// <summary>
+    /// Sends the agent a message (CTX-08). Its running turn adds it to the history before its next model call, labelled
+    /// with the sender (MSG-04); with no turn running, the agent's next turn starts with it.
+    /// </summary>
+    public void Send(string agentName, Sender from, string text)
+    {
+        ArgumentNullException.ThrowIfNull(agentName);
+        ArgumentNullException.ThrowIfNull(from);
+        ArgumentNullException.ThrowIfNull(text);
+        if (!Options.Agents.ContainsKey(agentName))
+        {
+            throw ConfigurationException.UnknownAgent(agentName, Options.Agents.Keys);
+        }
+
+        if (from.Kind == SenderKind.Agent && string.IsNullOrEmpty(from.Agent))
+        {
+            throw new ArgumentException("A message from an agent needs the agent's name.", nameof(from));
+        }
+
+        Inbox(agentName).Enqueue(Labels.From(from, text));
+    }
+
+    private ConcurrentQueue<Message> Inbox(string agentName) => inboxes.GetOrAdd(agentName, _ => new());
+
+    private async Task<AgentResult> RunCoreAsync(string name, string input, Caller caller, CancellationToken ct)
     {
         var agent = Options.Agents[name];
         var profile = Options.Models[agent.Model];
@@ -72,8 +103,7 @@ public sealed class AgentRunner
         var started = new RunStarted(Guid.CreateVersion7().ToString(), name, CoreVersion.Value, Options);
         var instructions = InstructionPlaceholders.Fill(agent.Instructions, Options.Project, name, agent);
 
-        // The caller arrives with admission (S09); until then runs act for an anonymous caller.
-        var turn = new Turn(new ToolContext(started.RunId, name, Caller.Anonymous), Options, provider, pipeline, instructions, input, time);
+        var turn = new Turn(new ToolContext(started.RunId, name, caller), Options, provider, pipeline, instructions, input, Inbox(name), time);
         var oneAtATime = turns.GetOrAdd(name, _ => new SemaphoreSlim(1, 1));
         var entered = false;
         try
