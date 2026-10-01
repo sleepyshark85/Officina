@@ -1,4 +1,3 @@
-using System.Collections.Immutable;
 using System.Text.Json;
 
 namespace Sleepyshark.Officina.Core.Messages;
@@ -15,21 +14,6 @@ public sealed record TextContent : Content
     }
 
     public string Text { get; }
-}
-
-/// <summary>An image or a document, such as a PDF, told apart by its media type.</summary>
-public sealed record MediaContent : Content
-{
-    public MediaContent(string mediaType, ImmutableArray<byte> data)
-    {
-        ArgumentNullException.ThrowIfNull(mediaType);
-        MediaType = mediaType;
-        Data = data;
-    }
-
-    public string MediaType { get; }
-
-    public ImmutableArray<byte> Data { get; }
 }
 
 /// <summary>The model's reasoning, kept exactly as received so it can be sent back unchanged.</summary>
