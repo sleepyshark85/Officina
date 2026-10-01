@@ -31,6 +31,15 @@ public sealed class LayeringTests : IDisposable
         Assert.Equal($"code default, core {CoreVersion.Value}", configuration.SourceOf("models.default.model"));
     }
 
+    // The binder appends a configured list to a non-empty default, so list settings default to unset.
+    [Fact]
+    public void A_configured_list_replaces_the_default()
+    {
+        folder.Write("sof.json", """{ "storage": { "unstoredEvents": ["modelCallEnded"] } }""");
+
+        Assert.Equal(["modelCallEnded"], folder.Load().Options.Storage.UnstoredEvents);
+    }
+
     [Fact]
     public void Environment_variables_are_a_layer_between_the_files_and_the_options()
     {

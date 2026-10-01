@@ -5,9 +5,12 @@ namespace Sleepyshark.Officina.Core.Configuration;
 /// <summary>What is stored, and for how long (EVT-05, PRIV-01). The host chooses the storage itself in code (STO-01).</summary>
 public sealed record StorageOptions
 {
-    [Setting("Kinds of event that are published live but not stored, so a reader that joins late or falls behind does not see them. Streamed text is not stored by default: storing each piece slows the agent, and the conversation keeps the text.",
+    [Setting("Kinds of event that are published live but not stored, so a reader that joins late or falls behind does not see them. Unset leaves out streamed text only: storing each piece slows the agent, and the conversation keeps the text.",
         Example = """["textGenerated", "modelCallEnded"]""")]
-    public IReadOnlyList<string> UnstoredEvents { get; init; } = ["textGenerated"];
+    public IReadOnlyList<string>? UnstoredEvents { get; init; }
+
+    /// <summary>The kinds not stored: the configured ones, or streamed text when none are configured.</summary>
+    internal IReadOnlyList<string> Unstored => UnstoredEvents ?? ["textGenerated"];
 
     [Setting("How long each kind of stored data is kept. Runs, conversations and events without a period are kept until they are deleted.",
         Example = """{ "events": "30.00:00:00" }""")]

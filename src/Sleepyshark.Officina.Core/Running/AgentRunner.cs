@@ -68,7 +68,7 @@ public sealed class AgentRunner
         pipeline = new ToolPipeline(options, tools, gates, knowledge, storage.Audit, Events, human, secrets, time);
         this.knowledge = knowledge;
         shortening = Shortening(options, providers, shorteners ?? new Dictionary<string, IHistoryShortener>());
-        admission = new Admission(options.Policies);
+        admission = new Admission(options.Policies, time);
         Options = options;
     }
 

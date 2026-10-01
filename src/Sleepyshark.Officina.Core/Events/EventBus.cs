@@ -29,7 +29,7 @@ public sealed class EventBus
     public EventBus(IEventLog log, StorageOptions options, TimeProvider time)
     {
         this.log = log;
-        unstored = options.UnstoredEvents;
+        unstored = options.Unstored;
         this.time = time;
     }
 

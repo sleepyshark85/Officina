@@ -17,9 +17,9 @@ public sealed record RateLimit
 {
     [Setting("How many work items are admitted in each window.", Example = "20")]
     [Range(1, int.MaxValue, ErrorMessage = "must be at least 1.")]
-    public int Permits { get; init; }
+    public required int Permits { get; init; }
 
     [Setting("How long a window lasts, as `hh:mm:ss`.", Example = "\"01:00:00\"")]
     [Range(typeof(TimeSpan), "00:00:00", "10675199.02:48:05.4775807", MinimumIsExclusive = true, ErrorMessage = "must be greater than zero.")]
-    public TimeSpan Window { get; init; }
+    public required TimeSpan Window { get; init; }
 }

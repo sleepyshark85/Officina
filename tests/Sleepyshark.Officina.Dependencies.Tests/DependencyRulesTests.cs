@@ -81,7 +81,7 @@ public sealed class DependencyRulesTests : IDisposable
     [Fact]
     public void Core_depending_on_anything_but_the_base_library_and_the_schema_validator_fails()
     {
-        repository.AddProject(Core, ["JsonSchema.Net", "System.Threading.RateLimiting", "Newtonsoft.Json"]);
+        repository.AddProject(Core, ["JsonSchema.Net", "Newtonsoft.Json"]);
 
         Assert.Equal([$"{Core} must depend on the .NET base library and JsonSchema.Net only, but references Newtonsoft.Json."], repository.Check());
     }

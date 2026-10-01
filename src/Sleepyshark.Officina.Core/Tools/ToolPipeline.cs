@@ -96,6 +96,11 @@ public sealed class ToolPipeline
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(request);
+        if (catalog.TryGet(context.Agent, request.Name, out var tool) && tool.Options.Untrusted)
+        {
+            context.ReadUntrusted = true; // SEC-04
+        }
+
         var entry = Entry(context, request.Name, request.Arguments, "provider", AuditOutcome.Completed) with { Detail = secrets.Remove(result) };
         return audit.AppendAsync(context.Caller.Tenant, entry, ct);
     }
@@ -171,7 +176,11 @@ public sealed class ToolPipeline
         var (result, detail) = await InvokeAsync(tool, new ToolCall(real ? context.Masker!.Restore(arguments) : arguments, context.Caller, key, secrets), ct)
             .ConfigureAwait(false);
         detail = detail is null || masker is null ? detail : masker.Mask(detail);
-        context.ReadUntrusted |= tool.Options.Untrusted && result.Error is null;
+        if (tool.Options.Untrusted && result.Error is null)
+        {
+            context.ReadUntrusted = true; // only ever set, as parallel calls share the context
+        }
+
         var outcome = result.Error is null ? AuditOutcome.Completed : AuditOutcome.Failed;
         if (detail is not null)
         {

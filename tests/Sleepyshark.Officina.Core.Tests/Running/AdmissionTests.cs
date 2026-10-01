@@ -3,6 +3,7 @@ using Sleepyshark.Officina.Core.Configuration;
 using Sleepyshark.Officina.Core.Extensibility;
 using Sleepyshark.Officina.Core.Messages;
 using Sleepyshark.Officina.Core.Running;
+using Sleepyshark.Officina.Core.Tools;
 using Sleepyshark.Officina.Testing;
 using static Sleepyshark.Officina.Core.Tests.Tools.ToolSetup;
 
@@ -96,6 +97,11 @@ public class AdmissionTests
             ],
             results.Select(result => (result.Outcome, result.Output)));
         Assert.Equal(3, kit.Model.Requests.Count);
+
+        // A new window starts once the last one has ended.
+        kit.Time.Advance(TimeSpan.FromHours(1));
+        kit.Model.Reply("4");
+        Assert.Equal(AgentOutcome.Completed, (await kit.Runner.RunAsync(Agent, "work", Caller("ann", "acme"), Ct)).Outcome);
     }
 
     // ING-01: the trigger check comes first.
@@ -122,19 +128,38 @@ public class AdmissionTests
             RateLimits = new() { PerTenant = new() { Permits = 0, Window = TimeSpan.Zero } },
         };
 
+        // The provider runs its own tools and gives the model their results, so the core cannot mask them.
+        var tools = new Dictionary<string, ToolOptions> { ["web_search"] = new() { Source = "provider:web_search", Reason = "Research.", MaskResults = true } };
+
         Assert.Equal(
-            ["policies.masking.patterns.badName-", "policies.masking.patterns.unclosed", "policies.rateLimits.perTenant.permits", "policies.rateLimits.perTenant.window"],
-            new OfficinaOptions { Policies = policies }.Validate().Select(error => error.Path).Order(StringComparer.Ordinal));
+            [
+                "policies.masking.patterns.badName-", "policies.masking.patterns.unclosed", "policies.rateLimits.perTenant.permits", "policies.rateLimits.perTenant.window",
+                "tools.web_search.maskResults",
+            ],
+            new OfficinaOptions { Policies = policies, Tools = tools }.Validate().Select(error => error.Path).Order(StringComparer.Ordinal));
     }
 
-    // SEC-04.
-    [Fact]
-    public async Task An_agent_that_has_read_untrusted_content_is_marked_and_gates_act_on_the_mark()
+    // SEC-04: whether the core or the provider runs the untrusted tool.
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task An_agent_that_has_read_untrusted_content_is_marked_and_gates_act_on_the_mark(bool byProvider)
     {
-        var options = Options(("fetch", Extension("fetch") with { Untrusted = true }), ("post", Extension("post") with { Gates = ["untrusted"] }));
+        var fetch = byProvider ? new ToolOptions { Source = "provider:fetch", Reason = "Research." } : Extension("fetch");
+        var options = Options(("fetch", fetch with { Untrusted = true }), ("post", Extension("post") with { Gates = ["untrusted"] }));
         options = options with { Gates = new Dictionary<string, GateOptions> { ["untrusted"] = new() { Use = GateOptions.UntrustedContentApproval } } };
         var kit = new TestKit(options, new Dictionary<string, ITool> { ["fetch"] = new FakeTool(ToolKind.Read), ["post"] = new FakeTool(ToolKind.Write) });
-        kit.Model.CallTools(("post", "{}")).CallTools(("fetch", "{}")).CallTools(("post", "{}")).Reply("Done.");
+        kit.Model.CallTools(("post", "{}"));
+        if (byProvider)
+        {
+            kit.Model.Reply(new ProviderToolUsed(new ToolRequest("fetch", Args("{}")), "page"), new Stopped(StopReason.Paused));
+        }
+        else
+        {
+            kit.Model.CallTools(("fetch", "{}"));
+        }
+
+        kit.Model.CallTools(("post", "{}")).Reply("Done.");
         kit.Human.Answer(HumanAnswer.Approve);
 
         await kit.RunAsync(Agent, "Post the page.", Ct);

@@ -54,9 +54,9 @@ Last updated 2026-10-02.
     reports `CacheBoundaries` and `TurnScopedMessages` in its capabilities.
   - S09 left parts of its requirements to the slices that add the state they need; its Notes list them
     (S06, S07, S11, S19, S20).
-  - The configuration binder appends a configured list to a non-empty default list and merges dictionaries into
-    default ones, so `storage.unstoredEvents: ["modelCallEnded"]` still keeps `textGenerated`. S09 avoids it with
-    unset-means-default settings; `storage.unstoredEvents` needs the same fix.
+  - The configuration binder appends a configured list to a non-empty default list, so list settings default to
+    unset and code supplies the default (S09 fixed `storage.unstoredEvents`). Dictionaries merge into their defaults on
+    purpose: `providers.claude` and `models.default` rely on it.
 
 ## How slices work
 

@@ -22,7 +22,7 @@ It lists the settings the code has today. Settings that later slices add are spe
 | `knowledge` | named entries | `{}` | Knowledge sources, by name. | `{"handbook":{"use":"extension:Acme.HandbookIndex"}}` |
 | `run` | section | `{"budget":{"cost":25,"time":"08:00:00"},"permissionMode":"ask"}` | Defaults for every run. | `{"permissionMode":"ask"}` |
 | `operations` | section | `{"telemetry":{"cacheHitWarning":0.7}}` | How the engine is operated. | `{"telemetry":{"cacheHitWarning":0.7}}` |
-| `storage` | section | `{"unstoredEvents":["textGenerated"],"retention":{"audit":"365.00:00:00"}}` | What is stored, and for how long. | `{"unstoredEvents":["textGenerated"],"retention":{"events":"30.00:00:00"}}` |
+| `storage` | section | `{"retention":{"audit":"365.00:00:00"}}` | What is stored, and for how long. | `{"unstoredEvents":["textGenerated"],"retention":{"events":"30.00:00:00"}}` |
 | `capabilities` | section | `{"conversationStore":{"enabled":false},"knowledge":{"enabled":false},"workspace":{"enabled":false,"protectedPaths":[],"keepWorkingCopies":false},"sandbox":{"enabled":false,"allowedHosts":[],"commandRules":[],"secrets":{}}}` | Optional capabilities and their settings. All are off by default. | `{"conversationStore":{"enabled":true}}` |
 
 ## `project`
@@ -141,7 +141,7 @@ It lists the settings the code has today. Settings that later slices add are spe
 
 | Setting | Allowed values | Default | Description | Example |
 |---|---|---|---|---|
-| `unstoredEvents` | list | `["textGenerated"]` | Kinds of event that are published live but not stored, so a reader that joins late or falls behind does not see them. Streamed text is not stored by default: storing each piece slows the agent, and the conversation keeps the text. | `["textGenerated","modelCallEnded"]` |
+| `unstoredEvents` | list |  | Kinds of event that are published live but not stored, so a reader that joins late or falls behind does not see them. Unset leaves out streamed text only: storing each piece slows the agent, and the conversation keeps the text. | `["textGenerated","modelCallEnded"]` |
 | `retention` | section | `{"audit":"365.00:00:00"}` | How long each kind of stored data is kept. Runs, conversations and events without a period are kept until they are deleted. | `{"events":"30.00:00:00"}` |
 
 ## `capabilities`

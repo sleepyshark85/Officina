@@ -23,9 +23,10 @@ The host delivers work as a `Work` item (agent, input, trigger, caller, handoff 
 `AgentRunner.RunAsync`, or a list of inputs to `RunBatchAsync`. Schedules, event sources and servers stay in the
 host; the core only knows how the work arrived. `agents.<name>.triggers` limits the ways an agent takes work.
 
-- Masking is a per-run token table in Core, with no `IMasker` extension until an application needs to replace it.
-- Rate limits use `System.Threading.RateLimiting` fixed windows, replenished when next used, so they keep no timers.
-  They run on the system clock, not `TimeProvider`.
+- Masking is a per-run token table in Core, not replaceable in v1, so DESIGN.md §4 has no `IMasker`. A provider runs
+  its own tools, so `maskResults` and `receivesMaskedValues` are rejected on them; `untrusted` still marks the agent.
+- Rate limits are fixed windows per owner and per tenant on the runner's `TimeProvider`.
+- `storage.unstoredEvents` is unset by default, because the binder appends a configured list to a non-empty default.
 - Handed over from earlier slices: the caller and the human-handoff flag arrive with the work (EGR-04, from S04);
   `caller.*` placeholders in operating facts (CTX-09, from S05); the host knows the run id before the run starts
   (from S08). `work.*` placeholders wait for work items with fields of their own, such as tasks (S18).

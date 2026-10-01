@@ -1,9 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- Core depends on the .NET base library, of which System.Threading.RateLimiting ships as a package, and a JSON Schema validator only (TEST-32). -->
+  <!-- Core depends on the .NET base library and a JSON Schema validator only (TEST-32). -->
   <ItemGroup>
     <PackageReference Include="JsonSchema.Net" />
-    <PackageReference Include="System.Threading.RateLimiting" />
   </ItemGroup>
 
 </Project>

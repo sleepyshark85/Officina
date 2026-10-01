@@ -1,7 +1,5 @@
-using System.Collections.Concurrent;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using System.Threading.RateLimiting;
 using Sleepyshark.Officina.Core.Configuration;
 using Sleepyshark.Officina.Core.Tools;
 
@@ -12,11 +10,11 @@ namespace Sleepyshark.Officina.Core.Running;
 /// the first rejection wins: the agent takes work that arrives this way (TRG-01), then the owner's and the tenant's rate
 /// limits (ING-03).
 /// </summary>
-internal sealed class Admission(PolicyOptions policies)
+internal sealed class Admission(PolicyOptions policies, TimeProvider time)
 {
     private readonly Regex? patterns = policies.Masking.Enabled ? Masker.Expression(policies.Masking.Patterns ?? MaskingOptions.BuiltInPatterns) : null;
-    private readonly RateLimits owners = new(policies.RateLimits.PerOwner);
-    private readonly RateLimits tenants = new(policies.RateLimits.PerTenant);
+    private readonly RateLimits owners = new(policies.RateLimits.PerOwner, time);
+    private readonly RateLimits tenants = new(policies.RateLimits.PerTenant, time);
 
     /// <returns>The work as the agent sees it, the run's masking when it is on, and why the work is rejected, if it is.</returns>
     public (Work Work, Masker? Masker, string? Rejection) Admit(Work work, AgentDefinition agent)
@@ -31,10 +29,13 @@ internal sealed class Admission(PolicyOptions policies)
         return (admitted, masker, rejection);
     }
 
-    /// <summary>A fixed-window limit for each key. A limiter replenishes when it is next used, so none needs a timer.</summary>
-    private sealed class RateLimits(RateLimit? limit)
+    /// <summary>
+    /// A fixed window for each key, which starts with the key's first work item after the last window ended. The windows
+    /// are kept for every owner and tenant seen, which is a few bytes each.
+    /// </summary>
+    private sealed class RateLimits(RateLimit? limit, TimeProvider time)
     {
-        private readonly ConcurrentDictionary<string, FixedWindowRateLimiter> limiters = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, (long Start, int Used)> windows = new(StringComparer.Ordinal);
 
         public bool TryAcquire(string? key)
         {
@@ -43,13 +44,13 @@ internal sealed class Admission(PolicyOptions policies)
                 return true;
             }
 
-            var limiter = limiters.GetOrAdd(key ?? "", _ => new(new()
+            lock (windows)
             {
-                PermitLimit = limit.Permits, Window = limit.Window, QueueLimit = 0, AutoReplenishment = false,
-            }));
-            limiter.TryReplenish();
-            using var lease = limiter.AttemptAcquire();
-            return lease.IsAcquired;
+                var now = time.GetTimestamp();
+                var (start, used) = windows.TryGetValue(key ?? "", out var window) && time.GetElapsedTime(window.Start, now) < limit.Window ? window : (now, 0);
+                windows[key ?? ""] = (start, Math.Min(used + 1, limit.Permits));
+                return used < limit.Permits;
+            }
         }
     }
 }

@@ -95,7 +95,7 @@ public sealed partial record OfficinaOptions : IValidatableObject
         }
 
         errors = errors.Concat(AdmissionSettings()).Concat(Annotations(Storage.Retention, "storage.retention"))
-            .Concat(Storage.UnstoredEvents.Where(kind => !EventPayload.Kinds.Contains(kind)).Select(kind => new ConfigurationError(
+            .Concat(Storage.Unstored.Where(kind => !EventPayload.Kinds.Contains(kind)).Select(kind => new ConfigurationError(
                 ValidationPhase.Shape, "storage.unstoredEvents", $"\"{kind}\" is not a kind of event.",
                 $"Use one of: {string.Join(", ", EventPayload.Kinds.Order(StringComparer.Ordinal))}.")));
 
@@ -159,6 +159,13 @@ public sealed partial record OfficinaOptions : IValidatableObject
                 // TOOL-13: a provider tool skips the per-call steps, so it is enabled only explicitly, with a reason.
                 errors = errors.Append(new(ValidationPhase.Tools, $"tools.{name}.reason", "is required for a provider tool.",
                     "Say why the agents need it; the provider runs it without gates or approval."));
+            }
+
+            if (tool.ProviderTool() is not null && (tool.MaskResults || tool.ReceivesMaskedValues))
+            {
+                // ING-02, ING-06: the provider runs the call and gives the model its result, so the core never sees either.
+                errors = errors.Append(new(ValidationPhase.Tools, $"tools.{name}.{(tool.MaskResults ? "maskResults" : "receivesMaskedValues")}",
+                    "has no effect on a provider tool.", "Remove it; the provider runs the call, so the core cannot mask or restore its values."));
             }
         }
 
