@@ -6,9 +6,9 @@ Status: draft · 2026-10-01 · slices `REQUIREMENTS.md` (revision 2) into delive
 
 Last updated 2026-10-02.
 
-- **Done:** M0 spikes S00a and S00b; M1 slices S01 (walking skeleton) and S02 (configuration); S03 (tool pipeline); S04 (turn loop); S14 (git workspace).
+- **Done:** M0 spikes S00a and S00b; M1 slices S01 (walking skeleton) and S02 (configuration); S03 (tool pipeline); S04 (turn loop); S05 (context and caching); S14 (git workspace).
 - **Waiting:** the M0 design review sign-off on `REQUIREMENTS.md`, `CONFIGURATION.md` and `DESIGN.md`.
-- **Next:** S05, S06, S08 and S10; S07 once S05 is done. S15 (sandbox) can run alongside them.
+- **Next:** S06, S07, S08 and S10; S07 can start now that S05 is done. S15 (sandbox) can run alongside them.
 - **Open follow-ups:**
   - S02 kept a `formatVersion` check, though only version 1 exists. Consider removing the setting
     until a version 2 exists (principle 13).
@@ -37,6 +37,14 @@ Last updated 2026-10-02.
   - S18 turns an integration conflict or failed check into work for the author or the lead (WS-03),
     and integrates a task only after its verification checks pass (TASK-05).
   - S19 snapshots and restores the workspace, and cleans up worktrees left by a crash.
+  - S05 moved CTX-06 to S07 and CTX-07 to S06, and left boundary ② and the memory-change case of TEST-09 to S17;
+    its Notes list the rest (S06, S09, S10, S18).
+  - S08 publishes a turn's `CacheWarnings` as warning events (COST-01). The threshold is `context.cacheHitWarning`
+    per agent, not `operations.telemetry.cacheHitWarning` as the configuration draft shows.
+  - S11 maps cache boundaries to `cache_control`, putting boundary ③ on the last cacheable block before a
+    turn-scoped message; maps `Role.System` to mid-conversation system messages and `TurnScoped` to `clear_at`; and
+    reports `CacheBoundaries` and `TurnScopedMessages` in its capabilities.
+  - S09 takes the caller from admission; `AgentRunner.RunAsync` already accepts one from the host.
 
 ## How slices work
 
@@ -77,8 +85,8 @@ A slice is **done** when:
 | [S02](S02-configuration.md) | Configuration | M1 | M | S01 | [#4](https://github.com/sleepyshark85/Officina/issues/4) | done |
 | [S03](S03-tool-pipeline.md) | Tool pipeline | M2 | M | S02 | [#5](https://github.com/sleepyshark85/Officina/issues/5) | done |
 | [S04](S04-turn-loop.md) | Turn loop | M2 | M | S03 | [#6](https://github.com/sleepyshark85/Officina/issues/6) | done |
-| [S05](S05-context-and-caching.md) | Context and caching | M2 | M | S04 | [#7](https://github.com/sleepyshark85/Officina/issues/7) | todo |
-| [S06](S06-run-record-and-output.md) | Run record and output | M2 | M | S04 | [#8](https://github.com/sleepyshark85/Officina/issues/8) | todo |
+| [S05](S05-context-and-caching.md) | Context and caching | M2 | M | S04 | [#7](https://github.com/sleepyshark85/Officina/issues/7) | done |
+| [S06](S06-run-record-and-output.md) | Run record and output | M2 | M | S04, S05 | [#8](https://github.com/sleepyshark85/Officina/issues/8) | todo |
 | [S07](S07-history-and-conversations.md) | History and conversation store | M2 | S | S05 | [#9](https://github.com/sleepyshark85/Officina/issues/9) | todo |
 | [S08](S08-events-storage-observability.md) | Events, storage and observability | M2 | M | S04 | [#10](https://github.com/sleepyshark85/Officina/issues/10) | todo |
 | [S09](S09-triggers-and-admission.md) | Triggers and admission | M2 | M | S04, S08 | [#11](https://github.com/sleepyshark85/Officina/issues/11) | todo |

@@ -35,8 +35,8 @@ public class AgentRunnerTests
 
         var request = Assert.Single(kit.Model.Requests);
         Assert.Same(kit.Runner.Options.Models[ModelProfile.DefaultName], request.Profile);
-        Assert.Equal(Instructions, request.Instructions);
-        Assert.Equal([Message.User("Invoice A-17")], request.Messages);
+        Assert.StartsWith(Instructions + "\n\n", request.Instructions);
+        Assert.Equal([Message.User("Invoice A-17")], request.History);
     }
 
     [Fact]
@@ -63,8 +63,8 @@ public class AgentRunnerTests
             options, providers, new InMemoryRunStore(), new Dictionary<string, ITool>(), new Dictionary<string, IGate>(),
             new InMemoryAuditLog(), new ScriptedHuman(), new InMemorySecretSource(new Dictionary<string, string>()), new FakeTimeProvider());
 
-        var cheap = await runner.RunAsync("classifier", "input", Ct);
-        var strong = await runner.RunAsync("answerer", "input", Ct);
+        var cheap = await runner.RunAsync("classifier", "input", ct: Ct);
+        var strong = await runner.RunAsync("answerer", "input", ct: Ct);
 
         Assert.Equal("from first", cheap.Output);
         Assert.Equal("from second", strong.Output);

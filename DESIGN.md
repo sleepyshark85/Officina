@@ -99,7 +99,7 @@ How each call is assembled:
    call of a turn only what changed since it was last sent is appended.
 4. Place boundary ③ on the last cacheable block of history.
 5. Check that the request starts with exactly the content of the previous request (the append-only
-   check). It runs in debug builds and in TEST-09.
+   check). It runs before every call, and a request that fails it is not sent.
 6. Send the request through the model gateway.
 
 ## 4. Extension interfaces

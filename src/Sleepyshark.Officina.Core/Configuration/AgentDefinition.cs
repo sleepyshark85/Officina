@@ -32,6 +32,10 @@ public sealed record AgentDefinition
     [Range(1, int.MaxValue, ErrorMessage = "must be at least 1.")]
     public int MaxParallelToolCalls { get; init; } = 4;
 
+    [Setting("How the agent's model input is built.", Example = """{ "operatingFacts": ["Today is {{now:date}}."] }""")]
+    [Required(ErrorMessage = Messages.Required)]
+    public ContextOptions Context { get; init; } = new();
+
     [Setting("When a turn is complete. They combine: the first that holds completes the turn.",
         Example = """{ "finished": false, "finishTool": "submit_report" }""")]
     [Required(ErrorMessage = Messages.Required)]

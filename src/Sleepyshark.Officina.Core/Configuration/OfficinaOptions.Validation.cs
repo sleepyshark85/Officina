@@ -104,13 +104,14 @@ public sealed partial record OfficinaOptions : IValidatableObject
         return errors;
     }
 
-    /// <summary>The settings of an agent's turns (LOOP-05, LOOP-06, LOOP-07). The turn budget is an invariant (INV-07).</summary>
+    /// <summary>The settings of an agent's turns (LOOP-05, LOOP-06, LOOP-07) and their input. The turn budget is an invariant (INV-07).</summary>
     private IEnumerable<ConfigurationError> TurnSettings(string name, AgentDefinition agent)
     {
         var path = $"agents.{name}";
         var errors = (agent.Budget is null ? [] : Annotations(agent.Budget, $"{path}.budget", ValidationPhase.Invariants))
             .Concat(agent.Budget?.Turn is null ? [] : Annotations(agent.Budget.Turn, $"{path}.budget.turn", ValidationPhase.Invariants))
-            .Concat(agent.Stall is null ? [] : Annotations(agent.Stall, $"{path}.stall"));
+            .Concat(agent.Stall is null ? [] : Annotations(agent.Stall, $"{path}.stall"))
+            .Concat(agent.Context is null ? [] : Annotations(agent.Context, $"{path}.context"));
         if (agent.StopWhen is { } stop)
         {
             errors = errors.Concat(Annotations(stop, $"{path}.stopWhen"))

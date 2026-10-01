@@ -72,7 +72,7 @@ public class TurnTests
         var result = await kit.RunAsync(Agent, "work", Ct);
 
         Assert.Equal((AgentOutcome.Completed, "Part two."), (result.Outcome, result.Output));
-        Assert.Equal(Message.Assistant("Part one. "), kit.Model.Requests[1].Messages[^1]);
+        Assert.Equal(Message.Assistant("Part one. "), kit.Model.Requests[1].History[^1]);
     }
 
     // LOOP-03, LOOP-10: the tools run, and the next call sees their results.
@@ -86,8 +86,10 @@ public class TurnTests
 
         Assert.Equal((AgentOutcome.Completed, "Read both.", 2), (result.Outcome, result.Output, result.Statistics.ToolCalls));
         Assert.Equal(
-            new Message(Role.User, [new ToolResultContent("call-1", "a.cs", false), new ToolResultContent("call-2", "b.cs", false)]),
-            kit.Model.Requests[1].Messages[^1]);
+            new Message(Role.User, [
+                new ToolResultContent("call-1", "<data source=\"tool:read\">\na.cs\n</data>", false),
+                new ToolResultContent("call-2", "<data source=\"tool:read\">\nb.cs\n</data>", false)]),
+            kit.Model.Requests[1].History[^1]);
         Assert.Equal(["edit", "read", "test"], kit.Model.Requests[0].Tools.Select(tool => tool.Name));
     }
 
@@ -106,7 +108,7 @@ public class TurnTests
         var result = await kit.RunAsync(Agent, "work", Ct);
 
         Assert.Equal("Done.", result.Output);
-        Assert.Equal([reasoning, new TextContent("Let me look."), call.Content, provider], kit.Model.Requests[1].Messages[1].Content);
+        Assert.Equal([reasoning, new TextContent("Let me look."), call.Content, provider], kit.Model.Requests[1].History[1].Content);
     }
 
     // LOOP-05.

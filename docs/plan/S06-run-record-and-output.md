@@ -1,12 +1,12 @@
 # S06 — Run record and output
 
-**Milestone:** M2 · **Size:** M · **Depends on:** S04 · **Issue:** [#8](https://github.com/sleepyshark85/Officina/issues/8) · **Status:** todo
+**Milestone:** M2 · **Size:** M · **Depends on:** S04, S05 · **Issue:** [#8](https://github.com/sleepyshark85/Officina/issues/8) · **Status:** todo
 
 ## Goal
 
 The shared run record, and checked output.
 
-**Closes:** REC-01, REC-02, REC-03, REC-04, REC-05, REC-06, OUT-01, OUT-02, OUT-03, OUT-04, OUT-05, INV-09, CONC-01
+**Closes:** REC-01, REC-02, REC-03, REC-04, REC-05, REC-06, CTX-07, OUT-01, OUT-02, OUT-03, OUT-04, OUT-05, INV-09, CONC-01
 
 ## Acceptance criteria
 
@@ -18,3 +18,5 @@ The shared run record, and checked output.
 - [ ] The stop condition "the output passes its checks" completes a turn (LOOP-05, left over from S04).
 - [ ] Citation rules work in all three modes: off, resolve and required.
 - [ ] Results can carry artifacts.
+- [ ] The record's facts join the volatile context in a consistent order, each with its as-of time, and building the
+  input never changes the record (CTX-07, moved from S05).

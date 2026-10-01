@@ -14,9 +14,15 @@ public sealed class TestKit
     /// <param name="options">The configuration; the code defaults when omitted.</param>
     /// <param name="tools">The application's tools, by extension id.</param>
     /// <param name="gates">The application's gates, by extension id.</param>
-    public TestKit(OfficinaOptions? options = null, IReadOnlyDictionary<string, ITool>? tools = null, IReadOnlyDictionary<string, IGate>? gates = null)
+    /// <param name="capabilities">What the scripted model claims to support; nothing when omitted.</param>
+    public TestKit(
+        OfficinaOptions? options = null,
+        IReadOnlyDictionary<string, ITool>? tools = null,
+        IReadOnlyDictionary<string, IGate>? gates = null,
+        ProviderCapabilities? capabilities = null)
     {
         options ??= new OfficinaOptions();
+        Model = new() { Capabilities = capabilities ?? ProviderCapabilities.None };
         Runner = new AgentRunner(
             options,
             options.Providers.Keys.ToDictionary(name => name, IModelProvider (_) => Model),
@@ -29,7 +35,7 @@ public sealed class TestKit
             Time);
     }
 
-    public ScriptedModelProvider Model { get; } = new();
+    public ScriptedModelProvider Model { get; }
 
     /// <summary>The runs started so far, with their configuration.</summary>
     public InMemoryRunStore Runs { get; } = new();
@@ -46,5 +52,5 @@ public sealed class TestKit
     public AgentRunner Runner { get; }
 
     public Task<AgentResult> RunAsync(string agentName, string input, CancellationToken ct = default) =>
-        Runner.RunAsync(agentName, input, ct);
+        Runner.RunAsync(agentName, input, ct: ct);
 }
