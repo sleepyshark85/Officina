@@ -1,7 +1,5 @@
-using System.Net;
-using System.Net.Sockets;
-using System.Text;
-using Sleepyshark.Officina.Core.Extensibility;
+using System.Runtime.Versioning;
+using static Sleepyshark.Officina.Sandbox.Tests.RealSandbox;
 
 namespace Sleepyshark.Officina.Sandbox.Tests;
 
@@ -9,52 +7,45 @@ namespace Sleepyshark.Officina.Sandbox.Tests;
 /// The Linux sandbox against the real operating system (TEST-25 on Linux). CI installs bubblewrap and socat and sets up
 /// the host as an installer would; elsewhere these tests are skipped.
 /// </summary>
+[SupportedOSPlatform("linux")]
 public sealed class LinuxSandboxTests : IDisposable
 {
     private const string LinuxOnly = "The Linux sandbox runs only on Linux.";
 
-    private readonly LinuxSandbox sandbox = new();
-    private readonly string host = Directory.CreateTempSubdirectory("officina-host-").FullName;
-    private readonly string workingCopy = Directory.CreateTempSubdirectory("officina-copy-").FullName;
+    private readonly RealSandbox real = new(new LinuxSandbox());
 
     public static bool OnLinux => OperatingSystem.IsLinux();
 
-    private static CancellationToken Ct => TestContext.Current.CancellationToken;
-
-    public void Dispose()
-    {
-        Directory.Delete(host, recursive: true);
-        Directory.Delete(workingCopy, recursive: true);
-    }
+    public void Dispose() => real.Dispose();
 
     [Fact(Skip = LinuxOnly, SkipUnless = nameof(OnLinux))]
-    public void The_machine_can_isolate_commands() => Assert.Null(sandbox.Probe());
+    public void The_machine_can_isolate_commands() => Assert.Null(real.Sandbox.Probe());
 
     [Fact(Skip = LinuxOnly, SkipUnless = nameof(OnLinux))]
     public async Task Only_the_working_copy_of_the_host_exists_inside()
     {
-        var secret = Path.Combine(host, "secret.txt");
+        var secret = Path.Combine(real.Host, "secret.txt");
         await File.WriteAllTextAsync(secret, "s3cret", Ct);
 
-        var (output, _) = await RunAsync($"cat {secret}; echo x > {host}/planted; ls /home; echo built > out.txt; pwd");
+        var (output, _) = await real.RunAsync($"cat {secret}; echo x > {real.Host}/planted; ls /home; echo built > out.txt; pwd");
 
         Assert.DoesNotContain("s3cret", output, StringComparison.Ordinal);
-        Assert.Contains($"{workingCopy}\n", output, StringComparison.Ordinal);
-        Assert.False(File.Exists(Path.Combine(host, "planted")));
-        Assert.Equal("built\n", await File.ReadAllTextAsync(Path.Combine(workingCopy, "out.txt"), Ct));
+        Assert.Contains($"{real.WorkingCopy}\n", output, StringComparison.Ordinal);
+        Assert.False(File.Exists(Path.Combine(real.Host, "planted")));
+        Assert.Equal("built\n", await File.ReadAllTextAsync(Path.Combine(real.WorkingCopy, "out.txt"), Ct));
     }
 
     [Fact(Skip = LinuxOnly, SkipUnless = nameof(OnLinux))]
     public async Task Hidden_paths_cannot_be_read_and_read_only_paths_cannot_be_changed()
     {
-        var git = Directory.CreateDirectory(Path.Combine(workingCopy, ".git")).FullName;
+        var git = Directory.CreateDirectory(Path.Combine(real.WorkingCopy, ".git")).FullName;
         await File.WriteAllTextAsync(Path.Combine(git, "config"), "git-secret", Ct);
-        var env = Path.Combine(workingCopy, ".env");
+        var env = Path.Combine(real.WorkingCopy, ".env");
         await File.WriteAllTextAsync(env, "API_KEY=s3cret", Ct);
-        var configuration = Path.Combine(workingCopy, "sof.json");
+        var configuration = Path.Combine(real.WorkingCopy, "sof.json");
         await File.WriteAllTextAsync(configuration, "{}", Ct);
 
-        var (output, exitCode) = await RunAsync("cat .env .git/config; ls -A .git; echo '{ \"x\": 1 }' > sof.json", hidden: [git, env], readOnly: [configuration]);
+        var (output, exitCode) = await real.RunAsync("cat .env .git/config; ls -A .git; echo '{ \"x\": 1 }' > sof.json", hidden: [git, env], readOnly: [configuration]);
 
         Assert.NotEqual(0, exitCode);
         Assert.DoesNotContain("s3cret", output, StringComparison.Ordinal);
@@ -64,9 +55,23 @@ public sealed class LinuxSandboxTests : IDisposable
     }
 
     [Fact(Skip = LinuxOnly, SkipUnless = nameof(OnLinux))]
+    public async Task A_toolchain_outside_the_system_folders_can_be_run()
+    {
+        var toolchain = Directory.CreateDirectory(Path.Combine(real.Host, "sdk")).FullName;
+        var tool = Path.Combine(toolchain, "sdk-tool");
+        await File.WriteAllTextAsync(tool, "#!/bin/sh\necho tool ran\n", Ct);
+        File.SetUnixFileMode(tool, UnixFileMode.UserRead | UnixFileMode.UserExecute);
+
+        var (output, exitCode) = await real.RunAsync("sdk-tool; echo x > " + tool, toolchains: [toolchain]);
+
+        Assert.StartsWith("tool ran\n", output, StringComparison.Ordinal);
+        Assert.NotEqual(0, exitCode);
+    }
+
+    [Fact(Skip = LinuxOnly, SkipUnless = nameof(OnLinux))]
     public async Task Commands_see_only_the_environment_they_are_given()
     {
-        var (output, _) = await RunAsync("env", environment: new Dictionary<string, string> { ["NUGET_TOKEN"] = "t0ken" });
+        var (output, _) = await real.RunAsync("env", environment: new Dictionary<string, string> { ["NUGET_TOKEN"] = "t0ken" });
 
         Assert.Contains("NUGET_TOKEN=t0ken", output, StringComparison.Ordinal);
         Assert.Contains("HOME=/tmp", output, StringComparison.Ordinal);
@@ -78,7 +83,7 @@ public sealed class LinuxSandboxTests : IDisposable
     {
         using var server = new Server();
 
-        var (output, exitCode) = await RunAsync($"socat -T 2 - TCP:127.0.0.1:{server.Port} </dev/null");
+        var (output, exitCode) = await real.RunAsync($"socat -T 2 - TCP:127.0.0.1:{server.Port} </dev/null");
 
         Assert.NotEqual(0, exitCode);
         Assert.Contains("Connection refused", output, StringComparison.Ordinal);
@@ -90,17 +95,19 @@ public sealed class LinuxSandboxTests : IDisposable
         using var server = new Server();
         string Get(string url) => $"printf 'GET {url} HTTP/1.0\\r\\n\\r\\n' | socat -t 5 - TCP:127.0.0.1:3128";
 
-        var (output, _) = await RunAsync($"{Get($"http://127.0.0.1:{server.Port}/")}; {Get("http://example.com/")}; socat -T 2 - TCP:127.0.0.1:{server.Port} </dev/null", ["127.0.0.1"]);
+        var (output, _) = await real.RunAsync($"{Get($"http://127.0.0.1:{server.Port}/")}; {Get("http://example.com/")}; socat -T 2 - TCP:127.0.0.1:{server.Port} </dev/null", ["127.0.0.1"]);
 
-        Assert.Contains("hello from the host", output, StringComparison.Ordinal);
+        Assert.Contains(Server.Greeting, output, StringComparison.Ordinal);
         Assert.Contains("403 Forbidden", output, StringComparison.Ordinal);
         Assert.Contains("Connection refused", output, StringComparison.Ordinal);
+        Assert.Contains($"[Network: allowed 127.0.0.1:{server.Port}.]", output, StringComparison.Ordinal);
+        Assert.Contains("[Network: refused example.com, which is not an allowed host.]", output, StringComparison.Ordinal);
     }
 
     [Fact(Skip = LinuxOnly, SkipUnless = nameof(OnLinux))]
     public async Task A_command_over_its_memory_limit_is_killed()
     {
-        var (_, exitCode) = await RunAsync("dd if=/dev/zero of=/dev/null bs=200M count=1", limits: Small);
+        var (_, exitCode) = await real.RunAsync("dd if=/dev/zero of=/dev/null bs=200M count=1", limits: Small);
 
         Assert.Equal(137, exitCode);
     }
@@ -108,7 +115,7 @@ public sealed class LinuxSandboxTests : IDisposable
     [Fact(Skip = LinuxOnly, SkipUnless = nameof(OnLinux))]
     public async Task A_command_cannot_start_more_processes_than_its_limit()
     {
-        var (output, exitCode) = await RunAsync("i=0; while [ $i -lt 40 ]; do sleep 30 & i=$((i+1)); done; echo all started", limits: Small);
+        var (output, exitCode) = await real.RunAsync("i=0; while [ $i -lt 40 ]; do sleep 30 & i=$((i+1)); done; echo all started", limits: Small);
 
         Assert.NotEqual(0, exitCode);
         Assert.Contains("Cannot fork", output, StringComparison.Ordinal);
@@ -118,7 +125,7 @@ public sealed class LinuxSandboxTests : IDisposable
     [Fact(Skip = LinuxOnly, SkipUnless = nameof(OnLinux))]
     public async Task Output_stops_at_its_limit()
     {
-        var (output, exitCode) = await RunAsync("yes | head -n 100000", limits: Small);
+        var (output, exitCode) = await real.RunAsync("yes | head -n 100000", limits: Small);
 
         Assert.Equal(0, exitCode);
         Assert.InRange(output.Length, 1000, 1100);
@@ -129,7 +136,7 @@ public sealed class LinuxSandboxTests : IDisposable
     public async Task Stopping_a_command_stops_everything_it_started()
     {
         // A new session, a double fork and a plain child: all must end.
-        var process = await StartAsync("setsid sleep 1234561 & (sleep 1234562 &); sleep 1234563 & echo started; wait");
+        var process = await real.StartAsync("setsid sleep 1234561 & (sleep 1234562 &); sleep 1234563 & echo started; wait");
         Assert.Equal("started", await process.Output.ReadAsync(Ct));
 
         await process.DisposeAsync();
@@ -140,14 +147,14 @@ public sealed class LinuxSandboxTests : IDisposable
     [Fact(Skip = LinuxOnly, SkipUnless = nameof(OnLinux))]
     public async Task Sandboxes_cannot_see_or_affect_each_other()
     {
-        var other = await StartAsync("sleep 9876504 & echo started; wait");
+        var other = await real.StartAsync("sleep 9876504 & echo started; wait");
         Assert.Equal("started", await other.Output.ReadAsync(Ct));
         var otherCopy = Directory.CreateTempSubdirectory("officina-copy-").FullName;
         try
         {
             await File.WriteAllTextAsync(Path.Combine(otherCopy, "work.txt"), "theirs", Ct);
 
-            var (output, _) = await RunAsync($"cat {otherCopy}/work.txt; grep -l '987650[4]' /proc/[0-9]*/cmdline; pkill -f '987650[4]'; echo done");
+            var (output, _) = await real.RunAsync($"cat {otherCopy}/work.txt; grep -l '987650[4]' /proc/[0-9]*/cmdline; pkill -f '987650[4]'; echo done");
 
             Assert.Equal("done", output.Split('\n', StringSplitOptions.RemoveEmptyEntries)[^1]);
             Assert.DoesNotContain("theirs", output, StringComparison.Ordinal);
@@ -159,30 +166,6 @@ public sealed class LinuxSandboxTests : IDisposable
             await other.DisposeAsync();
             Directory.Delete(otherCopy, recursive: true);
         }
-    }
-
-    private static SandboxLimits Small { get; } = new(1, 64 << 20, 16, 1000);
-
-    private Task<ISandboxProcess> StartAsync(string commandLine) =>
-        sandbox.StartAsync(new(commandLine, workingCopy, SandboxLimits.Default, [], new Dictionary<string, string>(), [], []), Ct).AsTask();
-
-    private async Task<(string Output, int ExitCode)> RunAsync(
-        string commandLine,
-        IReadOnlyList<string>? allowedHosts = null,
-        SandboxLimits? limits = null,
-        Dictionary<string, string>? environment = null,
-        IReadOnlyList<string>? hidden = null,
-        IReadOnlyList<string>? readOnly = null)
-    {
-        await using var process = await sandbox.StartAsync(
-            new(commandLine, workingCopy, limits ?? SandboxLimits.Default, allowedHosts ?? [], environment ?? [], hidden ?? [], readOnly ?? []), Ct);
-        var output = new StringBuilder();
-        await foreach (var line in process.Output.ReadAllAsync(Ct))
-        {
-            output.Append(line).Append('\n');
-        }
-
-        return (output.ToString(), await process.ExitCode);
     }
 
     /// <summary>The host's processes whose command line contains the text.</summary>
@@ -198,32 +181,4 @@ public sealed class LinuxSandboxTests : IDisposable
                 return false;
             }
         })];
-
-    /// <summary>An HTTP server on the host's loopback, which a sandbox can reach only through the proxy.</summary>
-    private sealed class Server : IDisposable
-    {
-        private readonly TcpListener listener = new(IPAddress.Loopback, 0);
-
-        public Server()
-        {
-            listener.Start();
-            _ = AnswerAsync();
-        }
-
-        public int Port => ((IPEndPoint)listener.LocalEndpoint).Port;
-
-        public void Dispose() => listener.Dispose();
-
-        private async Task AnswerAsync()
-        {
-            while (true)
-            {
-                using var client = await listener.AcceptTcpClientAsync();
-                var stream = client.GetStream();
-                using var request = new StreamReader(stream, leaveOpen: true);
-                await request.ReadLineAsync();
-                await stream.WriteAsync("HTTP/1.0 200 OK\r\n\r\nhello from the host\n"u8.ToArray());
-            }
-        }
-    }
 }

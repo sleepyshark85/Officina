@@ -12,4 +12,6 @@ namespace Sleepyshark.Officina.Core.Extensibility;
 /// audit log and errors (INV-06).
 /// </param>
 /// <param name="Record">The run record, to read; only the core's record tools propose changes to it (REC-02).</param>
-public sealed record ToolCall(JsonElement Arguments, Caller Caller, string IdempotencyKey, ISecretSource Secrets, RunRecord Record);
+/// <param name="Output">Publishes a line of the tool's output as it is produced, as an event, with known secrets removed.</param>
+public sealed record ToolCall(
+    JsonElement Arguments, Caller Caller, string IdempotencyKey, ISecretSource Secrets, RunRecord Record, Func<string, CancellationToken, ValueTask> Output);

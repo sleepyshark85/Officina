@@ -59,24 +59,28 @@ public sealed class LinuxSandbox : ISandbox
             Add(start, Directory.Exists(path) ? ["--tmpfs", path] : ["--ro-bind", "/dev/null", path]);
         }
 
-        foreach (var path in command.ReadOnlyPaths)
+        foreach (var path in command.ReadOnlyPaths.Concat(command.Toolchains))
         {
-            Add(start, "--ro-bind", path, path);
+            Add(start, "--ro-bind-try", path, path);
         }
+
         var environment = new Dictionary<string, string>
         {
-            ["PATH"] = "/usr/local/bin:/usr/bin:/bin:/usr/local/sbin:/usr/sbin:/sbin",
+            ["PATH"] = string.Join(':', command.Toolchains.Append("/usr/local/bin:/usr/bin:/bin:/usr/local/sbin:/usr/sbin:/sbin")),
             ["HOME"] = "/tmp",
             ["TMPDIR"] = "/tmp",
             ["LANG"] = "C.UTF-8",
         };
         var commandLine = command.CommandLine;
         FilterProxy? proxy = null;
+
+        // The proxy is told before the command can connect, and reports into its output once it runs.
+        SandboxProcess? sandboxed = null;
         if (command.AllowedHosts.Count > 0)
         {
             // A Unix socket path is limited to 108 bytes, so it lives in the runtime folder, not the working copy.
             var socket = Path.Combine(Environment.GetEnvironmentVariable("XDG_RUNTIME_DIR") ?? Path.GetTempPath(), $"officina-{Guid.NewGuid():N}.sock");
-            proxy = new FilterProxy(socket, command.AllowedHosts);
+            proxy = FilterProxy.OnUnixSocket(socket, command.AllowedHosts, line => sandboxed?.Add(line));
             Add(start, "--bind", socket, ProxySocket);
             foreach (var name in new[] { "HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy" })
             {
@@ -94,7 +98,20 @@ public sealed class LinuxSandbox : ISandbox
         }
 
         Add(start, "--", "/bin/sh", "-c", commandLine);
-        return ValueTask.FromResult<ISandboxProcess>(new SandboxProcess(start, limits.OutputCharacters, proxy));
+        start.RedirectStandardInput = true;
+        start.RedirectStandardOutput = true;
+        start.RedirectStandardError = true;
+        var process = Process.Start(start)!;
+        process.StandardInput.Close();
+        sandboxed = new SandboxProcess(
+            ExitedAsync(process), [process.StandardOutput, process.StandardError], () => process.Kill(entireProcessTree: true), limits.OutputCharacters, proxy);
+        return ValueTask.FromResult<ISandboxProcess>(sandboxed);
+    }
+
+    private static async Task<int> ExitedAsync(Process process)
+    {
+        await process.WaitForExitAsync().ConfigureAwait(false);
+        return process.ExitCode;
     }
 
     private static void Add(ProcessStartInfo start, params string[] arguments)

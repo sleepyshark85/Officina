@@ -620,6 +620,7 @@ object with `"enabled"` plus its own settings.
   },
   "sandbox": {
     "allowedHosts": ["api.nuget.org", "*.nuget.org"],               // SBX-01, network off by default
+    "toolchains": ["/home/dev/.dotnet"],                            // read-only, and on the path
     "commandRules": [                                               // SBX-02; first match wins, unmatched is asked about
       { "match": "dotnet build*", "action": "allow" },
       { "match": "dotnet test*",  "action": "allow" },

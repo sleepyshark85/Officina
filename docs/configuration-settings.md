@@ -24,7 +24,7 @@ It lists the settings the code has today. Settings that later slices add are spe
 | `run` | section | `{"budget":{"cost":25,"time":"08:00:00"},"permissionMode":"ask"}` | Defaults for every run. | `{"permissionMode":"ask"}` |
 | `operations` | section | `{"telemetry":{"cacheHitWarning":0.7}}` | How the engine is operated. | `{"telemetry":{"cacheHitWarning":0.7}}` |
 | `storage` | section | `{"retention":{"audit":"365.00:00:00"}}` | What is stored, and for how long. | `{"unstoredEvents":["textGenerated"],"retention":{"events":"30.00:00:00"}}` |
-| `capabilities` | section | `{"conversationStore":{"enabled":false},"knowledge":{"enabled":false},"workspace":{"enabled":false,"protectedPaths":[],"keepWorkingCopies":false},"sandbox":{"enabled":false,"allowedHosts":[],"commandRules":[],"secrets":{}}}` | Optional capabilities and their settings. All are off by default. | `{"conversationStore":{"enabled":true}}` |
+| `capabilities` | section | `{"conversationStore":{"enabled":false},"knowledge":{"enabled":false},"workspace":{"enabled":false,"protectedPaths":[],"keepWorkingCopies":false},"sandbox":{"enabled":false,"allowedHosts":[],"toolchains":[],"commandRules":[],"secrets":{}}}` | Optional capabilities and their settings. All are off by default. | `{"conversationStore":{"enabled":true}}` |
 
 ## `project`
 
@@ -159,7 +159,7 @@ It lists the settings the code has today. Settings that later slices add are spe
 | `conversationStore` | section | `{"enabled":false}` | The conversation store: each agent's conversation with each caller is kept, anonymous callers sharing one, so a history strategy other than `none` continues it across requests and restarts. | `{"enabled":true}` |
 | `knowledge` | section | `{"enabled":false}` | Knowledge retrieval: the sources in `knowledge`, searched before a turn or through `knowledge:` tools. | `{"enabled":true}` |
 | `workspace` | section | `{"enabled":false,"protectedPaths":[],"keepWorkingCopies":false}` | The git workspace: a working copy per agent, and an integration queue into the baseline. | `{"enabled":true,"protectedPaths":[{"path":"secrets/**","access":"hidden"}]}` |
-| `sandbox` | section | `{"enabled":false,"allowedHosts":[],"commandRules":[],"secrets":{}}` | The sandbox that commands run in: no network unless allowed, and command rules. It needs the workspace. | `{"enabled":true,"allowedHosts":["api.nuget.org"]}` |
+| `sandbox` | section | `{"enabled":false,"allowedHosts":[],"toolchains":[],"commandRules":[],"secrets":{}}` | The sandbox that commands run in: no network unless allowed, and command rules. It needs the workspace. | `{"enabled":true,"allowedHosts":["api.nuget.org"]}` |
 
 ## `providers.<name>.apiKey`
 
@@ -301,6 +301,7 @@ It lists the settings the code has today. Settings that later slices add are spe
 |---|---|---|---|---|
 | `enabled` | boolean | `false` | Whether the sandbox is on. | `true` |
 | `allowedHosts` | list | `[]` | The hosts commands may reach, through a filtering proxy. `*.` matches any subdomain. Empty means no network. | `["api.nuget.org","*.nuget.org"]` |
+| `toolchains` | list | `[]` | Folders of toolchains installed outside the system folders, such as an SDK in the home folder. Commands can read and run them, and find them on the path. | `["/home/dev/.dotnet"]` |
 | `commandRules` | list | `[]` | Rules for commands, in order. Each command of a command line is decided by the first rule that matches it, and the strictest decision applies. A command no rule matches is asked about. | `[{"match":"dotnet build*","action":"allow"},{"match":"git push*","action":"deny"}]` |
 | `secrets` | named entries | `{}` | The secrets each agent's commands receive as environment variables, by agent name. Other agents' commands never see them. | `{"developer":["NUGET_TOKEN"]}` |
 

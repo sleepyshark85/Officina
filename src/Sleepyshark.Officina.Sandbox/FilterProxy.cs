@@ -1,4 +1,8 @@
+using System.IO.Pipes;
 using System.Net.Sockets;
+using System.Runtime.Versioning;
+using System.Security.AccessControl;
+using System.Security.Principal;
 using System.Text;
 
 namespace Sleepyshark.Officina.Sandbox;
@@ -6,34 +10,76 @@ namespace Sleepyshark.Officina.Sandbox;
 /// <summary>
 /// The filtering proxy, the only way out of a sandbox (SBX-01). It runs on the host for one command and dials only the
 /// hosts on its allow list: HTTPS through <c>CONNECT host:port</c>, and plain HTTP through absolute URLs. It listens on a
-/// Unix socket that is mounted into the sandbox.
+/// Unix socket mounted into the Linux sandbox, or on a named pipe only the Windows sandbox's container may open.
 /// </summary>
 internal sealed class FilterProxy : IAsyncDisposable
 {
     private static readonly byte[] Forbidden = Encoding.ASCII.GetBytes("HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
     private static readonly byte[] Established = Encoding.ASCII.GetBytes("HTTP/1.1 200 Connection established\r\n\r\n");
 
-    private readonly Socket listener = new(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified);
-    private readonly string socketPath;
     private readonly IReadOnlyList<string> allowedHosts;
+    private readonly Action<string> report;
+    private readonly Func<CancellationToken, Task<Stream>> accept;
+    private readonly Action close;
     private readonly CancellationTokenSource stop = new();
     private readonly Task accepting;
 
-    public FilterProxy(string socketPath, IReadOnlyList<string> allowedHosts)
+    private FilterProxy(IReadOnlyList<string> allowedHosts, Action<string> report, Func<CancellationToken, Task<Stream>> accept, Action close)
     {
-        this.socketPath = socketPath;
         this.allowedHosts = allowedHosts;
-        listener.Bind(new UnixDomainSocketEndPoint(socketPath));
-        listener.Listen();
+        this.report = report;
+        this.accept = accept;
+        this.close = close;
         accepting = AcceptAsync();
+    }
+
+    /// <param name="path">The socket's path.</param>
+    /// <param name="allowedHosts">The hosts the proxy dials.</param>
+    /// <param name="report">Where each decision is told, as a line of the command's output.</param>
+    public static FilterProxy OnUnixSocket(string path, IReadOnlyList<string> allowedHosts, Action<string> report)
+    {
+        var listener = new Socket(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified);
+        listener.Bind(new UnixDomainSocketEndPoint(path));
+        listener.Listen();
+        return new(allowedHosts, report, async ct => new NetworkStream(await listener.AcceptAsync(ct).ConfigureAwait(false), ownsSocket: true), () =>
+        {
+            listener.Dispose();
+            File.Delete(path);
+        });
+    }
+
+    /// <param name="name">The pipe's name.</param>
+    /// <param name="client">The only one besides the host who may open the pipe: the sandbox's container.</param>
+    /// <param name="allowedHosts">The hosts the proxy dials.</param>
+    /// <param name="report">Where each decision is told, as a line of the command's output.</param>
+    [SupportedOSPlatform("windows")]
+    public static FilterProxy OnNamedPipe(string name, SecurityIdentifier client, IReadOnlyList<string> allowedHosts, Action<string> report)
+    {
+        var security = new PipeSecurity();
+        security.AddAccessRule(new PipeAccessRule(WindowsIdentity.GetCurrent().User!, PipeAccessRights.FullControl, AccessControlType.Allow));
+        security.AddAccessRule(new PipeAccessRule(client, PipeAccessRights.ReadWrite, AccessControlType.Allow));
+        return new(allowedHosts, report, async ct =>
+        {
+            var pipe = NamedPipeServerStreamAcl.Create(
+                name, PipeDirection.InOut, NamedPipeServerStream.MaxAllowedServerInstances, PipeTransmissionMode.Byte, PipeOptions.Asynchronous, 0, 0, security);
+            try
+            {
+                await pipe.WaitForConnectionAsync(ct).ConfigureAwait(false);
+                return pipe;
+            }
+            catch
+            {
+                await pipe.DisposeAsync().ConfigureAwait(false);
+                throw;
+            }
+        }, () => { });
     }
 
     public async ValueTask DisposeAsync()
     {
         await stop.CancelAsync().ConfigureAwait(false);
-        listener.Dispose();
         await accepting.ConfigureAwait(false);
-        File.Delete(socketPath);
+        close();
         stop.Dispose();
     }
 
@@ -46,21 +92,21 @@ internal sealed class FilterProxy : IAsyncDisposable
     {
         while (true)
         {
-            Socket client;
+            Stream client;
             try
             {
-                client = await listener.AcceptAsync(stop.Token).ConfigureAwait(false);
+                client = await accept(stop.Token).ConfigureAwait(false);
             }
-            catch (Exception exception) when (exception is OperationCanceledException or SocketException or ObjectDisposedException)
+            catch (Exception exception) when (exception is OperationCanceledException or IOException or SocketException or ObjectDisposedException)
             {
                 return;
             }
 
-            _ = ForwardAsync(new NetworkStream(client, ownsSocket: true));
+            _ = ForwardAsync(client);
         }
     }
 
-    private async Task ForwardAsync(NetworkStream client)
+    private async Task ForwardAsync(Stream client)
     {
         await using var _ = client.ConfigureAwait(false);
         try
@@ -82,9 +128,12 @@ internal sealed class FilterProxy : IAsyncDisposable
             var target = new Uri(connect ? $"tcp://{request[1]}" : request[1]);
             if (!Allows(target.Host) || target.Port < 0)
             {
+                report($"[Network: refused {target.Host}, which is not an allowed host.]");
                 await client.WriteAsync(Forbidden, stop.Token).ConfigureAwait(false);
                 return;
             }
+
+            report($"[Network: allowed {target.Host}:{target.Port}.]");
 
             using var upstream = new TcpClient();
             await upstream.ConnectAsync(target.Host, target.Port, stop.Token).ConfigureAwait(false);
@@ -100,23 +149,38 @@ internal sealed class FilterProxy : IAsyncDisposable
                 await server.WriteAsync(Encoding.ASCII.GetBytes(forwarded), stop.Token).ConfigureAwait(false);
             }
 
-            await Task.WhenAll(PipeAsync(client, server), PipeAsync(server, client)).ConfigureAwait(false);
+            var upload = PipeAsync(client, server);
+            await PipeAsync(server, client).ConfigureAwait(false);
+
+            // A named pipe cannot be half-closed, so for a pipe the server's end is the connection's end.
+            if (client is NetworkStream)
+            {
+                await upload.ConfigureAwait(false);
+            }
         }
         catch (Exception exception) when (exception is IOException or SocketException or UriFormatException or OperationCanceledException)
         {
             // The connection ends; the command sees it fail.
         }
+        finally
+        {
+            // Disconnecting ends a pipe at once; disposing it would wait for a pending read, which only the other end can finish.
+            if (client is NamedPipeServerStream { IsConnected: true } pipe)
+            {
+                pipe.Disconnect();
+            }
+        }
     }
 
     /// <summary>Copies one direction until it ends, then tells the other end, which may still answer.</summary>
-    private async Task PipeAsync(NetworkStream from, NetworkStream to)
+    private async Task PipeAsync(Stream from, Stream to)
     {
         await from.CopyToAsync(to, stop.Token).ConfigureAwait(false);
-        to.Socket.Shutdown(SocketShutdown.Send);
+        (to as NetworkStream)?.Socket.Shutdown(SocketShutdown.Send);
     }
 
     /// <summary>The request line and headers, up to the empty line that ends them; null if the client stops first.</summary>
-    private async Task<string?> ReadHeaderAsync(NetworkStream client)
+    private async Task<string?> ReadHeaderAsync(Stream client)
     {
         var header = new List<byte>();
         var next = new byte[1];
