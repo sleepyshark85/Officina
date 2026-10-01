@@ -41,6 +41,11 @@ public sealed partial record OfficinaOptions : IValidatableObject
                 .Concat(References($"agents.{name}.tools", "tool set", agent.Tools, "toolSets", ToolSets.Keys));
         }
 
+        foreach (var (index, path) in (Capabilities.Workspace?.ProtectedPaths ?? []).Index())
+        {
+            errors = errors.Concat(Annotations(path, $"capabilities.workspace.protectedPaths[{index}]"));
+        }
+
         return errors.Concat(ToolSettings()).Concat(InstructionPlaceholders.Check(this));
     }
 

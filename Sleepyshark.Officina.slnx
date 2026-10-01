@@ -16,5 +16,6 @@
     <Project Path="tests/Sleepyshark.Officina.Core.Tests/Sleepyshark.Officina.Core.Tests.csproj" />
     <Project Path="tests/Sleepyshark.Officina.Dependencies.Tests/Sleepyshark.Officina.Dependencies.Tests.csproj" />
     <Project Path="tests/Sleepyshark.Officina.Testing.Tests/Sleepyshark.Officina.Testing.Tests.csproj" />
+    <Project Path="tests/Sleepyshark.Officina.Workspace.Tests/Sleepyshark.Officina.Workspace.Tests.csproj" />
   </Folder>
 </Solution>

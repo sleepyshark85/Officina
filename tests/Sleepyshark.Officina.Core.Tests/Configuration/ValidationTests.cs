@@ -81,6 +81,16 @@ public class ValidationTests
     }
 
     [Fact]
+    public void A_protected_path_needs_a_path()
+    {
+        var workspace = new WorkspaceOptions { ProtectedPaths = [new() { Path = null! }] };
+
+        var error = Assert.Single(new OfficinaOptions { Capabilities = new() { Workspace = workspace } }.Validate());
+
+        Assert.Equal(("capabilities.workspace.protectedPaths[0].path", "is required but not set. Add it; it has no default."), (error.Path, error.Problem));
+    }
+
+    [Fact]
     public void Every_error_is_reported_ordered_by_phase()
     {
         var options = WithAgent(Extractor with { Instructions = "Hello {{caller.id}}", Model = "missing" }) with

@@ -1,6 +1,6 @@
 # S14 — Git workspace
 
-**Milestone:** M5 · **Size:** M · **Depends on:** S03 · **Issue:** [#16](https://github.com/sleepyshark85/Officina/issues/16) · **Status:** todo
+**Milestone:** M5 · **Size:** M · **Depends on:** S03 · **Issue:** [#16](https://github.com/sleepyshark85/Officina/issues/16) · **Status:** done
 
 ## Goal
 
@@ -10,9 +10,9 @@ The baseline, working copies, and the integration queue.
 
 ## Acceptance criteria
 
-- [ ] Each agent's changes stay invisible to other agents until integrated.
-- [ ] Integration goes through the queue and runs the baseline checks.
-- [ ] Two agents editing the same file produce a detected conflict, never a silent overwrite.
-- [ ] An edit fails if the file changed since it was read.
-- [ ] Protected paths are hidden or read-only.
-- [ ] A second run on the same workspace is refused.
+- [x] Each agent's changes stay invisible to other agents until integrated.
+- [x] Integration goes through the queue and runs the baseline checks.
+- [x] Two agents editing the same file produce a detected conflict, never a silent overwrite.
+- [x] An edit fails if the file changed since it was read.
+- [x] Protected paths are hidden or read-only.
+- [x] A second run on the same workspace is refused.

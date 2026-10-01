@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Sleepyshark.Officina.Workspace\Sleepyshark.Officina.Workspace.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The clock is a system boundary (DESIGN.md §11). -->
+    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
+  </ItemGroup>
+
+</Project>
