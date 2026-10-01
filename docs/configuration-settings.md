@@ -19,6 +19,7 @@ It lists the settings the code has today. Settings that later slices add are spe
 | `gates` | named entries | `{}` | Gates, by name. Tools and policies refer to them by name. | `{"issue-dedupe":{"use":"extension:Acme.IssueDedupeGate"}}` |
 | `policies` | section | `{"permissionRules":[],"gates":[],"anonymousPermissions":[]}` | Permission rules, gates for all tools, and anonymous callers' permissions. | `{"gates":["no-main-branch"]}` |
 | `run` | section | `{"budget":{"cost":25,"time":"08:00:00"},"permissionMode":"ask"}` | Defaults for every run. | `{"permissionMode":"ask"}` |
+| `capabilities` | section | `{}` | Optional capabilities and their settings. All are off by default. | `{"workspace":{"keepWorkingCopies":true}}` |
 
 ## `project`
 
@@ -95,6 +96,12 @@ It lists the settings the code has today. Settings that later slices add are spe
 | `budget` | section | `{"cost":25,"time":"08:00:00"}` | The run's budget. It can be high, but it cannot be removed or unlimited. Required. Live: the owner may change it during a run. | `{"cost":25,"time":"08:00:00"}` |
 | `permissionMode` | `"ask"`, `"auto"`, `"readOnly"` | `"ask"` | How tool calls that need permission are decided: `ask` the owner, `auto` by the rules, or `readOnly`. Live: the owner may change it during a run. | `"ask"` |
 
+## `capabilities`
+
+| Setting | Allowed values | Default | Description | Example |
+|---|---|---|---|---|
+| `workspace` | section |  | The git workspace: a working copy per agent, and an integration queue into the baseline. Off when unset. | `{"protectedPaths":[{"path":"secrets/**","access":"hidden"}]}` |
+
 ## `providers.<name>.apiKey`
 
 | Setting | Allowed values | Default | Description | Example |
@@ -133,3 +140,17 @@ It lists the settings the code has today. Settings that later slices add are spe
 |---|---|---|---|---|
 | `cost` | number, > 0 | `25` | The most the run may spend, in USD. Live: the owner may change it during a run. | `25` |
 | `time` | time span (`hh:mm:ss` or `d.hh:mm:ss`) | `"08:00:00"` | The longest the run may take, as `hh:mm:ss` or `d.hh:mm:ss`. Live: the owner may change it during a run. | `"08:00:00"` |
+
+## `capabilities.workspace`
+
+| Setting | Allowed values | Default | Description | Example |
+|---|---|---|---|---|
+| `protectedPaths` | list | `[]` | Paths agents cannot see or change, in addition to the fixed ones: `.git`, `**/.env*` and `.sof/**` are hidden, and `sof*.json` is read-only. | `[{"path":"secrets/**","access":"hidden"}]` |
+| `keepWorkingCopies` | boolean | `false` | Whether an agent's working copy is kept when its task ends, so the owner can look at it. | `true` |
+
+## `capabilities.workspace.protectedPaths[]`
+
+| Setting | Allowed values | Default | Description | Example |
+|---|---|---|---|---|
+| `path` | text |  | A glob relative to the workspace root, where `**` matches any number of folders. Required. | `"secrets/**"` |
+| `access` | `"hidden"`, `"readOnly"` | `"hidden"` | `hidden`: agents cannot see it at all; `readOnly`: they can read it but not change it. | `"readOnly"` |
