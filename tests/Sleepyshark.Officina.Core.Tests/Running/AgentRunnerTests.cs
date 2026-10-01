@@ -17,10 +17,10 @@ public class AgentRunnerTests
     [Fact]
     public async Task An_agent_with_only_instructions_completes_with_the_model_output()
     {
-        var kit = new TestKit();
+        var kit = Extractor();
         kit.Model.Reply("""{"number":"A-17"}""");
 
-        var result = await kit.RunAsync(new AgentDefinition { Instructions = Instructions }, "Invoice A-17", Ct);
+        var result = await kit.RunAsync("extractor", "Invoice A-17", Ct);
 
         Assert.Equal((AgentOutcome.Completed, """{"number":"A-17"}"""), (result.Outcome, result.Output));
     }
@@ -28,10 +28,10 @@ public class AgentRunnerTests
     [Fact]
     public async Task An_agent_with_only_instructions_runs_on_the_default_profile()
     {
-        var kit = new TestKit();
+        var kit = Extractor();
         kit.Model.Reply("done");
 
-        await kit.RunAsync(new AgentDefinition { Instructions = Instructions }, "Invoice A-17", Ct);
+        await kit.RunAsync("extractor", "Invoice A-17", Ct);
 
         var request = Assert.Single(kit.Model.Requests);
         Assert.Same(kit.Runner.Options.Models[ModelProfile.DefaultName], request.Profile);
@@ -52,14 +52,19 @@ public class AgentRunnerTests
                 ["cheap"] = new() { Provider = "first", Model = "small" },
                 ["strong"] = new() { Provider = "second", Model = "large" },
             },
+            Agents = new Dictionary<string, AgentDefinition>
+            {
+                ["classifier"] = new() { Instructions = "Classify.", Model = "cheap" },
+                ["answerer"] = new() { Instructions = "Answer.", Model = "strong" },
+            },
         };
         var providers = new Dictionary<string, IModelProvider> { ["first"] = first, ["second"] = second };
         var runner = new AgentRunner(
             options, providers, new InMemoryRunStore(), new Dictionary<string, ITool>(), new Dictionary<string, IGate>(),
             new InMemoryAuditLog(), new ScriptedHuman(), new InMemorySecretSource(new Dictionary<string, string>()), new FakeTimeProvider());
 
-        var cheap = await runner.RunAsync(new AgentDefinition { Instructions = "Classify.", Model = "cheap" }, "input", Ct);
-        var strong = await runner.RunAsync(new AgentDefinition { Instructions = "Answer.", Model = "strong" }, "input", Ct);
+        var cheap = await runner.RunAsync("classifier", "input", Ct);
+        var strong = await runner.RunAsync("answerer", "input", Ct);
 
         Assert.Equal("from first", cheap.Output);
         Assert.Equal("from second", strong.Output);
@@ -68,12 +73,9 @@ public class AgentRunnerTests
     }
 
     [Fact]
-    public async Task An_unknown_profile_is_reported_by_name()
+    public void An_unknown_profile_is_reported_by_name()
     {
-        var kit = new TestKit();
-
-        var error = await Assert.ThrowsAsync<ConfigurationException>(
-            () => kit.RunAsync(new AgentDefinition { Instructions = Instructions, Model = "missing" }, "input", Ct));
+        var error = Assert.Throws<ConfigurationException>(() => Extractor(new AgentDefinition { Instructions = Instructions, Model = "missing" }));
 
         Assert.Contains("\"missing\"", error.Message, StringComparison.Ordinal);
     }
@@ -134,9 +136,9 @@ public class AgentRunnerTests
     [Fact]
     public async Task Cancelling_before_the_turn_starts_hands_off_without_calling_the_model()
     {
-        var kit = new TestKit();
+        var kit = Extractor();
 
-        var result = await kit.RunAsync(new AgentDefinition { Instructions = Instructions }, "work", new CancellationToken(canceled: true));
+        var result = await kit.RunAsync("extractor", "work", new CancellationToken(canceled: true));
 
         Assert.Equal((HandoffReason.RequestedByHuman, 0), (result.Handoff!.Reason, kit.Model.Requests.Count));
     }
@@ -145,9 +147,9 @@ public class AgentRunnerTests
     [Fact]
     public async Task A_failing_model_call_ends_in_a_handoff()
     {
-        var kit = new TestKit();
+        var kit = Extractor();
 
-        var result = await kit.RunAsync(new AgentDefinition { Instructions = Instructions }, "work", Ct);
+        var result = await kit.RunAsync("extractor", "work", Ct);
 
         Assert.Equal(
             (AgentOutcome.HandedOff, HandoffReason.ProviderFailure, "the model call failed: InvalidOperationException"),
@@ -169,6 +171,10 @@ public class AgentRunnerTests
         Assert.Equal((AgentOutcome.Failed, "the turn failed: InvalidOperationException"), (result.Outcome, result.Output));
         Assert.Equal(new Message(Role.User, [new ToolResultContent("call-1", "cancelled", true)]), result.Transcript[^1]);
     }
+
+    /// <summary>A kit whose only agent is <c>extractor</c>; by default it has only instructions.</summary>
+    private static TestKit Extractor(AgentDefinition? agent = null) =>
+        new(new OfficinaOptions { Agents = new Dictionary<string, AgentDefinition> { ["extractor"] = agent ?? new() { Instructions = Instructions } } });
 
     private sealed class BrokenGate : IGate
     {

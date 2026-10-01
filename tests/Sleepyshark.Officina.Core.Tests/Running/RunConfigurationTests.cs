@@ -35,31 +35,6 @@ public class RunConfigurationTests
     }
 
     [Fact]
-    public async Task An_agent_run_directly_is_recorded_as_part_of_the_configuration()
-    {
-        var kit = new TestKit();
-        kit.Model.Reply("done");
-
-        await kit.RunAsync(new AgentDefinition { Instructions = "Be brief." }, "hi", TestContext.Current.CancellationToken);
-
-        var run = Assert.Single(kit.Runs.Runs);
-        Assert.Equal(AgentRunner.InlineAgentName, run.Agent);
-        Assert.Equal("Be brief.", run.Configuration.Agents[AgentRunner.InlineAgentName].Instructions);
-    }
-
-    [Fact]
-    public async Task An_agent_run_directly_cannot_take_the_name_of_a_configured_agent()
-    {
-        var configured = new Dictionary<string, AgentDefinition> { [AgentRunner.InlineAgentName] = new() { Instructions = "Configured." } };
-        var kit = new TestKit(new OfficinaOptions { Agents = configured });
-
-        var direct = new AgentDefinition { Instructions = "Direct." };
-        var error = await Assert.ThrowsAsync<ConfigurationException>(() => kit.RunAsync(direct, "hi", TestContext.Current.CancellationToken));
-
-        Assert.Equal("agents.agent", Assert.Single(error.Errors).Path);
-    }
-
-    [Fact]
     public async Task Running_an_unknown_agent_names_the_agents_that_exist()
     {
         var kit = new TestKit(Options);

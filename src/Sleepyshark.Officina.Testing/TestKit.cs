@@ -45,9 +45,6 @@ public sealed class TestKit
 
     public AgentRunner Runner { get; }
 
-    public Task<AgentResult> RunAsync(AgentDefinition agent, string input, CancellationToken ct = default) =>
-        Runner.RunAsync(agent, input, ct);
-
     public Task<AgentResult> RunAsync(string agentName, string input, CancellationToken ct = default) =>
         Runner.RunAsync(agentName, input, ct);
 }

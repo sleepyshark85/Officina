@@ -11,16 +11,8 @@ namespace Sleepyshark.Officina.Core.Running;
 /// </summary>
 public sealed class AgentRunner
 {
-    /// <summary>The name an agent passed directly to <see cref="RunAsync(AgentDefinition, string, CancellationToken)"/> runs under.</summary>
-    public const string InlineAgentName = "agent";
-
     private readonly IReadOnlyDictionary<string, IModelProvider> providers;
     private readonly IRunStore runs;
-    private readonly IReadOnlyDictionary<string, ITool> tools;
-    private readonly IReadOnlyDictionary<string, IGate> gates;
-    private readonly IAuditLog audit;
-    private readonly IHumanChannel human;
-    private readonly ISecretSource secrets;
     private readonly TimeProvider time;
     private readonly ToolPipeline pipeline;
     private readonly ConcurrentDictionary<string, SemaphoreSlim> turns = new(StringComparer.Ordinal);
@@ -51,11 +43,6 @@ public sealed class AgentRunner
         ArgumentNullException.ThrowIfNull(runs);
         this.providers = providers;
         this.runs = runs;
-        this.tools = tools;
-        this.gates = gates;
-        this.audit = audit;
-        this.human = human;
-        this.secrets = secrets;
         this.time = time;
         pipeline = new ToolPipeline(options, tools, gates, audit, human, secrets, time);
         Options = options;
@@ -71,37 +58,22 @@ public sealed class AgentRunner
             throw ConfigurationException.UnknownAgent(agentName, Options.Agents.Keys);
         }
 
-        return RunCoreAsync(agentName, Options, pipeline, input, ct);
+        return RunCoreAsync(agentName, input, ct);
     }
 
-    /// <summary>Runs an agent that is not in the configuration, as if it were defined there as <see cref="InlineAgentName"/>.</summary>
-    /// <exception cref="ConfigurationException">The agent does not validate, or the configuration already has an agent of that name.</exception>
-    public Task<AgentResult> RunAsync(AgentDefinition agent, string input, CancellationToken ct = default)
+    private async Task<AgentResult> RunCoreAsync(string name, string input, CancellationToken ct)
     {
-        ArgumentNullException.ThrowIfNull(agent);
-        if (Options.Agents.ContainsKey(InlineAgentName))
-        {
-            throw new ConfigurationException([new ConfigurationError(ValidationPhase.References, $"agents.{InlineAgentName}",
-                "is already defined, so an agent passed directly cannot run under its name.", "Run the configured agent by name, or rename it.")]);
-        }
-
-        var withAgent = Options with { Agents = new Dictionary<string, AgentDefinition>(Options.Agents) { [InlineAgentName] = agent } };
-        return RunCoreAsync(InlineAgentName, withAgent, new ToolPipeline(withAgent, tools, gates, audit, human, secrets, time), input, ct);
-    }
-
-    private async Task<AgentResult> RunCoreAsync(string name, OfficinaOptions resolved, ToolPipeline tools, string input, CancellationToken ct)
-    {
-        var agent = resolved.Agents[name];
-        var profile = resolved.Models[agent.Model];
+        var agent = Options.Agents[name];
+        var profile = Options.Models[agent.Model];
         var provider = providers.TryGetValue(profile.Provider, out var registered)
             ? registered
             : throw new InvalidOperationException($"Agent \"{name}\" uses provider \"{profile.Provider}\", which has no implementation registered.");
 
-        var started = new RunStarted(Guid.CreateVersion7().ToString(), name, CoreVersion.Value, resolved);
-        var instructions = InstructionPlaceholders.Fill(agent.Instructions, resolved.Project, name, agent);
+        var started = new RunStarted(Guid.CreateVersion7().ToString(), name, CoreVersion.Value, Options);
+        var instructions = InstructionPlaceholders.Fill(agent.Instructions, Options.Project, name, agent);
 
         // The caller arrives with admission (S09); until then runs act for an anonymous caller.
-        var turn = new Turn(new ToolContext(started.RunId, name, Caller.Anonymous), resolved, provider, tools, instructions, input, time);
+        var turn = new Turn(new ToolContext(started.RunId, name, Caller.Anonymous), Options, provider, pipeline, instructions, input, time);
         var oneAtATime = turns.GetOrAdd(name, _ => new SemaphoreSlim(1, 1));
         var entered = false;
         try
