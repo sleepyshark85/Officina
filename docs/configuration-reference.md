@@ -796,7 +796,7 @@ Attempts to weaken an invariant, and how each is rejected:
 
 Each error is reported once: a setting rejected in an early phase is not reported again by later
 phases. `sof config validate` runs all phases and exits non-zero on any error. `sof config dry-run
-[--agent <name>] [--input <text>] [--reply <text>]…` also runs an agent against a scripted model (CFG-12).
+[--agent <name>] [--input <text>] --reply <text>…` also runs an agent against a scripted model (CFG-12).
 
 ---
 

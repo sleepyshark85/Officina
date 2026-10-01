@@ -5,7 +5,7 @@ using Sleepyshark.Officina.Testing;
 namespace Sleepyshark.Officina.Cli;
 
 /// <summary>
-/// <c>sof config dry-run [--agent &lt;name&gt;] [--input &lt;text&gt;] [--reply &lt;text&gt;]…</c>: validates the
+/// <c>sof config dry-run [--agent &lt;name&gt;] [--input &lt;text&gt;] --reply &lt;text&gt;…</c>: validates the
 /// configuration, shows it, and runs an agent against a scripted model, with no real model calls (CFG-12).
 /// </summary>
 internal static class DryRunCommand
@@ -14,10 +14,10 @@ internal static class DryRunCommand
     {
         var agent = new Option<string>("--agent") { Description = "The agent to run (default: the only agent)." };
         var input = new Option<string>("--input") { Description = "The work it is given." };
-        var replies = new Option<string[]>("--reply") { Description = "A reply of the scripted model. Repeat it for each model call, in order." };
+        var replies = new Option<string[]>("--reply") { Description = "A reply of the scripted model. Repeat it for each model call, in order.", Required = true };
         var command = new Command("dry-run", "Validate and show the configuration, then run an agent against a scripted model.") { agent, input, replies };
         shared.AddTo(command);
-        command.SetAction(parse =>
+        command.SetAction(async (parse, ct) =>
         {
             var configuration = shared.Load(parse, host);
             ShowCommand.Print(configuration, host.Out, origin: false);
@@ -45,12 +45,12 @@ internal static class DryRunCommand
                 return ExitCodes.Invalid;
             }
 
-            foreach (var reply in parse.GetValue(replies) ?? [])
+            foreach (var reply in parse.GetValue(replies)!)
             {
                 kit.Model.Reply(reply);
             }
 
-            var result = kit.RunAsync(name, parse.GetValue(input) ?? "").GetAwaiter().GetResult();
+            var result = await kit.RunAsync(name, parse.GetValue(input) ?? "", ct);
             host.Out.WriteLine();
             host.Out.WriteLine($"{name}: {result.Outcome}{(result.Handoff is { } handoff ? $" ({handoff.Reason})" : "")}");
             host.Out.WriteLine(result.Output);

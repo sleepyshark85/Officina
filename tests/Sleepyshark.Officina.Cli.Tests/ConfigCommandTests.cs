@@ -19,13 +19,13 @@ public sealed partial class ConfigCommandTests : IDisposable
     public void Dispose() => sof.Dispose();
 
     [Fact]
-    public void Show_with_origin_lists_every_setting_with_its_source()
+    public async Task Show_with_origin_lists_every_setting_with_its_source()
     {
         sof.Write("sof.json", Smallest).Write("sof.prod.json", """{ "run": { "budget": { "time": "02:00:00" } } }""");
         sof.Variables["SOF_ENVIRONMENT"] = "prod";
         sof.Variables["SOF__run__permissionMode"] = "auto";
 
-        var (exitCode, output, _) = sof.Run("config", "show", "--origin", "--budget", "40");
+        var (exitCode, output, _) = await sof.RunAsync("config", "show", "--origin", "--budget", "40");
 
         Assert.Equal(0, exitCode);
         var lines = output.Split('\n', StringSplitOptions.RemoveEmptyEntries).Select(line => Spaces().Replace(line, " ")).ToArray();
@@ -39,11 +39,11 @@ public sealed partial class ConfigCommandTests : IDisposable
     }
 
     [Fact]
-    public void Validate_accepts_a_valid_configuration()
+    public async Task Validate_accepts_a_valid_configuration()
     {
         sof.Write("sof.json", Smallest);
 
-        var (exitCode, output, error) = sof.Run("config", "validate");
+        var (exitCode, output, error) = await sof.RunAsync("config", "validate");
 
         Assert.Equal(0, exitCode);
         Assert.Equal("The configuration is valid.\n", output);
@@ -51,7 +51,7 @@ public sealed partial class ConfigCommandTests : IDisposable
     }
 
     [Fact]
-    public void Validate_lists_every_error_with_where_it_was_set_and_fails()
+    public async Task Validate_lists_every_error_with_where_it_was_set_and_fails()
     {
         sof.Write("sof.json", """
             {
@@ -59,7 +59,7 @@ public sealed partial class ConfigCommandTests : IDisposable
             }
             """);
 
-        var (exitCode, _, error) = sof.Run("config", "validate", "--budget", "0");
+        var (exitCode, _, error) = await sof.RunAsync("config", "validate", "--budget", "0");
 
         Assert.Equal(1, exitCode);
         Assert.Equal(
@@ -75,11 +75,11 @@ public sealed partial class ConfigCommandTests : IDisposable
 
     // CFG-12.
     [Fact]
-    public void Dry_run_shows_the_configuration_and_runs_the_agent_against_scripted_replies()
+    public async Task Dry_run_shows_the_configuration_and_runs_the_agent_against_scripted_replies()
     {
         sof.Write("sof.json", Smallest);
 
-        var (exitCode, output, error) = sof.Run("config", "dry-run", "--input", "Invoice A-17", "--reply", """{"total":42}""");
+        var (exitCode, output, error) = await sof.RunAsync("config", "dry-run", "--input", "Invoice A-17", "--reply", """{"total":42}""");
 
         Assert.Equal((0, ""), (exitCode, error));
         Assert.Contains("project.name", output, StringComparison.Ordinal);
@@ -87,11 +87,11 @@ public sealed partial class ConfigCommandTests : IDisposable
     }
 
     [Fact]
-    public void Dry_run_runs_nothing_on_an_invalid_configuration()
+    public async Task Dry_run_runs_nothing_on_an_invalid_configuration()
     {
         sof.Write("sof.json", Smallest);
 
-        var (exitCode, output, _) = sof.Run("config", "dry-run", "--budget", "0", "--reply", "never");
+        var (exitCode, output, _) = await sof.RunAsync("config", "dry-run", "--budget", "0", "--reply", "never");
 
         Assert.Equal(1, exitCode);
         Assert.DoesNotContain("extractor:", output, StringComparison.Ordinal);
@@ -102,11 +102,12 @@ public sealed partial class ConfigCommandTests : IDisposable
     [InlineData("config", "show", "--colour")]
     [InlineData("config", "show", "--dir")]
     [InlineData("config", "show", "--agent", "a")]
+    [InlineData("config", "dry-run")]
     [InlineData("deploy")]
-    public void A_wrong_command_line_is_a_usage_error(params string[] args) => Assert.Equal(2, sof.Run(args).ExitCode);
+    public async Task A_wrong_command_line_is_a_usage_error(params string[] args) => Assert.Equal(2, (await sof.RunAsync(args)).ExitCode);
 
     [Fact]
-    public void Version_prints_the_version() => Assert.StartsWith("0.1.0", sof.Run("--version").Output, StringComparison.Ordinal);
+    public async Task Version_prints_the_version() => Assert.StartsWith("0.1.0", (await sof.RunAsync("--version")).Output, StringComparison.Ordinal);
 
     [GeneratedRegex(" {2,}")]
     private static partial Regex Spaces();
