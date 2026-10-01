@@ -678,14 +678,14 @@ v1 does not include:
 
 | # | Milestone | Done when |
 |---|---|---|
-| M0 | Design review | This specification, the configuration model and the design diagrams are approved |
-| M1 | Configuration and foundations | CFG, INV, MSG, MDL and STO MUSTs are met; a minimal definition runs a single call against a scripted model |
-| M2 | Single agent | LOOP, CTX, TOOL, OUT, REC, HIST, ING, EGR, TRG and EVT MUSTs are met; TEST-01…19 pass offline |
-| M3 | Claude integration | CLD MUSTs are met; recording and replay work; cache hit rates are measured live |
-| M4 | Loop patterns | PAT MUSTs are met; TEST-06 and TEST-07 pass |
-| M5 | Coding agent | WS, SBX, HITL and MEM MUSTs are met on Linux and Windows; one agent changes, builds and tests a project from the CLI |
-| M6 | Team and long-running | TEAM, TASK and RUN MUSTs are met; TEST-20…29 pass; the TEST-31 benchmark set and its hidden acceptance tests are written |
-| M7 | Hardening | Non-functional MUSTs are met; TEST-30 passes; the TEST-31 benchmark meets its target |
+| M0 | Design review | Spikes S00a and S00b are done; this specification, the configuration model and the design are approved |
+| M1 | Configuration and foundations | Slices S01–S02 are done (`docs/plan/`); a minimal definition runs against a scripted model |
+| M2 | Single agent | Slices S03–S10 are done; a tool-using agent runs fully offline |
+| M3 | Claude integration | Slices S11–S12 are done; recording and replay work; cache hit rates are measured live |
+| M4 | Loop patterns | Slice S13 is done; TEST-06 and TEST-07 pass |
+| M5 | Coding agent | Slices S14–S17 are done on Linux and Windows; one agent changes, builds and tests a project from the CLI |
+| M6 | Team and long-running | Slices S18–S20 are done; TEST-20…29 pass; the TEST-31 benchmark set and its hidden acceptance tests are written |
+| M7 | Hardening | Slice S21 is done; TEST-30 passes; the TEST-31 benchmark meets its target |
 | after v1 | Document Q&A | The Q&A reference application runs live with only the conversation store and knowledge retrieval capabilities on, with no changes to the core; SCALE-01 becomes a MUST |
 
 **v1 is accepted when:**

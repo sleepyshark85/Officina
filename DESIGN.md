@@ -228,8 +228,8 @@ decides the outcome.
 
 | Risk | Plan |
 |---|---|
-| Windows sandbox networking (AppContainer loopback) and Linux hosts without unprivileged user namespaces | Spike both in M0 or M1, before committing to M5 dates |
-| The C# SDK may not yet expose the newest features (mid-conversation and turn-scoped system messages) | M1 check against the SDK: use the typed API if it exists, otherwise the SDK's raw request option, otherwise leave the feature off and use the append-only fallback (CTX-10) |
+| Windows sandbox networking (AppContainer loopback) and Linux hosts without unprivileged user namespaces | Spike S00a in M0, before committing to M5 dates |
+| The C# SDK may not yet expose the newest features (mid-conversation and turn-scoped system messages) | Spike S00b in M0: use the typed API if it exists, otherwise the SDK's raw request option, otherwise leave the feature off and use the append-only fallback (CTX-10) |
 | Claude beta features (turn-scoped system messages, compaction) change or are not on the chosen model | Each one is behind a provider feature flag, with the append-only fallback always available |
 | Integration queue throughput with slow test suites | Measure in M6. The option is to batch compatible changes into one baseline check run. |
 | The 90% benchmark target depends on the model | The goal set's difficulty is agreed before M6 (TEST-31) |

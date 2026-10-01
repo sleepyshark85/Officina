@@ -6,3 +6,4 @@ first application. Status: specification and design, ready for the M0 design rev
 - [Requirements](REQUIREMENTS.md)
 - [Configuration](CONFIGURATION.md) and the [full reference](docs/configuration-reference.md)
 - [Design](DESIGN.md), with diagrams in [`docs/diagrams/`](docs/diagrams/)
+- [Master plan](docs/plan/README.md) and its slices
