@@ -11,7 +11,10 @@ public sealed record GateOptions
     /// <summary>The built-in gate that denies the call when its condition holds.</summary>
     public const string Deny = "builtin:deny";
 
-    [Setting("What the gate runs: `builtin:require-approval` or `builtin:deny`, which act when `when` holds, or `extension:<id>` for a gate the application registers.",
+    /// <summary>The built-in gate that asks a human when its condition holds and the agent has read untrusted content (SEC-04).</summary>
+    public const string UntrustedContentApproval = "builtin:untrusted-content-approval";
+
+    [Setting("What the gate runs: `builtin:require-approval` or `builtin:deny`, which act when `when` holds; `builtin:untrusted-content-approval`, which asks when `when` holds and the agent has read untrusted content; or `extension:<id>` for a gate the application registers.",
         Example = "\"builtin:require-approval\"")]
     [Required(ErrorMessage = Messages.Required)]
     public required string Use { get; init; }

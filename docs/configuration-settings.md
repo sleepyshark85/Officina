@@ -18,7 +18,7 @@ It lists the settings the code has today. Settings that later slices add are spe
 | `tools` | named entries | `{}` | Tools, by the name the model sees. | `{"create_issue":{"source":"extension:Acme.CreateIssue","gates":["issue-dedupe"]}}` |
 | `toolSets` | named entries | `{}` | Named groups of tools, by name in `tools`. Agents are offered tools by tool set. | `{"issues":["create_issue","find_issue"]}` |
 | `gates` | named entries | `{}` | Gates, by name. Tools and policies refer to them by name. | `{"issue-dedupe":{"use":"extension:Acme.IssueDedupeGate"}}` |
-| `policies` | section | `{"permissionRules":[],"gates":[],"anonymousPermissions":[]}` | Permission rules, gates for all tools, and anonymous callers' permissions. | `{"gates":["no-main-branch"]}` |
+| `policies` | section | `{"permissionRules":[],"gates":[],"anonymousPermissions":[],"masking":{"enabled":true},"rateLimits":{}}` | Permission rules, gates for all tools, anonymous callers' permissions, masking and rate limits. | `{"gates":["no-main-branch"]}` |
 | `knowledge` | named entries | `{}` | Knowledge sources, by name. | `{"handbook":{"use":"extension:Acme.HandbookIndex"}}` |
 | `run` | section | `{"budget":{"cost":25,"time":"08:00:00"},"permissionMode":"ask"}` | Defaults for every run. | `{"permissionMode":"ask"}` |
 | `operations` | section | `{"telemetry":{"cacheHitWarning":0.7}}` | How the engine is operated. | `{"telemetry":{"cacheHitWarning":0.7}}` |
@@ -58,6 +58,7 @@ It lists the settings the code has today. Settings that later slices add are spe
 | `description` | text |  | What the agent is for. Usable in instructions as `{{agent.description}}`. | `"Implements one task."` |
 | `instructions` | text |  | The agent's job. Only the application knows it, so it has no default. Placeholders may use the project and the agent only. Required. | `"Extract the invoice number, date and total. Reply as JSON."` |
 | `model` | text | `"default"` | The name of the model profile the agent runs on. Required. | `"strong"` |
+| `triggers` | list |  | How work may reach the agent: `conversation`, `request`, `batch`, `schedule`, `event` or `longRunning`. Work that arrives any other way is rejected. Unset accepts every way. | `["request","batch"]` |
 | `tools` | list | `[]` | The tool sets, by name in `toolSets`, whose tools the agent is offered. The same tools are offered whoever the caller is. | `["files","issues"]` |
 | `toolDescriptionsOnDemand` | boolean | `false` | Whether the model is offered only the tools' names, and reads a tool's description and arguments with `describe_tool` when it needs them. For agents with many tools. | `true` |
 | `permissions` | list |  | Narrows the caller's permissions for this agent's tool calls: a permission counts only if the caller holds it and it is listed here. Unset keeps the caller's. | `["issues:write"]` |
@@ -94,13 +95,16 @@ It lists the settings the code has today. Settings that later slices add are spe
 | `maxResultLength` | whole number, ≥ 1 | `32000` | The most characters of a result that enter the conversation; the rest is cut off. | `8000` |
 | `parallelSafe` | boolean |  | Whether calls may run at the same time as other calls. Unset uses the tool's declaration; `true` cannot loosen a tool that declares itself unsafe. Irreversible tools never run in parallel. | `false` |
 | `irreversible` | boolean | `false` | Whether the tool's effects cannot be undone. Such a tool is a write tool, is carried out at most once for the same run and arguments, and needs approval unless `approval` says otherwise. | `true` |
+| `maskResults` | boolean | `false` | Whether personal data in the tool's results is masked before the model sees them, when masking is on. | `true` |
+| `receivesMaskedValues` | boolean | `false` | Whether masked values are restored in the tool's arguments, so it receives the real ones, such as a tool that sends an email. Its results are masked again. | `true` |
+| `untrusted` | boolean | `false` | Whether the tool's results are untrusted content, such as fetched web pages. An agent that has read them is marked, and gates can act on the mark. | `true` |
 | `reason` | text |  | Why a provider tool is enabled. Required for `provider:` tools. | `"The lead researches unfamiliar libraries."` |
 
 ## `gates.<name>`
 
 | Setting | Allowed values | Default | Description | Example |
 |---|---|---|---|---|
-| `use` | text |  | What the gate runs: `builtin:require-approval` or `builtin:deny`, which act when `when` holds, or `extension:<id>` for a gate the application registers. Required. | `"builtin:require-approval"` |
+| `use` | text |  | What the gate runs: `builtin:require-approval` or `builtin:deny`, which act when `when` holds; `builtin:untrusted-content-approval`, which asks when `when` holds and the agent has read untrusted content; or `extension:<id>` for a gate the application registers. Required. | `"builtin:require-approval"` |
 | `when` | section |  | For the built-in gates: the condition over the tool's arguments under which the gate acts. Unset means always. | `{"field":"args.branch","in":["main","master"]}` |
 
 ## `policies`
@@ -110,12 +114,15 @@ It lists the settings the code has today. Settings that later slices add are spe
 | `permissionRules` | list | `[]` | Permission rules, in order. The first that matches a call decides it; a call no rule matches goes on. | `[{"tool":"delete_file","action":"ask"}]` |
 | `gates` | list | `[]` | Gates, by name in `gates`, that run before every tool call, ahead of the tool's own gates. | `["no-main-branch"]` |
 | `anonymousPermissions` | list | `[]` | The permissions a caller without an identity holds. | `["issues:read"]` |
+| `masking` | section | `{"enabled":true}` | Masking of personal data in work from outside, before the model, history or logs see it. On by default. Required. | `{"enabled":false}` |
+| `rateLimits` | section | `{}` | How much work each owner and each tenant may send. Required. | `{"perOwner":{"permits":20,"window":"01:00:00"}}` |
 
 ## `knowledge.<name>`
 
 | Setting | Allowed values | Default | Description | Example |
 |---|---|---|---|---|
 | `use` | text |  | The source the application registers, as `extension:<id>`. Required. | `"extension:Acme.HandbookIndex"` |
+| `mask` | boolean | `false` | Whether personal data in the passages is masked before the model sees them, when masking is on. | `true` |
 
 ## `run`
 
@@ -216,6 +223,20 @@ It lists the settings the code has today. Settings that later slices add are spe
 | `reason` | text |  | Why, as told to the model and the human. | `"Only the owner pushes."` |
 | `to` | text |  | For `route`: the agent, by name, that the turn is handed to. | `"lead"` |
 
+## `policies.masking`
+
+| Setting | Allowed values | Default | Description | Example |
+|---|---|---|---|---|
+| `enabled` | boolean | `true` | Whether masking is on. Turn it off where it would corrupt the content, such as source code. | `false` |
+| `patterns` | named entries |  | What is masked: regular expressions by name, which replace the built-in ones for email addresses, phone numbers and payment card numbers. Each match becomes a token such as `[email-1]`, the same for the same value throughout the run. Names may use letters, digits and underscores. | `{"email":"[^@\\s]\u002B@[^@\\s]\u002B","employeeId":"EMP-[0-9]{6}"}` |
+
+## `policies.rateLimits`
+
+| Setting | Allowed values | Default | Description | Example |
+|---|---|---|---|---|
+| `perOwner` | section |  | The limit for each owner. Anonymous callers share one. No limit when unset. | `{"permits":20,"window":"01:00:00"}` |
+| `perTenant` | section |  | The limit for each tenant. Callers without a tenant share one. No limit when unset. | `{"permits":500,"window":"01:00:00"}` |
+
 ## `run.budget`
 
 | Setting | Allowed values | Default | Description | Example |
@@ -285,6 +306,13 @@ It lists the settings the code has today. Settings that later slices add are spe
 | `tokens` | whole number, ≥ 1 | `3000000` | The most tokens a turn may use: input, output, cache reads and cache writes together. | `3000000` |
 | `cost` | number, > 0 | `5` | The most a turn may spend, in USD. | `5` |
 | `time` | time span (`hh:mm:ss` or `d.hh:mm:ss`) | `"00:45:00"` | The longest a turn may take, as `hh:mm:ss`. | `"00:45:00"` |
+
+## `policies.rateLimits.perOwner`
+
+| Setting | Allowed values | Default | Description | Example |
+|---|---|---|---|---|
+| `permits` | whole number, ≥ 1 | `0` | How many work items are admitted in each window. | `20` |
+| `window` | time span (`hh:mm:ss` or `d.hh:mm:ss`) | `"00:00:00"` | How long a window lasts, as `hh:mm:ss`. | `"01:00:00"` |
 
 ## `capabilities.workspace.protectedPaths[]`
 

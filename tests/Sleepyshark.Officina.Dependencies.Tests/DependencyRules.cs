@@ -11,6 +11,9 @@ internal static partial class DependencyRules
     /// <summary>The JSON Schema validator, the one package Core may use besides the base library (DESIGN.md §1).</summary>
     public const string JsonSchemaValidator = "JsonSchema.Net";
 
+    /// <summary>Parts of the .NET base library that ship as packages.</summary>
+    private static readonly string[] BaseLibraryPackages = ["System.Threading.RateLimiting"];
+
     /// <summary>Package id prefixes of AI and agent frameworks no project may use.</summary>
     /// <remarks>
     /// The official MCP SDK is listed because it brings in Microsoft.Extensions.AI; Officina has its own MCP client.
@@ -47,7 +50,7 @@ internal static partial class DependencyRules
 
         if (Is(project.Name, Core))
         {
-            foreach (var id in project.Direct.Where(id => !Is(id, JsonSchemaValidator)).Order(StringComparer.OrdinalIgnoreCase))
+            foreach (var id in project.Direct.Where(id => !Is(id, JsonSchemaValidator) && !BaseLibraryPackages.Any(package => Is(id, package))).Order(StringComparer.OrdinalIgnoreCase))
             {
                 yield return $"{Core} must depend on the .NET base library and {JsonSchemaValidator} only, but references {id}.";
             }

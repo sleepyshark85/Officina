@@ -27,16 +27,18 @@ internal sealed class Turn
     private readonly RunBudget runBudget;
     private readonly double cacheHitWarning;
     private readonly Conversation conversation;
-    private readonly ConcurrentQueue<Message> inbox;
+    private readonly ConcurrentQueue<(Sender From, string Text)> inbox;
     private readonly IModelProvider provider;
     private readonly ModelPrice? price;
     private readonly ToolPipeline tools;
-    private readonly IReadOnlyList<(string Name, IKnowledgeSource Source)> beforeTurn;
+    private readonly IReadOnlyList<(string Name, IKnowledgeSource Source, bool Mask)> beforeTurn;
     private readonly IConversationStore conversations;
     private readonly IHistoryShortener? shortener;
     private readonly EventBus events;
     private readonly TimeProvider time;
     private readonly string work;
+    private readonly bool batch;
+    private readonly bool handOffToHuman;
     private readonly List<ToolAttempt> attempts = [];
     private readonly List<CacheWarning> cacheWarnings = [];
     private readonly List<string> retrieved = [];
@@ -58,8 +60,8 @@ internal sealed class Turn
     /// <param name="shortener">What shortens the history when the model reports it too long; null when it is not shortened.</param>
     /// <param name="events">Where model text and model calls are published.</param>
     /// <param name="instructions">The agent's instructions, placeholders filled.</param>
-    /// <param name="work">What the turn is asked to do.</param>
-    /// <param name="inbox">Messages sent to the agent, which the turn adds to its history before each model call.</param>
+    /// <param name="work">What the turn is asked to do, as admission passed it.</param>
+    /// <param name="inbox">Messages sent to the agent, which the turn adds to its history before each model call, masked like the work.</param>
     /// <param name="time">The clock for the time budgets and the operating facts.</param>
     public Turn(
         ToolContext context,
@@ -71,8 +73,8 @@ internal sealed class Turn
         IHistoryShortener? shortener,
         EventBus events,
         string instructions,
-        string work,
-        ConcurrentQueue<Message> inbox,
+        Work work,
+        ConcurrentQueue<(Sender From, string Text)> inbox,
         TimeProvider time)
     {
         this.context = context;
@@ -86,12 +88,14 @@ internal sealed class Turn
         this.inbox = inbox;
         this.provider = provider;
         this.tools = tools;
-        beforeTurn = [.. agent.Context.Retrieval.BeforeTurn.Select(name => (name, knowledge[options.Knowledge[name].ExtensionId()!]))];
+        beforeTurn = [.. agent.Context.Retrieval.BeforeTurn.Select(name => (name, knowledge[options.Knowledge[name].ExtensionId()!], options.Knowledge[name].Mask))];
         this.conversations = conversations;
         this.shortener = shortener;
         this.events = events;
         this.time = time;
-        this.work = work;
+        this.work = work.Input;
+        batch = work.Trigger == Trigger.Batch;
+        handOffToHuman = work.HandOffToHuman;
     }
 
     public async Task<AgentResult> RunAsync(CancellationToken ct)
@@ -118,6 +122,11 @@ internal sealed class Turn
 
     private async Task<AgentResult> RunTurnAsync(CancellationToken ct)
     {
+        if (handOffToHuman)
+        {
+            return HandOff(HandoffReason.RequestedByHuman, "the request asks for a human", ToolResult.Human); // EGR-04
+        }
+
         if (await RetrieveAsync(ct).ConfigureAwait(false) is { } notCovered)
         {
             return notCovered;
@@ -133,10 +142,10 @@ internal sealed class Turn
             iterations++;
             while (inbox.TryDequeue(out var message))
             {
-                conversation.Add(message);
+                conversation.Add(Labels.From(message.From, Mask(message.Text)));
             }
 
-            var request = conversation.Next(Facts());
+            var request = conversation.Next(Facts()) with { Batch = batch };
             StopReason stop;
             try
             {
@@ -199,11 +208,12 @@ internal sealed class Turn
     private async Task<AgentResult?> RetrieveAsync(CancellationToken ct)
     {
         var covered = false;
-        foreach (var (name, source) in beforeTurn)
+        foreach (var (name, source, mask) in beforeTurn)
         {
             var retrieval = await source.RetrieveAsync(new RetrievalQuery(work, context.Caller, KnowledgeTool.MaxPassages), ct).ConfigureAwait(false);
             covered |= retrieval.Coverage != Coverage.NotCovered;
-            retrieved.Add(Labels.Data($"knowledge:{name}", KnowledgeTool.Format(retrieval)));
+            var passages = KnowledgeTool.Format(retrieval);
+            retrieved.Add(Labels.Data($"knowledge:{name}", mask ? Mask(passages) : passages));
         }
 
         return beforeTurn.Count > 0 && !covered && agent.Context.Retrieval.HandOffWhenNotCovered
@@ -257,8 +267,11 @@ internal sealed class Turn
     private List<string> Facts()
     {
         var now = time.GetUtcNow();
-        return [.. retrieved, .. agent.Context.OperatingFacts.Select(fact => InstructionPlaceholders.Fill(fact, project, context.Agent, agent, now))];
+        return [.. retrieved, .. agent.Context.OperatingFacts.Select(fact => InstructionPlaceholders.Fill(fact, project, context.Agent, agent, now, context.Caller))];
     }
+
+    /// <summary>Masks text from outside the core when masking is on (ING-02).</summary>
+    private string Mask(string text) => context.Masker?.Mask(text) ?? text;
 
     /// <summary>
     /// Calls the model, and adds the reply to the conversation. Text arrives in pieces as it is generated, and is

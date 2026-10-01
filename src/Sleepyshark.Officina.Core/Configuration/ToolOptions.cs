@@ -50,6 +50,17 @@ public sealed record ToolOptions
         Example = "true")]
     public bool Irreversible { get; init; }
 
+    [Setting("Whether personal data in the tool's results is masked before the model sees them, when masking is on.", Example = "true")]
+    public bool MaskResults { get; init; }
+
+    [Setting("Whether masked values are restored in the tool's arguments, so it receives the real ones, such as a tool that sends an email. Its results are masked again.",
+        Example = "true")]
+    public bool ReceivesMaskedValues { get; init; }
+
+    [Setting("Whether the tool's results are untrusted content, such as fetched web pages. An agent that has read them is marked, and gates can act on the mark.",
+        Example = "true")]
+    public bool Untrusted { get; init; }
+
     [Setting("Why a provider tool is enabled. Required for `provider:` tools.", Example = "\"The lead researches unfamiliar libraries.\"")]
     public string? Reason { get; init; }
 

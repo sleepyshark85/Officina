@@ -1,13 +1,14 @@
 using System.Globalization;
 using System.Text.RegularExpressions;
+using Sleepyshark.Officina.Core.Extensibility;
 
 namespace Sleepyshark.Officina.Core.Configuration;
 
 /// <summary>
 /// Placeholders in an agent's instructions and operating facts, written <c>{{namespace.name}}</c> (CFG-14).
 /// Instructions are the same for every call (the stable prefix), so they may use only the project's and the agent's own
-/// values. Operating facts are rebuilt for every call, so they may also use the time. A placeholder that cannot be
-/// filled is an error, never an empty string.
+/// values. Operating facts are rebuilt for every call, so they may also use the time and the caller (CTX-09). A
+/// placeholder that cannot be filled is an error, never an empty string.
 /// </summary>
 public static partial class InstructionPlaceholders
 {
@@ -21,19 +22,20 @@ public static partial class InstructionPlaceholders
         return options.Agents.SelectMany(agent =>
             (agent.Value.Instructions is null ? [] : Check(agent.Value.Instructions, $"agents.{agent.Key}.instructions", options.Project, agent.Key, agent.Value, null))
             .Concat((agent.Value.Context?.OperatingFacts ?? []).SelectMany((fact, index) =>
-                Check(fact, $"agents.{agent.Key}.context.operatingFacts[{index}]", options.Project, agent.Key, agent.Value, DateTimeOffset.UnixEpoch))));
+                Check(fact, $"agents.{agent.Key}.context.operatingFacts[{index}]", options.Project, agent.Key, agent.Value, DateTimeOffset.UnixEpoch, Caller.Anonymous))));
     }
 
     /// <summary>
-    /// Fills the placeholders of instructions, or of an operating fact with the time <paramref name="now"/>. Validation has
-    /// already rejected any that cannot be filled.
+    /// Fills the placeholders of instructions, or of an operating fact with the time <paramref name="now"/> and the
+    /// <paramref name="caller"/>. Validation has already rejected any that cannot be filled.
     /// </summary>
-    public static string Fill(string text, ProjectOptions project, string agentName, AgentDefinition agent, DateTimeOffset? now = null) =>
-        Expression().Replace(text, placeholder => Resolve(placeholder, project, agentName, agent, now)
+    public static string Fill(string text, ProjectOptions project, string agentName, AgentDefinition agent, DateTimeOffset? now = null, Caller? caller = null) =>
+        Expression().Replace(text, placeholder => Resolve(placeholder, project, agentName, agent, now, caller)
             ?? throw new InvalidOperationException($"Placeholder {placeholder.Value} cannot be filled."));
 
     /// <summary>The problems of one text's placeholders. <paramref name="now"/> is any time for an operating fact, and null for instructions.</summary>
-    private static IEnumerable<ConfigurationError> Check(string text, string path, ProjectOptions project, string agentName, AgentDefinition agent, DateTimeOffset? now)
+    private static IEnumerable<ConfigurationError> Check(
+        string text, string path, ProjectOptions project, string agentName, AgentDefinition agent, DateTimeOffset? now, Caller? caller = null)
     {
         foreach (Match placeholder in Expression().Matches(text))
         {
@@ -50,7 +52,7 @@ public static partial class InstructionPlaceholders
                 yield return new(ValidationPhase.Prefix, path, $"placeholder {placeholder.Value} is not allowed in instructions.",
                     "Instructions are the same for every call, so they cannot use caller, work or time values.");
             }
-            else if (Resolve(placeholder, project, agentName, agent, now) is null)
+            else if (Resolve(placeholder, project, agentName, agent, now, caller) is null)
             {
                 var problem = $"placeholder {placeholder.Value} cannot be filled; it is never replaced with an empty string.";
                 yield return new(ValidationPhase.References, path, problem,
@@ -59,13 +61,14 @@ public static partial class InstructionPlaceholders
                         "project" => "Set the value it names: project.name or project.values.<name>.",
                         "agent" => "Use agent.name, or give the agent a description for agent.description.",
                         "now" => "Use {{now}} or {{now:date}}.",
-                        _ => now is null ? "Use the project or agent namespace in instructions." : "Use the project, agent or now namespace in operating facts.",
+                        "caller" => "Use caller.id, caller.tenant or caller.attributes.<name>.",
+                        _ => now is null ? "Use the project or agent namespace in instructions." : "Use the project, agent, caller or now namespace in operating facts.",
                     });
             }
         }
     }
 
-    private static string? Resolve(Match placeholder, ProjectOptions project, string agentName, AgentDefinition agent, DateTimeOffset? now) =>
+    private static string? Resolve(Match placeholder, ProjectOptions project, string agentName, AgentDefinition agent, DateTimeOffset? now, Caller? caller) =>
         (placeholder.Groups["namespace"].Value, placeholder.Groups["name"].Value.Split('.'), placeholder.Groups["format"].Value) switch
         {
             ("project", ["name"], _) => project.Name,
@@ -74,6 +77,9 @@ public static partial class InstructionPlaceholders
             ("agent", ["description"], _) => agent.Description,
             ("now", [""], "") => now?.ToString("u", CultureInfo.InvariantCulture),
             ("now", [""], "date") => now?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+            ("caller", ["id"], "") => caller is null ? null : caller.Id ?? "anonymous",
+            ("caller", ["tenant"], "") => caller is null ? null : caller.Tenant ?? "none",
+            ("caller", ["attributes", var key], "") => caller is null ? null : caller.Attributes.GetValueOrDefault(key) ?? "none",
             _ => null,
         };
 

@@ -1,4 +1,6 @@
 using Sleepyshark.Officina.Core.Configuration;
+using Sleepyshark.Officina.Core.Extensibility;
+using Sleepyshark.Officina.Core.Messages;
 using Sleepyshark.Officina.Testing;
 
 namespace Sleepyshark.Officina.Core.Tests.Configuration;
@@ -86,6 +88,23 @@ public class PlaceholderTests
         await kit.RunAsync("tester", "go", TestContext.Current.CancellationToken);
 
         Assert.StartsWith("Run dotnet test as tester.\n\n", Assert.Single(kit.Model.Requests).Instructions);
+    }
+
+    // CTX-09: operating facts are rebuilt for every call, so they may name the caller.
+    [Fact]
+    public async Task Operating_facts_may_use_the_caller()
+    {
+        var facts = new ContextOptions { OperatingFacts = ["Caller {{caller.id}} of {{caller.tenant}} on plan {{caller.attributes.plan}}."] };
+        var kit = new TestKit(new OfficinaOptions
+        {
+            Agents = new Dictionary<string, AgentDefinition> { ["helper"] = new() { Instructions = "Help.", Context = facts } },
+        });
+        kit.Model.Reply("ok");
+        var caller = new Caller("ann", "acme", new HashSet<string>(), new Dictionary<string, string> { ["plan"] = "gold" });
+
+        await kit.Runner.RunAsync("helper", "hi", caller, TestContext.Current.CancellationToken);
+
+        Assert.Equal("<context>\nCaller ann of acme on plan gold.\n</context>", ((TextContent)kit.Model.Requests[0].History[^1].Content[0]).Text);
     }
 
     private static ConfigurationError[] Check(string instructions) =>

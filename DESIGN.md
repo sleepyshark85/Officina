@@ -16,7 +16,7 @@ namespace is its name.
 
 | Project | Box in the diagram | What it contains | Depends on | Loaded when |
 |---|---|---|---|---|
-| `Sleepyshark.Officina.Core` | Core | Options classes and validation; turn engine; built-in loop patterns; context builder; conversation history and its shortening, kept through `IStorage.Conversations`; tool pipeline; run record; budgets; events; audit; extension interfaces (§4); built-in `record.*`, `control.*` and `artifact.*` tools; knowledge retrieval and its tools | .NET base library and a JSON Schema validator only | Always |
+| `Sleepyshark.Officina.Core` | Core | Options classes and validation; admission; turn engine; built-in loop patterns; context builder; conversation history and its shortening, kept through `IStorage.Conversations`; tool pipeline; run record; budgets; events; audit; extension interfaces (§4); built-in `record.*`, `control.*` and `artifact.*` tools; knowledge retrieval and its tools | .NET base library and a JSON Schema validator only | Always |
 | `Sleepyshark.Officina.Team` | Capabilities | Team pattern, lead role support, task board, helper agents; `tasks.*` and `team.*` tools | Core | `team` or `taskBoard` is on |
 | `Sleepyshark.Officina.Workspace` | Capabilities | Git-backed workspace: baseline, working copies, integration queue, edit safety; `workspace.*` tools | Core; the git CLI at run time | `workspace` is on |
 | `Sleepyshark.Officina.Sandbox` | Capabilities | Linux sandbox (bubblewrap, cgroups v2) and Windows sandbox (AppContainer, Job Objects); filtering network proxy; `sandbox.*` tools | Core | `sandbox` is on |

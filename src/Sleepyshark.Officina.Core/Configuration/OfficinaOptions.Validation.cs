@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Sleepyshark.Officina.Core.Events;
 
 namespace Sleepyshark.Officina.Core.Configuration;
@@ -93,7 +94,7 @@ public sealed partial record OfficinaOptions : IValidatableObject
             errors = errors.Concat(References("capabilities.sandbox.secrets", "agent", sandbox.Secrets.Keys, "agents", Agents.Keys));
         }
 
-        errors = errors.Concat(Annotations(Storage.Retention, "storage.retention"))
+        errors = errors.Concat(AdmissionSettings()).Concat(Annotations(Storage.Retention, "storage.retention"))
             .Concat(Storage.UnstoredEvents.Where(kind => !EventPayload.Kinds.Contains(kind)).Select(kind => new ConfigurationError(
                 ValidationPhase.Shape, "storage.unstoredEvents", $"\"{kind}\" is not a kind of event.",
                 $"Use one of: {string.Join(", ", EventPayload.Kinds.Order(StringComparer.Ordinal))}.")));
@@ -169,10 +170,10 @@ public sealed partial record OfficinaOptions : IValidatableObject
         foreach (var (name, gate) in Gates)
         {
             errors = errors.Concat(Annotations(gate, $"gates.{name}"));
-            if (gate.Use is not null and not GateOptions.RequireApproval and not GateOptions.Deny && gate.ExtensionId() is null)
+            if (gate.Use is not null and not GateOptions.RequireApproval and not GateOptions.Deny and not GateOptions.UntrustedContentApproval && gate.ExtensionId() is null)
             {
                 errors = errors.Append(new(ValidationPhase.Shape, $"gates.{name}.use", $"\"{gate.Use}\" is not a gate.",
-                    $"Use {GateOptions.RequireApproval}, {GateOptions.Deny}, or extension:<id> for a gate the application registers."));
+                    $"Use {GateOptions.RequireApproval}, {GateOptions.Deny}, {GateOptions.UntrustedContentApproval}, or extension:<id> for a gate the application registers."));
             }
         }
 
@@ -185,6 +186,31 @@ public sealed partial record OfficinaOptions : IValidatableObject
                 errors = errors.Concat(rule.To is null
                     ? [new(ValidationPhase.Shape, $"{path}.to", "is required to route.", "Name the agent the turn is handed to.")]
                     : References($"{path}.to", "agent", [rule.To], "agents", Agents.Keys));
+            }
+        }
+
+        return errors;
+    }
+
+    /// <summary>The admission settings (ING-02, ING-03): masking patterns that are valid expressions, and real rate limits.</summary>
+    private IEnumerable<ConfigurationError> AdmissionSettings()
+    {
+        var errors = Annotations(Policies, "policies");
+        foreach (var (name, limit) in new[] { ("perOwner", Policies.RateLimits?.PerOwner), ("perTenant", Policies.RateLimits?.PerTenant) })
+        {
+            errors = errors.Concat(limit is null ? [] : Annotations(limit, $"policies.rateLimits.{name}"));
+        }
+
+        foreach (var (name, pattern) in Policies.Masking?.Patterns ?? new Dictionary<string, string>())
+        {
+            try
+            {
+                _ = new Regex($"(?<{name}>{pattern})");
+            }
+            catch (ArgumentException exception)
+            {
+                errors = errors.Append(new(ValidationPhase.Shape, $"policies.masking.patterns.{name}", $"is not a valid pattern: {exception.Message}",
+                    "Name the pattern with letters, digits and underscores, and write a .NET regular expression."));
             }
         }
 

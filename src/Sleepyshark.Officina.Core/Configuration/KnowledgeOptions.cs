@@ -12,6 +12,9 @@ public sealed record KnowledgeOptions
     [Required(ErrorMessage = Messages.Required)]
     public required string Use { get; init; }
 
+    [Setting("Whether personal data in the passages is masked before the model sees them, when masking is on.", Example = "true")]
+    public bool Mask { get; init; }
+
     /// <summary>The id of the application's knowledge source.</summary>
     public string? ExtensionId() => ToolOptions.After(Use, "extension:");
 }

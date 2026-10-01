@@ -1,6 +1,6 @@
 # S09 — Triggers and admission
 
-**Milestone:** M2 · **Size:** M · **Depends on:** S04, S08 · **Issue:** [#11](https://github.com/sleepyshark85/Officina/issues/11) · **Status:** todo
+**Milestone:** M2 · **Size:** M · **Depends on:** S04, S08 · **Issue:** [#11](https://github.com/sleepyshark85/Officina/issues/11) · **Status:** done
 
 ## Goal
 
@@ -10,9 +10,30 @@ Every way work can arrive, and the admission step in front of it.
 
 ## Acceptance criteria
 
-- [ ] The same agent definition behaves the same under every trigger.
-- [ ] A batch reports a result per input, and one failure does not stop the others.
-- [ ] Single requests and batches can run stateless.
-- [ ] Masking is on by default and reversible; masked values reach only the tools allowed to see them.
-- [ ] Rate limits apply, and a rejection is a normal result with a reason.
-- [ ] An agent that has read untrusted content is marked.
+- [x] The same agent definition behaves the same under every trigger.
+- [x] A batch reports a result per input, and one failure does not stop the others.
+- [x] Single requests and batches can run stateless.
+- [x] Masking is on by default and reversible; masked values reach only the tools allowed to see them.
+- [x] Rate limits apply, and a rejection is a normal result with a reason.
+- [x] An agent that has read untrusted content is marked.
+
+## Notes
+
+The host delivers work as a `Work` item (agent, input, trigger, caller, handoff flag, run id) to
+`AgentRunner.RunAsync`, or a list of inputs to `RunBatchAsync`. Schedules, event sources and servers stay in the
+host; the core only knows how the work arrived. `agents.<name>.triggers` limits the ways an agent takes work.
+
+- Masking is a per-run token table in Core, with no `IMasker` extension until an application needs to replace it.
+- Rate limits use `System.Threading.RateLimiting` fixed windows, replenished when next used, so they keep no timers.
+  They run on the system clock, not `TimeProvider`.
+- Handed over from earlier slices: the caller and the human-handoff flag arrive with the work (EGR-04, from S04);
+  `caller.*` placeholders in operating facts (CTX-09, from S05); the host knows the run id before the run starts
+  (from S08). `work.*` placeholders wait for work items with fields of their own, such as tasks (S18).
+
+Parts of the closed requirements need state that later slices add:
+- S19: the per-run rate limit (ING-03), once work can join a running run; long-running runs resume.
+- S07: conversations keep history only for the `conversation` trigger, so requests and batches stay stateless
+  (TRG-04), and the masking table is kept with the conversation so tokens stay stable across its turns (ING-06).
+- S06, S07: the run record and stored history receive content already masked (ING-02).
+- S11: maps `ModelRequest.Batch` to Message Batches when the provider's `batch` feature is on (MDL-10, CLD-11).
+- S20: the coding team preset turns masking off (ING-02).
