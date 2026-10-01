@@ -152,8 +152,13 @@ internal sealed class FilterProxy : IAsyncDisposable
             var upload = PipeAsync(client, server);
             await PipeAsync(server, client).ConfigureAwait(false);
 
-            // A named pipe cannot be half-closed, so the server's end is the connection's end.
-            if (client is NetworkStream)
+            // A named pipe cannot be half-closed, so the server's end is the connection's end. Disconnecting ends it at once;
+            // disposing it would wait for the upload's pending read, which only the other end can finish.
+            if (client is NamedPipeServerStream pipe)
+            {
+                pipe.Disconnect();
+            }
+            else
             {
                 await upload.ConfigureAwait(false);
             }
