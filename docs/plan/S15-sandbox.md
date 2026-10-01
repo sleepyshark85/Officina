@@ -6,7 +6,7 @@
 
 Isolated command execution on Linux and on Windows.
 
-**Closes:** SBX-01, SBX-02, SBX-03, SBX-04, SBX-05, SBX-06, SBX-07, SEC-01, TEST-11, TEST-25
+**Closes:** TEST-01, SBX-01, SBX-02, SBX-03, SBX-04, SBX-05, SBX-06, SBX-07, SEC-01, TEST-11, TEST-25
 
 ## Acceptance criteria
 
@@ -18,4 +18,4 @@ Isolated command execution on Linux and on Windows.
 
 ## Notes
 
-Do it as two pieces of work, Linux then Windows, following the S00a findings.
+Do it as two pieces of work, Linux then Windows, following the S00a findings. This slice also completes the test kit (TEST-01): S01 started it, S03 adds fake tools, S04 a controllable clock, S14 an in-memory workspace, and this slice the fake sandbox.

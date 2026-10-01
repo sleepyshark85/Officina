@@ -26,16 +26,17 @@ namespace is its name.
 | `Sleepyshark.Officina.Mcp` | Mcp | Own MCP client for stdio and Streamable HTTP. Turns each server tool into a core tool. | Core | `toolServers` are configured |
 | `Sleepyshark.Officina.Providers.Claude` | Providers.Claude | The Claude provider: maps requests (§9), places cache markers, streams, classifies errors, ships the price table | Core, Anthropic C# SDK | A `claude` provider is configured (the default) |
 | `Sleepyshark.Officina.Testing` | Testing | Test kit: scripted models, controllable clock, fake tools, in-memory workspace, sandbox and storage, record and replay (TEST-01, TEST-02) | Core | In tests only |
-| `Sleepyshark.Officina.Cli` | Cli | The coding team CLI: `init`, `run`, `resume`, `config`; approvals, questions, task board and cost views; the CLI human-interaction channel | All of the above | — |
+| `Sleepyshark.Officina.Cli` | Cli | The coding team CLI: `init`, `run`, `resume`, `config`; approvals, questions, task board and cost views; the CLI human-interaction channel | Every project except Testing; it receives the Anthropic SDK only transitively, through the Claude provider | — |
 | `Anthropic` (NuGet) | Anthropic SDK | The official Claude SDK | `Microsoft.Extensions.AI.Abstractions` (transitive) | With the Claude provider only |
 
-Dependency rules, enforced by the build check (TEST-32):
+Dependency rules, enforced by the dependency check, which runs as a test in CI (TEST-32):
 
 - Every project depends on `Sleepyshark.Officina.Core`. Core depends on no other project and on no AI or
   agent framework.
-- Only `Sleepyshark.Officina.Providers.Claude` references the Anthropic SDK. The SDK's transitive
-  `Microsoft.Extensions.AI.Abstractions` stays inside that assembly, and no project code uses its
-  types.
+- Only `Sleepyshark.Officina.Providers.Claude` references the Anthropic SDK directly. Projects that
+  reference the provider, such as the CLI, receive the SDK and its transitive
+  `Microsoft.Extensions.AI.Abstractions` through it, but no project code outside the provider uses
+  either.
 - Capability projects never reference each other. Where one needs another, for example the sandbox
   needing the workspace, it uses that capability's interface in Core, and validation checks that
   both are on (CAP-03).
@@ -220,7 +221,8 @@ decides the outcome.
 | Model profile | `model`, `output_config.effort`, `max_tokens`, `thinking` (adaptive; `display`), `tool_choice: auto`. Forced tool choice is not used, because current models reject it. |
 | Structured output | `output_config.format`; `strict: true` on tools |
 | Stop reasons | `end_turn` → finished, `tool_use` → wants tools, `max_tokens` → output limit, `stop_sequence`, `pause_turn` → paused, `refusal` → refused, `model_context_window_exceeded` → input too long, anything else → unknown |
-| Errors (MDL-05) | 429 → rate-limited; 500, 529 and connection errors → transient; 401 and 403 → authentication; a 400 for an over-long prompt → input too long; other 400s → invalid request |
+| Errors (MDL-05) | Classified by the SDK's exception type, then its error type. 429 → rate-limited; 500, 529 and connection errors → transient; an error that arrives mid-stream (no status code, for example `overloaded_error`) → transient; 401 and 403 → authentication; a 400 whose message says the prompt is too long → input too long (the SDK has no distinct type, so the provider matches the API's error message, not model output); other 400s → invalid request |
+| SDK use (S00b) | The provider uses only the beta API (`client.Beta.Messages`), because turn-scoped system messages, fallbacks, task budgets and context management are typed only there. JSON the core already holds (tool and output schemas, stored reasoning blocks) is passed through the SDK's raw-data constructors. The SDK's own retries are off (`MaxRetries = 0`), so the model gateway is the only retry policy, including for mid-stream errors (REL-01, CLD-10). |
 | Usage | `input_tokens`, `output_tokens`, `cache_read_input_tokens`, `cache_creation_input_tokens` (by TTL) |
 | Streaming | Always on. Tool inputs use eager streaming and are validated against the schema before any tool runs. |
 
@@ -229,7 +231,6 @@ decides the outcome.
 | Risk | Plan |
 |---|---|
 | Windows sandbox networking (AppContainer loopback) and Linux hosts without unprivileged user namespaces | Spike S00a in M0, before committing to M5 dates |
-| The C# SDK may not yet expose the newest features (mid-conversation and turn-scoped system messages) | Spike S00b in M0: use the typed API if it exists, otherwise the SDK's raw request option, otherwise leave the feature off and use the append-only fallback (CTX-10) |
 | Claude beta features (turn-scoped system messages, compaction) change or are not on the chosen model | Each one is behind a provider feature flag, with the append-only fallback always available |
 | Integration queue throughput with slow test suites | Measure in M6. The option is to batch compatible changes into one baseline check run. |
 | The 90% benchmark target depends on the model | The goal set's difficulty is agreed before M6 (TEST-31) |
