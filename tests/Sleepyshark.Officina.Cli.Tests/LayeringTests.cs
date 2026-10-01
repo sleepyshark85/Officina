@@ -71,6 +71,33 @@ public sealed class LayeringTests : IDisposable
     }
 
     [Fact]
+    public void Tools_gates_policies_and_conditions_bind_from_a_file()
+    {
+        folder.Write("sof.json", """
+            {
+              "agents": { "dev": { "instructions": "x", "tools": ["issues"] } },
+              "tools": { "create_issue": { "source": "extension:Acme.CreateIssue", "kind": "write", "gates": ["no-main"], "timeout": "00:00:30" } },
+              "toolSets": { "issues": ["create_issue"] },
+              "gates": {
+                "no-main": { "use": "builtin:deny", "when": { "all": [ { "field": "args.branch", "in": ["main"] }, { "not": { "field": "args.force", "is": true } } ] } }
+              },
+              "policies": { "permissionRules": [ { "tool": "create_issue", "when": { "field": "args.count", "gte": 2 }, "action": "ask" } ] }
+            }
+            """);
+
+        var configuration = folder.Load();
+        var options = configuration.Options;
+
+        Assert.Empty(configuration.Errors);
+        Assert.Equal((ToolKind.Write, TimeSpan.FromSeconds(30)), (options.Tools["create_issue"].Kind, options.Tools["create_issue"].Timeout));
+        Assert.Equal(PolicyAction.Ask, Assert.Single(options.Policies.PermissionRules).Action);
+        var when = options.Gates["no-main"].When!;
+        Assert.True(when.Holds(JsonDocument.Parse("""{ "branch": "main", "force": false }""").RootElement));
+        Assert.False(when.Holds(JsonDocument.Parse("""{ "branch": "main", "force": true }""").RootElement));
+        Assert.True(options.Policies.PermissionRules[0].When!.Holds(JsonDocument.Parse("""{ "count": 2 }""").RootElement));
+    }
+
+    [Fact]
     public void Null_unsets_a_setting_that_may_be_unset()
     {
         folder.Write("sof.json", """{ "agents": { "a": { "instructions": "x", "description": "Writes." } } }""")

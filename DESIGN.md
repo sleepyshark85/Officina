@@ -111,7 +111,7 @@ in `Sleepyshark.Officina.Core.Extensibility`.
 public interface IModelProvider    { ProviderCapabilities Capabilities { get; }
                                      IAsyncEnumerable<ModelEvent> StreamAsync(ModelRequest request, CancellationToken ct); }
 public interface ITool             { ToolDescriptor Descriptor { get; }
-                                     ValueTask<ToolResult> InvokeAsync(ToolCall call, CancellationToken ct); }
+                                     ValueTask<ToolResult> InvokeAsync(ToolCall toolCall, CancellationToken ct); }
 public interface IGate             { ValueTask<GateDecision> EvaluateAsync(GateContext context, CancellationToken ct); }
 public interface ICheck            { ValueTask<CheckResult> RunAsync(CheckContext context, CancellationToken ct); }
 public interface IKnowledgeSource  { ValueTask<Retrieval> RetrieveAsync(RetrievalQuery query, CancellationToken ct); }

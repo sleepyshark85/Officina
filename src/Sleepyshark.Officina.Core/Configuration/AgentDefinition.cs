@@ -19,4 +19,16 @@ public sealed record AgentDefinition
     [Setting("The name of the model profile the agent runs on.", Example = "\"strong\"")]
     [Required(ErrorMessage = Messages.Required)]
     public string Model { get; init; } = ModelProfile.DefaultName;
+
+    [Setting("The tool sets, by name in `toolSets`, whose tools the agent is offered. The same tools are offered whoever the caller is.",
+        Example = """["files", "issues"]""")]
+    public IReadOnlyList<string> Tools { get; init; } = [];
+
+    [Setting("Narrows the caller's permissions for this agent's tool calls: a permission counts only if the caller holds it and it is listed here. Unset keeps the caller's.",
+        Example = """["issues:write"]""")]
+    public IReadOnlyList<string>? Permissions { get; init; }
+
+    [Setting("The most tool calls from one reply that run at the same time, when every tool called is safe to run in parallel.", Example = "4")]
+    [Range(1, int.MaxValue, ErrorMessage = "must be at least 1.")]
+    public int MaxParallelToolCalls { get; init; } = 4;
 }

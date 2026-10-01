@@ -248,7 +248,7 @@ example, a tool that declares itself `write` cannot be configured as `read`.
   "run_command": {
     "source": "builtin:sandbox.run",
     "timeout": "00:15:00",
-    "trim": { "maxTokens": 4000, "keep": "headAndTail" }           // TOOL-09
+    "maxResultLength": 16000                                       // TOOL-09
   },
   "create_issue": {
     "source": "extension:Acme.CreateIssue",
@@ -256,8 +256,8 @@ example, a tool that declares itself `write` cannot be configured as `read`.
     "irreversible": true,                                          // TOOL-10
     "permissions": ["issues:write"],
     "gates": ["issue-dedupe"],                                     // INV-04
-    "approval": "always",                                          // never | always | { "rules": […] }
-    "retries": { "maxAttempts": 1 },
+    "approval": "always",                                          // never | always
+    "maxAttempts": 1,
     "receivesMaskedValues": true                                   // ING-06
   },
   "github":      { "source": "mcp:github/*", "kind": "write", "gates": ["github-writes"] },
@@ -276,11 +276,11 @@ example, a tool that declares itself `write` cannot be configured as `read`.
 | `kind` | the tool's declaration; `write` for MCP tools | MCP annotations are treated as hints only. A tool server's tools are writes unless configured as reads. |
 | `permissions` | `[]` | Permissions the caller must hold (TOOL-03, INV-02). |
 | `gates` | `[]` | The tool's own gates, run after global gates (TOOL-05). |
-| `gateExemption` | none | `{ "reason": "…" }`. Allowed only for write tools; the reason is required (INV-04). |
-| `approval` | `always` for irreversible tools, otherwise `never` | `always`, `never`, or rules written in the condition language over the tool's arguments. |
+| `gateExemption` | none | The reason a write tool needs no gate of its own (INV-04). |
+| `approval` | `always` for irreversible tools, otherwise `never` | `always` or `never`. For approval by rule, give the tool a `builtin:require-approval` gate whose `when` is a condition over the tool's arguments. |
 | `timeout` | `2m` | Per call. |
-| `retries` | `{ "maxAttempts": 1 }` | Retried only for `timeout` and `unavailable` errors, and never for irreversible tools. |
-| `trim` | `{ "maxTokens": 8000, "keep": "head" }` | The full result is kept as an artifact the agent can page through. |
+| `maxAttempts` | `1` | Retried only for `timeout` and `unavailable` errors, and never for irreversible tools. |
+| `maxResultLength` | `32000` | Characters of a result that enter the conversation; the rest is cut off. The full result is kept as an artifact the agent can page through (S06). |
 | `parallelSafe` | the tool's declaration; `false` for MCP tools | LOOP-08. |
 | `irreversible` | `false` | Carried out at most once, with an idempotency key (TOOL-10). |
 | `receivesMaskedValues` | `false` | Masked values are restored in this tool's arguments (ING-06). |
@@ -371,10 +371,10 @@ Conditions appear in branch rules, router mappings, approval rules and gates. Th
 arguments and task fields. A condition that refers to free-text output fails validation (INV-01).
 
 ```jsonc
-{ "field": "output.severity", "equals": "high" }
+{ "field": "output.severity", "is": "high" }
 { "field": "output.category", "in": ["bug", "regression"] }
 { "field": "output.score", "gte": 0.8 }                 // gt | gte | lt | lte
-{ "field": "checks.tests.passed", "equals": true }
+{ "field": "checks.tests.passed", "is": true }
 { "field": "output.ticket", "exists": true }
 { "all": [ <condition>, <condition> ] }                 // and
 { "any": [ <condition>, <condition> ] }                 // or
@@ -394,7 +394,8 @@ Paths are dotted names with an optional `[n]` index. There are no variables, fun
 arithmetic. Validation checks every path against the schema of the value it reads, and rejects a
 comparison that can never hold (a value of the wrong type, or one outside the field's `enum`).
 
-`equals` and `in` compare JSON values, numbers by value (`1` equals `1.0`). `gt`, `gte`, `lt` and `lte`
+`is` and `in` compare the field's value with the values given: numbers by value (`1` is `1.0`), and
+`true` or `false` with booleans. `gt`, `gte`, `lt` and `lte`
 compare numbers only. `exists: true` holds when the field is present and not `null`. A field that is
 missing makes every other test false.
 
@@ -453,7 +454,7 @@ PAT-02). Data moves only through declared `input` and `output` (PAT-04).
       "onOutcome": { "failed": { "retry": 1 }, "handedOff": "handoff" } }
   ],
   "next": [
-    { "from": "triage", "when": { "field": "output.kind", "equals": "question" }, "goto": "end" },
+    { "from": "triage", "when": { "field": "output.kind", "is": "question" }, "goto": "end" },
     { "from": "triage", "goto": "fix" }
   ] }
 
@@ -646,13 +647,12 @@ Dependencies checked at validation (CAP-03):
 
 ```jsonc
 "policies": {
-  "permissions": {                                   // TOOL-05 step 2, first match wins
-    "rules": [
-      { "tool": "run_command", "when": { "field": "args.command", "in": ["git push", "git push --force"] }, "action": "deny", "reason": "Pushing is the owner's job" },
-      { "tool": "delete_file", "action": "ask" }
-    ]
-  },
-  "gates": { "all": ["rate-limit"] },               // gates for all tools (TOOL-05 step 3)
+  "permissionRules": [                              // TOOL-05 step 2, first match wins
+    { "tool": "run_command", "when": { "field": "args.command", "in": ["git push", "git push --force"] }, "action": "deny", "reason": "Pushing is the owner's job" },
+    { "tool": "delete_file", "action": "ask" },
+    { "tool": "create_issue", "action": "route", "to": "lead" }
+  ],
+  "gates": ["rate-limit"],                          // gates for all tools (TOOL-05 step 3)
   "masking": {                                       // ING-02, ING-06
     "enabled": true,
     "patterns": ["email", "phone", "paymentCard"],
@@ -661,15 +661,16 @@ Dependencies checked at validation (CAP-03):
   },
   "rateLimits": { "perOwner": { "runsPerHour": 10 }, "perTenant": { "costPerDay": 200 } },   // ING-03
   "untrustedSources": ["provider:web_search", "mcp:tracker/*"],    // SEC-04
-  "anonymous": { "permissions": [] }                               // ING-05
+  "anonymousPermissions": []                                       // ING-05
 },
 "admission": {
   "checks": ["extension:Acme.WorkingHoursCheck"]                   // ING-01, in order
 }
 ```
 
-Permission rule actions are `allow`, `deny`, `ask` and `route`. A rule's `when` reads the tool's
-arguments only. The caller's identity comes from the host (INV-03), never from configuration values
+Permission rule actions are `allow`, `deny` (the default), `ask` and `route` (to the agent named in `to`).
+A rule's `when` reads the tool's arguments only. A caller must also hold every permission the tool lists, and an
+agent's `permissions` narrow the caller's. The caller's identity comes from the host (INV-03), never from configuration values
 supplied with the work.
 
 ---
@@ -758,7 +759,7 @@ is fixed. For example:
 
 ```
 agents.developer.tools[2]: tool set "shel" does not exist. Did you mean "shell"?
-tools.create_issue: write tool has no gate of its own. Add "gates": [...] or "gateExemption": { "reason": "..." } (INV-04).
+tools.create_issue: write tool has no gate of its own. Add "gates": [...] or "gateExemption": "<reason>".
 agents.lead.instructions: placeholder {{caller.id}} is not allowed in the stable prefix. Move it to context.operatingFacts (CTX-02, CFG-14).
 ```
 

@@ -8,6 +8,9 @@ internal static partial class DependencyRules
     public const string ClaudeProvider = "Sleepyshark.Officina.Providers.Claude";
     public const string Core = "Sleepyshark.Officina.Core";
 
+    /// <summary>The JSON Schema validator, the one package Core may use besides the base library (DESIGN.md §1).</summary>
+    public const string JsonSchemaValidator = "JsonSchema.Net";
+
     /// <summary>Package id prefixes of AI and agent frameworks no project may use.</summary>
     /// <remarks>
     /// The official MCP SDK is listed because it brings in Microsoft.Extensions.AI; Officina has its own MCP client.
@@ -44,14 +47,14 @@ internal static partial class DependencyRules
 
         if (Is(project.Name, Core))
         {
-            foreach (var id in project.Direct.Order(StringComparer.OrdinalIgnoreCase))
+            foreach (var id in project.Direct.Where(id => !Is(id, JsonSchemaValidator)).Order(StringComparer.OrdinalIgnoreCase))
             {
-                yield return $"{Core} must depend on the .NET base library only, but references {id}.";
+                yield return $"{Core} must depend on the .NET base library and {JsonSchemaValidator} only, but references {id}.";
             }
 
             foreach (var framework in project.FrameworkReferences.Where(name => !Is(name, "Microsoft.NETCore.App")))
             {
-                yield return $"{Core} must depend on the .NET base library only, but references the {framework} framework.";
+                yield return $"{Core} must depend on the .NET base library and {JsonSchemaValidator} only, but references the {framework} framework.";
             }
         }
     }

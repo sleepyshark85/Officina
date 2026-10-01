@@ -7,6 +7,8 @@ public enum ValidationPhase
     Shape = 2,
     Merge = 3,
     References = 4,
+    Tools = 7,
+    Conditions = 8,
     Prefix = 9,
     Invariants = 10,
 }
