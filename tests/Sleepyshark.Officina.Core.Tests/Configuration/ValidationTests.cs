@@ -35,6 +35,40 @@ public class ValidationTests
         Assert.Equal("Add it to models, or use one of: default, other.", errors[1].Fix);
     }
 
+    // MDL-09: cost budgets always exist, so a model needs a price; the claude provider ships them for current models.
+    [Fact]
+    public void A_model_without_a_price_is_rejected()
+    {
+        var options = WithAgent(Extractor) with
+        {
+            Models = new Dictionary<string, ModelProfile> { ["default"] = new(), ["new"] = new() { Model = "claude-next" } },
+        };
+
+        var error = Assert.Single(options.Validate());
+
+        Assert.Equal(
+            (ValidationPhase.Provider, "models.new.model", "model \"claude-next\" has no price, which the cost budgets need.", "Add its prices to providers.claude.prices."),
+            (error.Phase, error.Path, error.Problem, error.Fix));
+    }
+
+    // TOOL-13: the provider's limits apply to its own tools only.
+    [Fact]
+    public void Provider_limits_on_another_tool_are_rejected()
+    {
+        var options = WithAgent(Extractor) with
+        {
+            Tools = new Dictionary<string, ToolOptions>
+            {
+                ["page"] = new() { Source = "builtin:artifact.page", Limits = new() { MaxUses = 3 } },
+                ["web_search"] = new() { Source = "provider:web_search", Reason = "Research.", Limits = new() { MaxUses = 0 } },
+            },
+        };
+
+        Assert.Equal(
+            [("tools.page.limits", "applies only to a provider tool."), ("tools.web_search.limits.maxUses", "must be at least 1.")],
+            options.Validate().Select(error => (error.Path, error.Problem)).Order());
+    }
+
     [Fact]
     public void A_secret_reference_needs_a_name() => Assert.Throws<ArgumentNullException>(() => new SecretReference(null!));
 

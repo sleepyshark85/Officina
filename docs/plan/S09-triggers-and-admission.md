@@ -37,5 +37,5 @@ Parts of the closed requirements need state that later slices add:
 - S06: the run record receives content already masked (ING-02), as S07's stored history does.
 - Validation refuses kept history for an agent with a `receivesMaskedValues` tool while masking is on, until the
   token table is kept with the conversation (ING-06); see the plan's open follow-ups.
-- S11: maps `ModelRequest.Batch` to Message Batches when the provider's `batch` feature is on (MDL-10, CLD-11).
+- S21: maps `ModelRequest.Batch` to Message Batches when the provider's `batch` feature is on (MDL-10, CLD-11, moved from S11).
 - S20: the coding team preset turns masking off (ING-02).

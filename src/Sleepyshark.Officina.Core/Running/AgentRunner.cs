@@ -48,7 +48,10 @@ public sealed class AgentRunner
     /// <param name="checks">The application's checks, by the id that <c>extension:&lt;id&gt;</c> checks name.</param>
     /// <param name="knowledge">The application's knowledge sources, by the id that <c>extension:&lt;id&gt;</c> sources name.</param>
     /// <param name="human">Who approves tool calls that need approval.</param>
-    /// <param name="secrets">Where tools read credentials.</param>
+    /// <param name="secrets">
+    /// Where tools read credentials. Pass the <see cref="KnownSecrets"/> the providers and tool servers read theirs from, so
+    /// those are removed from what tools return too (INV-06).
+    /// </param>
     /// <param name="time">The clock for budgets, time limits and audit times.</param>
     /// <param name="shorteners">The application's history shorteners, by the id that <c>extension:&lt;id&gt;</c> shortenings name.</param>
     /// <exception cref="ConfigurationException">The configuration has errors.</exception>
@@ -76,6 +79,7 @@ public sealed class AgentRunner
         pipeline = new ToolPipeline(options, tools, gates, knowledge, checks, storage, Events, human, secrets, time);
         this.checks = checks;
         this.knowledge = knowledge;
+        ProviderToolsSupported(options, providers);
         shortening = Shortening(options, providers, shorteners ?? new Dictionary<string, IHistoryShortener>());
         admission = new Admission(options.Policies, time);
         Options = options;
@@ -190,6 +194,25 @@ public sealed class AgentRunner
         if (cancels.TryRemove(agentName, out var cancel))
         {
             cancel.Cancel();
+        }
+    }
+
+    /// <summary>MDL-06: each agent's provider must run the provider tools the agent is offered (TOOL-13).</summary>
+    /// <exception cref="ConfigurationException">A provider does not run one of them.</exception>
+    private static void ProviderToolsSupported(OfficinaOptions options, IReadOnlyDictionary<string, IModelProvider> providers)
+    {
+        var errors = options.Agents
+            .SelectMany(agent => agent.Value.Tools.SelectMany(set => options.ToolSets[set]).Select(tool => (Tool: tool, options.Models[agent.Value.Model].Provider)))
+            .Distinct()
+            .Where(use => options.Tools[use.Tool].ProviderTool() is { } name
+                && providers.TryGetValue(use.Provider, out var provider) && !provider.Capabilities.ProviderTools.Contains(name))
+            .Select(use => new ConfigurationError(
+                ValidationPhase.Provider, $"tools.{use.Tool}.source", $"provider \"{use.Provider}\" does not run the tool \"{options.Tools[use.Tool].ProviderTool()}\".",
+                $"Use a tool it runs: {string.Join(", ", providers[use.Provider].Capabilities.ProviderTools.Order(StringComparer.Ordinal))}."))
+            .ToList();
+        if (errors.Count > 0)
+        {
+            throw new ConfigurationException(errors);
         }
     }
 

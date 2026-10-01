@@ -46,7 +46,10 @@ public sealed class ToolPipeline
     /// </param>
     /// <param name="events">Where tool calls and approvals are published.</param>
     /// <param name="human">Who approves calls that need approval.</param>
-    /// <param name="secrets">Where tools read credentials.</param>
+    /// <param name="secrets">
+    /// Where tools read credentials. A <see cref="KnownSecrets"/> the host shares with the providers and tool servers also
+    /// removes the secrets they read (INV-06).
+    /// </param>
     /// <param name="time">The clock for time limits and audit times.</param>
     /// <exception cref="ConfigurationException">The configuration has errors, including those only the tools reveal (TOOL-02).</exception>
     public ToolPipeline(
@@ -73,7 +76,7 @@ public sealed class ToolPipeline
         this.storage = storage;
         audit = storage.Audit;
         this.events = events ?? throw new ArgumentNullException(nameof(events));
-        this.secrets = new KnownSecrets(secrets ?? throw new ArgumentNullException(nameof(secrets)));
+        this.secrets = secrets as KnownSecrets ?? new KnownSecrets(secrets ?? throw new ArgumentNullException(nameof(secrets)));
         this.time = time ?? throw new ArgumentNullException(nameof(time));
         Owner = new OwnerChannel(human ?? throw new ArgumentNullException(nameof(human)), events, options.Run.ApprovalTimeout, time);
         permissionMode = options.Run.PermissionMode;
@@ -124,7 +127,7 @@ public sealed class ToolPipeline
     /// Audits a call a provider ran itself, after the fact. Provider tools skip the per-call steps, because the provider
     /// runs them (TOOL-13).
     /// </summary>
-    public ValueTask AuditProviderToolAsync(ToolContext context, ToolRequest request, string result, CancellationToken ct)
+    public async ValueTask AuditProviderToolAsync(ToolContext context, ToolRequest request, string result, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(request);
@@ -133,8 +136,11 @@ public sealed class ToolPipeline
             context.ReadUntrusted = true; // SEC-04
         }
 
+        // EVT-01: published like any other call, once the provider has run it.
+        await events.PublishAsync(context, new ToolCallStarted(request.Name, secrets.Remove(request.Arguments.GetRawText())), ct).ConfigureAwait(false);
         var entry = Entry(context, request.Name, request.Arguments, "provider", AuditOutcome.Completed) with { Detail = secrets.Remove(result) };
-        return audit.AppendAsync(context.Caller.Tenant, entry, ct);
+        await audit.AppendAsync(context.Caller.Tenant, entry, ct).ConfigureAwait(false);
+        await events.PublishAsync(context, new ToolCallEnded(request.Name, null), ct).ConfigureAwait(false);
     }
 
     private async Task<ToolResult> RunAsync(ToolContext context, ToolRequest request, CancellationToken ct)

@@ -20,14 +20,19 @@ public sealed record ModelPrice
     [Range(typeof(decimal), "0", "79228162514264337593543950335", ErrorMessage = NotNegative)]
     public decimal CacheRead { get; init; }
 
-    [Setting("USD per million tokens written to the cache.", Example = "5")]
+    [Setting("USD per million tokens written to the cache for five minutes.", Example = "5")]
     [Range(typeof(decimal), "0", "79228162514264337593543950335", ErrorMessage = NotNegative)]
-    public decimal CacheWrite { get; init; }
+    public decimal CacheWrite5m { get; init; }
+
+    [Setting("USD per million tokens written to the cache for an hour.", Example = "8")]
+    [Range(typeof(decimal), "0", "79228162514264337593543950335", ErrorMessage = NotNegative)]
+    public decimal CacheWrite1h { get; init; }
 
     /// <summary>What the usage costs, in USD (MSG-06).</summary>
     public decimal Cost(Usage usage)
     {
         ArgumentNullException.ThrowIfNull(usage);
-        return ((usage.Input * Input) + (usage.Output * Output) + (usage.CacheRead * CacheRead) + (usage.CacheWrite * CacheWrite)) / 1_000_000m;
+        return ((usage.Input * Input) + (usage.Output * Output) + (usage.CacheRead * CacheRead)
+            + ((usage.CacheWrite - usage.CacheWrite1h) * CacheWrite5m) + (usage.CacheWrite1h * CacheWrite1h)) / 1_000_000m;
     }
 }

@@ -93,7 +93,7 @@ internal sealed class ToolCatalog
         return [.. tools.Values.OrderBy(tool => tool.Name, StringComparer.Ordinal).Select(tool =>
             onDemand && tool.Implementation is not (null or DescribeTool)
                 ? new ToolDefinition(tool.Name, DescribeTool.Stub, DescribeTool.AnyArguments, null)
-                : new ToolDefinition(tool.Name, tool.Implementation?.Descriptor.Description, tool.Implementation?.Descriptor.InputSchema, tool.Options.ProviderTool()))];
+                : new ToolDefinition(tool.Name, tool.Implementation?.Descriptor.Description, tool.Implementation?.Descriptor.InputSchema, tool.Options.ProviderTool(), tool.Options.Limits))];
     }
 
     private Dictionary<string, CatalogTool> Tools(string agent) =>

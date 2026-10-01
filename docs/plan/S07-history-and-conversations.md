@@ -35,7 +35,7 @@ Long conversations: shortening history, and conversations that survive restarts.
 
 Left to later slices:
 - S06: the run record joins the shortening test (HIST-03, TEST-15). S17 and S18 add memory and tasks.
-- S11: the Claude provider implements `IHistoryShortener` with Claude's own mechanism.
+- S21: the Claude provider implements `IHistoryShortener` with Claude's own mechanism (CLD-06, moved from S11).
 - S16, S17, S18, S19, S20: their capabilities add their switches and dependencies (checkpoints need the
   conversation store, the team needs the task board), and S16 offers the workspace and sandbox tools only when
   their capability is on.

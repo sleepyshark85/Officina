@@ -6,10 +6,10 @@ Status: draft · 2026-10-01 · slices `REQUIREMENTS.md` (revision 2) into delive
 
 Last updated 2026-10-02.
 
-- **Done:** M0 spikes S00a and S00b; M1 slices S01 (walking skeleton) and S02 (configuration); S03 (tool pipeline); S04 (turn loop); S05 (context and caching); S06 (run record and output); S07 (history and conversation store); S08 (events, storage and observability); S09 (triggers and admission); S10 (MCP and knowledge); S14 (git workspace); S15 (sandbox); S18 (task board); S16 part 1 (human interaction).
+- **Done:** M0 spikes S00a and S00b; M1 slices S01 (walking skeleton) and S02 (configuration); S03 (tool pipeline); S04 (turn loop); S05 (context and caching); S06 (run record and output); S07 (history and conversation store); S08 (events, storage and observability); S09 (triggers and admission); S10 (MCP and knowledge); S11 (Claude provider); S14 (git workspace); S15 (sandbox); S18 (task board); S16 part 1 (human interaction).
 - **Waiting:** the M0 design review sign-off on `REQUIREMENTS.md`, `CONFIGURATION.md` and `DESIGN.md`.
 - **Doing:** S16, part 2 (S16b): wiring the workspace, sandbox and tool servers into `sof run` (see the follow-ups).
-- **Next:** S16b, then S11 and S17.
+- **Next:** S16b, then S12 (model gateway) and S17.
 - **Open follow-ups:**
   - S02 kept a `formatVersion` check, though only version 1 exists. Consider removing the setting
     until a version 2 exists (principle 13). S06 keeps `output.schema` as JSON text; when S13 or S16 want the
@@ -20,26 +20,23 @@ Last updated 2026-10-02.
     hands off.
   - The configuration binder adds a file's items to a list setting's default instead of replacing it, so
     `storage.unstoredEvents` set in a file keeps `textGenerated`. S06 made `context.record` unset by default to avoid it.
-  - S11 maps provider tools and their limits, such as maximum uses, to the Claude request.
-  - S11: secrets declared in configuration, such as the provider API key and the tool servers' `env` and
-    `headers`, must join the tool pipeline's redaction set when they are resolved, so they are removed like
-    secrets tools read (INV-06).
-  - S07 left memory (S17) to join the shortening test (HIST-03, TEST-15);
-    S11 makes the Claude provider an `IHistoryShortener`; the capability slices (S16–S20) add their switches and
+  - S16b builds the Claude provider and the tool servers in `sof run` with the runner's `KnownSecrets`, so the API key
+    and the servers' `env` and `headers` are removed from what tools return (INV-06).
+  - S07 left the run record (S06), memory (S17) and tasks (S18) to join the shortening test (HIST-03, TEST-15);
+    S21 makes the Claude provider an `IHistoryShortener` (CLD-06); the capability slices (S16–S20) add their switches and
     dependencies to `CapabilitiesOptions`. Its Notes list the rest.
   - S04 left parts of its requirements to the slices that add the state they need; its Notes list them
     (S06, S07, S09, S14, S16, S19).
   - S08 left parts of its requirements to the slices that add the state they need; its Notes list them
-    (S06, S07, S09, S11, S13, S16, S17, S19, S20).
-  - S11 ships the price table, requires a price when a cost budget is set, and splits `prices.*.cacheWrite`
-    by cache lifetime (MDL-09). Until then a model without a configured price costs nothing.
+    (S06, S07, S09, S12, S13, S16, S17, S19, S20).
+  - S11 moved MDL-05 to S12, which retries classified failures, and CLD-06 and CLD-11 (the Claude provider's feature
+    switches and Message Batches) to S21. Its Notes list the rest.
   - S16b wires the workspace, sandbox and tool servers into `sof run`: it connects the tool servers; gives each agent
     its working copy and its `SandboxTools`, disposed when the agent, task or run ends (SBX-03); wires the sandbox
     tools and the command rules gate as built-ins; probes the sandbox once at startup (SBX-07); offers the workspace
     and sandbox tools only when their capability is on (CAP-02); adds `workspace.delete_file` and
     `workspace.move_file`; lets `capabilities.workspace.baselineChecks` name checks from `checks` (WS-02); and shows
     the integration queue (WS-09).
-  - S11 registers the Claude provider in `sof run`, which until then reports that the provider is not available.
   - S20 also adds pausing the whole run (RUN-06); S16 pauses one agent at a time.
   - S20 adds the plan-approval sign-off and the model's tool to hand off to a human (EGR-04). S18 and S19 add
     integration and snapshots to `IWorkspace`.
@@ -57,12 +54,9 @@ Last updated 2026-10-02.
     already bumped it past the version on main.
   - S19 snapshots and restores the workspace, and cleans up worktrees left by a crash.
   - S05 moved CTX-06 to S07 and CTX-07 to S06, and left boundary ② and the memory-change case of TEST-09 to S17;
-    its Notes list the rest (S06, S09).
-  - S11 maps cache boundaries to `cache_control`, putting boundary ③ on the last cacheable block before a
-    turn-scoped message; maps `Role.System` to mid-conversation system messages and `TurnScoped` to `clear_at`; and
-    reports `CacheBoundaries` and `TurnScopedMessages` in its capabilities.
+    its Notes list the rest (S06, S09, S18).
   - S09 left parts of its requirements to the slices that add the state they need; its Notes list them
-    (S06, S11, S19, S20).
+    (S06, S19, S20, and S21 for Message Batches).
   - REQUIREMENTS.md §4.3 lists masking as replaceable, but DESIGN.md §4 keeps it in Core and not replaceable in v1.
     The owner decides at revision 3.
   - Masking tokens are numbered per run, but S07 keeps history across runs, so a token in earlier history could
@@ -118,7 +112,7 @@ A slice is **done** when:
 | [S08](S08-events-storage-observability.md) | Events, storage and observability | M2 | M | S04 | [#10](https://github.com/sleepyshark85/Officina/issues/10) | done |
 | [S09](S09-triggers-and-admission.md) | Triggers and admission | M2 | M | S04, S08 | [#11](https://github.com/sleepyshark85/Officina/issues/11) | done |
 | [S10](S10-mcp-and-knowledge.md) | MCP and knowledge sources | M2 | M | S03 | [#12](https://github.com/sleepyshark85/Officina/issues/12) | done |
-| [S11](S11-claude-provider.md) | Claude provider | M3 | M | S00b, S05 | [#13](https://github.com/sleepyshark85/Officina/issues/13) | todo |
+| [S11](S11-claude-provider.md) | Claude provider | M3 | M | S00b, S05 | [#13](https://github.com/sleepyshark85/Officina/issues/13) | done |
 | [S12](S12-model-gateway.md) | Model gateway | M3 | S | S11 | [#14](https://github.com/sleepyshark85/Officina/issues/14) | todo |
 | [S13](S13-loop-patterns.md) | Loop patterns | M4 | M | S04, S06 | [#15](https://github.com/sleepyshark85/Officina/issues/15) | todo |
 | [S14](S14-git-workspace.md) | Git workspace | M5 | M | S03 | [#16](https://github.com/sleepyshark85/Officina/issues/16) | done |
