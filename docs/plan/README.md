@@ -13,6 +13,7 @@ Status: draft · 2026-10-01 · slices `REQUIREMENTS.md` (revision 2) into delive
 A slice is **done** when:
 - its acceptance criteria pass in CI on Linux and Windows;
 - every requirement it closes has a test or a recorded review;
+- its tests replace only system boundaries, never internal types (DESIGN.md §11);
 - its settings appear in the generated reference.
 
 ## Milestones
