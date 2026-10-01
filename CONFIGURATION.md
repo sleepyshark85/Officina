@@ -20,7 +20,9 @@ Status: draft for M0 design review · 2026-09-30 · companion to `REQUIREMENTS.m
   file without running it.
 
 The full list of settings is in [`docs/configuration-reference.md`](docs/configuration-reference.md).
-It is generated from the Options classes once they exist (DOC-01).
+The settings implemented so far are in [`docs/configuration-settings.md`](docs/configuration-settings.md),
+generated from the Options classes with the JSON Schema [`docs/officina.schema.json`](docs/officina.schema.json)
+(CFG-15, DOC-01).
 
 ## What you must specify (CFG-17)
 

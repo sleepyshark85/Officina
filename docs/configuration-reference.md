@@ -5,9 +5,10 @@ Status: draft for M0 design review · 2026-09-30 · companion to `../REQUIREMENT
 This is the full catalogue of settings. **Most applications never need it**: start with
 `../CONFIGURATION.md`, which lists the few settings a new application must specify.
 
-Every setting here has its default defined in code, in the core's Options classes (CFG-16). Once
-the code exists, this reference and the JSON Schema are generated from those classes (CFG-15,
-DOC-01). Until then this draft is the specification they must match.
+Every setting here has its default defined in code, in the core's Options classes (CFG-16). The
+settings implemented so far are listed in the generated [settings reference](configuration-settings.md),
+and the generated JSON Schema is [`officina.schema.json`](officina.schema.json) (CFG-15, DOC-01). For
+settings not implemented yet, this draft is the specification they must match.
 
 ---
 
@@ -34,10 +35,11 @@ DOC-01). Until then this draft is the specification they must match.
 |---|---|
 | Format | JSON. Comments (`//`, `/* */`) and trailing commas are accepted and ignored. |
 | Main file | `sof.json` in the application's directory (the coding team CLI: the project root). |
-| Environment file | `sof.<environment>.json`, merged on top of the main file when that environment is selected. |
+| Environment file | `sof.<environment>.json`, merged on top of the main file when that environment is selected: by the host (the CLI's `--environment`), or else by the `SOF_ENVIRONMENT` variable. |
 | Schema | `"$schema"` may point to the published schema, which gives editor completion and validation. |
 | Format version | `"formatVersion": 1`. Unknown versions are rejected. A newer core reads the previous format version (REL-04). |
-| Includes | Large values can live in their own files: `{ "file": "prompts/developer.md" }` for text, and the same form for JSON Schemas. Paths are relative to the file that contains them. |
+| Includes | Large values can live in their own files: `{ "file": "prompts/developer.md" }` for text, and the same form for JSON Schemas. Paths are relative to the file that contains them, or to the application's directory for values from environment variables, run options and presets. |
+| Names | Names of named items (agents, models, …) use letters, digits, `-` and `_`, and start with a letter, digit or `_`. |
 | Encoding | UTF-8. Text loaded from files is normalised to `\n` line endings, so the stable prefix is byte-identical on Linux and Windows (COST-01). |
 
 ### Value forms
@@ -132,6 +134,11 @@ Instructions and some settings may contain placeholders written as `{{namespace.
 A placeholder from a volatile-only namespace inside instructions, tool descriptions, policies or
 memory is a validation error that names the setting and suggests `context.operatingFacts` (§7.3).
 An unknown placeholder is an error, never an empty string.
+
+- `project.*` has `name` and `values.<name>`; `agent.*` has `name` and `description`. Only `now` takes a format.
+- Placeholders are filled once: a value that itself contains `{{…}}` is not filled again.
+- Text between `{{` and `}}` that is not a dotted name, such as `{{ example }}`, is left as it is.
+- There is no secret namespace: `{{secret.…}}`, `{{secrets.…}}` and `{{env.…}}` are rejected (INV-06).
 
 ---
 
@@ -380,7 +387,12 @@ arguments and task fields. A condition that refers to free-text output fails val
 | `task` | The current task's fields (gates, when the task board is on) |
 
 Paths are dotted names with an optional `[n]` index. There are no variables, functions or
-arithmetic. Validation checks every path against the schema of the value it reads.
+arithmetic. Validation checks every path against the schema of the value it reads, and rejects a
+comparison that can never hold (a value of the wrong type, or one outside the field's `enum`).
+
+`equals` and `in` compare JSON values, numbers by value (`1` equals `1.0`). `gt`, `gte`, `lt` and `lte`
+compare numbers only. `exists: true` holds when the field is present and not `null`. A field that is
+missing makes every other test false.
 
 ---
 
@@ -415,8 +427,8 @@ every model slot. A step inside a pattern that calls a model is its own slot: it
 only on that slot's configuration and the enabled capabilities, never on the caller.
 
 **Capabilities per agent.** `capabilities` lists which of the application's enabled capabilities
-this agent uses. Listing a capability the application has not enabled is a validation error
-(CAP-03).
+this agent uses; when it is not set, the agent uses all of them. Listing a capability the
+application has not enabled is a validation error (CAP-03).
 
 ### 7.2 Patterns (PAT-01)
 
@@ -621,7 +633,7 @@ Dependencies checked at validation (CAP-03):
 | `sandbox` | `workspace` |
 | `checkpoints` | `conversationStore` |
 | `projectMemory` | nothing; requires `humanInteraction` if `approveBy` is `owner` |
-| Any `signOffs`, `approval` other than `never`, or `permissionMode: ask` | `humanInteraction` |
+| Any `signOffs`, `approval` other than `never`, or `permissionMode: ask` while an agent has a tool that may need permission | `humanInteraction` |
 | `history.strategy` other than `none` across requests | `conversationStore` |
 
 ---
@@ -713,7 +725,11 @@ code defaults (Options classes) < presets (extends) < application file < environ
 ```
 
 - **Environment variables** use the form `SOF__agents__developer__budget__turn__cost=8`.
-  Their values are parsed as JSON where possible, otherwise as strings.
+  Their values are parsed as JSON where possible, otherwise as strings, and read as the type the
+  setting expects (`SOF__project__name=123` is the text `"123"`). Setting names are matched ignoring
+  case; names of agents, models and other named items are matched exactly.
+- **`extends`** at the top of a file lists presets and other files. Each is expanded just below the
+  file that names it, in order, so a later entry overrides an earlier one.
 - **Run options** are what the host passes when it starts a run, for example the CLI's `--budget 40`.
 - **The agent definition** is the top layer for its own settings: run defaults such as the budget
   apply to an agent only where the agent does not set them.
@@ -725,11 +741,15 @@ Merge rules:
 | Object | Merged key by key |
 | Named map (`agents`, `tools`, …) | Merged by name; a new name adds an entry |
 | Array | Replaced as a whole |
-| `null` | Removes the value, so the next lower layer's value applies (for a default, the core default) |
-| `extends` on a definition | The same rules, with the base definition as the lower layer; cycles are rejected |
+| `null` | Removes the value set by the lower layers, so the code default applies; in a named map it removes the entry. Settings that protect an invariant, such as budgets, cannot be removed (INV-07). |
+| `extends` on a definition | The same rules, with the base definition as the lower layer, so `null` removes a base value; cycles are rejected |
 
 `sof config show [--agent <name>] [--origin]` prints the effective configuration. With
-`--origin`, each value shows the layer and file position it came from (CFG-04, TEST-05).
+`--origin`, each value shows the layer and file position it came from (CFG-04, TEST-05), such as
+`application file sof.json:4:20`, `environment variable SOF__run__permissionMode`, `run option --budget`
+or `code default, core 0.1.0`. A value inherited through `extends` also names the definition it came from.
+
+In code, a definition builds on another with a C# `with` expression; `extends` exists in files only.
 
 ---
 
@@ -751,7 +771,7 @@ Validation runs in this order:
 | 1 | Parse | Invalid JSON, unknown `formatVersion` |
 | 2 | Shape | Unknown settings, wrong types, values outside allowed ranges, credential-like literals |
 | 3 | Merge | Cycles in `extends`, missing presets |
-| 4 | References | Missing models, tools, tool sets, gates, checks, knowledge sources, agents, tool servers, extensions, secrets (by name only; secrets are not read) |
+| 4 | References | Missing models, tools, tool sets, gates, checks, knowledge sources, agents, tool servers, extensions, secrets (by name only; secrets are not read), included files, unknown placeholders |
 | 5 | Capabilities | Capabilities used but not enabled, unmet dependencies (§9) |
 | 6 | Provider | Settings or features the model or platform does not support (MDL-06), fallbacks that cannot serve their slots (MDL-04), models without prices when a cost budget is set |
 | 7 | Tools | Duplicate names after merging MCP tools, invalid input formats, write tools without gates or exemptions (TOOL-02) |
@@ -773,8 +793,9 @@ Attempts to weaken an invariant, and how each is rejected:
 | INV-09 | `onCheckFailure: accept`, or a task transition to `done` that skips its checks |
 | INV-10 | Workspace settings that expose the configuration files to agents as writable |
 
-`sof config validate` runs all phases and exits non-zero on any error. `sof config dry-run`
-also runs the configuration against scripted models (CFG-12).
+Each error is reported once: a setting rejected in an early phase is not reported again by later
+phases. `sof config validate` runs all phases and exits non-zero on any error. `sof config dry-run
+[--agent <name>] [--input <text>] [--reply <text>]…` also runs an agent against a scripted model (CFG-12).
 
 ---
 

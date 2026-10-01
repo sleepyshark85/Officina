@@ -17,7 +17,7 @@ namespace is its name.
 | Project | Box in the diagram | What it contains | Depends on | Loaded when |
 |---|---|---|---|---|
 | `Sleepyshark.Officina.Core` | Core | Options classes and validation; turn engine; built-in loop patterns; context builder; tool pipeline; run record; budgets; events; audit; extension interfaces (§4); built-in `record.*`, `control.*` and `artifact.*` tools | .NET base library and a JSON Schema validator only | Always |
-| `Sleepyshark.Officina.Hosting` | not drawn | Binds `sof.json`, environment variables and CLI flags onto the Options classes. Registers services and loads extension assemblies. | Core, `Microsoft.Extensions.Configuration` | By any host application |
+| `Sleepyshark.Officina.Hosting` | not drawn | Binds `sof.json`, environment variables and CLI flags onto the Options classes, merging layers by the rules of the configuration reference §13. Registers services and loads extension assemblies. | Core (its own layer merge: `Microsoft.Extensions.Configuration` merges lists by index, cannot remove a value with `null`, and keeps no file positions) | By any host application |
 | `Sleepyshark.Officina.Team` | Capabilities | Team pattern, lead role support, task board, helper agents; `tasks.*` and `team.*` tools | Core | `team` or `taskBoard` is on |
 | `Sleepyshark.Officina.Workspace` | Capabilities | Git-backed workspace: baseline, working copies, integration queue, edit safety; `workspace.*` tools | Core; the git CLI at run time | `workspace` is on |
 | `Sleepyshark.Officina.Sandbox` | Capabilities | Linux sandbox (bubblewrap, cgroups v2) and Windows sandbox (AppContainer, Job Objects); filtering network proxy; `sandbox.*` tools | Core | `sandbox` is on |
