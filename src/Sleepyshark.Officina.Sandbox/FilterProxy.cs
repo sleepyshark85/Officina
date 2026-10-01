@@ -151,7 +151,6 @@ internal sealed class FilterProxy : IAsyncDisposable
 
             var upload = PipeAsync(client, server);
             await PipeAsync(server, client).ConfigureAwait(false);
-            report($"[debug download done {DateTime.Now:HH:mm:ss.fff}]");
 
             // A named pipe cannot be half-closed, so for a pipe the server's end is the connection's end.
             if (client is NetworkStream)
@@ -162,7 +161,6 @@ internal sealed class FilterProxy : IAsyncDisposable
         catch (Exception exception) when (exception is IOException or SocketException or UriFormatException or OperationCanceledException)
         {
             // The connection ends; the command sees it fail.
-            report($"[debug {exception.GetType().Name} {DateTime.Now:HH:mm:ss.fff}]");
         }
         finally
         {
@@ -171,8 +169,6 @@ internal sealed class FilterProxy : IAsyncDisposable
             {
                 pipe.Disconnect();
             }
-
-            report($"[debug finally {DateTime.Now:HH:mm:ss.fff}]");
         }
     }
 

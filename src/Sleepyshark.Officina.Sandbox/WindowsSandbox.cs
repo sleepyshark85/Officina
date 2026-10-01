@@ -23,7 +23,8 @@ namespace Sleepyshark.Officina.Sandbox;
 public sealed class WindowsSandbox : ISandbox
 {
     // Listens on a free loopback port, says which, and carries each connection to the proxy's pipe. When either direction
-    // of a connection ends, both ends are closed, so the client sees the server's close and the proxy the client's.
+    // of a connection ends, both ends are closed, so the client sees the server's close and the proxy the client's. It
+    // uses .NET only: cmdlets do not load in the container, and looking one up there takes about 40 seconds.
     private const string Forwarder = """
         $l = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback, 0); $l.Start(); [Console]::WriteLine($l.LocalEndpoint.Port)
         $open = [Collections.ArrayList]::new()
@@ -34,7 +35,7 @@ public sealed class WindowsSandbox : ISandbox
                 $null = $open.Add(@($c, $p, $s.CopyToAsync($p), $p.CopyToAsync($s)))
             }
             foreach ($o in @($open)) { if ($o[2].IsCompleted -or $o[3].IsCompleted) { $o[0].Close(); $o[1].Dispose(); $open.Remove($o) } }
-            Start-Sleep -Milliseconds 20
+            [Threading.Thread]::Sleep(20)
         }
         """;
 

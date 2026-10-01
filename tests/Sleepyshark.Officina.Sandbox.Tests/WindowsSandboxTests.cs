@@ -94,9 +94,8 @@ public sealed class WindowsSandboxTests : IDisposable
         using var server = new Server();
 
         var (output, _) = await real.RunAsync(
-            $"curl -s -w \" T1=%{{time_total}} first=%{{time_starttransfer}}\" http://127.0.0.1:{server.Port}/ & curl -s -w \" T1b=%{{time_total}} first=%{{time_starttransfer}}\" http://127.0.0.1:{server.Port}/ & curl -s -i http://example.com/ & curl -s -m 5 --noproxy * http://127.0.0.1:{server.Port}/",
+            $"curl -s http://127.0.0.1:{server.Port}/ & curl -s -i http://example.com/ & curl -s -m 5 --noproxy * http://127.0.0.1:{server.Port}/",
             ["127.0.0.1"]);
-        Assert.Fail(output);
 
         Assert.Single(output.Split('\n'), line => line == Server.Greeting);
         Assert.Contains("403 Forbidden", output, StringComparison.Ordinal);
