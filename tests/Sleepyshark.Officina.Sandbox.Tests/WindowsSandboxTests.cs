@@ -47,12 +47,11 @@ public sealed class WindowsSandboxTests : IDisposable
         var configuration = Path.Combine(real.WorkingCopy, "sof.json");
         await File.WriteAllTextAsync(configuration, "{}", Ct);
 
-        var (output, _) = await real.RunAsync("type .env & type .git\\config & echo {\"x\": 1}> sof.json & del /f sof.json", hidden: [git, env], readOnly: [configuration]);
+        var (output, _) = await real.RunAsync("type .env & type .git\\config & echo {\"x\": 1}> sof.json & del /f sof.json & type sof.json", hidden: [git, env], readOnly: [configuration]);
 
-        var entries = string.Join("; ", new FileInfo(env).GetAccessControl().GetAccessRules(true, true, typeof(System.Security.Principal.SecurityIdentifier))
-            .Cast<System.Security.AccessControl.FileSystemAccessRule>().Select(rule => $"{rule.IdentityReference} {rule.AccessControlType} {rule.FileSystemRights} {rule.IsInherited}"));
-        Assert.True(!output.Contains("s3cret", StringComparison.Ordinal), $"{output} | {entries}");
+        Assert.DoesNotContain("s3cret", output, StringComparison.Ordinal);
         Assert.DoesNotContain("git-secret", output, StringComparison.Ordinal);
+        Assert.Contains("{}", output, StringComparison.Ordinal);
         Assert.Equal("{}", await File.ReadAllTextAsync(configuration, Ct));
     }
 

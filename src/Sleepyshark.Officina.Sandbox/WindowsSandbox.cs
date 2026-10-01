@@ -14,8 +14,8 @@ namespace Sleepyshark.Officina.Sandbox;
 /// <summary>
 /// The Windows sandbox (DESIGN.md §7, S00a). Each working copy has its own AppContainer with no capabilities, so its
 /// commands have no network and can open only what is granted to the container: the working copy, a home folder of its
-/// own, and the toolchains, besides what Windows grants every app (such as Program Files). Protected paths carry entries
-/// that deny the container. Each command runs in a job object that sets its limits and ends everything it started.
+/// own, and the toolchains, besides what Windows grants every app (such as Program Files). Protected paths stop inheriting
+/// the working copy's grant. Each command runs in a job object that sets its limits and ends everything it started.
 /// Allowed traffic goes through the filtering proxy on a named pipe only the container may open, which a small
 /// PowerShell forwarder inside the sandbox offers on a loopback port. No admin rights are needed.
 /// </summary>
@@ -64,21 +64,21 @@ public sealed class WindowsSandbox : ISandbox
 
         // Modify, not full control, so the container can neither change the entries below nor delete a protected file
         // through its folder.
-        Allow(new DirectoryInfo(command.Directory), container, FileSystemRights.Modify);
-        Allow(home, container, FileSystemRights.Modify);
+        Grant(new DirectoryInfo(command.Directory), container, FileSystemRights.Modify);
+        Grant(home, container, FileSystemRights.Modify);
         foreach (var toolchain in command.Toolchains.Where(Directory.Exists))
         {
-            Allow(new DirectoryInfo(toolchain), container, FileSystemRights.ReadAndExecute);
+            Grant(new DirectoryInfo(toolchain), container, FileSystemRights.ReadAndExecute);
         }
 
         foreach (var path in command.HiddenPaths)
         {
-            Deny(path, container, FileSystemRights.FullControl);
+            Protect(path, container, null);
         }
 
         foreach (var path in command.ReadOnlyPaths)
         {
-            Deny(path, container, FileSystemRights.Write | FileSystemRights.Delete | FileSystemRights.DeleteSubdirectoriesAndFiles);
+            Protect(path, container, FileSystemRights.ReadAndExecute);
         }
 
         var environment = new SortedDictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -154,42 +154,63 @@ public sealed class WindowsSandbox : ISandbox
     // HRESULT_FROM_WIN32(ERROR_ALREADY_EXISTS).
     private const int AlreadyExists = unchecked((int)0x800700B7);
 
-    /// <summary>Grants the container rights over a folder and everything in it, once.</summary>
-    private static void Allow(DirectoryInfo folder, SecurityIdentifier container, FileSystemRights rights) =>
-        Add(folder, new FileSystemAccessRule(container, rights, InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit, PropagationFlags.None, AccessControlType.Allow));
+    // Setting an entry rewrites the entries of everything below, so each is set only once.
+    private const InheritanceFlags Everything = InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit;
 
-    /// <summary>Denies the container rights over a file, or a folder and everything in it, once. A deny entry wins over the grants.</summary>
-    private static void Deny(string path, SecurityIdentifier container, FileSystemRights rights)
+    /// <summary>Grants the container rights over a folder and everything in it.</summary>
+    private static void Grant(DirectoryInfo folder, SecurityIdentifier container, FileSystemRights rights)
     {
-        if (Directory.Exists(path))
+        var security = folder.GetAccessControl();
+        if (!security.GetAccessRules(true, false, typeof(SecurityIdentifier)).Cast<FileSystemAccessRule>().Any(rule => rule.IdentityReference == container))
         {
-            Add(new DirectoryInfo(path), new FileSystemAccessRule(container, rights, InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit, PropagationFlags.None, AccessControlType.Deny));
-        }
-        else
-        {
-            Add(new FileInfo(path), new FileSystemAccessRule(container, rights, AccessControlType.Deny));
+            security.AddAccessRule(new FileSystemAccessRule(container, rights, Everything, PropagationFlags.None, AccessControlType.Allow));
+            folder.SetAccessControl(security);
         }
     }
 
-    // Setting an entry rewrites the entries of everything below, so it is done only when missing.
-    private static void Add(FileSystemInfo item, FileSystemAccessRule rule)
+    /// <summary>
+    /// Takes a protected path out of the working copy's grant: it stops inheriting, and the container keeps only the
+    /// rights given, if any. An AppContainer opens only what is granted to it, so a hidden path cannot be opened at all;
+    /// an entry that denies the container would not stop it reading.
+    /// </summary>
+    private static void Protect(string path, SecurityIdentifier container, FileSystemRights? rights)
     {
-        FileSystemSecurity security = item is DirectoryInfo folder ? folder.GetAccessControl() : ((FileInfo)item).GetAccessControl();
-        if (security.GetAccessRules(true, false, typeof(SecurityIdentifier)).Cast<FileSystemAccessRule>()
-            .Any(existing => existing.IdentityReference == rule.IdentityReference && existing.AccessControlType == rule.AccessControlType))
+        if (Directory.Exists(path))
         {
-            return;
-        }
-
-        security.AddAccessRule(rule);
-        if (item is DirectoryInfo directory)
-        {
-            directory.SetAccessControl((DirectorySecurity)security);
+            var folder = new DirectoryInfo(path);
+            var security = folder.GetAccessControl();
+            if (Withdraw(security, container, rights is null ? null : new(container, rights.Value, Everything, PropagationFlags.None, AccessControlType.Allow)))
+            {
+                folder.SetAccessControl(security);
+            }
         }
         else
         {
-            ((FileInfo)item).SetAccessControl((FileSecurity)security);
+            var file = new FileInfo(path);
+            var security = file.GetAccessControl();
+            if (Withdraw(security, container, rights is null ? null : new(container, rights.Value, AccessControlType.Allow)))
+            {
+                file.SetAccessControl(security);
+            }
         }
+    }
+
+    /// <summary>Stops inheriting and keeps only the container's given rule; false if that was done before.</summary>
+    private static bool Withdraw(FileSystemSecurity security, SecurityIdentifier container, FileSystemAccessRule? kept)
+    {
+        if (security.AreAccessRulesProtected)
+        {
+            return false;
+        }
+
+        security.SetAccessRuleProtection(isProtected: true, preserveInheritance: true);
+        security.PurgeAccessRules(container);
+        if (kept is not null)
+        {
+            security.AddAccessRule(kept);
+        }
+
+        return true;
     }
 
     private static async Task<int> ExitedAsync(Process process)
