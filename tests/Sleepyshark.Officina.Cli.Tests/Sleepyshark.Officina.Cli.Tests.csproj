@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Sleepyshark.Officina.Cli\Sleepyshark.Officina.Cli.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Validates the documentation's examples against the generated schema (CFG-15). Tests only. -->
+    <PackageReference Include="JsonSchema.Net" />
+  </ItemGroup>
+
+</Project>
