@@ -17,14 +17,20 @@ internal abstract class McpConnection : IAsyncDisposable
     private int lastId;
 
     /// <summary>Agrees on the protocol with the server; it accepts other requests only after this.</summary>
+    /// <exception cref="InvalidOperationException">The server answers with a protocol version this client does not speak.</exception>
     public async Task InitializeAsync(CancellationToken ct)
     {
-        await RequestAsync("initialize", new JsonObject
+        var result = await RequestAsync("initialize", new JsonObject
         {
             ["protocolVersion"] = ProtocolVersion,
             ["capabilities"] = new JsonObject(),
             ["clientInfo"] = new JsonObject { ["name"] = "officina", ["version"] = CoreVersion.Value },
         }, ct).ConfigureAwait(false);
+        if (result.GetProperty("protocolVersion").GetString() is var version && version != ProtocolVersion)
+        {
+            throw new InvalidOperationException($"The tool server speaks protocol {version}; this client speaks {ProtocolVersion}.");
+        }
+
         await SendAsync(new JsonObject { ["jsonrpc"] = "2.0", ["method"] = "notifications/initialized" }, null, ct).ConfigureAwait(false);
     }
 

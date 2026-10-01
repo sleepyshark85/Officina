@@ -7,7 +7,8 @@ using System.Text.Json.Nodes;
 // The reference MCP server of the tests (DESIGN.md §11). With no arguments it serves over standard input and output;
 // with "http" it serves Streamable HTTP on a free local port, and prints its URL first. It accepts only the credential
 // "s3cret": in MCP_TEST_TOKEN for stdio, as a bearer token for HTTP. It lists its tools one per page, in no particular
-// order, and sends a notification before each tool result, which clients must skip.
+// order, and sends a notification before each tool result, which clients must skip. It agrees to the protocol version
+// the client asks for, unless MCP_TEST_PROTOCOL names another.
 const string Credential = "s3cret";
 const string Notification = """{ "jsonrpc": "2.0", "method": "notifications/message", "params": { "level": "info", "data": "working" } }""";
 (string Name, string Description)[] tools = [("upper", "Upper-cases text."), ("echo", "Repeats text."), ("fail", "Always fails.")];
@@ -93,7 +94,7 @@ JsonObject? Handle(JsonObject request, bool authorized)
     {
         "initialize" when authorized => new JsonObject
         {
-            ["protocolVersion"] = (string?)parameters!["protocolVersion"],
+            ["protocolVersion"] = Environment.GetEnvironmentVariable("MCP_TEST_PROTOCOL") ?? (string?)parameters!["protocolVersion"],
             ["capabilities"] = new JsonObject { ["tools"] = new JsonObject() },
             ["serverInfo"] = new JsonObject { ["name"] = "reference", ["version"] = "1.0.0" },
         },

@@ -50,6 +50,27 @@ public class ToolServerTests
     }
 
     [Fact]
+    public async Task A_server_that_answers_with_another_protocol_version_is_refused()
+    {
+        await using var server = await ReferenceServer.StartAsync(ToolServerTransport.Stdio);
+        var options = server.With() with
+        {
+            ToolServers = new Dictionary<string, ToolServerOptions>
+            {
+                [ReferenceServer.Name] = server.Options with
+                {
+                    Env = new Dictionary<string, SecretReference>(server.Options.Env) { ["MCP_TEST_PROTOCOL"] = new("PROTOCOL") },
+                },
+            },
+        };
+        var secrets = new InMemorySecretSource(new Dictionary<string, string> { ["TOKEN"] = "s3cret", ["PROTOCOL"] = "2025-03-26" });
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => ToolServers.ConnectAsync(options, secrets, Ct));
+
+        Assert.Equal("The tool server speaks protocol 2025-03-26; this client speaks 2025-06-18.", error.Message);
+    }
+
+    [Fact]
     public async Task A_servers_tools_are_writes_unless_configured_as_reads_and_must_exist_on_the_server()
     {
         await using var server = await ReferenceServer.StartAsync(ToolServerTransport.Stdio);

@@ -39,7 +39,6 @@ internal sealed class StdioConnection : McpConnection
         var process = Process.Start(start) ?? throw new InvalidOperationException($"The tool server {command} did not start.");
 
         // The server's log is not read, but it is drained, so a server that logs a lot never blocks.
-        process.ErrorDataReceived += (_, _) => { };
         process.BeginErrorReadLine();
         return new StdioConnection(process);
     }
