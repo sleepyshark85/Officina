@@ -1,6 +1,6 @@
 # S00b — Claude SDK spike
 
-**Milestone:** M0 · **Size:** S · **Depends on:** none · **Issue:** [#2](https://github.com/sleepyshark85/Officina/issues/2) · **Status:** todo
+**Milestone:** M0 · **Size:** S · **Depends on:** none · **Issue:** [#2](https://github.com/sleepyshark85/Officina/issues/2) · **Status:** done
 
 ## Goal
 

@@ -1,6 +1,6 @@
 # S01 — Walking skeleton
 
-**Milestone:** M1 · **Size:** M · **Depends on:** none · **Issue:** [#3](https://github.com/sleepyshark85/Officina/issues/3) · **Status:** todo
+**Milestone:** M1 · **Size:** M · **Depends on:** none · **Issue:** [#3](https://github.com/sleepyshark85/Officina/issues/3) · **Status:** done
 
 ## Goal
 
@@ -10,7 +10,7 @@ Run the thinnest end-to-end path, configuration → turn → scripted model → 
 
 - **Out:** Configuration files (S02) and tools (S03).
 
-**Closes:** MDL-01, MSG-01, MSG-03, CFG-03, CAP-04, TEST-01, TEST-32
+**Closes:** MDL-01, MSG-01, MSG-03, CFG-03, CAP-04, TEST-32
 
 ## Acceptance criteria
 
@@ -21,4 +21,4 @@ Run the thinnest end-to-end path, configuration → turn → scripted model → 
 
 ## Notes
 
-The test kit starts here and grows in every slice.
+The test kit starts here and grows in every slice. TEST-01 closes in S15, when its last part (the fake sandbox) exists.

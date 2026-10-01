@@ -5,3 +5,4 @@ obj/
 TestResults/
 *.user
 .vs/
+.claude/
