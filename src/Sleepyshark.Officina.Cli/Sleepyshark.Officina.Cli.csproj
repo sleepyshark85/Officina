@@ -7,6 +7,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="System.CommandLine" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\Sleepyshark.Officina.Core\Sleepyshark.Officina.Core.csproj" />
     <ProjectReference Include="..\Sleepyshark.Officina.Hosting\Sleepyshark.Officina.Hosting.csproj" />
     <ProjectReference Include="..\Sleepyshark.Officina.Team\Sleepyshark.Officina.Team.csproj" />

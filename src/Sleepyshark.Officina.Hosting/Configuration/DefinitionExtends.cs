@@ -8,8 +8,10 @@ namespace Sleepyshark.Officina.Hosting.Configuration;
 /// Resolves <c>extends</c> between agent definitions (CFG-05): the base definition is the lower layer, under the same
 /// merge rules, and inherited values say where they came from. Missing bases and cycles are merge errors.
 /// </summary>
-internal sealed class DefinitionExtends(LayerMerger merger, OriginMap origins, ConfigurationErrors errors)
+internal sealed class DefinitionExtends(LayerMerger merger, OriginMap origins, LoadErrors errors)
 {
+    private const string Fix = "Name another agent definition, without cycles.";
+
     public void Resolve(JsonObject root)
     {
         if (root["agents"] is not JsonObject agents)
@@ -33,33 +35,55 @@ internal sealed class DefinitionExtends(LayerMerger merger, OriginMap origins, C
         }
 
         var path = $"agents.{name}.extends";
-        var baseName = extends.GetValueKind() == JsonValueKind.String ? extends.GetValue<string>() : null;
+        var at = origins.LocationOf(path);
         definition.Remove("extends");
         origins.Take(path);
-        if (baseName is null || baseName == name || visiting.Contains(baseName) || agents[baseName] is not JsonObject)
+
+        if (extends.GetValueKind() != JsonValueKind.String)
         {
-            var problem = baseName is null ? "is not the name of an agent definition."
-                : agents[baseName] is JsonObject ? $"agent definitions {string.Join(" → ", visiting.SkipWhile(item => item != baseName).Append(name).Append(baseName))} extend each other in a cycle."
-                : $"agent definition \"{baseName}\" does not exist.";
-            errors.Add(ValidationPhase.Merge, path, problem, "Name another agent definition, without cycles.", origins.LocationOf(path));
-            errors.Reject($"agents.{name}");
+            Reject(name, path, "is not the name of an agent definition.", at);
+            return;
+        }
+
+        var baseName = extends.GetValue<string>();
+        if (agents[baseName] is not JsonObject)
+        {
+            Reject(name, path, $"agent definition \"{baseName}\" does not exist.", at);
+            return;
+        }
+
+        if (baseName == name || visiting.Contains(baseName))
+        {
+            var cycle = string.Join(" → ", visiting.SkipWhile(item => item != baseName).Append(name).Append(baseName));
+            Reject(name, path, $"agent definitions {cycle} extend each other in a cycle.", at);
             return;
         }
 
         visiting.Add(name);
         Resolve(agents, baseName, resolved, visiting);
         visiting.Remove(name);
+        Inherit(agents, name, baseName, definition);
+    }
 
-        // The base's values come first, marked as inherited; the definition's own values merge on top.
+    /// <summary>The base's values come first, marked as inherited; the definition's own values merge on top.</summary>
+    private void Inherit(JsonObject agents, string name, string baseName, JsonObject definition)
+    {
         var own = origins.Take($"agents.{name}");
-        foreach (var (basePath, origin) in origins.Take($"agents.{baseName}"))
+        var basePrefix = $"agents.{baseName}";
+        foreach (var (basePath, origin) in origins.Take(basePrefix))
         {
             origins.Set(basePath, origin);
-            origins.Set($"agents.{name}{basePath[$"agents.{baseName}".Length..]}", origin with { Via = origin.Via ?? $"agents.{baseName}" });
+            origins.Set($"agents.{name}{basePath[basePrefix.Length..]}", origin with { Via = origin.Via ?? basePrefix });
         }
 
         var combined = agents[baseName]!.DeepClone().AsObject();
-        merger.Merge(combined, definition, null, $"agents.{name}", ownPath => own.GetValueOrDefault(ownPath) ?? ConfigOrigin.CodeDefault);
+        merger.Merge(combined, definition, null, $"agents.{name}", ownPath => own.GetValueOrDefault(ownPath) ?? ConfigurationOrigin.CodeDefault);
         agents[name] = combined;
+    }
+
+    private void Reject(string name, string path, string problem, ConfigurationOrigin? at)
+    {
+        errors.Add(ValidationPhase.Merge, path, problem, Fix, at);
+        errors.Reject($"agents.{name}");
     }
 }

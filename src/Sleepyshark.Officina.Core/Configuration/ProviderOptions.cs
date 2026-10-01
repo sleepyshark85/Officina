@@ -9,6 +9,6 @@ public sealed record ProviderOptions
     /// <summary>The default <c>claude</c> provider, which reads the secret <c>ANTHROPIC_API_KEY</c>.</summary>
     public static ProviderOptions Claude { get; } = new() { ApiKey = new SecretReference("ANTHROPIC_API_KEY") };
 
-    [Setting("The provider's credential, as the name of a secret. A literal key is rejected (CFG-09).", Example = """{ "secret": "ANTHROPIC_API_KEY" }""")]
+    [Setting("The provider's credential, as the name of a secret, which is read when it is used.", Example = """{ "secret": "ANTHROPIC_API_KEY" }""")]
     public SecretReference? ApiKey { get; init; }
 }

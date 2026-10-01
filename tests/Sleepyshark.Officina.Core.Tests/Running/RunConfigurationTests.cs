@@ -11,7 +11,10 @@ public class RunConfigurationTests
     private static readonly OfficinaOptions Options = new()
     {
         Project = new ProjectOptions { Name = "invoice-api" },
-        Agents = new Dictionary<string, AgentDefinition> { ["extractor"] = new() { Instructions = "Extract the total of {{project.name}} invoices." } },
+        Agents = new Dictionary<string, AgentDefinition>
+        {
+            ["extractor"] = new() { Instructions = "Extract the total of {{project.name}} invoices." },
+        },
     };
 
     [Fact]
@@ -27,7 +30,7 @@ public class RunConfigurationTests
         var runs = kit.Runs.Runs;
         Assert.Equal(2, runs.Count);
         Assert.NotEqual(runs[0].RunId, runs[1].RunId);
-        Assert.Equal(("extractor", CoreVersion.Value, OfficinaJson.Write(Options)), (runs[0].Agent, runs[0].CoreVersion, runs[0].Configuration));
+        Assert.Equal(("extractor", CoreVersion.Value, ConfigurationJson.Write(Options)), (runs[0].Agent, runs[0].CoreVersion, runs[0].Configuration));
         Assert.Contains("Extract the total of {{project.name}} invoices.", runs[0].Configuration, StringComparison.Ordinal);
         Assert.Contains("\"cost\": 25", runs[0].Configuration, StringComparison.Ordinal);
     }
@@ -46,6 +49,27 @@ public class RunConfigurationTests
     }
 
     [Fact]
+    public async Task An_agent_run_directly_cannot_take_the_name_of_a_configured_agent()
+    {
+        var configured = new Dictionary<string, AgentDefinition> { [AgentRunner.InlineAgentName] = new() { Instructions = "Configured." } };
+        var kit = new TestKit(new OfficinaOptions { Agents = configured });
+
+        var direct = new AgentDefinition { Instructions = "Direct." };
+        var error = await Assert.ThrowsAsync<ConfigurationException>(() => kit.RunAsync(direct, "hi", TestContext.Current.CancellationToken));
+
+        Assert.Equal("agents.agent", Assert.Single(error.Errors).Path);
+    }
+
+    [Fact]
+    public async Task Running_an_unknown_agent_names_the_agents_that_exist()
+    {
+        var kit = new TestKit(Options);
+        var error = await Assert.ThrowsAsync<ConfigurationException>(() => kit.RunAsync("nobody", "hi", TestContext.Current.CancellationToken));
+
+        Assert.Equal(("agents.nobody", "Use one of: extractor."), (Assert.Single(error.Errors).Path, error.Errors[0].Fix));
+    }
+
+    [Fact]
     public void Nothing_runs_on_a_configuration_with_errors_and_every_error_is_named()
     {
         var invalid = Options with
@@ -57,9 +81,10 @@ public class RunConfigurationTests
             },
         };
 
-        var error = Assert.Throws<ConfigurationException>(() => new AgentRunner(invalid, new Dictionary<string, IModelProvider>(), new InMemoryRunStore()));
+        var providers = new Dictionary<string, IModelProvider>();
+        var error = Assert.Throws<ConfigurationException>(() => new AgentRunner(invalid, providers, new InMemoryRunStore()));
 
         Assert.Equal(["agents.a.instructions", "agents.a.model", "agents.b.instructions"], error.Errors.Select(item => item.Path));
-        Assert.Contains("agents.b.instructions: placeholder {{now:date}} is not allowed in the stable prefix.", error.Message, StringComparison.Ordinal);
+        Assert.Contains("agents.b.instructions: placeholder {{now:date}} is not allowed in instructions.", error.Message, StringComparison.Ordinal);
     }
 }

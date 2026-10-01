@@ -1,20 +1,27 @@
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Sleepyshark.Officina.Core.Configuration;
 
 namespace Sleepyshark.Officina.Hosting.Configuration;
 
-/// <summary>One effective setting: its path, its value as JSON, and where it came from (CFG-04).</summary>
-public sealed record EffectiveSetting(string Path, string Value, ConfigOrigin Origin);
-
 /// <summary>A loaded configuration: the bound Options, every validation error, and the origin of every value.</summary>
 public sealed class LoadedConfiguration
 {
-    private static readonly JsonSerializerOptions Compact = new() { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
+    private static readonly JsonSerializerOptions Compact = new() { Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
 
-    private readonly IReadOnlyDictionary<string, ConfigOrigin> origins;
+    /// <summary>The top-level sections that are maps of named entries, such as <c>agents</c>.</summary>
+    private static readonly string[] NamedSections = [.. typeof(OfficinaOptions).GetProperties()
+        .Where(property => property.PropertyType.IsGenericType && property.PropertyType.GetGenericTypeDefinition() == typeof(IReadOnlyDictionary<,>))
+        .Select(property => JsonNamingPolicy.CamelCase.ConvertName(property.Name))];
 
-    internal LoadedConfiguration(OfficinaOptions options, IReadOnlyList<ConfigurationError> errors, IReadOnlyDictionary<string, ConfigOrigin> origins, IReadOnlyList<string> layers)
+    private readonly IReadOnlyDictionary<string, ConfigurationOrigin> origins;
+
+    internal LoadedConfiguration(
+        OfficinaOptions options,
+        IReadOnlyList<ConfigurationError> errors,
+        IReadOnlyDictionary<string, ConfigurationOrigin> origins,
+        IReadOnlyList<string> layers)
     {
         Options = options;
         Errors = errors;
@@ -36,17 +43,17 @@ public sealed class LoadedConfiguration
     public OfficinaOptions ValidOptions() => IsValid ? Options : throw new ConfigurationException(Errors);
 
     /// <summary>Where a value came from; a value no layer set is a code default.</summary>
-    public ConfigOrigin OriginOf(string path) => origins.GetValueOrDefault(path) ?? ConfigOrigin.CodeDefault;
+    public ConfigurationOrigin OriginOf(string path) => origins.GetValueOrDefault(path) ?? ConfigurationOrigin.CodeDefault;
 
     /// <summary>
-    /// Every effective setting with its origin; for an agent, the ones that apply to it: the project, its
-    /// definition, its model profile and provider, and the run defaults.
+    /// Every effective setting with its origin. For an agent, the ones that apply to it: everything outside the named
+    /// sections, and of those only the agent itself, its model profile and that profile's provider.
     /// </summary>
-    /// <exception cref="ArgumentException">There is no such agent.</exception>
+    /// <exception cref="ConfigurationException">There is no such agent.</exception>
     public IReadOnlyList<EffectiveSetting> Settings(string? agent = null)
     {
         var settings = new List<EffectiveSetting>();
-        Flatten(JsonSerializer.SerializeToNode(Options, OfficinaJson.Options)!, "", settings);
+        Flatten(JsonSerializer.SerializeToNode(Options, ConfigurationJson.Options)!, "", settings);
         if (agent is null)
         {
             return settings;
@@ -54,12 +61,14 @@ public sealed class LoadedConfiguration
 
         if (!Options.Agents.TryGetValue(agent, out var definition))
         {
-            throw new ArgumentException($"There is no agent \"{agent}\". Agents: {(Options.Agents.Count == 0 ? "none" : string.Join(", ", Options.Agents.Keys))}.", nameof(agent));
+            throw ConfigurationException.UnknownAgent(agent, Options.Agents.Keys);
         }
 
         var provider = Options.Models.TryGetValue(definition.Model, out var profile) ? profile.Provider : "";
-        string[] scope = ["project", $"agents.{agent}", $"models.{definition.Model}", $"providers.{provider}", "run"];
-        return [.. settings.Where(setting => scope.Any(prefix => setting.Path == prefix || setting.Path.StartsWith(prefix + ".", StringComparison.Ordinal)))];
+        string[] used = [$"agents.{agent}", $"models.{definition.Model}", $"providers.{provider}"];
+        bool Applies(string path) =>
+            !NamedSections.Any(section => SettingPaths.IsWithin(path, section)) || used.Any(entry => SettingPaths.IsWithin(path, entry));
+        return [.. settings.Where(setting => Applies(setting.Path))];
     }
 
     private void Flatten(JsonNode node, string path, List<EffectiveSetting> settings)

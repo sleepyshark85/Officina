@@ -7,6 +7,11 @@
   -->
 
   <ItemGroup>
+    <!-- Checks configuration files against the schema generated from the Options classes. -->
+    <PackageReference Include="JsonSchema.Net" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\Sleepyshark.Officina.Core\Sleepyshark.Officina.Core.csproj" />
   </ItemGroup>
 

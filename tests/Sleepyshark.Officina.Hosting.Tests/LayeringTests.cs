@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Sleepyshark.Officina.Core;
 using Sleepyshark.Officina.Core.Configuration;
 using Sleepyshark.Officina.Hosting.Configuration;
@@ -37,12 +38,19 @@ public sealed class LayeringTests : IDisposable
     {
         folder.Write("sof.json", """{ "run": { "budget": { "cost": 10 } } }""");
 
-        var configuration = folder.Load(variables: new() { ["SOF__run__budget__cost"] = "30", ["SOF__run__permissionMode"] = "auto", ["SOF__models__default__fallbacks"] = """["fast"]""", ["SOF__models__fast__model"] = "claude-haiku-4-5" });
+        var configuration = folder.Load(variables: new()
+        {
+            ["SOF__run__budget__cost"] = "30",
+            ["SOF__run__permissionMode"] = "auto",
+            ["SOF__models__default__settings"] = """{ "stop": ["END"] }""",
+            ["SOF__models__fast__model"] = "claude-haiku-4-5",
+        });
 
         Assert.True(configuration.IsValid, string.Join('\n', configuration.Errors));
         Assert.Equal(30m, configuration.Options.Run.Budget.Cost);
         Assert.Equal(PermissionMode.Auto, configuration.Options.Run.PermissionMode);
-        Assert.Equal(["fast"], configuration.Options.Models["default"].Fallbacks);
+        Assert.Equal("""["END"]""", JsonSerializer.Serialize(configuration.Options.Models["default"].Settings["stop"]));
+        Assert.Equal("claude-haiku-4-5", configuration.Options.Models["fast"].Model);
         Assert.Equal("environment variable SOF__run__budget__cost", configuration.OriginOf("run.budget.cost").ToString());
     }
 
@@ -73,13 +81,13 @@ public sealed class LayeringTests : IDisposable
     [Fact]
     public void Lists_are_replaced_as_a_whole()
     {
-        folder.Write("sof.json", """{ "models": { "a": { "fallbacks": ["default", "b"] }, "b": {} } }""")
-            .Write("sof.ci.json", """{ "models": { "a": { "fallbacks": ["b"] } } }""");
+        folder.Write("sof.json", """{ "models": { "a": { "settings": { "stop": ["x", "y"] } } } }""")
+            .Write("sof.ci.json", """{ "models": { "a": { "settings": { "stop": ["z"] } } } }""");
 
         var configuration = folder.Load("ci");
 
-        Assert.Equal(["b"], configuration.Options.Models["a"].Fallbacks);
-        Assert.Equal("environment file sof.ci.json:1:35", configuration.OriginOf("models.a.fallbacks").ToString());
+        Assert.Equal("""["z"]""", JsonSerializer.Serialize(configuration.Options.Models["a"].Settings["stop"]));
+        Assert.Equal("environment file sof.ci.json:1:44", configuration.OriginOf("models.a.settings.stop").ToString());
     }
 
     [Fact]
@@ -111,7 +119,9 @@ public sealed class LayeringTests : IDisposable
         Assert.Equal("two", configuration.Options.Project.Name);
         Assert.Equal(new Dictionary<string, string> { ["a"] = "1", ["b"] = "2" }, configuration.Options.Project.Values);
         Assert.Equal("extended file base/two.json:1:49", configuration.OriginOf("project.name").ToString());
-        Assert.Equal(["extended file base/one.json", "extended file base/one.json", "extended file base/two.json", "application file sof.json"], configuration.Layers);
+        Assert.Equal(
+            ["extended file base/one.json", "extended file base/one.json", "extended file base/two.json", "application file sof.json"],
+            configuration.Layers);
     }
 
     [Fact]
@@ -133,7 +143,9 @@ public sealed class LayeringTests : IDisposable
         Assert.True(configuration.IsValid, string.Join('\n', configuration.Errors));
         Assert.Equal(new AgentDefinition { Instructions = "Implement the task.", Model = "strong" }, configuration.Options.Agents["junior"]);
         Assert.Equal("Writes code.", configuration.Options.Agents["developer"].Description);
-        Assert.Equal("application file sof.json:5:55, through extends from agents.developer", configuration.OriginOf("agents.junior.instructions").ToString());
+        Assert.Equal(
+            "application file sof.json:5:55, through extends from agents.developer",
+            configuration.OriginOf("agents.junior.instructions").ToString());
         Assert.Equal("application file sof.json:4:86, through extends from agents.base", configuration.OriginOf("agents.junior.model").ToString());
     }
 
@@ -179,7 +191,7 @@ public sealed class LayeringTests : IDisposable
         folder.Write("sof.json", """
             {
               "project": { "name": "app" },
-              "models": { "strong": { "effort": "high", "fallbacks": ["default"] } },
+              "models": { "strong": { "effort": "high", "toolChoice": "none" } },
               "agents": { "dev": { "instructions": "Implement.", "model": "strong" } },
               "run": { "budget": { "cost": 40, "time": "2h" } }
             }
@@ -188,12 +200,16 @@ public sealed class LayeringTests : IDisposable
         var built = new OfficinaOptions
         {
             Project = new ProjectOptions { Name = "app" },
-            Models = new Dictionary<string, ModelProfile> { ["default"] = new(), ["strong"] = new() { Effort = "high", Fallbacks = ["default"] } },
+            Models = new Dictionary<string, ModelProfile>
+            {
+                ["default"] = new(),
+                ["strong"] = new() { Effort = "high", ToolChoice = ToolChoice.None },
+            },
             Agents = new Dictionary<string, AgentDefinition> { ["dev"] = new() { Instructions = "Implement.", Model = "strong" } },
             Run = new RunDefaults { Budget = new RunBudget { Cost = 40, Time = TimeSpan.FromHours(2) } },
         };
 
-        Assert.Equal(OfficinaJson.Write(built), OfficinaJson.Write(folder.Load().ValidOptions()));
+        Assert.Equal(ConfigurationJson.Write(built), ConfigurationJson.Write(folder.Load().ValidOptions()));
     }
 
     [Fact]
@@ -207,8 +223,9 @@ public sealed class LayeringTests : IDisposable
         Assert.Contains("models.strong.model", paths);
         Assert.Contains("providers.claude.apiKey.secret", paths);
         Assert.Contains("run.budget.cost", paths);
-        Assert.DoesNotContain(paths, path => path.StartsWith("agents.other", StringComparison.Ordinal) || path.StartsWith("models.default", StringComparison.Ordinal));
-        Assert.Throws<ArgumentException>(() => folder.Load().Settings("nobody"));
+        Assert.DoesNotContain(paths, path => path.StartsWith("agents.other", StringComparison.Ordinal));
+        Assert.DoesNotContain(paths, path => path.StartsWith("models.default", StringComparison.Ordinal));
+        Assert.Throws<ConfigurationException>(() => folder.Load().Settings("nobody"));
     }
 
     [Fact]
@@ -217,7 +234,7 @@ public sealed class LayeringTests : IDisposable
         folder.Write("sof.json", """
             {
               "project": { "name": "app", "values": { "test": "dotnet test" } },
-              "models": { "strong": { "effort": "high", "settings": { "temperature": 0.2, "nested": { "a": [1, "b"] } }, "fallbacks": ["default"] } },
+              "models": { "strong": { "effort": "high", "settings": { "temperature": 0.2, "nested": { "a": [1, "b"] } } } },
               "agents": { "dev": { "instructions": "Run {{project.values.test}}.", "model": "strong", "description": "Dev." } },
               "run": { "budget": { "time": "90m" }, "permissionMode": "auto" }
             }
@@ -231,6 +248,6 @@ public sealed class LayeringTests : IDisposable
         var stored = Assert.Single(kit.Runs.Runs).Configuration;
         replay.Write("sof.json", stored);
 
-        Assert.Equal(stored, OfficinaJson.Write(replay.Load().ValidOptions()));
+        Assert.Equal(stored, ConfigurationJson.Write(replay.Load().ValidOptions()));
     }
 }

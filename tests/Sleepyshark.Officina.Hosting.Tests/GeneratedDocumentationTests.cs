@@ -3,7 +3,7 @@ using System.Text.RegularExpressions;
 using Json.Schema;
 using Sleepyshark.Officina.Hosting.Documentation;
 
-namespace Sleepyshark.Officina.Cli.Tests;
+namespace Sleepyshark.Officina.Hosting.Tests;
 
 /// <summary>
 /// The JSON Schema and the settings reference are generated from the Options classes, and the committed copies
@@ -54,13 +54,17 @@ public sealed partial class GeneratedDocumentationTests
         }
 
         var committed = File.Exists(path) ? File.ReadAllText(path).ReplaceLineEndings("\n") : "";
-        Assert.True(committed == generated, $"{relativePath} is out of date with the Options classes. Regenerate it: {UpdateVariable}=1 dotnet test --filter {nameof(GeneratedDocumentationTests)}");
+        var regenerate = $"{UpdateVariable}=1 dotnet test --filter {nameof(GeneratedDocumentationTests)}";
+        Assert.True(committed == generated, $"{relativePath} is out of date with the Options classes. Regenerate it: {regenerate}");
     }
 
     private static void AssertValid(string json)
     {
         var result = Evaluate(json);
-        Assert.True(result.IsValid, $"{json}\n" + string.Join('\n', (result.Details ?? []).Where(detail => detail.Errors is not null).SelectMany(detail => detail.Errors!.Select(error => $"{detail.InstanceLocation}: {error.Value}"))));
+        var problems = (result.Details ?? [])
+            .Where(detail => detail.Errors is not null)
+            .SelectMany(detail => detail.Errors!.Select(error => $"{detail.InstanceLocation}: {error.Value}"));
+        Assert.True(result.IsValid, $"{json}\n" + string.Join('\n', problems));
     }
 
     private static EvaluationResults Evaluate(string json)

@@ -13,7 +13,7 @@ internal static class JsonPositions
     private static readonly JsonReaderOptions ReaderOptions = new() { CommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true };
 
     /// <summary>The positions, or null with a parse error added.</summary>
-    public static Dictionary<string, (int Line, int Column)>? Read(string text, ConfigOrigin file, ConfigurationErrors errors)
+    public static Dictionary<string, (int Line, int Column)>? Read(string text, ConfigurationOrigin file, LoadErrors errors)
     {
         var bytes = Encoding.UTF8.GetBytes(text);
         var lineStarts = new List<int> { 0 };
@@ -67,7 +67,8 @@ internal static class JsonPositions
         }
         catch (JsonException exception)
         {
-            errors.Add(ValidationPhase.Parse, "", "the file is not valid JSON.", "Fix the syntax there. Comments (//, /* */) and trailing commas are allowed.",
+            errors.Add(ValidationPhase.Parse, "", "the file is not valid JSON.",
+                "Fix the syntax there. Comments (//, /* */) and trailing commas are allowed.",
                 file with { Line = (int)(exception.LineNumber ?? 0) + 1, Column = (int)(exception.BytePositionInLine ?? 0) + 1 });
             return null;
         }

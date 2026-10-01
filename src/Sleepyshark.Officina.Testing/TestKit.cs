@@ -4,7 +4,10 @@ using Sleepyshark.Officina.Core.Running;
 
 namespace Sleepyshark.Officina.Testing;
 
-/// <summary>Runs agents offline. The scripted model stands in for every provider of the configuration, so a definition runs unchanged (TEST-01).</summary>
+/// <summary>
+/// Runs agents offline. The scripted model stands in for every provider of the configuration, so a definition runs
+/// unchanged (TEST-01).
+/// </summary>
 public sealed class TestKit
 {
     /// <param name="options">The configuration; the code defaults when omitted.</param>

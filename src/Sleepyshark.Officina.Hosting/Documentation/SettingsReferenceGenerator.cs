@@ -24,12 +24,15 @@ public static class SettingsReferenceGenerator
         var sections = new Queue<(string Title, JsonObject Schema)>([("Top level", schema)]);
         while (sections.TryDequeue(out var section))
         {
-            text.Append(CultureInfo.InvariantCulture, $"\n## {section.Title}\n\n| Setting | Allowed values | Default | Description | Example |\n|---|---|---|---|---|\n");
+            text.Append(CultureInfo.InvariantCulture, $"\n## {section.Title}\n\n");
+            text.Append("| Setting | Allowed values | Default | Description | Example |\n|---|---|---|---|---|\n");
             var prefix = section.Title == "Top level" ? "" : section.Title.Trim('`') + ".";
             foreach (var (name, value) in (JsonObject)section.Schema["properties"]!)
             {
                 var property = (JsonObject)value!;
-                text.Append(CultureInfo.InvariantCulture, $"| `{name}` | {Allowed(property)} | {Code(property["default"])} | {Escape((string?)property["description"] ?? "")} | {Code(property["examples"]?[0])} |\n");
+                var description = Escape((string?)property["description"] ?? "");
+                text.Append(CultureInfo.InvariantCulture,
+                    $"| `{name}` | {Allowed(property)} | {Code(property["default"])} | {description} | {Code(property["examples"]?[0])} |\n");
                 if (property["properties"] is JsonObject)
                 {
                     sections.Enqueue(($"`{prefix}{name}`", property));
@@ -80,7 +83,8 @@ public static class SettingsReferenceGenerator
         return allowed.Length == 0 ? "any JSON value" : allowed;
     }
 
-    private static string Code(JsonNode? value) => value is null ? "" : "`" + value.ToJsonString().Replace("|", "\\|", StringComparison.Ordinal) + "`";
+    private static string Code(JsonNode? value) =>
+        value is null ? "" : "`" + value.ToJsonString().Replace("|", "\\|", StringComparison.Ordinal) + "`";
 
     private static string Escape(string text) => text.Replace("|", "\\|", StringComparison.Ordinal);
 }

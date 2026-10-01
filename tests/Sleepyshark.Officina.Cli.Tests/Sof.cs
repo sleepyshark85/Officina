@@ -17,7 +17,7 @@ internal sealed class Sof : IDisposable
     {
         using var output = new StringWriter();
         using var error = new StringWriter();
-        var exitCode = SofCommandLine.Run(args, new SofConsole(output, error, Directory, Variables));
+        var exitCode = SofCommandLine.Run(args, new SofEnvironment(output, error, Directory, Variables));
         return (exitCode, output.ToString().ReplaceLineEndings("\n"), error.ToString().ReplaceLineEndings("\n"));
     }
 

@@ -2,23 +2,30 @@ using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Schema;
+using System.Text.Json.Serialization.Metadata;
 using Sleepyshark.Officina.Core.Configuration;
 
 namespace Sleepyshark.Officina.Hosting.Documentation;
 
 /// <summary>
-/// Generates the JSON Schema of configuration files from the Options classes with the built-in exporter, adding
-/// the descriptions, examples, defaults and ranges of <see cref="SettingAttribute"/> (CFG-15). Every file is a
-/// layer that may set only some settings, or remove one with <c>null</c>, so the schema requires nothing.
+/// Generates the JSON Schema of configuration files from the Options classes with the built-in exporter, adding the
+/// descriptions, examples, defaults and ranges of <see cref="SettingAttribute"/> (CFG-15). A file is a layer that may
+/// set only some settings, or remove one with <c>null</c>, so the published schema requires nothing; the variant for
+/// checking the merged configuration keeps the required settings.
 /// </summary>
 public static class SchemaGenerator
 {
     public const string SchemaId = "https://raw.githubusercontent.com/sleepyshark85/Officina/main/docs/officina.schema.json";
 
-    public static JsonObject Generate()
+    /// <param name="keepRequired">Whether required settings stay required, for the merged configuration.</param>
+    public static JsonObject Generate(bool keepRequired = false)
     {
-        var exporter = new JsonSchemaExporterOptions { TreatNullObliviousAsNonNullable = true, TransformSchemaNode = Transform };
-        var schema = JsonSchemaExporter.GetJsonSchemaAsNode(OfficinaJson.Options, typeof(OfficinaOptions), exporter).AsObject();
+        var exporter = new JsonSchemaExporterOptions
+        {
+            TreatNullObliviousAsNonNullable = true,
+            TransformSchemaNode = (context, schema) => Transform(context, schema, keepRequired),
+        };
+        var schema = JsonSchemaExporter.GetJsonSchemaAsNode(ConfigurationJson.Options, typeof(OfficinaOptions), exporter).AsObject();
         schema["type"] = "object";
         var root = new JsonObject
         {
@@ -36,13 +43,13 @@ public static class SchemaGenerator
         return root;
     }
 
-    public static string GenerateText() => Generate().ToJsonString(OfficinaJson.Options).ReplaceLineEndings("\n") + "\n";
+    public static string GenerateText() => Generate().ToJsonString(ConfigurationJson.Options).ReplaceLineEndings("\n") + "\n";
 
-    private static JsonNode Transform(JsonSchemaExporterContext context, JsonNode schema)
+    private static JsonNode Transform(JsonSchemaExporterContext context, JsonNode schema, bool keepRequired)
     {
         if (context.TypeInfo.Type == typeof(TimeSpan))
         {
-            schema = new JsonObject { ["type"] = "string", ["pattern"] = "^[0-9]+(\\.[0-9]+)?(ms|s|m|h|d)$" };
+            schema = new JsonObject { ["type"] = "string", ["pattern"] = Duration.Pattern };
         }
 
         if (schema is not JsonObject node)
@@ -50,7 +57,18 @@ public static class SchemaGenerator
             return schema;
         }
 
-        node.Remove("required");
+        if (!keepRequired)
+        {
+            node.Remove("required");
+        }
+
+        // A named entry can be removed with null, like any other value.
+        var isMap = context.TypeInfo.Kind == JsonTypeInfoKind.Dictionary;
+        if (isMap && node["additionalProperties"] is JsonObject entry && entry["type"] is JsonValue only)
+        {
+            entry["type"] = new JsonArray(only.GetValue<string>(), "null");
+        }
+
         if (context.PropertyInfo is null)
         {
             AddFileOnlyKeys(context.TypeInfo.Type, node);
@@ -67,40 +85,41 @@ public static class SchemaGenerator
     {
         var description = setting.Description
             + (setting.Live ? " Live: the owner may change it during a run." : "")
-            + (setting.Invariant is { } invariant ? $" Cannot be removed or unlimited ({invariant})." : "");
+            + (setting.Invariant is null ? "" : " It cannot be removed.");
         node.Insert(0, "description", description);
         node["examples"] = new JsonArray(JsonNode.Parse(setting.Example));
         if (property.DeclaringType!.GetConstructor(Type.EmptyTypes) is { } create && property.GetValue(create.Invoke(null)) is { } value)
         {
-            node["default"] = JsonSerializer.SerializeToNode(value, property.PropertyType, OfficinaJson.Options);
+            node["default"] = JsonSerializer.SerializeToNode(value, property.PropertyType, ConfigurationJson.Options);
         }
 
-        if (!double.IsNaN(setting.Minimum) && node["type"]?.ToJsonString().Contains("string", StringComparison.Ordinal) != true)
+        var types = Types(node);
+        if (!double.IsNaN(setting.Minimum) && (types.Contains("number") || types.Contains("integer")))
         {
             node[setting.ExclusiveMinimum ? "exclusiveMinimum" : "minimum"] = setting.Minimum;
         }
 
-        // In a layer, null removes a value so the code default applies (§13), except where that weakens an invariant.
-        if (setting.Invariant is null)
+        // In a layer, null removes a value so the code default applies (§13), except where that would weaken an invariant.
+        if (setting.Invariant is not null && node["type"] is not null)
         {
-            switch (node["type"])
-            {
-                case JsonValue type:
-                    node["type"] = new JsonArray(type.GetValue<string>(), "null");
-                    break;
-                case JsonArray types when !types.Any(type => type?.GetValue<string>() == "null"):
-                    types.Add("null");
-                    break;
-                case null when node["enum"] is JsonArray choices:
-                    choices.Add(null);
-                    break;
-            }
+            node["type"] = new JsonArray([.. types.Where(type => type != "null").Select(type => (JsonNode)type)]);
         }
-        else if (node["type"] is JsonArray types)
+        else if (node["type"] is not null && !types.Contains("null"))
         {
-            node["type"] = new JsonArray([.. types.Where(type => type?.GetValue<string>() != "null").Select(type => type!.DeepClone())]);
+            node["type"] = new JsonArray([.. types.Append("null").Select(type => (JsonNode)type)]);
+        }
+        else if (node["type"] is null && node["enum"] is JsonArray choices)
+        {
+            choices.Add(null);
         }
     }
+
+    private static string[] Types(JsonObject node) => node["type"] switch
+    {
+        JsonArray list => [.. list.Select(type => (string)type!)],
+        JsonValue single => [(string)single!],
+        _ => [],
+    };
 
     /// <summary>Keys that exist only in files and are resolved while loading.</summary>
     private static void AddFileOnlyKeys(Type type, JsonObject node)
@@ -112,10 +131,15 @@ public static class SchemaGenerator
 
         if (type == typeof(OfficinaOptions))
         {
-            properties.Insert(0, "$schema", new JsonObject { ["description"] = "The JSON Schema of the file, for editor completion. Files only.", ["type"] = "string" });
+            properties.Insert(0, "$schema", new JsonObject
+            {
+                ["description"] = "The JSON Schema of the file, for editor completion. Files only.",
+                ["type"] = "string",
+            });
             properties.Insert(1, "extends", new JsonObject
             {
-                ["description"] = "Other files, relative to this one, that this file builds on. Each is a lower layer; later entries override earlier ones. Files only.",
+                ["description"] = "Other files, relative to this one, that this file builds on. "
+                    + "Each is a lower layer; later entries override earlier ones. Files only.",
                 ["type"] = "array",
                 ["items"] = new JsonObject { ["type"] = "string" },
                 ["examples"] = new JsonArray(new JsonArray("base.json")),
@@ -125,7 +149,7 @@ public static class SchemaGenerator
         {
             properties.Insert(0, "extends", new JsonObject
             {
-                ["description"] = "Another agent definition this one builds on (CFG-05). Its settings are the lower layer; cycles are rejected. Files only.",
+                ["description"] = "Another agent definition this one builds on. Its settings are the lower layer; cycles are rejected. Files only.",
                 ["type"] = "string",
                 ["examples"] = new JsonArray("base-coder"),
             });

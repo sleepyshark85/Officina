@@ -34,7 +34,8 @@ public sealed partial class ConfigCommandTests : IDisposable
         Assert.Contains("run.budget.time \"2h\" environment file sof.prod.json:1:32", lines);
         Assert.Contains("run.permissionMode \"auto\" environment variable SOF__run__permissionMode", lines);
         Assert.Contains("models.default.model \"claude-opus-5-5\" code default, core 0.1.0", lines);
-        Assert.All(lines, line => Assert.Matches(@" (code default, core \d|application file|environment file|environment variable|run option)", line));
+        const string AnyLayer = @" (code default, core \d|application file|environment file|environment variable|run option)";
+        Assert.All(lines, line => Assert.Matches(AnyLayer, line));
     }
 
     [Fact]
@@ -57,7 +58,7 @@ public sealed partial class ConfigCommandTests : IDisposable
         var (exitCode, _, error) = sof.Run("config", "show", "--agent", "nobody");
 
         Assert.Equal(2, exitCode);
-        Assert.Contains("There is no agent \"nobody\". Agents: extractor.", error, StringComparison.Ordinal);
+        Assert.Contains("error: agents.nobody: does not exist. Use one of: extractor.", error, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -87,10 +88,10 @@ public sealed partial class ConfigCommandTests : IDisposable
         Assert.Equal(1, exitCode);
         Assert.Equal(
             """
-            error: --permission-mode: run.permissionMode: is not one of "ask", "auto", "readOnly". Write one of "ask", "auto", "readOnly".
+            error: --permission-mode: run.permissionMode: is text, but must be one of "ask", "auto", "readOnly". Write one of "ask", "auto", "readOnly".
             error: sof.json:2:67: agents.a.model: model profile "strong" does not exist. Add it to models, or use one of: default.
-            error: sof.json:2:38: agents.a.instructions: placeholder {{caller.id}} is not allowed in the stable prefix. Move it to context.operatingFacts (CTX-02, CFG-14).
-            error: sof.json:3:32: run.budget.cost: is 0, but must be greater than 0. A limit can be high, but never zero, negative or unlimited (INV-07).
+            error: sof.json:2:38: agents.a.instructions: placeholder {{caller.id}} is not allowed in instructions. Instructions are the same for every call, so they cannot use caller, work or time values.
+            error: sof.json:3:32: run.budget.cost: is 0, but must be greater than 0. A limit can be high, but never zero, negative or unlimited.
             4 errors.
 
             """.ReplaceLineEndings("\n"),
@@ -100,6 +101,8 @@ public sealed partial class ConfigCommandTests : IDisposable
     [Theory]
     [InlineData("config", "explode")]
     [InlineData("config", "show", "--colour")]
+    [InlineData("config", "show", "--dir")]
+    [InlineData("config", "validate", "--agent", "nope")]
     [InlineData("deploy")]
     public void A_wrong_command_line_is_a_usage_error(params string[] args) => Assert.Equal(2, sof.Run(args).ExitCode);
 

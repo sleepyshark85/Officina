@@ -3,25 +3,14 @@ using Sleepyshark.Officina.Core;
 
 namespace Sleepyshark.Officina.Hosting.Configuration;
 
-/// <summary>The configuration layers, lowest to highest (configuration reference §13).</summary>
-public enum LayerKind
-{
-    CodeDefault,
-    ExtendedFile,
-    ApplicationFile,
-    EnvironmentFile,
-    EnvironmentVariable,
-    RunOption,
-}
-
 /// <summary>Where a value came from: its layer, and the file position, variable or option that set it (CFG-04).</summary>
 /// <param name="Layer">The layer.</param>
 /// <param name="Source">The file (relative to the configuration directory), environment variable or run option.</param>
 /// <param name="Line">The 1-based line in the file, or 0.</param>
 /// <param name="Column">The 1-based column in the file, or 0.</param>
-public sealed record ConfigOrigin(LayerKind Layer, string? Source = null, int Line = 0, int Column = 0)
+public sealed record ConfigurationOrigin(LayerKind Layer, string? Source = null, int Line = 0, int Column = 0)
 {
-    public static ConfigOrigin CodeDefault { get; } = new(LayerKind.CodeDefault);
+    public static ConfigurationOrigin CodeDefault { get; } = new(LayerKind.CodeDefault);
 
     /// <summary>The definition a value was inherited from through <c>extends</c>, such as <c>agents.base</c>.</summary>
     public string? Via { get; init; }

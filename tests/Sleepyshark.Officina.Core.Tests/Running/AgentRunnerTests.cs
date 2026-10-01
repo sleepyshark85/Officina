@@ -49,7 +49,8 @@ public class AgentRunnerTests
                 ["strong"] = new() { Provider = "second", Model = "large" },
             },
         };
-        var runner = new AgentRunner(options, new Dictionary<string, IModelProvider> { ["first"] = first, ["second"] = second }, new InMemoryRunStore());
+        var providers = new Dictionary<string, IModelProvider> { ["first"] = first, ["second"] = second };
+        var runner = new AgentRunner(options, providers, new InMemoryRunStore());
         var ct = TestContext.Current.CancellationToken;
 
         var cheap = await runner.RunAsync(new AgentDefinition { Instructions = "Classify.", Model = "cheap" }, "input", ct);
@@ -67,7 +68,8 @@ public class AgentRunnerTests
         var kit = new TestKit();
 
         var error = await Assert.ThrowsAsync<ConfigurationException>(
-            () => kit.RunAsync(new AgentDefinition { Instructions = Instructions, Model = "missing" }, "input", TestContext.Current.CancellationToken));
+            () => kit.RunAsync(
+                new AgentDefinition { Instructions = Instructions, Model = "missing" }, "input", TestContext.Current.CancellationToken));
 
         Assert.Contains("\"missing\"", error.Message, StringComparison.Ordinal);
     }

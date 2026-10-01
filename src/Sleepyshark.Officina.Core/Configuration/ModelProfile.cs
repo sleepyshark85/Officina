@@ -20,12 +20,9 @@ public sealed record ModelProfile
     [Setting("The most tokens one reply may have. Unset uses the provider's default.", Example = "64000", Minimum = 1)]
     public int? MaxOutputTokens { get; init; }
 
-    [Setting("Whether the model may call tools: `auto` or `none`.", Example = "\"auto\"")]
-    public string ToolChoice { get; init; } = "auto";
+    [Setting("Whether the model may call tools.", Example = "\"auto\"")]
+    public ToolChoice ToolChoice { get; init; } = ToolChoice.Auto;
 
-    [Setting("Any other setting the provider declares for the model, such as a temperature (MDL-02).", Example = """{ "temperature": 0.2 }""")]
+    [Setting("Any other setting the provider declares for the model, such as a temperature.", Example = """{ "temperature": 0.2 }""")]
     public IReadOnlyDictionary<string, JsonElement> Settings { get; init; } = new Dictionary<string, JsonElement>();
-
-    [Setting("Profiles to use instead, in order, when this one is unavailable (MDL-04).", Example = """["backup"]""")]
-    public IReadOnlyList<string> Fallbacks { get; init; } = [];
 }

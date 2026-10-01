@@ -4,8 +4,8 @@ using Sleepyshark.Officina.Hosting.Configuration;
 namespace Sleepyshark.Officina.Hosting.Tests;
 
 /// <summary>
-/// A test per validation phase of configuration reference §14 that applies to the settings so far (CFG-06, TEST-04).
-/// Every error names the setting, the problem and the fix, and where it was written.
+/// A test per validation phase of configuration reference §14 that applies to the settings so far (CFG-06). Every
+/// error names the setting, the problem and the fix, and where it was written.
 /// </summary>
 public sealed class ValidationPhaseTests : IDisposable
 {
@@ -60,13 +60,30 @@ public sealed class ValidationPhaseTests : IDisposable
     }
 
     [Theory]
-    [InlineData("""{ "run": { "permissionMode": "sometimes" } }""", "run.permissionMode", "is not one of \"ask\", \"auto\", \"readOnly\".")]
-    [InlineData("""{ "run": { "budget": { "time": "8 hours" } } }""", "run.budget.time", "is not a duration: a number with a unit, ms, s, m, h or d, such as \"30m\".")]
-    [InlineData("""{ "run": { "budget": { "cost": "a lot" } } }""", "run.budget.cost", "is not a number.")]
-    [InlineData("""{ "models": { "default": { "maxOutputTokens": 1.5 } } }""", "models.default.maxOutputTokens", "is not a whole number.")]
-    [InlineData("""{ "agents": { "a": { "instructions": ["x"] } } }""", "agents.a.instructions", "is not text.")]
-    [InlineData("""{ "models": { "default": { "fallbacks": "fast" } } }""", "models.default.fallbacks", "is not a list.")]
+    [InlineData(
+        """{ "run": { "permissionMode": "sometimes" } }""",
+        "run.permissionMode",
+        "is text, but must be one of \"ask\", \"auto\", \"readOnly\".")]
+    [InlineData(
+        """{ "models": { "default": { "toolChoice": "banana" } } }""",
+        "models.default.toolChoice",
+        "is text, but must be one of \"auto\", \"none\".")]
+    [InlineData(
+        """{ "run": { "budget": { "time": "8 hours" } } }""",
+        "run.budget.time",
+        "is text, but must be a duration: a number with a unit, ms, s, m, h or d, such as \"30m\".")]
+    [InlineData(
+        """{ "run": { "budget": { "time": "99999999999d" } } }""",
+        "run.budget.time",
+        "is text, but must be a duration: a number with a unit, ms, s, m, h or d, such as \"30m\".")]
+    [InlineData("""{ "run": { "budget": { "cost": "a lot" } } }""", "run.budget.cost", "is text, but must be a number.")]
+    [InlineData(
+        """{ "models": { "default": { "maxOutputTokens": 1.5 } } }""",
+        "models.default.maxOutputTokens",
+        "is a number, but must be a whole number.")]
+    [InlineData("""{ "agents": { "a": { "instructions": ["x"] } } }""", "agents.a.instructions", "is a list, but must be text.")]
     [InlineData("""{ "agents": { "a": { "model": "default" } } }""", "agents.a.instructions", "is required but not set.")]
+    [InlineData("""{ "providers": { "x": { "apiKey": {} } } }""", "providers.x.apiKey.secret", "is required but not set.")]
     public void Phase_2_shape_rejects_values_of_the_wrong_type(string text, string path, string problem)
     {
         folder.Write("sof.json", text);
@@ -85,39 +102,60 @@ public sealed class ValidationPhaseTests : IDisposable
 
         var error = Assert.Single(folder.Load().Errors);
 
-        Assert.Equal("providers.claude.apiKey", error.Path);
+        Assert.Equal(("providers.claude.apiKey", "is not a secret reference."), (error.Path, error.Problem));
         Assert.Contains("{ \"secret\": \"NAME\" }", error.Fix, StringComparison.Ordinal);
         Assert.DoesNotContain(key, error.ToString(), StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void Phase_2_rejects_a_credential_like_value_in_any_setting()
-    {
-        folder.Write("sof.json", """{ "project": { "values": { "deployKey": "ghp_abcdefghijklmnopqrstuvwxyz0123456789" } } }""");
-
-        var error = Assert.Single(folder.Load().Errors);
-
-        Assert.Equal((ValidationPhase.Shape, "project.values.deployKey", "looks like a credential.", "sof.json:1:41"), (error.Phase, error.Path, error.Problem, error.Location));
     }
 
     [Fact]
     public void Phase_2_checks_environment_variables_and_run_options_too()
     {
         var configuration = folder.Load(
-            variables: new() { ["SOF__run__permissionMode"] = "never", ["SOF__run____x"] = "1" },
+            variables: new() { ["SOF__run__permissionMode"] = "never", ["SOF__run____x"] = "1", ["SOF__RUN__BUDGET__COST"] = "8" },
             runOptions: new RunOption("run.budget.costs", "3", "--budget"));
 
         Assert.Equal(
-            [("", "SOF__run____x"), ("run.budget.costs", "--budget"), ("run.permissionMode", "SOF__run__permissionMode")],
+            [
+                ("", "SOF__run____x"),
+                ("RUN", "SOF__RUN__BUDGET__COST"),
+                ("run.budget.costs", "--budget"),
+                ("run.permissionMode", "SOF__run__permissionMode"),
+            ],
             configuration.Errors.Select(error => (error.Path, error.Location!)).Order());
+        var uppercase = configuration.Errors.Single(error => error.Path == "RUN");
+        Assert.EndsWith("Setting names are case-sensitive, as in SOF__run__permissionMode.", uppercase.Fix, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Phase_2_rejects_a_duplicate_key_in_a_variable_value()
+    {
+        var error = Assert.Single(folder.Load(variables: new() { ["SOF__project"] = """{"name":"a","name":"b"}""" }).Errors);
+
+        Assert.Equal((ValidationPhase.Shape, "project", "has a key twice in the same object."), (error.Phase, error.Path, error.Problem));
+    }
+
+    [Fact]
+    public void A_null_in_a_list_is_an_error_not_a_crash()
+    {
+        folder.Write("sof.json", """{ "extends": [null], "models": { "default": { "settings": { "stop": [null] } } } }""");
+
+        var error = Assert.Single(folder.Load().Errors);
+
+        Assert.Equal(("extends[0]", "is not a file path."), (error.Path, error.Problem));
     }
 
     [Theory]
     [InlineData("""{ "extends": ["missing.json"] }""", "extends", "file \"missing.json\" does not exist.")]
     [InlineData("""{ "extends": ["sof.json"] }""", "extends", "extends forms a cycle: sof.json → sof.json.")]
     [InlineData("""{ "extends": ["preset:coding-team"] }""", "extends[0]", "is not a file path.")]
-    [InlineData("""{ "agents": { "a": { "extends": "b", "instructions": "x" }, "b": { "extends": "a" } } }""", "agents.b.extends", "agent definitions a → b → a extend each other in a cycle.")]
-    [InlineData("""{ "agents": { "a": { "extends": "bse", "instructions": "x" }, "base": { "instructions": "y" } } }""", "agents.a.extends", "agent definition \"bse\" does not exist.")]
+    [InlineData(
+        """{ "agents": { "a": { "extends": "b", "instructions": "x" }, "b": { "extends": "a" } } }""",
+        "agents.b.extends",
+        "agent definitions a → b → a extend each other in a cycle.")]
+    [InlineData(
+        """{ "agents": { "a": { "extends": "bse", "instructions": "x" }, "base": { "instructions": "y" } } }""",
+        "agents.a.extends",
+        "agent definition \"bse\" does not exist.")]
     public void Phase_3_merge_rejects_cycles_and_missing_bases(string text, string path, string problem)
     {
         folder.Write("sof.json", text);
@@ -133,7 +171,7 @@ public sealed class ValidationPhaseTests : IDisposable
     {
         folder.Write("sof.json", """
             {
-              "models": { "strong": { "provider": "anthropic", "fallbacks": ["backup"] } },
+              "models": { "strong": { "provider": "anthropic" } },
               "agents": { "a": { "instructions": "Run {{project.values.test}}.", "model": "strnog" } }
             }
             """);
@@ -142,17 +180,18 @@ public sealed class ValidationPhaseTests : IDisposable
 
         Assert.All(errors, error => Assert.Equal(ValidationPhase.References, error.Phase));
         Assert.Equal(
-            [("agents.a.instructions", "sof.json:3:38"), ("agents.a.model", "sof.json:3:79"), ("models.strong.fallbacks[0]", "sof.json:2:66"), ("models.strong.provider", "sof.json:2:39")],
+            [("agents.a.instructions", "sof.json:3:38"), ("agents.a.model", "sof.json:3:79"), ("models.strong.provider", "sof.json:2:39")],
             errors.Select(error => (error.Path, error.Location!)).Order());
     }
 
     [Fact]
-    public void Phase_9_prefix_rejects_volatile_placeholders_in_instructions()
+    public void Phase_9_prefix_rejects_caller_work_and_time_placeholders_in_instructions()
     {
         folder.Write("sof.json", """{ "agents": { "lead": { "instructions": "Greet {{caller.id}}." } } }""");
 
         Assert.Equal(
-            "sof.json:1:41: agents.lead.instructions: placeholder {{caller.id}} is not allowed in the stable prefix. Move it to context.operatingFacts (CTX-02, CFG-14).",
+            "sof.json:1:41: agents.lead.instructions: placeholder {{caller.id}} is not allowed in instructions. "
+                + "Instructions are the same for every call, so they cannot use caller, work or time values.",
             Assert.Single(folder.Load().Errors).ToString());
     }
 
@@ -167,6 +206,8 @@ public sealed class ValidationPhaseTests : IDisposable
             """);
 
         // agents.a.instructions has the wrong type, so it is not also reported as missing.
-        Assert.Equal(["agents.a.instructions", "run.permisionMode", "agents.b.model", "run.budget.cost"], folder.Load().Errors.Select(error => error.Path));
+        Assert.Equal(
+            ["agents.a.instructions", "agents.b.model", "run.budget.cost", "run.permisionMode"],
+            folder.Load().Errors.Select(error => error.Path).Order());
     }
 }

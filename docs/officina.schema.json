@@ -33,14 +33,14 @@
       "default": 1
     },
     "project": {
-      "description": "The project's identity, and values usable in placeholders (CFG-14).",
+      "description": "The project's identity, and values usable in placeholders.",
       "type": [
         "object",
         "null"
       ],
       "properties": {
         "name": {
-          "description": "The project's name. Usable as `{{project.name}}`.",
+          "description": "The project's name. Usable in instructions as `{{project.name}}`.",
           "type": [
             "string",
             "null"
@@ -50,13 +50,16 @@
           ]
         },
         "values": {
-          "description": "Free-form text values. Usable as `{{project.values.<name>}}`.",
+          "description": "Free-form text values. Usable in instructions as `{{project.values.<name>}}`.",
           "type": [
             "object",
             "null"
           ],
           "additionalProperties": {
-            "type": "string"
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "examples": [
             {
@@ -83,17 +86,20 @@
         "null"
       ],
       "additionalProperties": {
-        "type": "object",
+        "type": [
+          "object",
+          "null"
+        ],
         "properties": {
           "apiKey": {
-            "description": "The provider's credential, as the name of a secret. A literal key is rejected (CFG-09).",
+            "description": "The provider's credential, as the name of a secret, which is read when it is used.",
             "type": [
               "object",
               "null"
             ],
             "properties": {
               "secret": {
-                "description": "The secret's name: letters, digits and underscores.",
+                "description": "The name of the secret, such as the environment variable that holds it.",
                 "type": [
                   "string",
                   "null"
@@ -131,13 +137,16 @@
       }
     },
     "models": {
-      "description": "Model profiles, by name. Agents refer to them by name (MDL-02, MDL-03).",
+      "description": "Model profiles, by name. Agents refer to them by name.",
       "type": [
         "object",
         "null"
       ],
       "additionalProperties": {
-        "type": "object",
+        "type": [
+          "object",
+          "null"
+        ],
         "properties": {
           "provider": {
             "description": "The provider that serves this profile, by its name in `providers`.",
@@ -183,10 +192,11 @@
             "minimum": 1
           },
           "toolChoice": {
-            "description": "Whether the model may call tools: `auto` or `none`.",
-            "type": [
-              "string",
-              "null"
+            "description": "Whether the model may call tools.",
+            "enum": [
+              "auto",
+              "none",
+              null
             ],
             "examples": [
               "auto"
@@ -194,7 +204,7 @@
             "default": "auto"
           },
           "settings": {
-            "description": "Any other setting the provider declares for the model, such as a temperature (MDL-02).",
+            "description": "Any other setting the provider declares for the model, such as a temperature.",
             "type": [
               "object",
               "null"
@@ -205,22 +215,6 @@
               }
             ],
             "default": {}
-          },
-          "fallbacks": {
-            "description": "Profiles to use instead, in order, when this one is unavailable (MDL-04).",
-            "type": [
-              "array",
-              "null"
-            ],
-            "items": {
-              "type": "string"
-            },
-            "examples": [
-              [
-                "backup"
-              ]
-            ],
-            "default": []
           }
         },
         "additionalProperties": false
@@ -237,22 +231,24 @@
           "provider": "claude",
           "model": "claude-opus-5-5",
           "toolChoice": "auto",
-          "settings": {},
-          "fallbacks": []
+          "settings": {}
         }
       }
     },
     "agents": {
-      "description": "Agent definitions, by name (CFG-01).",
+      "description": "Agent definitions, by name.",
       "type": [
         "object",
         "null"
       ],
       "additionalProperties": {
-        "type": "object",
+        "type": [
+          "object",
+          "null"
+        ],
         "properties": {
           "extends": {
-            "description": "Another agent definition this one builds on (CFG-05). Its settings are the lower layer; cycles are rejected. Files only.",
+            "description": "Another agent definition this one builds on. Its settings are the lower layer; cycles are rejected. Files only.",
             "type": "string",
             "examples": [
               "base-coder"
@@ -269,7 +265,7 @@
             ]
           },
           "instructions": {
-            "description": "The agent's job. Required: only the application knows it (CFG-17). Placeholders may use the `project` and `agent` namespaces only (CFG-14).",
+            "description": "The agent's job. Only the application knows it, so it has no default. Placeholders may use the project and the agent only.",
             "type": [
               "string",
               "null"
@@ -279,7 +275,7 @@
             ]
           },
           "model": {
-            "description": "The name of the model profile the agent runs on (MDL-03).",
+            "description": "The name of the model profile the agent runs on.",
             "type": [
               "string",
               "null"
@@ -309,12 +305,16 @@
       ],
       "properties": {
         "budget": {
-          "description": "The run's budget. It can be high, but never removed or unlimited (RUN-05). Live: the owner may change it during a run. Cannot be removed or unlimited (INV-07).",
-          "type": "object",
+          "description": "The run's budget. It can be high, but it cannot be removed or unlimited. Live: the owner may change it during a run. It cannot be removed.",
+          "type": [
+            "object"
+          ],
           "properties": {
             "cost": {
-              "description": "The most the run may spend, in USD. Live: the owner may change it during a run. Cannot be removed or unlimited (INV-07).",
-              "type": "number",
+              "description": "The most the run may spend, in USD. Live: the owner may change it during a run. It cannot be removed.",
+              "type": [
+                "number"
+              ],
               "examples": [
                 25
               ],
@@ -322,9 +322,11 @@
               "exclusiveMinimum": 0
             },
             "time": {
-              "description": "The longest the run may take: a number with a unit, `ms`, `s`, `m`, `h` or `d`. Live: the owner may change it during a run. Cannot be removed or unlimited (INV-07).",
-              "type": "string",
-              "pattern": "^[0-9]+(\\.[0-9]+)?(ms|s|m|h|d)$",
+              "description": "The longest the run may take: a number with a unit, `ms`, `s`, `m`, `h` or `d`. Live: the owner may change it during a run. It cannot be removed.",
+              "type": [
+                "string"
+              ],
+              "pattern": "^[0-9]{1,7}(\\.[0-9]+)?(ms|s|m|h|d)$",
               "examples": [
                 "8h"
               ],
@@ -344,7 +346,7 @@
           }
         },
         "permissionMode": {
-          "description": "How tool calls that need permission are decided: `ask` the owner, `auto` by the rules, or `readOnly` (HITL-01). Live: the owner may change it during a run.",
+          "description": "How tool calls that need permission are decided: `ask` the owner, `auto` by the rules, or `readOnly`. Live: the owner may change it during a run.",
           "enum": [
             "ask",
             "auto",

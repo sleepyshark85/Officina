@@ -38,15 +38,21 @@ public sealed class AgentRunner
         ArgumentNullException.ThrowIfNull(agentName);
         var agent = Options.Agents.TryGetValue(agentName, out var found)
             ? found
-            : throw new InvalidOperationException($"There is no agent \"{agentName}\".");
+            : throw ConfigurationException.UnknownAgent(agentName, Options.Agents.Keys);
         return RunCoreAsync(agentName, agent, Options, input, ct);
     }
 
     /// <summary>Runs an agent that is not in the configuration, as if it were defined there as <see cref="InlineAgentName"/>.</summary>
-    /// <exception cref="ConfigurationException">The agent does not validate with this configuration.</exception>
+    /// <exception cref="ConfigurationException">The agent does not validate, or the configuration already has an agent of that name.</exception>
     public Task<AgentResult> RunAsync(AgentDefinition agent, string input, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(agent);
+        if (Options.Agents.ContainsKey(InlineAgentName))
+        {
+            throw new ConfigurationException([new ConfigurationError(ValidationPhase.References, $"agents.{InlineAgentName}",
+                "is already defined, so an agent passed directly cannot run under its name.", "Run the configured agent by name, or rename it.")]);
+        }
+
         var withAgent = Options with { Agents = new Dictionary<string, AgentDefinition>(Options.Agents) { [InlineAgentName] = agent } };
         ThrowIfInvalid(withAgent);
         return RunCoreAsync(InlineAgentName, agent, withAgent, input, ct);
@@ -59,9 +65,10 @@ public sealed class AgentRunner
             ? registered
             : throw new InvalidOperationException($"Agent \"{name}\" uses provider \"{profile.Provider}\", which has no implementation registered.");
 
-        await runs.RecordStartAsync(new RunStarted(Guid.CreateVersion7().ToString(), name, CoreVersion.Value, OfficinaJson.Write(resolved)), ct).ConfigureAwait(false);
+        var started = new RunStarted(Guid.CreateVersion7().ToString(), name, CoreVersion.Value, ConfigurationJson.Write(resolved));
+        await runs.RecordStartAsync(started, ct).ConfigureAwait(false);
 
-        var instructions = Placeholder.Fill(agent.Instructions, resolved.Project, name, agent);
+        var instructions = InstructionPlaceholders.Fill(agent.Instructions, resolved.Project, name, agent);
         var request = new ModelRequest(profile, instructions, [Message.User(input)]);
         var output = new StringBuilder();
         await foreach (var modelEvent in provider.StreamAsync(request, ct).WithCancellation(ct))

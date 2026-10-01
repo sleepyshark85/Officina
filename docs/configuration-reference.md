@@ -60,8 +60,11 @@ constant in code, and can be dropped from this draft rather than built speculati
 | Sizes | A number with a unit: `B`, `KiB`, `MiB`, `GiB` | `"4GiB"` |
 | Money | A number in the currency of the price table (default USD) | `25` |
 
-A secret is never accepted as a plain string where a `{ "secret": … }` is expected. A value that
-looks like a credential in any setting is rejected (CFG-09).
+A secret is never accepted as a plain string where a `{ "secret": … }` is expected (CFG-09).
+Configuration should not hold secret values; the core does not scan it for them.
+
+Names of named items (agents, models, providers, …) cannot contain `.`, `[` or `]`, which setting
+paths use.
 
 ---
 
@@ -769,7 +772,7 @@ Validation runs in this order:
 | # | Phase | Rejects |
 |---|---|---|
 | 1 | Parse | Invalid JSON, unknown `formatVersion` |
-| 2 | Shape | Unknown settings, wrong types, values outside allowed ranges, credential-like literals |
+| 2 | Shape | Unknown settings, wrong types, values outside allowed ranges, missing required settings |
 | 3 | Merge | Cycles in `extends`, missing presets |
 | 4 | References | Missing models, tools, tool sets, gates, checks, knowledge sources, agents, tool servers, extensions, secrets (by name only; secrets are not read), unknown placeholders |
 | 5 | Capabilities | Capabilities used but not enabled, unmet dependencies (§9) |

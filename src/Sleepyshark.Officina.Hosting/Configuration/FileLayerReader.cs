@@ -6,10 +6,10 @@ using Sleepyshark.Officina.Core.Configuration;
 namespace Sleepyshark.Officina.Hosting.Configuration;
 
 /// <summary>
-/// Reads configuration files as layers: a file, preceded by the files it extends, in order (§13). Checks the
-/// syntax, the format version and <c>extends</c> cycles.
+/// Reads configuration files as layers: a file, preceded by the files it extends, in order (§13). Checks the syntax,
+/// the format version and <c>extends</c> cycles.
 /// </summary>
-internal sealed class FileLayers(string directory, ConfigurationErrors errors)
+internal sealed class FileLayerReader(string directory, LoadErrors errors)
 {
     private static readonly JsonDocumentOptions DocumentOptions = new() { CommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true };
 
@@ -21,13 +21,13 @@ internal sealed class FileLayers(string directory, ConfigurationErrors errors)
         return layers;
     }
 
-    private void Read(string fullPath, LayerKind kind, List<string> chain, ConfigOrigin? namedAt, List<Layer> layers)
+    private void Read(string fullPath, LayerKind kind, List<string> chain, ConfigurationOrigin? namedAt, List<Layer> layers)
     {
         var source = Display(fullPath);
         if (chain.Contains(fullPath))
         {
-            errors.Add(ValidationPhase.Merge, "extends", $"extends forms a cycle: {string.Join(" → ", chain.SkipWhile(item => item != fullPath).Append(fullPath).Select(Display))}.",
-                "Remove one of the extends entries.", namedAt);
+            var cycle = string.Join(" → ", chain.SkipWhile(item => item != fullPath).Append(fullPath).Select(Display));
+            errors.Add(ValidationPhase.Merge, "extends", $"extends forms a cycle: {cycle}.", "Remove one of the extends entries.", namedAt);
             return;
         }
 
@@ -35,14 +35,15 @@ internal sealed class FileLayers(string directory, ConfigurationErrors errors)
         {
             if (namedAt is not null)
             {
-                errors.Add(ValidationPhase.Merge, "extends", $"file \"{source}\" does not exist.", "Paths are relative to the file that names them.", namedAt);
+                errors.Add(ValidationPhase.Merge, "extends", $"file \"{source}\" does not exist.",
+                    "Paths are relative to the file that names them.", namedAt);
             }
 
             return;
         }
 
         var text = File.ReadAllText(fullPath);
-        var origin = new ConfigOrigin(kind, source);
+        var origin = new ConfigurationOrigin(kind, source);
         if (JsonPositions.Read(text, origin, errors) is not { } positions)
         {
             return;
@@ -50,13 +51,16 @@ internal sealed class FileLayers(string directory, ConfigurationErrors errors)
 
         if (JsonNode.Parse(text, documentOptions: DocumentOptions) is not JsonObject root)
         {
-            errors.Add(ValidationPhase.Parse, "", "the file is not a JSON object.", "Put the settings in { … }.", origin with { Line = 1, Column = 1 });
+            errors.Add(ValidationPhase.Parse, "", "the file is not a JSON object.", "Put the settings in { … }.",
+                origin with { Line = 1, Column = 1 });
             return;
         }
 
-        var layer = new Layer(origin.ToString(), origin, root,
-            positions.ToDictionary(entry => entry.Key, entry => origin with { Line = entry.Value.Line, Column = entry.Value.Column }, StringComparer.Ordinal));
-        if (root["formatVersion"] is { } version && version.ToJsonString() != OfficinaOptions.CurrentFormatVersion.ToString(CultureInfo.InvariantCulture))
+        var at = positions.ToDictionary(
+            entry => entry.Key, entry => origin with { Line = entry.Value.Line, Column = entry.Value.Column }, StringComparer.Ordinal);
+        var layer = new Layer(origin.ToString(), origin, root, at);
+        var supported = OfficinaOptions.CurrentFormatVersion.ToString(CultureInfo.InvariantCulture);
+        if (root["formatVersion"] is { } version && version.ToJsonString() != supported)
         {
             errors.Add(ValidationPhase.Parse, "formatVersion", $"format version {version.ToJsonString()} is not supported.",
                 $"This core reads format version {OfficinaOptions.CurrentFormatVersion}.", layer.OriginOf("formatVersion"));
@@ -78,7 +82,8 @@ internal sealed class FileLayers(string directory, ConfigurationErrors errors)
 
         if (root["extends"] is not JsonArray extends)
         {
-            errors.Add(ValidationPhase.Shape, "extends", "is not a list.", "Write a list of file paths, such as [\"base.json\"].", layer.OriginOf("extends"));
+            errors.Add(ValidationPhase.Shape, "extends", "is not a list.", "Write a list of file paths, such as [\"base.json\"].",
+                layer.OriginOf("extends"));
             return;
         }
 
@@ -87,7 +92,9 @@ internal sealed class FileLayers(string directory, ConfigurationErrors errors)
             var at = layer.OriginOf($"extends[{index}]");
             if (entry?.GetValueKind() != JsonValueKind.String || entry.GetValue<string>().StartsWith("preset:", StringComparison.Ordinal))
             {
-                errors.Add(ValidationPhase.Merge, $"extends[{index}]", "is not a file path.", "Name a file, relative to this one. Presets arrive with the coding team (S20).", at);
+                // Presets arrive with the coding team (S20).
+                errors.Add(ValidationPhase.Merge, $"extends[{index}]", "is not a file path.",
+                    "Name a file, relative to this one. Presets are not available yet.", at);
                 continue;
             }
 
