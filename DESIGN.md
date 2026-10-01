@@ -190,8 +190,9 @@ decides the outcome.
 | Baseline and working copies | The baseline is a git branch. Each working copy is a `git worktree` on `agent/<task>`. The core uses the git CLI, because libgit2's worktree support is limited. |
 | Integration (WS-09) | A single queue per workspace. Each change is rebased onto the current baseline in a scratch worktree, then the baseline checks run, then the baseline fast-forwards. A failure or conflict goes back to the task. |
 | Edit safety (WS-07) | The core keeps a content hash for each agent and file at read time. An edit whose hash no longer matches fails. |
-| Linux sandbox | bubblewrap (user namespaces). Only the working copy and toolchains are mounted, and the network namespace is empty. Allowed traffic goes through a host-side filtering proxy reached over a bind-mounted Unix socket. Limits use cgroups v2. |
-| Windows sandbox | An AppContainer with ACLs granting the working copy only, and a Job Object for CPU, memory, process count and kill-on-close. The network capability is removed. Allowed traffic goes through the filtering proxy using a loopback exemption. |
+| Linux sandbox | bubblewrap (user namespaces). Only the working copy and toolchains are mounted, and the network namespace is empty. Allowed traffic goes through a host-side filtering proxy reached over a Unix socket in `$XDG_RUNTIME_DIR` (socket paths are limited to 108 bytes), bind-mounted into the sandbox and forwarded by socat. Limits use cgroups v2 through `systemd-run --user`, and cancel uses `cgroup.kill`. |
+| Linux host setup | Done once by the installer, as root: an AppArmor profile that lets bubblewrap create user namespaces (Ubuntu 23.10 and later restrict them); `loginctl enable-linger` for service accounts, so they get a systemd user manager; socat installed. Everything else runs unprivileged (S00a). |
+| Windows sandbox | An AppContainer with ACLs granting the working copy only, and a Job Object for CPU, memory, process count and kill-on-close. The network capability is removed. Allowed traffic goes through the filtering proxy over a named pipe whose access list admits only the container, with a small forwarder inside the sandbox. No admin rights are needed. A loopback exemption also works, but it would expose every local service on the host, so it is not used (S00a). |
 | No isolation available | Startup refuses to run with a clear reason. Commands never run unsandboxed (SBX-07). |
 
 ## 8. State and durability
@@ -230,7 +231,7 @@ decides the outcome.
 
 | Risk | Plan |
 |---|---|
-| Windows sandbox networking (AppContainer loopback) and Linux hosts without unprivileged user namespaces | Spike S00a in M0, before committing to M5 dates |
+| Sandbox gaps the spike did not cover: isolation between two sandboxes (SBX-06), output size caps, background processes, and Windows files readable by all apps (Program Files, Windows) | Prove them in S15; fallbacks for hosts that cannot isolate are rootless Podman (Linux) and Windows Sandbox or WSL2 (Windows) |
 | Claude beta features (turn-scoped system messages, compaction) change or are not on the chosen model | Each one is behind a provider feature flag, with the append-only fallback always available |
 | Integration queue throughput with slow test suites | Measure in M6. The option is to batch compatible changes into one baseline check run. |
 | The 90% benchmark target depends on the model | The goal set's difficulty is agreed before M6 (TEST-31) |
