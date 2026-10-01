@@ -19,6 +19,7 @@ It lists the settings the code has today. Settings that later slices add are spe
 | `toolSets` | named entries | `{}` | Named groups of tools, by name in `tools`. Agents are offered tools by tool set. | `{"issues":["create_issue","find_issue"]}` |
 | `gates` | named entries | `{}` | Gates, by name. Tools and policies refer to them by name. | `{"issue-dedupe":{"use":"extension:Acme.IssueDedupeGate"}}` |
 | `policies` | section | `{"permissionRules":[],"gates":[],"anonymousPermissions":[],"masking":{"enabled":true},"rateLimits":{}}` | Permission rules, gates for all tools, anonymous callers' permissions, masking and rate limits. | `{"gates":["no-main-branch"]}` |
+| `checks` | named entries | `{}` | Checks of output, by name. Agents refer to them by name in `output.checks`. | `{"no-secrets":{"use":"extension:Acme.NoSecretsCheck"}}` |
 | `knowledge` | named entries | `{}` | Knowledge sources, by name. | `{"handbook":{"use":"extension:Acme.HandbookIndex"}}` |
 | `run` | section | `{"budget":{"cost":25,"time":"08:00:00"},"permissionMode":"ask"}` | Defaults for every run. | `{"permissionMode":"ask"}` |
 | `operations` | section | `{"telemetry":{"cacheHitWarning":0.7}}` | How the engine is operated. | `{"telemetry":{"cacheHitWarning":0.7}}` |
@@ -64,7 +65,8 @@ It lists the settings the code has today. Settings that later slices add are spe
 | `permissions` | list |  | Narrows the caller's permissions for this agent's tool calls: a permission counts only if the caller holds it and it is listed here. Unset keeps the caller's. | `["issues:write"]` |
 | `maxParallelToolCalls` | whole number, ≥ 1 | `4` | The most tool calls from one reply that run at the same time, when every tool called is safe to run in parallel. | `4` |
 | `context` | section | `{"operatingFacts":[],"historyCacheLifetime":"00:05:00","retrieval":{"beforeTurn":[],"handOffWhenNotCovered":false},"history":{"strategy":"none","shortening":"provider","lastTurns":10}}` | How the agent's model input is built. Required. | `{"operatingFacts":["Today is {{now:date}}."]}` |
-| `stopWhen` | section | `{"finished":true}` | When a turn is complete. They combine: the first that holds completes the turn. Required. | `{"finished":false,"finishTool":"submit_report"}` |
+| `output` | section | `{"format":"text","attempts":2,"checks":[]}` | What the output must be before a turn completes with it. Required. | `{"format":"structured","schema":"{ \u0022type\u0022: \u0022object\u0022 }"}` |
+| `stopWhen` | section | `{"finished":true,"checksPass":false}` | When a turn is complete. They combine: the first that holds completes the turn. Required. | `{"finished":false,"finishTool":"submit_report"}` |
 | `budget` | section | `{"turn":{"iterations":50,"toolCalls":200,"tokens":3000000,"cost":5,"time":"00:45:00"}}` | The agent's budgets. They can be high, but they cannot be removed or unlimited. Required. | `{"turn":{"iterations":50,"cost":5}}` |
 | `stall` | section | `{"iterationsWithoutProgress":3}` | When a turn has stalled. Required. | `{"iterationsWithoutProgress":5}` |
 | `handOffOnPolicyGap` | boolean | `true` | Whether a turn ends in a handoff for a policy gap when every tool call of an iteration is refused. With `false`, the refusals go back to the model. | `false` |
@@ -84,7 +86,7 @@ It lists the settings the code has today. Settings that later slices add are spe
 
 | Setting | Allowed values | Default | Description | Example |
 |---|---|---|---|---|
-| `source` | text |  | Where the tool comes from: `extension:<id>` for a tool the application registers, `mcp:<server>/<tool>` for a tool of a server in `toolServers`, `knowledge:<name>` to search a source in `knowledge`, or `provider:<name>` for a tool the model provider runs itself. Required. | `"extension:Acme.CreateIssue"` |
+| `source` | text |  | Where the tool comes from: `extension:<id>` for a tool the application registers, `mcp:<server>/<tool>` for a tool of a server in `toolServers`, `knowledge:<name>` to search a source in `knowledge`, `provider:<name>` for a tool the model provider runs itself, or `builtin:<name>` for a built-in tool: `record.propose_fact`, `record.propose_finding`, `record.propose_decision` and `record.cite` propose changes to the run record, and `artifact.page` reads an artifact, such as a trimmed result in full. Required. | `"extension:Acme.CreateIssue"` |
 | `kind` | `"read"`, `"write"` |  | `write` for a tool that changes something. Unset uses the tool's declaration, and `write` for a tool server's tools; a tool that declares itself `write` stays `write`. | `"write"` |
 | `permissions` | list | `[]` | Permissions the caller must hold to call the tool. | `["issues:write"]` |
 | `gates` | list | `[]` | The tool's own gates, by name in `gates`. They run after the gates for all tools. | `["issue-dedupe"]` |
@@ -92,7 +94,7 @@ It lists the settings the code has today. Settings that later slices add are spe
 | `approval` | `"never"`, `"always"` |  | Whether each call needs a human's approval. Unset means `always` for irreversible tools, otherwise `never`. For approval by rule, give the tool a `builtin:require-approval` gate with a condition. | `"always"` |
 | `timeout` | time span (`hh:mm:ss` or `d.hh:mm:ss`) | `"00:02:00"` | The longest one call may take, as `hh:mm:ss`. | `"00:15:00"` |
 | `maxAttempts` | whole number, ≥ 1 | `1` | How many times a call is tried. Only timeouts and unavailable errors are retried, and irreversible tools never are. | `3` |
-| `maxResultLength` | whole number, ≥ 1 | `32000` | The most characters of a result that enter the conversation; the rest is cut off. | `8000` |
+| `maxResultLength` | whole number, ≥ 1 | `32000` | The most characters of a result that enter the conversation. The full result is kept as an artifact, which a `builtin:artifact.page` tool reads. | `8000` |
 | `parallelSafe` | boolean |  | Whether calls may run at the same time as other calls. Unset uses the tool's declaration; `true` cannot loosen a tool that declares itself unsafe. Irreversible tools never run in parallel. | `false` |
 | `irreversible` | boolean | `false` | Whether the tool's effects cannot be undone. Such a tool is a write tool, is carried out at most once for the same run and arguments, and needs approval unless `approval` says otherwise. | `true` |
 | `maskResults` | boolean | `false` | Whether personal data in the tool's results is masked before the model sees them, when masking is on. | `true` |
@@ -116,6 +118,12 @@ It lists the settings the code has today. Settings that later slices add are spe
 | `anonymousPermissions` | list | `[]` | The permissions a caller without an identity holds. | `["issues:read"]` |
 | `masking` | section | `{"enabled":true}` | Masking of personal data in work from outside, before the model, history or logs see it. On by default. Required. | `{"enabled":false}` |
 | `rateLimits` | section | `{}` | How much work each owner and each tenant may send. Required. | `{"perOwner":{"permits":20,"window":"01:00:00"}}` |
+
+## `checks.<name>`
+
+| Setting | Allowed values | Default | Description | Example |
+|---|---|---|---|---|
+| `use` | text |  | The check the application registers, as `extension:<id>`. Required. | `"extension:Acme.NoSecretsCheck"` |
 
 ## `knowledge.<name>`
 
@@ -142,7 +150,7 @@ It lists the settings the code has today. Settings that later slices add are spe
 | Setting | Allowed values | Default | Description | Example |
 |---|---|---|---|---|
 | `unstoredEvents` | list |  | Kinds of event that are published live but not stored, so a reader that joins late or falls behind does not see them. Unset leaves out streamed text only: storing each piece slows the agent, and the conversation keeps the text. An empty list in a file counts as unset; to store every kind, set an empty list in code. | `["textGenerated","modelCallEnded"]` |
-| `retention` | section | `{"audit":"365.00:00:00"}` | How long each kind of stored data is kept. Runs, conversations and events without a period are kept until they are deleted. | `{"events":"30.00:00:00"}` |
+| `retention` | section | `{"audit":"365.00:00:00"}` | How long each kind of stored data is kept. Data without a period is kept until it is deleted. | `{"events":"30.00:00:00"}` |
 
 ## `capabilities`
 
@@ -174,8 +182,19 @@ It lists the settings the code has today. Settings that later slices add are spe
 |---|---|---|---|---|
 | `operatingFacts` | list | `[]` | Facts added after the history for every model call, in this order, such as limits or the date. Placeholders may use `{{now}}` and `{{now:date}}`, and the project and agent values. | `["Today is {{now:date}}.","Replies are limited to 300 words."]` |
 | `historyCacheLifetime` | time span (`hh:mm:ss` or `d.hh:mm:ss`) | `"00:05:00"` | How long the provider keeps the conversation cached between model calls, as `hh:mm:ss`, at most one hour. Agents that often wait for approvals benefit from longer. | `"01:00:00"` |
+| `record` | list |  | The kinds of run record entry the agent sees in its model input: `fact`, `finding`, `decision` and `citation`; unset for all of them. Facts come before retrieved knowledge, and the rest after it. | `["fact","decision"]` |
 | `retrieval` | section | `{"beforeTurn":[],"handOffWhenNotCovered":false}` | Knowledge retrieved before each turn. Required. | `{"beforeTurn":["handbook"],"handOffWhenNotCovered":true}` |
 | `history` | section | `{"strategy":"none","shortening":"provider","lastTurns":10}` | What history a request starts with, and how it is shortened. Required. | `{"strategy":"shortened"}` |
+
+## `agents.<name>.output`
+
+| Setting | Allowed values | Default | Description | Example |
+|---|---|---|---|---|
+| `format` | `"text"`, `"structured"` | `"text"` | `text`, or `structured`: JSON that must match `schema`. | `"structured"` |
+| `schema` | text |  | The JSON Schema that structured output must match, as JSON text. | `"{ \u0022type\u0022: \u0022object\u0022, \u0022required\u0022: [\u0022total\u0022] }"` |
+| `attempts` | whole number, ≥ 0 | `2` | How many times structured output that does not match the schema goes back to the model with the errors before the turn is handed off. | `3` |
+| `checks` | list | `[]` | Checks, by name in `checks`, that the output must pass, run in this order. The first that fails hands the turn off. | `["no-secrets","style"]` |
+| `citations` | `"off"`, `"resolve"`, `"required"` |  | `off`; `resolve`: every id the output cites as `[cite:<id>]` must be a citation in the run record; or `required`: as `resolve`, and the output must cite at least one. Output that fails hands the turn off. Unset means `resolve` when the knowledge capability is on, otherwise `off`. | `"required"` |
 
 ## `agents.<name>.stopWhen`
 
@@ -183,6 +202,7 @@ It lists the settings the code has today. Settings that later slices add are spe
 |---|---|---|---|---|
 | `finished` | boolean | `true` | The turn completes when the model finishes its reply. When this is `false` and the model finishes, the turn ends in a handoff. | `false` |
 | `finishTool` | text |  | A tool, by name in `tools`, that completes the turn when a call of it succeeds. The call's arguments are the output. | `"submit_report"` |
+| `checksPass` | boolean | `false` | The turn completes as soon as its output passes the checks in `output.checks`, which then run after every model reply. | `true` |
 | `maxIterations` | whole number, ≥ 1 |  | The turn completes after this many model calls, with the model's last text as the output. | `1` |
 
 ## `agents.<name>.budget`
@@ -257,6 +277,8 @@ It lists the settings the code has today. Settings that later slices add are spe
 | `runs` | time span (`hh:mm:ss` or `d.hh:mm:ss`) |  | How long a run, with the configuration it used, is kept after it starts, as `d.hh:mm:ss`. | `"90.00:00:00"` |
 | `events` | time span (`hh:mm:ss` or `d.hh:mm:ss`) |  | How long an event is kept after it happens, as `d.hh:mm:ss`. | `"30.00:00:00"` |
 | `conversations` | time span (`hh:mm:ss` or `d.hh:mm:ss`) |  | How long a turn of a stored conversation is kept after it ends, as `d.hh:mm:ss`. Once its earliest turns are deleted, a conversation continues from the turns kept. | `"90.00:00:00"` |
+| `runRecords` | time span (`hh:mm:ss` or `d.hh:mm:ss`) |  | How long a run's record is kept after its last change, as `d.hh:mm:ss`. It is kept or deleted whole, never trimmed. | `"365.00:00:00"` |
+| `artifacts` | time span (`hh:mm:ss` or `d.hh:mm:ss`) |  | How long an artifact, such as the full text of a trimmed tool result, is kept after it is made, as `d.hh:mm:ss`. | `"90.00:00:00"` |
 | `audit` | time span (`hh:mm:ss` or `d.hh:mm:ss`) | `"365.00:00:00"` | How long an audit entry is kept after it is written, as `d.hh:mm:ss`. A request to delete an owner's data leaves audit entries to this period. | `"730.00:00:00"` |
 
 ## `capabilities.conversationStore`

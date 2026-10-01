@@ -10,7 +10,7 @@ namespace Sleepyshark.Officina.Sandbox.Tests;
 
 /// <summary>
 /// One agent's sandbox tools behind a real tool pipeline, configured as an application would. Only the boundaries are
-/// stand-ins: the sandbox, the human, the secret source, the audit store and the clock.
+/// stand-ins: the sandbox, the human, the secret source and the clock; storage is the in-memory one.
 /// </summary>
 internal sealed class Agent : IAsyncDisposable
 {
@@ -31,7 +31,7 @@ internal sealed class Agent : IAsyncDisposable
             Options, Tools.Tools.Concat(others).ToDictionary(),
             new Dictionary<string, IGate> { [CommandRules.Id] = new CommandRules(Options.Capabilities.Sandbox!) },
             new Dictionary<string, IKnowledgeSource>(),
-            Audit, new EventBus(new InMemoryEventLog(), Options.Storage, Time), Human, new InMemorySecretSource(new Dictionary<string, string> { ["NUGET_TOKEN"] = "t0ken" }), Time);
+            Storage, new EventBus(new InMemoryEventLog(), Options.Storage, Time), Human, new InMemorySecretSource(new Dictionary<string, string> { ["NUGET_TOKEN"] = "t0ken" }), Time);
     }
 
     public OfficinaOptions Options { get; }
@@ -49,7 +49,9 @@ internal sealed class Agent : IAsyncDisposable
 
     public ScriptedHuman Human { get; } = new();
 
-    public InMemoryAuditLog Audit { get; } = new();
+    public InMemoryStorage Storage { get; } = new();
+
+    public InMemoryAuditLog Audit => Storage.Audit;
 
     public FakeTimeProvider Time { get; } = new();
 

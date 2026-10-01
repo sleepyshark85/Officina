@@ -2,12 +2,15 @@ using System.Collections.Concurrent;
 using System.Collections.Immutable;
 using System.Text;
 using System.Text.Json;
+using Json.Schema;
 using Sleepyshark.Officina.Core.Configuration;
 using Sleepyshark.Officina.Core.Events;
 using Sleepyshark.Officina.Core.Extensibility;
 using Sleepyshark.Officina.Core.Messages;
 using Sleepyshark.Officina.Core.Observability;
+using Sleepyshark.Officina.Core.Records;
 using Sleepyshark.Officina.Core.Tools;
+using OutputFormat = Sleepyshark.Officina.Core.Configuration.OutputFormat;
 
 namespace Sleepyshark.Officina.Core.Running;
 
@@ -17,7 +20,8 @@ namespace Sleepyshark.Officina.Core.Running;
 /// pipeline, and repeats until a stop condition holds (LOOP-05) or the turn must be handed off. The budget is checked
 /// before every model call (LOOP-06), and the turn always ends in a result (INV-07). Each call's input is built by the
 /// turn's <see cref="Conversation"/>, with the messages that arrived since the last call (CTX-08). The conversation
-/// starts from the history its strategy keeps (CTX-06), and the turn is stored with it when it ends (CAP-05).
+/// starts from the history its strategy keeps (CTX-06), and the turn is stored with it when it ends (CAP-05). The turn
+/// completes only with output that passes its schema, citation rule and checks (OUT, INV-09).
 /// </summary>
 internal sealed class Turn
 {
@@ -31,6 +35,10 @@ internal sealed class Turn
     private readonly IModelProvider provider;
     private readonly ModelPrice? price;
     private readonly ToolPipeline tools;
+    private readonly RunRecord record;
+    private readonly JsonSchema? outputSchema;
+    private readonly CitationRule citations;
+    private readonly IReadOnlyList<(string Name, ICheck Check)> checks;
     private readonly IReadOnlyList<(string Name, IKnowledgeSource Source, bool Mask)> beforeTurn;
     private readonly IConversationStore conversations;
     private readonly IHistoryShortener? shortener;
@@ -42,11 +50,14 @@ internal sealed class Turn
     private readonly List<ToolAttempt> attempts = [];
     private readonly List<CacheWarning> cacheWarnings = [];
     private readonly List<string> retrieved = [];
+    private readonly List<Artifact> artifacts = [];
+    private IReadOnlyList<RecordEntry> entries = [];
     private List<ToolUseContent> pending = [];
     private long? started;
     private int iterations;
     private int toolCalls;
     private int withoutProgress;
+    private int outputAttempts;
     private Usage usage = Usage.None;
     private decimal cost;
     private string lastText = "";
@@ -55,6 +66,8 @@ internal sealed class Turn
     /// <param name="options">The configuration the run uses.</param>
     /// <param name="provider">The provider of the agent's model profile.</param>
     /// <param name="tools">The tool pipeline built from <paramref name="options"/>.</param>
+    /// <param name="record">The run record, which the volatile context and the citation rule read.</param>
+    /// <param name="checks">The application's checks, by extension id.</param>
     /// <param name="knowledge">The application's knowledge sources, by extension id.</param>
     /// <param name="conversations">Where the agent's conversation is kept, when its history strategy keeps one.</param>
     /// <param name="shortener">What shortens the history when the model reports it too long; null when it is not shortened.</param>
@@ -68,6 +81,8 @@ internal sealed class Turn
         OfficinaOptions options,
         IModelProvider provider,
         ToolPipeline tools,
+        RunRecord record,
+        IReadOnlyDictionary<string, ICheck> checks,
         IReadOnlyDictionary<string, IKnowledgeSource> knowledge,
         IConversationStore conversations,
         IHistoryShortener? shortener,
@@ -88,6 +103,10 @@ internal sealed class Turn
         this.inbox = inbox;
         this.provider = provider;
         this.tools = tools;
+        this.record = record;
+        outputSchema = agent.Output.Format == OutputFormat.Structured ? JsonSchema.FromText(agent.Output.Schema!) : null;
+        citations = agent.Output.Citations ?? (options.Capabilities.Knowledge.Enabled ? CitationRule.Resolve : CitationRule.Off);
+        this.checks = [.. agent.Output.Checks.Select(name => (name, checks[options.Checks[name].ExtensionId()!]))];
         beforeTurn = [.. agent.Context.Retrieval.BeforeTurn.Select(name => (name, knowledge[options.Knowledge[name].ExtensionId()!], options.Knowledge[name].Mask))];
         this.conversations = conversations;
         this.shortener = shortener;
@@ -132,6 +151,8 @@ internal sealed class Turn
             return notCovered;
         }
 
+        entries = await record.ReadAsync(ct).ConfigureAwait(false);
+
         while (true)
         {
             if (Exhausted() is { } limit)
@@ -160,8 +181,8 @@ internal sealed class Turn
             var result = stop switch
             {
                 StopReason.WantsTools => await RunToolsAsync(ct).ConfigureAwait(false),
-                StopReason.Finished or StopReason.StopSequence => agent.StopWhen.Finished
-                    ? Complete(lastText)
+                StopReason.Finished or StopReason.StopSequence => agent.StopWhen.Finished || agent.StopWhen.ChecksPass
+                    ? await FinishAsync(lastText, ct).ConfigureAwait(false)
                     : HandOff(HandoffReason.NoProgress, "the model finished, but no stop condition holds"),
                 StopReason.Paused => null,
                 StopReason.OutputLimit => HandOff(HandoffReason.TruncatedOutput, "the reply reached the output limit"),
@@ -176,7 +197,8 @@ internal sealed class Turn
 
             if (iterations >= agent.StopWhen.MaxIterations)
             {
-                return Complete(lastText);
+                // Not revisable, so never null.
+                return (await FinishAsync(lastText, ct, revisable: false).ConfigureAwait(false))!;
             }
         }
     }
@@ -194,7 +216,7 @@ internal sealed class Turn
     {
         CancelPending();
         var statistics = new TurnStatistics(iterations, toolCalls, usage, cost, Elapsed);
-        return new AgentResult(outcome, output, statistics, conversation.History, [.. cacheWarnings], handoff?.Invoke());
+        return new AgentResult(outcome, output, statistics, conversation.History, [.. cacheWarnings], [.. entries], [.. artifacts], handoff?.Invoke());
     }
 
     /// <summary>Time since the turn started; zero for a turn cancelled before it started.</summary>
@@ -263,11 +285,102 @@ internal sealed class Turn
             : null;
     }
 
-    /// <summary>The volatile context for this call: the passages retrieved before the turn, then the agent's operating facts, filled for this call (CTX-09).</summary>
+    /// <summary>
+    /// The volatile context for this call, in the order of CTX-01: the record's facts, the passages retrieved before the
+    /// turn, the record's other entries, then the agent's operating facts, filled for this call (CTX-09). Each part of the
+    /// record is in revision order, so it only grows (CTX-07). The agent sees the kinds of entry it is configured to (REC-06).
+    /// </summary>
     private List<string> Facts()
     {
         var now = time.GetUtcNow();
-        return [.. retrieved, .. agent.Context.OperatingFacts.Select(fact => InstructionPlaceholders.Fill(fact, project, context.Agent, agent, now, context.Caller))];
+        var shown = entries.Where(entry => agent.Context.Record?.Contains(entry.Item.Kind) ?? true).ToList();
+        return [.. Record(shown.Where(entry => entry.Item is Fact)), .. retrieved, .. Record(shown.Where(entry => entry.Item is not Fact)),
+            .. agent.Context.OperatingFacts.Select(fact => InstructionPlaceholders.Fill(fact, project, context.Agent, agent, now, context.Caller))];
+
+        // Entries come from tools and documents, so they are labelled as data (INV-08).
+        IEnumerable<string> Record(IEnumerable<RecordEntry> part) =>
+            part.Any() ? [Labels.Data("record", string.Join('\n', part.Select(entry => RunRecord.Describe(entry, entries))))] : [];
+    }
+
+    /// <summary>
+    /// Completes the turn with the output if it passes (OUT-01 to OUT-04). Structured output that does not match its
+    /// schema goes back to the model with the errors while attempts are left and the model is called again
+    /// (<paramref name="revisable"/>), and null is returned so the turn goes on (OUT-02); any other failure hands the
+    /// turn off.
+    /// </summary>
+    private async Task<AgentResult?> FinishAsync(string output, CancellationToken ct, bool revisable = true)
+    {
+        if (await OutputProblemAsync(output, ct).ConfigureAwait(false) is not { } found)
+        {
+            return Complete(output);
+        }
+
+        var (reason, problem) = found;
+        if (reason == HandoffReason.InvalidStructuredOutput && revisable && outputAttempts < agent.Output.Attempts)
+        {
+            outputAttempts++;
+            conversation.Add(Message.User($"The output does not match its schema: {problem}. Reply again with output that does."));
+            return null;
+        }
+
+        return HandOff(reason, problem);
+    }
+
+    /// <summary>
+    /// The first problem of an output, or null when it passes: its schema (OUT-01), the citation rule (OUT-04), then the
+    /// checks in order, where the first that fails decides (OUT-03). Only these decide whether output is accepted (INV-09).
+    /// </summary>
+    private async Task<(HandoffReason, string)?> OutputProblemAsync(string output, CancellationToken ct)
+    {
+        if (outputSchema is not null && SchemaProblem(output) is { } invalid)
+        {
+            return (HandoffReason.InvalidStructuredOutput, invalid);
+        }
+
+        if (citations != CitationRule.Off && RunRecord.Unresolved(output, entries) is { } unresolved)
+        {
+            return (HandoffReason.OutputCheckFailed, $"the output cites {unresolved}, which is not a citation in the run record");
+        }
+
+        if (citations == CitationRule.Required && RunRecord.Cited(output).Count == 0)
+        {
+            return (HandoffReason.OutputCheckFailed, "the output cites no source");
+        }
+
+        foreach (var (name, check) in checks)
+        {
+            var result = await check.RunAsync(new CheckContext(null, output, [.. artifacts]), ct).ConfigureAwait(false);
+            Telemetry.CheckEnded(context, name, result.Passed);
+            if (!result.Passed)
+            {
+                return (HandoffReason.OutputCheckFailed, $"check {name} failed: {string.Join("; ", result.Findings)}");
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>Why structured output does not match its schema, or null when it does.</summary>
+    private string? SchemaProblem(string output)
+    {
+        JsonDocument document;
+        try
+        {
+            document = JsonDocument.Parse(output);
+        }
+        catch (JsonException)
+        {
+            return "it is not JSON";
+        }
+
+        using (document)
+        {
+            var result = outputSchema!.Evaluate(document.RootElement, new EvaluationOptions { OutputFormat = Json.Schema.OutputFormat.List });
+            return result.IsValid
+                ? null
+                : string.Join("; ", (result.Details ?? []).Where(detail => detail.Errors is not null)
+                    .SelectMany(detail => detail.Errors!.Select(error => $"{(detail.InstanceLocation.ToString() is { Length: > 0 } at ? at : "/")}: {error.Value}")));
+        }
     }
 
     /// <summary>Masks text from outside the core when masking is on (ING-02).</summary>
@@ -370,6 +483,8 @@ internal sealed class Turn
 
         var requests = pending.Select(call => new ToolRequest(call.Name, call.Arguments)).ToList();
         var results = await tools.RunAsync(context, requests, ct).ConfigureAwait(false);
+        artifacts.AddRange(results.SelectMany(result => result.Artifacts));
+        entries = await record.ReadAsync(ct).ConfigureAwait(false);
         conversation.Add(new Message(
             Role.User, pending.Zip(results, (call, result) => new ToolResultContent(call.Id, Labels.Data($"tool:{call.Name}", result.Content), result.Error is not null))));
         pending = [];
@@ -385,12 +500,17 @@ internal sealed class Turn
 
         if (batch.FirstOrDefault(attempt => attempt.Request.Name == agent.StopWhen.FinishTool && attempt.Result.Error is null) is { } finish)
         {
-            return Complete(finish.Request.Arguments.GetRawText());
+            return await FinishAsync(finish.Request.Arguments.GetRawText(), ct).ConfigureAwait(false);
         }
 
         if (agent.HandOffOnPolicyGap && results.All(result => result.Error is ToolErrorCategory.NotAuthorised or ToolErrorCategory.PolicyViolation))
         {
             return HandOff(HandoffReason.PolicyGap, "every tool call of the iteration was refused"); // LOOP-11
+        }
+
+        if (agent.StopWhen.ChecksPass && await OutputProblemAsync(lastText, ct).ConfigureAwait(false) is null)
+        {
+            return Complete(lastText);
         }
 
         withoutProgress = progressed ? 0 : withoutProgress + 1;
@@ -400,8 +520,9 @@ internal sealed class Turn
     }
 
     /// <summary>
-    /// LOOP-07: a call is progress if it is new to the turn, or if its result differs from the last time it was made.
-    /// The run record (S06) and the workspace (S14) add their own changes as progress.
+    /// LOOP-07: a call is progress if it is new to the turn, or if its result differs from the last time it was made. A
+    /// record tool's call that the record accepts is new, since an identical proposal is not added again. The workspace
+    /// (S16) adds its changes as progress.
     /// </summary>
     private bool IsProgress(ToolAttempt attempt) =>
         attempts.LastOrDefault(earlier => earlier.Request.Name == attempt.Request.Name

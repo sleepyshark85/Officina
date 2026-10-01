@@ -6,17 +6,20 @@ Status: draft · 2026-10-01 · slices `REQUIREMENTS.md` (revision 2) into delive
 
 Last updated 2026-10-02.
 
-- **Done:** M0 spikes S00a and S00b; M1 slices S01 (walking skeleton) and S02 (configuration); S03 (tool pipeline); S04 (turn loop); S05 (context and caching); S07 (history and conversation store); S08 (events, storage and observability); S09 (triggers and admission); S10 (MCP and knowledge); S14 (git workspace).
+- **Done:** M0 spikes S00a and S00b; M1 slices S01 (walking skeleton) and S02 (configuration); S03 (tool pipeline); S04 (turn loop); S05 (context and caching); S06 (run record and output); S07 (history and conversation store); S08 (events, storage and observability); S09 (triggers and admission); S10 (MCP and knowledge); S14 (git workspace).
 - **Doing:** S15 (sandbox). The Linux piece is in review; the Windows piece follows.
 - **Waiting:** the M0 design review sign-off on `REQUIREMENTS.md`, `CONFIGURATION.md` and `DESIGN.md`.
-- **Next:** S06 and S16. The Windows piece of S15 can run alongside them.
+- **Next:** S16. The Windows piece of S15 can run alongside it.
 - **Open follow-ups:**
   - S02 kept a `formatVersion` check, though only version 1 exists. Consider removing the setting
     until a version 2 exists (principle 13).
   - S02 rejects a plain-text `apiKey`, because the binder would otherwise skip it silently and
     fall back to the default secret reference. Kept on purpose.
-  - S06 keeps a trimmed result's full text as an artifact (TOOL-09) and gives gates the run record
-    (TOOL-06); S18 adds the task board to `GateContext`.
+  - S18 adds the task board to `GateContext` (TOOL-06), and the `task` record scope (REC-06).
+  - S13 adds the output-check failure outcome "revise" where the pattern supports it (OUT-03); until then a failed check
+    hands off.
+  - The configuration binder adds a file's items to a list setting's default instead of replacing it, so
+    `storage.unstoredEvents` set in a file keeps `textGenerated`. S06 made `context.record` unset by default to avoid it.
   - S11 maps provider tools and their limits, such as maximum uses, to the Claude request.
   - S11: secrets declared in configuration, such as the provider API key and the tool servers' `env` and
     `headers`, must join the tool pipeline's redaction set when they are resolved, so they are removed like
@@ -34,8 +37,8 @@ Last updated 2026-10-02.
     (S06, S07, S09, S11, S13, S16–S20).
   - S11 ships the price table, requires a price when a cost budget is set, and splits `prices.*.cacheWrite`
     by cache lifetime (MDL-09). Until then a model without a configured price costs nothing.
-  - S06 adds the `checks` section; `capabilities.workspace.baselineChecks` then names the checks
-    `GitWorkspace` runs, which the host passes in code today (WS-02).
+  - S16: `capabilities.workspace.baselineChecks` names checks from the `checks` section (added by S06) for
+    `GitWorkspace` to run, which the host passes in code today, with the command checks it needs (WS-02).
   - S16 offers the `workspace.*` tools over `WorkingCopy` (read, search, edit, write; delete and
     move with them) through `IWorkspace` in Core, with the test kit's in-memory workspace (TEST-01,
     moved from S15: the sandbox needs only the working copy's folder). It gives each agent its working
@@ -104,7 +107,7 @@ A slice is **done** when:
 | [S03](S03-tool-pipeline.md) | Tool pipeline | M2 | M | S02 | [#5](https://github.com/sleepyshark85/Officina/issues/5) | done |
 | [S04](S04-turn-loop.md) | Turn loop | M2 | M | S03 | [#6](https://github.com/sleepyshark85/Officina/issues/6) | done |
 | [S05](S05-context-and-caching.md) | Context and caching | M2 | M | S04 | [#7](https://github.com/sleepyshark85/Officina/issues/7) | done |
-| [S06](S06-run-record-and-output.md) | Run record and output | M2 | M | S04, S05 | [#8](https://github.com/sleepyshark85/Officina/issues/8) | todo |
+| [S06](S06-run-record-and-output.md) | Run record and output | M2 | M | S04, S05 | [#8](https://github.com/sleepyshark85/Officina/issues/8) | done |
 | [S07](S07-history-and-conversations.md) | History and conversation store | M2 | S | S05 | [#9](https://github.com/sleepyshark85/Officina/issues/9) | done |
 | [S08](S08-events-storage-observability.md) | Events, storage and observability | M2 | M | S04 | [#10](https://github.com/sleepyshark85/Officina/issues/10) | done |
 | [S09](S09-triggers-and-admission.md) | Triggers and admission | M2 | M | S04, S08 | [#11](https://github.com/sleepyshark85/Officina/issues/11) | done |

@@ -30,14 +30,14 @@ public class GovernanceTests
             Capabilities = new() { Knowledge = new() { Enabled = true } },
         };
         await using var servers = await ToolServers.ConnectAsync(options, ReferenceServer.Secrets(), TestContext.Current.CancellationToken);
-        var audit = new InMemoryAuditLog();
+        var storage = new InMemoryStorage();
         var human = new ScriptedHuman().Answer(HumanAnswer.Deny).Answer(HumanAnswer.Approve);
         var pipeline = new ToolPipeline(
             options,
             new Dictionary<string, ITool>(servers.Tools) { ["lookup"] = new FakeTool(ToolKind.Read) },
             new Dictionary<string, IGate>(),
             new Dictionary<string, IKnowledgeSource> { ["handbook"] = new FakeKnowledgeSource(Coverage.Covered, ("hb-1", "x")) },
-            audit,
+            storage,
             new EventBus(new InMemoryEventLog(), options.Storage, new FakeTimeProvider()),
             human,
             ReferenceServer.Secrets(),
@@ -57,6 +57,6 @@ public class GovernanceTests
                 ("gates.ask", AuditOutcome.Asked), ("human", AuditOutcome.Denied),
                 ("gates.ask", AuditOutcome.Asked), ("human", AuditOutcome.Intent), (null, AuditOutcome.Completed),
             ],
-            audit.Entries.Select(entry => (entry.DecidedBy, entry.Outcome)));
+            storage.Audit.Entries.Select(entry => (entry.DecidedBy, entry.Outcome)));
     }
 }

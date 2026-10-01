@@ -17,3 +17,5 @@ All the built-in patterns, built from the turn primitive.
 ## Notes
 
 The team pattern's runtime arrives in S20; here only its configuration shape is validated.
+
+From S06: the output-check failure outcome "revise", for patterns that support it (OUT-03); output checks hand off until then.

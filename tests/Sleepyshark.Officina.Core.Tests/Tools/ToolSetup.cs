@@ -10,7 +10,7 @@ namespace Sleepyshark.Officina.Core.Tests.Tools;
 
 /// <summary>
 /// A real tool pipeline for one agent, <c>dev</c>, offered every configured tool. Only the boundaries are stand-ins:
-/// storage, the human, the secret source and the clock.
+/// the human, the secret source and the clock; storage is the in-memory one.
 /// </summary>
 internal sealed class ToolSetup
 {
@@ -20,9 +20,11 @@ internal sealed class ToolSetup
 
     public static readonly ToolContext Context = new("run-1", Agent, Owner);
 
-    public InMemoryAuditLog Audit { get; } = new();
+    public InMemoryStorage Storage { get; } = new();
 
-    public InMemoryEventLog Events { get; } = new();
+    public InMemoryAuditLog Audit => Storage.Audit;
+
+    public InMemoryEventLog Events => Storage.Events;
 
     public ScriptedHuman Human { get; } = new();
 
@@ -48,7 +50,7 @@ internal sealed class ToolSetup
     public static ToolOptions Extension(string name) => new() { Source = $"extension:{name}" };
 
     public ToolPipeline Create(OfficinaOptions options) =>
-        new(options, Tools, Gates, Knowledge, Audit, new EventBus(Events, options.Storage, Time), Human, new InMemorySecretSource(Secrets), Time);
+        new(options, Tools, Gates, Knowledge, Storage, new EventBus(Events, options.Storage, Time), Human, new InMemorySecretSource(Secrets), Time);
 
     public static JsonElement Args(string text) => JsonDocument.Parse(text).RootElement.Clone();
 

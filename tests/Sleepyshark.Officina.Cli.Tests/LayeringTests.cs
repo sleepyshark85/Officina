@@ -88,6 +88,32 @@ public sealed class LayeringTests : IDisposable
         Assert.Equal(("high", 1000), (options.Models["strong"].Effort, options.Models["strong"].MaxOutputTokens));
     }
 
+    // OUT-01, OUT-03, REC-06.
+    [Fact]
+    public void Output_checks_and_the_records_kinds_bind_from_a_file()
+    {
+        folder.Write("sof.json", """
+            {
+              "agents": {
+                "dev": {
+                  "instructions": "x",
+                  "context": { "record": ["decision"] },
+                  "output": { "format": "structured", "schema": "{ \"type\": \"object\" }", "checks": ["style"], "citations": "required" }
+                }
+              },
+              "checks": { "style": { "use": "extension:Acme.Style" } }
+            }
+            """);
+
+        var configuration = folder.Load();
+        var agent = configuration.Options.Agents["dev"];
+
+        Assert.Empty(configuration.Errors);
+        Assert.Equal(["decision"], agent.Context.Record);
+        Assert.Equal((OutputFormat.Structured, "{ \"type\": \"object\" }", CitationRule.Required), (agent.Output.Format, agent.Output.Schema, agent.Output.Citations));
+        Assert.Equal(["style"], agent.Output.Checks);
+    }
+
     [Fact]
     public void Tools_gates_policies_and_conditions_bind_from_a_file()
     {

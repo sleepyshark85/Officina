@@ -15,6 +15,7 @@ public sealed class TestKit
     /// <param name="tools">The application's tools, by extension id.</param>
     /// <param name="gates">The application's gates, by extension id.</param>
     /// <param name="knowledge">The application's knowledge sources, by extension id.</param>
+    /// <param name="checks">The application's checks, by extension id.</param>
     /// <param name="capabilities">What the scripted model claims to support; nothing when omitted.</param>
     /// <param name="shorteners">The application's history shorteners, by extension id.</param>
     public TestKit(
@@ -23,7 +24,8 @@ public sealed class TestKit
         IReadOnlyDictionary<string, IGate>? gates = null,
         IReadOnlyDictionary<string, IKnowledgeSource>? knowledge = null,
         ProviderCapabilities? capabilities = null,
-        IReadOnlyDictionary<string, IHistoryShortener>? shorteners = null)
+        IReadOnlyDictionary<string, IHistoryShortener>? shorteners = null,
+        IReadOnlyDictionary<string, ICheck>? checks = null)
     {
         options ??= new OfficinaOptions();
         Model = new() { Capabilities = capabilities ?? ProviderCapabilities.None };
@@ -33,6 +35,7 @@ public sealed class TestKit
             Storage,
             tools ?? new Dictionary<string, ITool>(),
             gates ?? new Dictionary<string, IGate>(),
+            checks ?? new Dictionary<string, ICheck>(),
             knowledge ?? new Dictionary<string, IKnowledgeSource>(),
             Human,
             new InMemorySecretSource(Secrets),
@@ -42,7 +45,7 @@ public sealed class TestKit
 
     public ScriptedModelProvider Model { get; }
 
-    /// <summary>The runs started so far with their configuration, their events, and the audit log.</summary>
+    /// <summary>The runs started so far with their configuration, their events, records and artifacts, and the audit log.</summary>
     public InMemoryStorage Storage { get; } = new();
 
     public ScriptedHuman Human { get; } = new();

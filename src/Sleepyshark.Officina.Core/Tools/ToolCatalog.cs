@@ -1,6 +1,7 @@
 using Json.Schema;
 using Sleepyshark.Officina.Core.Configuration;
 using Sleepyshark.Officina.Core.Extensibility;
+using Sleepyshark.Officina.Core.Records;
 
 namespace Sleepyshark.Officina.Core.Tools;
 
@@ -36,13 +37,17 @@ internal sealed record CatalogTool(string Name, ToolOptions Options, ITool? Impl
 /// </summary>
 internal sealed class ToolCatalog
 {
+    /// <summary>The built-in tools, by the name <c>builtin:</c> sources use.</summary>
+    public static readonly IReadOnlyList<string> Builtins = [.. RecordTool.All.Keys, ArtifactTool.Name];
+
     private readonly Dictionary<string, Dictionary<string, CatalogTool>> byAgent;
 
     private ToolCatalog(Dictionary<string, Dictionary<string, CatalogTool>> byAgent) => this.byAgent = byAgent;
 
     /// <exception cref="ConfigurationException">The configuration has errors.</exception>
     public static ToolCatalog Create(
-        OfficinaOptions options, IReadOnlyDictionary<string, ITool> tools, IReadOnlyDictionary<string, IGate> gates, IReadOnlyDictionary<string, IKnowledgeSource> knowledge)
+        OfficinaOptions options, IReadOnlyDictionary<string, ITool> tools, IReadOnlyDictionary<string, IGate> gates, IReadOnlyDictionary<string, IKnowledgeSource> knowledge,
+        IArtifactStore artifacts)
     {
         var errors = options.Validate().ToList();
         var catalog = new Dictionary<string, CatalogTool>();
@@ -50,7 +55,7 @@ internal sealed class ToolCatalog
         {
             foreach (var (name, tool) in options.Tools)
             {
-                catalog[name] = Join(name, tool, Implementation(name, tool, options, tools, knowledge, errors), errors);
+                catalog[name] = Join(name, tool, Implementation(name, tool, options, tools, knowledge, artifacts, errors), errors);
             }
 
             errors.AddRange(options.Knowledge
@@ -107,8 +112,13 @@ internal sealed class ToolCatalog
     /// <summary>What runs a tool's calls; null for a provider tool, or one that is missing.</summary>
     private static ITool? Implementation(
         string name, ToolOptions tool, OfficinaOptions options, IReadOnlyDictionary<string, ITool> tools, IReadOnlyDictionary<string, IKnowledgeSource> knowledge,
-        List<ConfigurationError> errors)
+        IArtifactStore artifacts, List<ConfigurationError> errors)
     {
+        if (tool.BuiltinTool() is { } builtin)
+        {
+            return builtin == ArtifactTool.Name ? new ArtifactTool(artifacts) : RecordTool.All[builtin];
+        }
+
         if (tool.KnowledgeSource() is { } source)
         {
             // An unregistered source is reported once, for its entry in knowledge.
@@ -174,6 +184,6 @@ internal sealed class ToolCatalog
             .Select(problem => new ConfigurationError(ValidationPhase.Conditions, condition.Item1, $"for tool {tool.Name}: {problem}", "")));
     }
 
-    private static ConfigurationError Unregistered(string path, string kind, string id) =>
+    internal static ConfigurationError Unregistered(string path, string kind, string id) =>
         new(ValidationPhase.References, path, $"{kind} extension \"{id}\" is not registered.", $"Register the application's {kind} under the id \"{id}\".");
 }

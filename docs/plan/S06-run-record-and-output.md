@@ -1,6 +1,6 @@
 # S06 — Run record and output
 
-**Milestone:** M2 · **Size:** M · **Depends on:** S04, S05 · **Issue:** [#8](https://github.com/sleepyshark85/Officina/issues/8) · **Status:** todo
+**Milestone:** M2 · **Size:** M · **Depends on:** S04, S05 · **Issue:** [#8](https://github.com/sleepyshark85/Officina/issues/8) · **Status:** done
 
 ## Goal
 
@@ -10,13 +10,31 @@ The shared run record, and checked output.
 
 ## Acceptance criteria
 
-- [ ] Record tools propose changes; the core validates them and applies each one atomically with a new revision.
-- [ ] Conflicting values are both kept and reported.
-- [ ] Concurrent writers never overwrite each other silently (stress test).
-- [ ] Invalid structured output is retried twice, then handed off.
-- [ ] Output checks run in order, and the first failure decides.
-- [ ] The stop condition "the output passes its checks" completes a turn (LOOP-05, left over from S04).
-- [ ] Citation rules work in all three modes: off, resolve and required.
-- [ ] Results can carry artifacts.
-- [ ] The record's facts join the volatile context in a consistent order, each with its as-of time, and building the
+- [x] Record tools propose changes; the core validates them and applies each one atomically with a new revision.
+- [x] Conflicting values are both kept and reported.
+- [x] Concurrent writers never overwrite each other silently (stress test).
+- [x] Invalid structured output is retried twice, then handed off.
+- [x] Output checks run in order, and the first failure decides.
+- [x] The stop condition "the output passes its checks" completes a turn (LOOP-05, left over from S04).
+- [x] Citation rules work in all three modes: off, resolve and required.
+- [x] Results can carry artifacts.
+- [x] The record's facts join the volatile context in a consistent order, each with its as-of time, and building the
   input never changes the record (CTX-07, moved from S05).
+
+## Notes
+
+- Agents propose through the built-in tools `builtin:record.propose_fact`, `propose_finding`, `propose_decision` and
+  `cite`. The core validates each proposal against the record and appends it with the next revision; the store refuses
+  a taken revision, and the core then validates again (REC-04). Answers and entries cite as `[cite:<id>]`.
+- A trimmed tool result is kept in full as an artifact, which `builtin:artifact.page` reads (TOOL-09, SBX-04). Gates get
+  the run record (TOOL-06). The `officina.checks` metric gives check pass rates (OBS-02).
+- An accepted proposal is a new call, and an identical proposal is not added again, so the stall rule needs nothing more
+  (LOOP-07). The result carries the record and the artifacts (EGR-01, EGR-02).
+- The storage format version stays 1: nothing stored by an earlier core is read yet (the CLI opens storage from S16).
+
+Left to later slices:
+- S13: the check-failure outcome "revise", where the pattern supports it (OUT-03); until then a failure hands off.
+- S11: send the output schema to providers that support structured output natively.
+- S16: `capabilities.workspace.baselineChecks` names checks from `checks`; `checks` takes `extension:` checks only, and
+  S16 adds the command checks it needs (WS-02).
+- S18: `task` record scope (REC-06), the task board in `GateContext` (TOOL-06), task verification checks.

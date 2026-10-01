@@ -26,6 +26,22 @@ internal sealed class TenantRows<T>
         }
     }
 
+    /// <summary>Adds an item unless a row of its tenant matches <paramref name="taken"/>, in one step.</summary>
+    public bool TryAdd(string? tenant, T item, Func<T, bool> taken)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+        lock (gate)
+        {
+            if (rows.Any(row => row.Tenant == tenant && taken(row.Item)))
+            {
+                return false;
+            }
+
+            rows.Add((tenant, item));
+            return true;
+        }
+    }
+
     public IReadOnlyList<T> Where(string? tenant, Func<T, bool> match)
     {
         lock (gate)

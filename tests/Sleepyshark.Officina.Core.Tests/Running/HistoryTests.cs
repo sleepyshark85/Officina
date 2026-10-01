@@ -204,7 +204,7 @@ public class HistoryTests
 
         var error = Assert.Throws<ConfigurationException>(() => new AgentRunner(
             options, new Dictionary<string, IModelProvider> { ["claude"] = new Unshortening() }, new InMemoryStorage(), Tools(),
-            new Dictionary<string, IGate>(), new Dictionary<string, IKnowledgeSource>(), new ScriptedHuman(),
+            new Dictionary<string, IGate>(), new Dictionary<string, ICheck>(), new Dictionary<string, IKnowledgeSource>(), new ScriptedHuman(),
             new InMemorySecretSource(new Dictionary<string, string>()), new FakeTimeProvider()));
 
         Assert.Equal(

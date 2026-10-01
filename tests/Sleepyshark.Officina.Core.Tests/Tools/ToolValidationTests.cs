@@ -96,10 +96,10 @@ public class ToolValidationTests
 
         Assert.Equal(
             [
-                (ValidationPhase.Shape, "tools.search.source", "\"builtin:workspace.search\" is not a tool source."),
                 (ValidationPhase.Shape, "gates.dedupe.use", "\"builtin:rate-limit\" is not a gate."),
                 (ValidationPhase.Shape, "policies.permissionRules[0].to", "is required to route."),
                 (ValidationPhase.References, "tools.search.gates", "gate \"dedup\" does not exist."),
+                (ValidationPhase.References, "tools.search.source", "built-in tool \"workspace.search\" does not exist."),
                 (ValidationPhase.References, "toolSets.all", "tool \"web_serch\" does not exist."),
                 (ValidationPhase.Tools, "tools.web_search.reason", "is required for a provider tool."),
             ],

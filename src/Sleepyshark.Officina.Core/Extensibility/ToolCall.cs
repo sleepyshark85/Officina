@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Sleepyshark.Officina.Core.Records;
 
 namespace Sleepyshark.Officina.Core.Extensibility;
 
@@ -10,4 +11,5 @@ namespace Sleepyshark.Officina.Core.Extensibility;
 /// Where the tool reads credentials when it runs (SEC-05). Every value read here is kept out of the model's input, the
 /// audit log and errors (INV-06).
 /// </param>
-public sealed record ToolCall(JsonElement Arguments, Caller Caller, string IdempotencyKey, ISecretSource Secrets);
+/// <param name="Record">The run record, to read; only the core's record tools propose changes to it (REC-02).</param>
+public sealed record ToolCall(JsonElement Arguments, Caller Caller, string IdempotencyKey, ISecretSource Secrets, RunRecord Record);

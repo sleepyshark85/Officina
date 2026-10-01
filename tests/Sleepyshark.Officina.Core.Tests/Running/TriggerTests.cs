@@ -45,7 +45,7 @@ public class TriggerTests
         var model = new EchoModel();
         var runner = new AgentRunner(
             Options(), new Dictionary<string, IModelProvider> { ["claude"] = model }, new InMemoryStorage(), new Dictionary<string, ITool>(),
-            new Dictionary<string, IGate>(), new Dictionary<string, IKnowledgeSource>(), new ScriptedHuman(),
+            new Dictionary<string, IGate>(), new Dictionary<string, ICheck>(), new Dictionary<string, IKnowledgeSource>(), new ScriptedHuman(),
             new InMemorySecretSource(new Dictionary<string, string>()), new FakeTimeProvider());
 
         var results = await runner.RunBatchAsync(Agent, ["first", "broken", "third"], ct: Ct);

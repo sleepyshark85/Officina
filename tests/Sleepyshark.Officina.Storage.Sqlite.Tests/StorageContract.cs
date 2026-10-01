@@ -1,10 +1,14 @@
+using System.Collections.Concurrent;
 using System.Text.Json;
+using Microsoft.Extensions.Time.Testing;
 using Sleepyshark.Officina.Core;
 using Sleepyshark.Officina.Core.Configuration;
 using Sleepyshark.Officina.Core.Events;
 using Sleepyshark.Officina.Core.Extensibility;
 using Sleepyshark.Officina.Core.Messages;
+using Sleepyshark.Officina.Core.Records;
 using Sleepyshark.Officina.Core.Running;
+using Sleepyshark.Officina.Core.Tools;
 using Sleepyshark.Officina.Testing;
 
 namespace Sleepyshark.Officina.Storage.Sqlite.Tests;
@@ -87,6 +91,78 @@ public abstract class StorageContract
         Assert.Equal([(true, Start), (false, Start)], read.Select(turn => (turn.Shortened, turn.Time)));
     }
 
+    // REC-01, REC-04.
+    [Fact]
+    public async Task A_record_is_read_in_revision_order_and_a_taken_revision_is_refused()
+    {
+        var storage = await CreateAsync();
+        Assert.True(await storage.Records.TryAppendAsync("acme", Fact("run-1", 1), Ct));
+        Assert.True(await storage.Records.TryAppendAsync("acme", Fact("run-1", 2), Ct));
+        Assert.True(await storage.Records.TryAppendAsync("acme", Fact("run-2", 1), Ct));
+
+        Assert.False(await storage.Records.TryAppendAsync("acme", Fact("run-1", 2) with { Agent = "reviewer" }, Ct));
+
+        Assert.Equal([Fact("run-1", 1), Fact("run-1", 2)], await storage.Records.ReadAsync("acme", "run-1", Ct));
+    }
+
+    // TOOL-09, OUT-05.
+    [Fact]
+    public async Task An_artifact_is_read_by_its_id_within_its_run()
+    {
+        var storage = await CreateAsync();
+        var first = await storage.Artifacts.SaveAsync("acme", "run-1", new("read_log result", "full text"), Start, Ct);
+        var second = await storage.Artifacts.SaveAsync("acme", "run-1", new("report.md", "# Report"), Start, Ct);
+
+        Assert.NotEqual(first, second);
+        Assert.Equal(new Artifact("report.md", "# Report"), await storage.Artifacts.ReadAsync("acme", "run-1", second, Ct));
+        Assert.Null(await storage.Artifacts.ReadAsync("acme", "run-2", first, Ct));
+    }
+
+    // REC-04, CONC-01: real threads propose to one record through the real pipeline, record tool and store.
+    [Fact]
+    public async Task Concurrent_proposals_never_overwrite_each_other()
+    {
+        const int Writers = 4;
+        const int Proposals = 25;
+        var storage = await CreateAsync();
+        var options = new OfficinaOptions
+        {
+            Agents = Enumerable.Range(0, Writers).ToDictionary(writer => $"agent-{writer}", _ => new AgentDefinition { Instructions = "Record.", Tools = ["record"] }),
+            Tools = new Dictionary<string, ToolOptions> { ["propose_fact"] = new() { Source = "builtin:record.propose_fact" } },
+            ToolSets = new Dictionary<string, IReadOnlyList<string>> { ["record"] = ["propose_fact"] },
+        };
+        var time = new FakeTimeProvider(Start);
+        var pipeline = new ToolPipeline(
+            options, new Dictionary<string, ITool>(), new Dictionary<string, IGate>(), new Dictionary<string, IKnowledgeSource>(), storage,
+            new EventBus(storage.Events, options.Storage, time), new ScriptedHuman(), new InMemorySecretSource(new Dictionary<string, string>()), time);
+        var caller = new Caller("ann", "acme", new HashSet<string>(), new Dictionary<string, string>());
+        var errors = new ConcurrentBag<string>();
+        using var start = new Barrier(Writers);
+        var threads = Enumerable.Range(0, Writers).Select(writer => new Thread(() =>
+        {
+            start.SignalAndWait();
+            for (var proposal = 0; proposal < Proposals; proposal++)
+            {
+                var arguments = JsonDocument.Parse($$"""{ "subject": "{{writer}}.{{proposal}}", "value": "v", "source": "test" }""").RootElement;
+                var context = new ToolContext("run-1", $"agent-{writer}", caller);
+                var result = pipeline.RunAsync(context, [new ToolRequest("propose_fact", arguments)], CancellationToken.None).GetAwaiter().GetResult()[0];
+                if (result.Error is not null)
+                {
+                    errors.Add(result.Content);
+                }
+            }
+        })).ToList();
+
+        threads.ForEach(thread => thread.Start());
+        threads.ForEach(thread => thread.Join());
+
+        Assert.Empty(errors);
+        var record = await storage.Records.ReadAsync("acme", "run-1", Ct);
+        Assert.Equal(Enumerable.Range(1, Writers * Proposals).Select(revision => (long)revision), record.Select(entry => entry.Revision));
+        Assert.All(record, entry => Assert.StartsWith($"{entry.Agent[^1]}.", ((Fact)entry.Item).Subject, StringComparison.Ordinal));
+        Assert.Equal(Writers * Proposals, record.Select(entry => ((Fact)entry.Item).Subject).Distinct().Count());
+    }
+
     // SEC-02, TEST-18.
     [Fact]
     public async Task A_tenant_cannot_see_another_tenants_data()
@@ -99,6 +175,8 @@ public abstract class StorageContract
             Assert.Empty(await storage.Events.ReadAsync(other, "run-1", 0, Ct));
             Assert.Empty(await storage.Audit.ReadAsync(other, "run-1", Ct));
             Assert.Empty(await storage.Conversations.ReadAsync(other, "extractor", "ann", Ct));
+            Assert.Empty(await storage.Records.ReadAsync(other, "run-1", Ct));
+            Assert.Null(await storage.Artifacts.ReadAsync(other, "run-1", 1, Ct));
             Assert.Equal(0, await CountAsync(storage, other, "ann"));
             await storage.DeleteAsync(other, "ann", Ct);
         }
@@ -120,6 +198,8 @@ public abstract class StorageContract
         Assert.Equal([Event("run-1", 1)], export.Events);
         Assert.Equal([Entry("run-1", AuditOutcome.Intent)], export.Audit);
         Assert.Equal(["ann"], export.Conversations.Select(turn => turn.Owner));
+        Assert.Equal([Fact("run-1", 1)], export.Records);
+        Assert.Equal([new Artifact("run-1 result", "full text")], export.Artifacts);
     }
 
     // PRIV-02, TEST-18.
@@ -135,26 +215,35 @@ public abstract class StorageContract
         Assert.Equal(0, await CountAsync(storage, "acme", "ann"));
         Assert.Empty(await storage.Events.ReadAsync("acme", "run-1", 0, Ct));
         Assert.Empty(await storage.Conversations.ReadAsync("acme", "extractor", "ann", Ct));
+        Assert.Empty(await storage.Records.ReadAsync("acme", "run-1", Ct));
         Assert.Equal([Entry("run-1", AuditOutcome.Intent)], await storage.Audit.ReadAsync("acme", "run-1", Ct));
         Assert.Single((await storage.ExportAsync("acme", "bob", Ct)).Runs);
     }
 
-    // PRIV-01, EVT-05, TEST-18.
+    // PRIV-01, EVT-05, TEST-18; REC-05: a record is deleted whole, never trimmed.
     [Fact]
     public async Task Data_older_than_its_kinds_retention_is_deleted()
     {
         var storage = await CreateAsync();
         await StoreRunAsync(storage, "acme", "old", "ann");
+        await StoreRunAsync(storage, "acme", "long", "ann");
+        await storage.Records.TryAppendAsync("acme", Fact("long", 2, Start.AddDays(20)), Ct);
         await StoreRunAsync(storage, "acme", "new", "ann", Start.AddDays(20));
+        var retention = new RetentionOptions
+        {
+            Events = TimeSpan.FromDays(10), Conversations = TimeSpan.FromDays(10), Audit = TimeSpan.FromDays(30), RunRecords = TimeSpan.FromDays(10),
+            Artifacts = TimeSpan.FromDays(10),
+        };
 
-        await storage.DeleteExpiredAsync(
-            new RetentionOptions { Events = TimeSpan.FromDays(10), Conversations = TimeSpan.FromDays(10), Audit = TimeSpan.FromDays(30) }, Start.AddDays(25), Ct);
+        await storage.DeleteExpiredAsync(retention, Start.AddDays(25), Ct);
 
         var export = await storage.ExportAsync("acme", "ann", Ct);
-        Assert.Equal(["old", "new"], export.Runs.Select(run => run.RunId));
+        Assert.Equal(["old", "long", "new"], export.Runs.Select(run => run.RunId));
         Assert.Equal(["new"], export.Events.Select(kept => kept.RunId));
-        Assert.Equal(["old", "new"], export.Audit.Select(entry => entry.RunId));
+        Assert.Equal(["old", "long", "new"], export.Audit.Select(entry => entry.RunId));
         Assert.Equal([Start.AddDays(20)], export.Conversations.Select(turn => turn.Time));
+        Assert.Equal([("long", 1L), ("long", 2L), ("new", 1L)], export.Records.Select(entry => (entry.RunId, entry.Revision)).Order());
+        Assert.Equal(["new result"], export.Artifacts.Select(artifact => artifact.Name));
     }
 
     protected static RunStarted Run(string runId, string? owner, DateTimeOffset? time = null) =>
@@ -168,20 +257,28 @@ public abstract class StorageContract
 
     protected static ConversationTurn Turn(string owner, params Message[] messages) => new("extractor", owner, Start, [.. messages], Shortened: false);
 
-    /// <summary>A run with one event, one audit entry and one turn of the owner's conversation, all at <paramref name="time"/>.</summary>
+    protected static RecordEntry Fact(string runId, long revision, DateTimeOffset? time = null) =>
+        new(runId, revision, "extractor", time ?? Start, new Fact("invoice.total", "42", "invoice.pdf", null));
+
+    /// <summary>
+    /// A run with one event, one audit entry, one turn of the owner's conversation, a record of one fact and one artifact,
+    /// all at <paramref name="time"/>.
+    /// </summary>
     private static async Task StoreRunAsync(IStorage storage, string tenant, string runId, string owner, DateTimeOffset? time = null)
     {
         await storage.Runs.RecordStartAsync(tenant, Run(runId, owner, time), Ct);
         await storage.Events.AppendAsync(tenant, Event(runId, 1, time), Ct);
         await storage.Audit.AppendAsync(tenant, Entry(runId, AuditOutcome.Intent, time), Ct);
         await storage.Conversations.AppendAsync(tenant, Turn(owner, Message.User(runId)) with { Time = time ?? Start }, Ct);
+        await storage.Records.TryAppendAsync(tenant, Fact(runId, 1, time), Ct);
+        await storage.Artifacts.SaveAsync(tenant, runId, new($"{runId} result", "full text"), time ?? Start, Ct);
     }
 
-    /// <summary>How many runs, events, audit entries and conversation turns an export of the owner's data holds.</summary>
+    /// <summary>How many items an export of the owner's data holds.</summary>
     private static async Task<int> CountAsync(IStorage storage, string? tenant, string owner)
     {
         var data = await storage.ExportAsync(tenant, owner, Ct);
-        return data.Runs.Count + data.Events.Count + data.Audit.Count + data.Conversations.Count;
+        return data.Runs.Count + data.Events.Count + data.Audit.Count + data.Conversations.Count + data.Records.Count + data.Artifacts.Count;
     }
 
     private static JsonElement Args => JsonDocument.Parse("""{ "path": "a.cs" }""").RootElement;
