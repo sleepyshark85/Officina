@@ -6,10 +6,9 @@ Status: draft · 2026-10-01 · slices `REQUIREMENTS.md` (revision 2) into delive
 
 Last updated 2026-10-02.
 
-- **Done:** M0 spikes S00a and S00b; M1 slices S01 (walking skeleton) and S02 (configuration); S03 (tool pipeline); S04 (turn loop); S05 (context and caching); S06 (run record and output); S07 (history and conversation store); S08 (events, storage and observability); S09 (triggers and admission); S10 (MCP and knowledge); S14 (git workspace).
-- **Doing:** S15 (sandbox). The Linux piece is in review; the Windows piece follows.
+- **Done:** M0 spikes S00a and S00b; M1 slices S01 (walking skeleton) and S02 (configuration); S03 (tool pipeline); S04 (turn loop); S05 (context and caching); S06 (run record and output); S07 (history and conversation store); S08 (events, storage and observability); S09 (triggers and admission); S10 (MCP and knowledge); S14 (git workspace); S15 (sandbox).
 - **Waiting:** the M0 design review sign-off on `REQUIREMENTS.md`, `CONFIGURATION.md` and `DESIGN.md`.
-- **Next:** S16. The Windows piece of S15 can run alongside it.
+- **Next:** S16.
 - **Open follow-ups:**
   - S02 kept a `formatVersion` check, though only version 1 exists. Consider removing the setting
     until a version 2 exists (principle 13). S06 keeps `output.schema` as JSON text; when S13 or S16 want the
@@ -45,9 +44,9 @@ Last updated 2026-10-02.
     moved from S15: the sandbox needs only the working copy's folder). It gives each agent its working
     copy and its `SandboxTools`, disposes them when the agent, task or run ends (SBX-03), wires the
     sandbox tools and the command rules gate as built-ins, and shows the integration queue (WS-09).
-  - S15 mounts toolchains installed outside `/usr` into the Linux sandbox. Its Windows piece keeps
-    protected paths out of commands with the AppContainer's ACLs, as the Linux piece does with mounts.
-  - S08 publishes sandboxed command output and the proxy's allow and deny decisions as events (SBX-04).
+    It probes the sandbox once at startup (SBX-07), rather than once per agent's `SandboxTools`.
+  - S19 deletes the AppContainer profile of a working copy that is cleaned up; each working copy
+    has its own, and they stay until then.
   - S18 turns an integration conflict or failed check into work for the author or the lead (WS-03),
     and integrates a task only after its verification checks pass (TASK-05).
   - S19 snapshots and restores the workspace, and cleans up worktrees left by a crash.
@@ -117,7 +116,7 @@ A slice is **done** when:
 | [S12](S12-model-gateway.md) | Model gateway | M3 | S | S11 | [#14](https://github.com/sleepyshark85/Officina/issues/14) | todo |
 | [S13](S13-loop-patterns.md) | Loop patterns | M4 | M | S04, S06 | [#15](https://github.com/sleepyshark85/Officina/issues/15) | todo |
 | [S14](S14-git-workspace.md) | Git workspace | M5 | M | S03 | [#16](https://github.com/sleepyshark85/Officina/issues/16) | done |
-| [S15](S15-sandbox.md) | Sandbox | M5 | M ×2 | S00a, S14 | [#17](https://github.com/sleepyshark85/Officina/issues/17) | doing |
+| [S15](S15-sandbox.md) | Sandbox | M5 | M ×2 | S00a, S14 | [#17](https://github.com/sleepyshark85/Officina/issues/17) | done |
 | [S16](S16-human-interaction-cli.md) | Human interaction and CLI | M5 | M | S04, S08 | [#18](https://github.com/sleepyshark85/Officina/issues/18) | todo |
 | [S17](S17-project-memory.md) | Project memory | M5 | S | S05, S16 | [#19](https://github.com/sleepyshark85/Officina/issues/19) | todo |
 | [S18](S18-task-board.md) | Task board | M6 | M | S06, S08 | [#20](https://github.com/sleepyshark85/Officina/issues/20) | todo |
