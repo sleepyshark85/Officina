@@ -152,13 +152,8 @@ internal sealed class FilterProxy : IAsyncDisposable
             var upload = PipeAsync(client, server);
             await PipeAsync(server, client).ConfigureAwait(false);
 
-            // A named pipe cannot be half-closed, so the server's end is the connection's end. Disconnecting ends it at once;
-            // disposing it would wait for the upload's pending read, which only the other end can finish.
-            if (client is NamedPipeServerStream pipe)
-            {
-                pipe.Disconnect();
-            }
-            else
+            // A named pipe cannot be half-closed, so for a pipe the server's end is the connection's end.
+            if (client is NetworkStream)
             {
                 await upload.ConfigureAwait(false);
             }
@@ -166,6 +161,14 @@ internal sealed class FilterProxy : IAsyncDisposable
         catch (Exception exception) when (exception is IOException or SocketException or UriFormatException or OperationCanceledException)
         {
             // The connection ends; the command sees it fail.
+        }
+        finally
+        {
+            // Disconnecting ends a pipe at once; disposing it would wait for a pending read, which only the other end can finish.
+            if (client is NamedPipeServerStream { IsConnected: true } pipe)
+            {
+                pipe.Disconnect();
+            }
         }
     }
 
