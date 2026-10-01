@@ -21,13 +21,17 @@ public sealed class AgentRunner
     private readonly TimeProvider time;
     private readonly ToolPipeline pipeline;
     private readonly IReadOnlyDictionary<string, IKnowledgeSource> knowledge;
+    private readonly Dictionary<string, IHistoryShortener> shortening;
     private readonly ConcurrentDictionary<string, SemaphoreSlim> turns = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, ConcurrentQueue<Message>> inboxes = new(StringComparer.Ordinal);
 
     /// <summary>Validates the configuration in full, with the application's tools and gates; nothing runs if it has errors (CFG-06).</summary>
     /// <param name="options">The configuration, fixed for the runner's lifetime. A changed configuration needs a new runner (CFG-08).</param>
     /// <param name="providers">The provider implementations, by their name in <c>providers</c>.</param>
-    /// <param name="storage">Where each run is recorded with the configuration it used (CFG-07), with its events and audit entries.</param>
+    /// <param name="storage">
+    /// Where each run is recorded with the configuration it used (CFG-07), with its events and audit entries, and where
+    /// conversations are kept.
+    /// </param>
     /// <param name="tools">
     /// The application's tools, by the id that <c>extension:&lt;id&gt;</c> sources name, and the tool servers' tools, by
     /// the <c>&lt;server&gt;/&lt;tool&gt;</c> that <c>mcp:</c> sources name.
@@ -37,6 +41,7 @@ public sealed class AgentRunner
     /// <param name="human">Who approves tool calls that need approval.</param>
     /// <param name="secrets">Where tools read credentials.</param>
     /// <param name="time">The clock for budgets, time limits and audit times.</param>
+    /// <param name="shorteners">The application's history shorteners, by the id that <c>extension:&lt;id&gt;</c> shortenings name.</param>
     /// <exception cref="ConfigurationException">The configuration has errors.</exception>
     public AgentRunner(
         OfficinaOptions options,
@@ -47,7 +52,8 @@ public sealed class AgentRunner
         IReadOnlyDictionary<string, IKnowledgeSource> knowledge,
         IHumanChannel human,
         ISecretSource secrets,
-        TimeProvider time)
+        TimeProvider time,
+        IReadOnlyDictionary<string, IHistoryShortener>? shorteners = null)
     {
         ArgumentNullException.ThrowIfNull(providers);
         ArgumentNullException.ThrowIfNull(options);
@@ -58,6 +64,7 @@ public sealed class AgentRunner
         Events = new EventBus(storage.Events, options.Storage, time);
         pipeline = new ToolPipeline(options, tools, gates, knowledge, storage.Audit, Events, human, secrets, time);
         this.knowledge = knowledge;
+        shortening = Shortening(options, providers, shorteners ?? new Dictionary<string, IHistoryShortener>());
         Options = options;
     }
 
@@ -105,6 +112,40 @@ public sealed class AgentRunner
 
     private ConcurrentQueue<Message> Inbox(string agentName) => inboxes.GetOrAdd(agentName, _ => new());
 
+    /// <summary>
+    /// What shortens the history of each agent whose strategy is <c>shortened</c> (HIST-01): its model provider, which
+    /// must be able to, or a shortener the application registers.
+    /// </summary>
+    /// <exception cref="ConfigurationException">A shortening is not available.</exception>
+    private static Dictionary<string, IHistoryShortener> Shortening(
+        OfficinaOptions options, IReadOnlyDictionary<string, IModelProvider> providers, IReadOnlyDictionary<string, IHistoryShortener> shorteners)
+    {
+        var found = new Dictionary<string, IHistoryShortener>(StringComparer.Ordinal);
+        var errors = new List<ConfigurationError>();
+        foreach (var (name, agent) in options.Agents.Where(agent => agent.Value.Context.History.Strategy == HistoryStrategy.Shortened))
+        {
+            var path = $"agents.{name}.context.history.shortening";
+            var provider = options.Models[agent.Model].Provider;
+            var id = agent.Context.History.ExtensionId();
+            if ((id is null ? providers.GetValueOrDefault(provider) as IHistoryShortener : shorteners.GetValueOrDefault(id)) is { } shortener)
+            {
+                found[name] = shortener;
+            }
+            else if (id is not null)
+            {
+                errors.Add(new(ValidationPhase.References, path, $"history shortener extension \"{id}\" is not registered.",
+                    $"Register the application's history shortener under the id \"{id}\"."));
+            }
+            else if (providers.ContainsKey(provider))
+            {
+                errors.Add(new(ValidationPhase.Provider, path, $"provider \"{provider}\" cannot shorten history.",
+                    "Use extension:<id> for a shortener the application registers."));
+            }
+        }
+
+        return errors.Count > 0 ? throw new ConfigurationException([.. errors.OrderBy(error => error.Phase)]) : found;
+    }
+
     private async Task<AgentResult> RunCoreAsync(string name, string input, Caller caller, CancellationToken ct)
     {
         var agent = Options.Agents[name];
@@ -115,7 +156,8 @@ public sealed class AgentRunner
 
         var context = new ToolContext(Guid.CreateVersion7().ToString(), name, caller);
         var instructions = InstructionPlaceholders.Fill(agent.Instructions, Options.Project, name, agent);
-        var turn = new Turn(context, Options, provider, pipeline, knowledge, Events, instructions, input, Inbox(name), time);
+        var turn = new Turn(
+            context, Options, provider, pipeline, knowledge, storage.Conversations, shortening.GetValueOrDefault(name), Events, instructions, input, Inbox(name), time);
         var oneAtATime = turns.GetOrAdd(name, _ => new SemaphoreSlim(1, 1));
         var entered = false;
         Activity? activity = null;

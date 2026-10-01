@@ -23,7 +23,7 @@ It lists the settings the code has today. Settings that later slices add are spe
 | `run` | section | `{"budget":{"cost":25,"time":"08:00:00"},"permissionMode":"ask"}` | Defaults for every run. | `{"permissionMode":"ask"}` |
 | `operations` | section | `{"telemetry":{"cacheHitWarning":0.7}}` | How the engine is operated. | `{"telemetry":{"cacheHitWarning":0.7}}` |
 | `storage` | section | `{"unstoredEvents":["textGenerated"],"retention":{"audit":"365.00:00:00"}}` | What is stored, and for how long. | `{"unstoredEvents":["textGenerated"],"retention":{"events":"30.00:00:00"}}` |
-| `capabilities` | section | `{}` | Optional capabilities and their settings. All are off by default. | `{"workspace":{"keepWorkingCopies":true}}` |
+| `capabilities` | section | `{"conversationStore":{"enabled":false},"knowledge":{"enabled":false},"workspace":{"enabled":false,"protectedPaths":[],"keepWorkingCopies":false},"sandbox":{"enabled":false,"allowedHosts":[],"commandRules":[],"secrets":{}}}` | Optional capabilities and their settings. All are off by default. | `{"conversationStore":{"enabled":true}}` |
 
 ## `project`
 
@@ -61,8 +61,9 @@ It lists the settings the code has today. Settings that later slices add are spe
 | `tools` | list | `[]` | The tool sets, by name in `toolSets`, whose tools the agent is offered. The same tools are offered whoever the caller is. | `["files","issues"]` |
 | `toolDescriptionsOnDemand` | boolean | `false` | Whether the model is offered only the tools' names, and reads a tool's description and arguments with `describe_tool` when it needs them. For agents with many tools. | `true` |
 | `permissions` | list |  | Narrows the caller's permissions for this agent's tool calls: a permission counts only if the caller holds it and it is listed here. Unset keeps the caller's. | `["issues:write"]` |
+| `capabilities` | list |  | The capabilities, by name in `capabilities`, this agent uses; each must be enabled. Unset uses every enabled capability. | `["conversationStore","knowledge"]` |
 | `maxParallelToolCalls` | whole number, ≥ 1 | `4` | The most tool calls from one reply that run at the same time, when every tool called is safe to run in parallel. | `4` |
-| `context` | section | `{"operatingFacts":[],"historyCacheLifetime":"00:05:00","retrieval":{"beforeTurn":[],"handOffWhenNotCovered":false}}` | How the agent's model input is built. Required. | `{"operatingFacts":["Today is {{now:date}}."]}` |
+| `context` | section | `{"operatingFacts":[],"historyCacheLifetime":"00:05:00","retrieval":{"beforeTurn":[],"handOffWhenNotCovered":false},"history":{"strategy":"none","shortening":"provider","lastTurns":10}}` | How the agent's model input is built. Required. | `{"operatingFacts":["Today is {{now:date}}."]}` |
 | `stopWhen` | section | `{"finished":true}` | When a turn is complete. They combine: the first that holds completes the turn. Required. | `{"finished":false,"finishTool":"submit_report"}` |
 | `budget` | section | `{"turn":{"iterations":50,"toolCalls":200,"tokens":3000000,"cost":5,"time":"00:45:00"}}` | The agent's budgets. They can be high, but they cannot be removed or unlimited. Required. | `{"turn":{"iterations":50,"cost":5}}` |
 | `stall` | section | `{"iterationsWithoutProgress":3}` | When a turn has stalled. Required. | `{"iterationsWithoutProgress":5}` |
@@ -135,14 +136,16 @@ It lists the settings the code has today. Settings that later slices add are spe
 | Setting | Allowed values | Default | Description | Example |
 |---|---|---|---|---|
 | `unstoredEvents` | list | `["textGenerated"]` | Kinds of event that are published live but not stored, so a reader that joins late or falls behind does not see them. Streamed text is not stored by default: storing each piece slows the agent, and the conversation keeps the text. | `["textGenerated","modelCallEnded"]` |
-| `retention` | section | `{"audit":"365.00:00:00"}` | How long each kind of stored data is kept. Runs and events without a period are kept until they are deleted. | `{"events":"30.00:00:00"}` |
+| `retention` | section | `{"audit":"365.00:00:00"}` | How long each kind of stored data is kept. Runs, conversations and events without a period are kept until they are deleted. | `{"events":"30.00:00:00"}` |
 
 ## `capabilities`
 
 | Setting | Allowed values | Default | Description | Example |
 |---|---|---|---|---|
-| `workspace` | section |  | The git workspace: a working copy per agent, and an integration queue into the baseline. Off when unset. | `{"protectedPaths":[{"path":"secrets/**","access":"hidden"}]}` |
-| `sandbox` | section |  | The sandbox that commands run in: no network unless allowed, and command rules. Off when unset. | `{"allowedHosts":["api.nuget.org"]}` |
+| `conversationStore` | section | `{"enabled":false}` | The conversation store: each agent's conversation with each caller is kept, so a history strategy other than `none` continues it across requests and restarts. | `{"enabled":true}` |
+| `knowledge` | section | `{"enabled":false}` | Knowledge retrieval: the sources in `knowledge`, searched before a turn or through `knowledge:` tools. | `{"enabled":true}` |
+| `workspace` | section | `{"enabled":false,"protectedPaths":[],"keepWorkingCopies":false}` | The git workspace: a working copy per agent, and an integration queue into the baseline. | `{"enabled":true,"protectedPaths":[{"path":"secrets/**","access":"hidden"}]}` |
+| `sandbox` | section | `{"enabled":false,"allowedHosts":[],"commandRules":[],"secrets":{}}` | The sandbox that commands run in: no network unless allowed, and command rules. It needs the workspace. | `{"enabled":true,"allowedHosts":["api.nuget.org"]}` |
 
 ## `providers.<name>.apiKey`
 
@@ -166,6 +169,7 @@ It lists the settings the code has today. Settings that later slices add are spe
 | `operatingFacts` | list | `[]` | Facts added after the history for every model call, in this order, such as limits or the date. Placeholders may use `{{now}}` and `{{now:date}}`, and the project and agent values. | `["Today is {{now:date}}.","Replies are limited to 300 words."]` |
 | `historyCacheLifetime` | time span (`hh:mm:ss` or `d.hh:mm:ss`) | `"00:05:00"` | How long the provider keeps the conversation cached between model calls, as `hh:mm:ss`, at most one hour. Agents that often wait for approvals benefit from longer. | `"01:00:00"` |
 | `retrieval` | section | `{"beforeTurn":[],"handOffWhenNotCovered":false}` | Knowledge retrieved before each turn. Required. | `{"beforeTurn":["handbook"],"handOffWhenNotCovered":true}` |
+| `history` | section | `{"strategy":"none","shortening":"provider","lastTurns":10}` | What history a request starts with, and how it is shortened. Required. | `{"strategy":"shortened"}` |
 
 ## `agents.<name>.stopWhen`
 
@@ -232,12 +236,20 @@ It lists the settings the code has today. Settings that later slices add are spe
 |---|---|---|---|---|
 | `runs` | time span (`hh:mm:ss` or `d.hh:mm:ss`) |  | How long a run, with the configuration it used, is kept after it starts, as `d.hh:mm:ss`. | `"90.00:00:00"` |
 | `events` | time span (`hh:mm:ss` or `d.hh:mm:ss`) |  | How long an event is kept after it happens, as `d.hh:mm:ss`. | `"30.00:00:00"` |
+| `conversations` | time span (`hh:mm:ss` or `d.hh:mm:ss`) |  | How long a turn of a stored conversation is kept after it ends, as `d.hh:mm:ss`. Once its earliest turns are deleted, a conversation continues from the turns kept. | `"90.00:00:00"` |
 | `audit` | time span (`hh:mm:ss` or `d.hh:mm:ss`) | `"365.00:00:00"` | How long an audit entry is kept after it is written, as `d.hh:mm:ss`. A request to delete an owner's data leaves audit entries to this period. | `"730.00:00:00"` |
+
+## `capabilities.conversationStore`
+
+| Setting | Allowed values | Default | Description | Example |
+|---|---|---|---|---|
+| `enabled` | boolean | `false` | Whether the capability is on. | `true` |
 
 ## `capabilities.workspace`
 
 | Setting | Allowed values | Default | Description | Example |
 |---|---|---|---|---|
+| `enabled` | boolean | `false` | Whether the workspace is on. | `true` |
 | `protectedPaths` | list | `[]` | Paths agents cannot see or change, in addition to the fixed ones: `.git`, `**/.env*` and `.sof/**` are hidden, and `sof.json` and `sof.*.json` are read-only. | `[{"path":"secrets/**","access":"hidden"}]` |
 | `keepWorkingCopies` | boolean | `false` | Whether an agent's working copy is kept when its task ends, so the owner can look at it. | `true` |
 
@@ -245,6 +257,7 @@ It lists the settings the code has today. Settings that later slices add are spe
 
 | Setting | Allowed values | Default | Description | Example |
 |---|---|---|---|---|
+| `enabled` | boolean | `false` | Whether the sandbox is on. | `true` |
 | `allowedHosts` | list | `[]` | The hosts commands may reach, through a filtering proxy. `*.` matches any subdomain. Empty means no network. | `["api.nuget.org","*.nuget.org"]` |
 | `commandRules` | list | `[]` | Rules for commands, in order. Each command of a command line is decided by the first rule that matches it, and the strictest decision applies. A command no rule matches is asked about. | `[{"match":"dotnet build*","action":"allow"},{"match":"git push*","action":"deny"}]` |
 | `secrets` | named entries | `{}` | The secrets each agent's commands receive as environment variables, by agent name. Other agents' commands never see them. | `{"developer":["NUGET_TOKEN"]}` |
@@ -255,6 +268,14 @@ It lists the settings the code has today. Settings that later slices add are spe
 |---|---|---|---|---|
 | `beforeTurn` | list | `[]` | Knowledge sources, by name in `knowledge`, searched with the turn's work before the turn starts. Their passages are given to the model as data in the volatile context. | `["handbook"]` |
 | `handOffWhenNotCovered` | boolean | `false` | Whether the turn ends in a handoff for a policy gap, without calling the model, when no source searched before the turn covers the work. | `true` |
+
+## `agents.<name>.context.history`
+
+| Setting | Allowed values | Default | Description | Example |
+|---|---|---|---|---|
+| `strategy` | `"none"`, `"full"`, `"shortened"`, `"lastTurns"` | `"none"` | `none`: each request starts a new conversation. `full`: the agent's conversation with the caller continues, and is never shortened, so once it is too long for the model the turn is handed off. `shortened`: it continues, and is shortened once when the model reports it too long. `lastTurns`: it continues with the last `lastTurns` turns only. All but `none` need the conversation store. | `"shortened"` |
+| `shortening` | text | `"provider"` | How `shortened` history is shortened: `provider` by the model provider's own mechanism, or `extension:<id>` by a shortener the application registers. The current turn is never shortened. Required. | `"extension:Acme.Summarizer"` |
+| `lastTurns` | whole number, ≥ 1 | `10` | For `lastTurns`: how many earlier turns a request starts with. | `5` |
 
 ## `agents.<name>.budget.turn`
 

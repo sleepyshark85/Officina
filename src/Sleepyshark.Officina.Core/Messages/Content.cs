@@ -1,8 +1,15 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace Sleepyshark.Officina.Core.Messages;
 
-/// <summary>One piece of a message (MSG-02).</summary>
+/// <summary>One piece of a message (MSG-02). Its JSON form names its kind, so a stored conversation reads back as it was.</summary>
+[JsonPolymorphic(TypeDiscriminatorPropertyName = "kind")]
+[JsonDerivedType(typeof(TextContent), "text")]
+[JsonDerivedType(typeof(ReasoningContent), "reasoning")]
+[JsonDerivedType(typeof(ToolUseContent), "toolUse")]
+[JsonDerivedType(typeof(ToolResultContent), "toolResult")]
+[JsonDerivedType(typeof(ProviderContent), "provider")]
 public abstract record Content;
 
 public sealed record TextContent : Content

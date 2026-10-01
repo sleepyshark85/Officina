@@ -22,6 +22,9 @@ public sealed record WorkspaceOptions
         new() { Path = "sof.*.json", Access = PathAccess.ReadOnly },
     ];
 
+    [Setting("Whether the workspace is on.", Example = "true")]
+    public bool Enabled { get; init; }
+
     [Setting("Paths agents cannot see or change, in addition to the fixed ones: `.git`, `**/.env*` and `.sof/**` are hidden, and `sof.json` and `sof.*.json` are read-only.",
         Example = """[{ "path": "secrets/**", "access": "hidden" }]""")]
     public IReadOnlyList<ProtectedPath> ProtectedPaths { get; init; } = [];

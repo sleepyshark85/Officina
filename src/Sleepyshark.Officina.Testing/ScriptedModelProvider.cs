@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using Sleepyshark.Officina.Core.Extensibility;
@@ -5,11 +6,15 @@ using Sleepyshark.Officina.Core.Messages;
 
 namespace Sleepyshark.Officina.Testing;
 
-/// <summary>A model provider that answers with replies scripted in advance, in order. It needs no network or API key.</summary>
-public sealed class ScriptedModelProvider : IModelProvider
+/// <summary>
+/// A model provider that answers with replies scripted in advance, in order, and shortens history as scripted. It needs
+/// no network or API key.
+/// </summary>
+public sealed class ScriptedModelProvider : IModelProvider, IHistoryShortener
 {
     private readonly Lock gate = new();
     private readonly Queue<ModelEvent[]> replies = new();
+    private readonly Queue<Func<ImmutableArray<Message>, IEnumerable<Message>>> shortenings = new();
     private readonly List<ModelRequest> requests = [];
     private int toolCalls;
 
@@ -53,6 +58,29 @@ public sealed class ScriptedModelProvider : IModelProvider
         return Reply([.. calls.Select(call => new ContentReceived(
             new ToolUseContent($"call-{Interlocked.Increment(ref toolCalls)}", call.Tool, JsonDocument.Parse(call.Arguments).RootElement))),
             new Stopped(StopReason.WantsTools)]);
+    }
+
+    /// <summary>Adds a shortening: what the provider's own mechanism makes of the history it is given.</summary>
+    public ScriptedModelProvider Shorten(Func<ImmutableArray<Message>, IEnumerable<Message>> shorten)
+    {
+        ArgumentNullException.ThrowIfNull(shorten);
+        lock (gate)
+        {
+            shortenings.Enqueue(shorten);
+        }
+
+        return this;
+    }
+
+    public ValueTask<ImmutableArray<Message>> ShortenAsync(ModelRequest request, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        lock (gate)
+        {
+            return shortenings.TryDequeue(out var shorten)
+                ? ValueTask.FromResult<ImmutableArray<Message>>([.. shorten(request.History)])
+                : throw new InvalidOperationException("The scripted model was asked to shorten history but has no shortening left. Add one with Shorten().");
+        }
     }
 
     public async IAsyncEnumerable<ModelEvent> StreamAsync(

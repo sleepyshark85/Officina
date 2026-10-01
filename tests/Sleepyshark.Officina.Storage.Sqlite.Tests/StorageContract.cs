@@ -59,6 +59,34 @@ public abstract class StorageContract
             await storage.Audit.ReadAsync("acme", "run-1", Ct));
     }
 
+    // CAP-05, HIST-01: a shortened turn holds the whole conversation, so reading starts there.
+    [Fact]
+    public async Task A_conversation_is_read_in_order_from_its_latest_shortened_turn()
+    {
+        var storage = await CreateAsync();
+        ConversationTurn[] turns =
+        [
+            Turn("ann", Message.User("1")),
+            Turn("ann", Message.User("Summary of 1."), Message.User("2")) with { Shortened = true },
+            Turn("ann", Message.User("3"), new Message(Role.Assistant, [new ReasoningContent("Look first.", "sig"), new ToolUseContent("call-1", "read", Args)]),
+                new Message(Role.User, [new ToolResultContent("call-1", "text", isError: false)]), new Message(Role.System, [new TextContent("<context />")], turnScoped: true),
+                new Message(Role.Assistant, [new ProviderContent(Args)])),
+        ];
+        foreach (var turn in turns)
+        {
+            await storage.Conversations.AppendAsync("acme", turn, Ct);
+        }
+
+        await storage.Conversations.AppendAsync("acme", Turn("bob", Message.User("other")), Ct);
+        await storage.Conversations.AppendAsync("acme", Turn("ann", Message.User("other")) with { Agent = "reviewer" }, Ct);
+
+        var read = await storage.Conversations.ReadAsync("acme", "extractor", "ann", Ct);
+
+        // Arguments and provider content are JSON, which compares by its text.
+        Assert.Equal(JsonSerializer.Serialize(turns[1..].SelectMany(turn => turn.Messages)), JsonSerializer.Serialize(read.SelectMany(turn => turn.Messages)));
+        Assert.Equal([(true, Start), (false, Start)], read.Select(turn => (turn.Shortened, turn.Time)));
+    }
+
     // SEC-02, TEST-18.
     [Fact]
     public async Task A_tenant_cannot_see_another_tenants_data()
@@ -70,6 +98,7 @@ public abstract class StorageContract
         {
             Assert.Empty(await storage.Events.ReadAsync(other, "run-1", 0, Ct));
             Assert.Empty(await storage.Audit.ReadAsync(other, "run-1", Ct));
+            Assert.Empty(await storage.Conversations.ReadAsync(other, "extractor", "ann", Ct));
             Assert.Equal(0, await CountAsync(storage, other, "ann"));
             await storage.DeleteAsync(other, "ann", Ct);
         }
@@ -90,6 +119,7 @@ public abstract class StorageContract
         Assert.Equal(["run-1"], export.Runs.Select(run => run.RunId));
         Assert.Equal([Event("run-1", 1)], export.Events);
         Assert.Equal([Entry("run-1", AuditOutcome.Intent)], export.Audit);
+        Assert.Equal(["ann"], export.Conversations.Select(turn => turn.Owner));
     }
 
     // PRIV-02, TEST-18.
@@ -104,6 +134,7 @@ public abstract class StorageContract
 
         Assert.Equal(0, await CountAsync(storage, "acme", "ann"));
         Assert.Empty(await storage.Events.ReadAsync("acme", "run-1", 0, Ct));
+        Assert.Empty(await storage.Conversations.ReadAsync("acme", "extractor", "ann", Ct));
         Assert.Equal([Entry("run-1", AuditOutcome.Intent)], await storage.Audit.ReadAsync("acme", "run-1", Ct));
         Assert.Single((await storage.ExportAsync("acme", "bob", Ct)).Runs);
     }
@@ -116,12 +147,14 @@ public abstract class StorageContract
         await StoreRunAsync(storage, "acme", "old", "ann");
         await StoreRunAsync(storage, "acme", "new", "ann", Start.AddDays(20));
 
-        await storage.DeleteExpiredAsync(new RetentionOptions { Events = TimeSpan.FromDays(10), Audit = TimeSpan.FromDays(30) }, Start.AddDays(25), Ct);
+        await storage.DeleteExpiredAsync(
+            new RetentionOptions { Events = TimeSpan.FromDays(10), Conversations = TimeSpan.FromDays(10), Audit = TimeSpan.FromDays(30) }, Start.AddDays(25), Ct);
 
         var export = await storage.ExportAsync("acme", "ann", Ct);
         Assert.Equal(["old", "new"], export.Runs.Select(run => run.RunId));
         Assert.Equal(["new"], export.Events.Select(kept => kept.RunId));
         Assert.Equal(["old", "new"], export.Audit.Select(entry => entry.RunId));
+        Assert.Equal([Start.AddDays(20)], export.Conversations.Select(turn => turn.Time));
     }
 
     protected static RunStarted Run(string runId, string? owner, DateTimeOffset? time = null) =>
@@ -133,20 +166,25 @@ public abstract class StorageContract
     protected static AuditEntry Entry(string runId, AuditOutcome outcome, DateTimeOffset? time = null) =>
         new(runId, "extractor", "ann", "create_issue", """{"title":"Crash"}""", null, outcome, time ?? Start, "key");
 
-    /// <summary>A run with one event and one audit entry, all at <paramref name="time"/>.</summary>
+    protected static ConversationTurn Turn(string owner, params Message[] messages) => new("extractor", owner, Start, [.. messages], Shortened: false);
+
+    /// <summary>A run with one event, one audit entry and one turn of the owner's conversation, all at <paramref name="time"/>.</summary>
     private static async Task StoreRunAsync(IStorage storage, string tenant, string runId, string owner, DateTimeOffset? time = null)
     {
         await storage.Runs.RecordStartAsync(tenant, Run(runId, owner, time), Ct);
         await storage.Events.AppendAsync(tenant, Event(runId, 1, time), Ct);
         await storage.Audit.AppendAsync(tenant, Entry(runId, AuditOutcome.Intent, time), Ct);
+        await storage.Conversations.AppendAsync(tenant, Turn(owner, Message.User(runId)) with { Time = time ?? Start }, Ct);
     }
 
-    /// <summary>How many runs, events and audit entries an export of the owner's data holds.</summary>
+    /// <summary>How many runs, events, audit entries and conversation turns an export of the owner's data holds.</summary>
     private static async Task<int> CountAsync(IStorage storage, string? tenant, string owner)
     {
         var data = await storage.ExportAsync(tenant, owner, Ct);
-        return data.Runs.Count + data.Events.Count + data.Audit.Count;
+        return data.Runs.Count + data.Events.Count + data.Audit.Count + data.Conversations.Count;
     }
+
+    private static JsonElement Args => JsonDocument.Parse("""{ "path": "a.cs" }""").RootElement;
 
     private static string Json(OfficinaOptions options) => JsonSerializer.Serialize(options, ConfigurationJson.Options);
 }

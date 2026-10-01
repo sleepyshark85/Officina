@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using System.Text.Json.Serialization;
 
 namespace Sleepyshark.Officina.Core.Messages;
 
@@ -25,6 +26,13 @@ public sealed record Message
         Role = role;
         Content = pieces;
         TurnScoped = turnScoped;
+    }
+
+    /// <summary>Reads a stored message back, with the same checks.</summary>
+    [JsonConstructor]
+    private Message(Role role, ImmutableArray<Content> content, bool turnScoped)
+        : this(role, content.AsEnumerable(), turnScoped)
+    {
     }
 
     public Role Role { get; }

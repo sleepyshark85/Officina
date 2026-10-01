@@ -27,6 +27,7 @@ public class GovernanceTests
         {
             Gates = new Dictionary<string, GateOptions> { ["ask"] = new() { Use = GateOptions.RequireApproval } },
             Knowledge = new Dictionary<string, KnowledgeOptions> { ["handbook"] = new() { Use = "extension:handbook" } },
+            Capabilities = new() { Knowledge = new() { Enabled = true } },
         };
         await using var servers = await ToolServers.ConnectAsync(options, ReferenceServer.Secrets(), TestContext.Current.CancellationToken);
         var audit = new InMemoryAuditLog();

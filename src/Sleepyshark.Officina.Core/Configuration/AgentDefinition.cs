@@ -32,6 +32,10 @@ public sealed record AgentDefinition
         Example = """["issues:write"]""")]
     public IReadOnlyList<string>? Permissions { get; init; }
 
+    [Setting("The capabilities, by name in `capabilities`, this agent uses; each must be enabled. Unset uses every enabled capability.",
+        Example = """["conversationStore", "knowledge"]""")]
+    public IReadOnlyList<string>? Capabilities { get; init; }
+
     [Setting("The most tool calls from one reply that run at the same time, when every tool called is safe to run in parallel.", Example = "4")]
     [Range(1, int.MaxValue, ErrorMessage = "must be at least 1.")]
     public int MaxParallelToolCalls { get; init; } = 4;

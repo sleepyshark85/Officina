@@ -55,6 +55,6 @@ public sealed partial record OfficinaOptions
     [Setting("What is stored, and for how long.", Example = """{ "unstoredEvents": ["textGenerated"], "retention": { "events": "30.00:00:00" } }""")]
     public StorageOptions Storage { get; init; } = new();
 
-    [Setting("Optional capabilities and their settings. All are off by default.", Example = """{ "workspace": { "keepWorkingCopies": true } }""")]
+    [Setting("Optional capabilities and their settings. All are off by default.", Example = """{ "conversationStore": { "enabled": true } }""")]
     public CapabilitiesOptions Capabilities { get; init; } = new();
 }

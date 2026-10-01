@@ -81,6 +81,7 @@ public class KnowledgeTests
         return options with
         {
             Knowledge = new Dictionary<string, KnowledgeOptions> { ["handbook"] = new() { Use = "extension:Handbook" } },
+            Capabilities = new() { Knowledge = new() { Enabled = true } },
             Agents = new Dictionary<string, AgentDefinition> { [Agent] = options.Agents[Agent] with { Context = new() { Retrieval = retrieval } } },
         };
     }

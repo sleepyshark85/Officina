@@ -517,10 +517,11 @@ PAT-02). Data moves only through declared `input` and `output` (PAT-04).
 }
 ```
 
-History strategies are `none`, `full`, `shortened` and `lastTurns`. `shortened` requires a
-shortening method: `provider` (the default where the provider supports it), `extension:<id>`, or
-`off`. `lastTurns` needs a conversation store and never edits history already sent: it starts a
-new conversation when the window moves (CTX-10).
+History strategies are `none`, `full`, `shortened` and `lastTurns`; all but `none` need the
+conversation store. `shortened` is shortened once when the model reports it too long, by
+`provider` (the default; the provider must support it) or `extension:<id>`. `full` is never
+shortened, which is how shortening is off. `lastTurns` never edits history already sent: each
+request starts a new conversation with the last turns (CTX-10).
 
 ### 7.4 Output (OUT)
 
@@ -588,11 +589,11 @@ not given access to configuration.
 ## 9. Capabilities
 
 All are off by default (CAP-01). Turning one on enables its tools, storage and settings. Each is an
-object with `"enabled"` plus its own settings. `true` is shorthand for `{ "enabled": true }`.
+object with `"enabled"` plus its own settings.
 
 ```jsonc
 "capabilities": {
-  "conversationStore": true,                                        // CAP-05
+  "conversationStore": { "enabled": true },                         // CAP-05
   "humanInteraction": {
     "channel": "builtin:cli",                                       // or extension:<id>
     "approvalTimeout": "00:30:00",                                       // HITL-02
@@ -626,7 +627,7 @@ object with `"enabled"` plus its own settings. `true` is shorthand for `{ "enabl
     // 10 Mi characters of output. A command's time is its tool's timeout.
   },
   "projectMemory": { "scope": "project", "maxTokens": 20000, "approveBy": "lead" },   // MEM
-  "knowledge": false
+  "knowledge": { "enabled": false }
 }
 ```
 
