@@ -21,6 +21,8 @@ Last updated 2026-10-01.
     (TOOL-06); S18 adds the task board to `GateContext`.
   - S08 adds the durable `IAuditLog`, tool-call events, and a log for read tools' internal error details.
   - S11 maps provider tools and their limits, such as maximum uses, to the Claude request.
+  - S11: secrets declared in configuration, such as the provider API key, must join the tool
+    pipeline's redaction set when they are resolved, so they are removed like secrets tools read (INV-06).
   - S16 adds the approval timeout and the permission modes (HITL-01, HITL-02).
 
 ## How slices work
