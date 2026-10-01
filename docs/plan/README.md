@@ -13,6 +13,9 @@ Status: draft · 2026-10-01 · slices `REQUIREMENTS.md` (revision 2) into delive
 A slice is **done** when:
 - its acceptance criteria pass in CI on Linux and Windows;
 - every requirement it closes has a test or a recorded review;
+- its tests replace only system boundaries, never internal types (DESIGN.md §11);
+- it builds nothing its acceptance criteria don't need: no unused abstractions, no settings without a
+  known case, no optimization without a measured target (principle 13);
 - its settings appear in the generated reference.
 
 ## Milestones
@@ -32,7 +35,7 @@ A slice is **done** when:
 
 | Slice | Title | Milestone | Size | Depends on | Issue | Status |
 |---|---|---|---|---|---|---|
-| [S00a](S00a-sandbox-spike.md) | Sandbox spike | M0 | S | — | [#1](https://github.com/sleepyshark85/Officina/issues/1) | todo |
+| [S00a](S00a-sandbox-spike.md) | Sandbox spike | M0 | S | — | [#1](https://github.com/sleepyshark85/Officina/issues/1) | done |
 | [S00b](S00b-claude-sdk-spike.md) | Claude SDK spike | M0 | S | — | [#2](https://github.com/sleepyshark85/Officina/issues/2) | done |
 | [S01](S01-walking-skeleton.md) | Walking skeleton | M1 | M | — | [#3](https://github.com/sleepyshark85/Officina/issues/3) | done |
 | [S02](S02-configuration.md) | Configuration | M1 | M | S01 | [#4](https://github.com/sleepyshark85/Officina/issues/4) | todo |

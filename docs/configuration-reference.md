@@ -10,6 +10,9 @@ settings implemented so far are listed in the generated [settings reference](con
 and the generated JSON Schema is [`officina.schema.json`](officina.schema.json) (CFG-15, DOC-01). For
 settings not implemented yet, this draft is the specification they must match.
 
+Settings are added when the slice that needs them is built. A setting no slice needs yet stays a
+constant in code, and can be dropped from this draft rather than built speculatively.
+
 ---
 
 ## 1. Principles

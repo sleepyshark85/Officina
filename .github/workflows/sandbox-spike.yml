@@ -1,0 +1,97 @@
+name: sandbox-spike
+
+# Spike S00a only: runs the sandbox prototype on both OSes. Not part of the product CI.
+on:
+  push:
+    branches: [spike/S00a-sandbox]
+  workflow_dispatch:
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Environment as shipped (no admin changes)
+        continue-on-error: true
+        run: |
+          set -x
+          cat /etc/os-release | head -2; uname -r; id
+          sysctl kernel.apparmor_restrict_unprivileged_userns || true
+          which bwrap socat || true
+          sudo apt-get install -y bubblewrap socat >/dev/null 2>&1 || true
+          bwrap --version
+          bwrap --unshare-all --ro-bind / / true && echo "BWRAP_UNPRIVILEGED=ok" || echo "BWRAP_UNPRIVILEGED=fail"
+          systemd-run --user --scope --quiet true && echo "SYSTEMD_USER=ok" || echo "SYSTEMD_USER=fail"
+          cat /sys/fs/cgroup/cgroup.controllers
+      - name: One-time host setup (needs root) — what an installer would do
+        run: |
+          set -x
+          # Ubuntu 24.04 restricts unprivileged user namespaces through AppArmor. Prefer a
+          # per-binary profile for bwrap over turning the restriction off globally.
+          if ! bwrap --unshare-all --ro-bind / / true 2>/dev/null; then
+            printf 'abi <abi/4.0>,\ninclude <tunables/global>\nprofile bwrap /usr/bin/bwrap flags=(unconfined) {\n  userns,\n  include if exists <local/bwrap>\n}\n' | sudo tee /etc/apparmor.d/bwrap
+            sudo apparmor_parser -r /etc/apparmor.d/bwrap
+          fi
+          bwrap --unshare-all --ro-bind / / true && echo "BWRAP after profile: ok"
+          # A systemd user manager gives the unprivileged user a delegated cgroup subtree.
+          sudo loginctl enable-linger "$USER"
+          for i in $(seq 1 30); do [ -S /run/user/$(id -u)/bus ] && break; sleep 1; done
+          echo "XDG_RUNTIME_DIR=/run/user/$(id -u)" >> "$GITHUB_ENV"
+          echo "DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$(id -u)/bus" >> "$GITHUB_ENV"
+          export XDG_RUNTIME_DIR=/run/user/$(id -u)
+          cat /sys/fs/cgroup/user.slice/user-$(id -u).slice/user@$(id -u).service/cgroup.controllers
+          systemd-run --user --scope --quiet -p MemoryMax=64M true && echo "SYSTEMD_USER after linger: ok"
+      - name: Build prototype
+        run: dotnet build spikes/sandbox/SandboxSpike -nologo -v:q
+      - name: Run checks (unprivileged)
+        run: dotnet spikes/sandbox/SandboxSpike/bin/Debug/net10.0/SandboxSpike.dll --report linux-report.md
+      - name: Summary
+        if: always()
+        run: cat linux-report.md >> "$GITHUB_STEP_SUMMARY" || true
+
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Environment
+        shell: pwsh
+        run: |
+          [System.Environment]::OSVersion.VersionString
+          whoami /groups | Select-String -Pattern "Mandatory|Administrators"
+          (Get-Command dotnet).Source
+          icacls "C:\Program Files\dotnet" | Select-String "APPLICATION PACKAGES"
+      - name: Build prototype
+        run: dotnet build spikes/sandbox/SandboxSpike -nologo -v:q
+      - name: Run checks (runner is elevated admin)
+        run: dotnet spikes/sandbox/SandboxSpike/bin/Debug/net10.0/SandboxSpike.dll --report windows-report.md
+      - name: Run all checks again as a standard (non-admin) user
+        if: always()
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          # net user prompts if the password is longer than 14 characters.
+          $pw = "Sp!" + [guid]::NewGuid().ToString("N").Substring(0, 10)
+          net user spikeuser $pw /add
+          $cred = New-Object System.Management.Automation.PSCredential("spikeuser", (ConvertTo-SecureString $pw -AsPlainText -Force))
+          New-Item -ItemType Directory -Force C:\officina-spike | Out-Null
+          Copy-Item -Recurse -Force spikes\sandbox C:\officina-spike\sandbox
+          icacls C:\officina-spike /grant "spikeuser:(OI)(CI)F" /T | Out-Null
+          $dll = "C:\officina-spike\sandbox\SandboxSpike\bin\Debug\net10.0\SandboxSpike.dll"
+          $log = "C:\officina-spike\nonadmin.log"
+          $cmd = "whoami /groups > $log 2>&1 & `"C:\Program Files\dotnet\dotnet.exe`" $dll --report C:\officina-spike\nonadmin-report.md >> $log 2>&1"
+          Start-Process -FilePath cmd.exe -ArgumentList "/c", $cmd -Credential $cred -Wait -WorkingDirectory C:\officina-spike -LoadUserProfile
+          Get-Content $log
+          "### Same checks as a standard user (spikeuser, not in Administrators)`n" | Out-File -Append $env:GITHUB_STEP_SUMMARY
+          if (Test-Path C:\officina-spike\nonadmin-report.md) { Get-Content C:\officina-spike\nonadmin-report.md | Out-File -Append $env:GITHUB_STEP_SUMMARY }
+      - name: Summary
+        if: always()
+        shell: pwsh
+        run: if (Test-Path windows-report.md) { Get-Content windows-report.md | Out-File -Append $env:GITHUB_STEP_SUMMARY }

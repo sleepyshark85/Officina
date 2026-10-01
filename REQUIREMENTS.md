@@ -110,9 +110,10 @@ business domain logic.
 
 These principles decide any trade-off in the requirements below.
 
-1. **Configuration over code, invariants over configuration.** Anything that varies between agents
-   is configurable. The safety guarantees in §5.4 are not, and no configuration or extension can
-   weaken them.
+1. **Configuration over code, invariants over configuration.** Anything known to vary between agents
+   is configurable. A value becomes a setting only when there is a known case that needs a different
+   value; until then it is a constant in code. The safety guarantees in §5.2 are not configurable, and
+   no configuration or extension can weaken them.
 2. **Decisions follow structured signals.** Control flow is decided only by stop reasons, validated
    structured output, tool calls and check results. The system never interprets free text to
    decide what happens next.
@@ -135,6 +136,9 @@ These principles decide any trade-off in the requirements below.
 11. **The core knows no application.** No business concepts, no per-application branches. Presets
     and reference applications are consumers of the core, not part of it.
 12. **Failures that make no noise are tested.** Each has a mandatory automated check.
+13. **The simplest thing that works.** Each slice builds only what its acceptance criteria need: no
+    abstractions without a current user, no speculative generality, and no optimization without a
+    measured target (LAT, SCALE).
 
 ---
 

@@ -18,4 +18,4 @@ Isolated command execution on Linux and on Windows.
 
 ## Notes
 
-Do it as two pieces of work, Linux then Windows, following the S00a findings. This slice also completes the test kit (TEST-01): S01 started it, S03 adds fake tools, S04 a controllable clock, S14 an in-memory workspace, and this slice the fake sandbox.
+Do it as two pieces of work, Linux then Windows, following `docs/spikes/sandbox.md`. Still unproven after the spike: SBX-06, output caps, background processes, NuGet certificate-revocation hosts in the allow list (presets per toolchain). This slice also completes the test kit (TEST-01): S01 started it, S03 adds fake tools, S04 a controllable clock, S14 an in-memory workspace, and this slice the fake sandbox.
