@@ -301,6 +301,7 @@ It lists the settings the code has today. Settings that later slices add are spe
 |---|---|---|---|---|
 | `enabled` | boolean | `false` | Whether the sandbox is on. | `true` |
 | `allowedHosts` | list | `[]` | The hosts commands may reach, through a filtering proxy. `*.` matches any subdomain. Empty means no network. | `["api.nuget.org","*.nuget.org"]` |
+| `toolchains` | list | `[]` | Folders of toolchains installed outside the system folders, such as an SDK in the home folder. Commands can read and run them, and find them on the path. | `["/home/dev/.dotnet"]` |
 | `commandRules` | list | `[]` | Rules for commands, in order. Each command of a command line is decided by the first rule that matches it, and the strictest decision applies. A command no rule matches is asked about. | `[{"match":"dotnet build*","action":"allow"},{"match":"git push*","action":"deny"}]` |
 | `secrets` | named entries | `{}` | The secrets each agent's commands receive as environment variables, by agent name. Other agents' commands never see them. | `{"developer":["NUGET_TOKEN"]}` |
 

@@ -133,7 +133,7 @@ public sealed class SandboxTools : IAsyncDisposable
         var (hiddenPaths, readOnlyPaths) = (new List<string>(), new List<string>());
         Protect(directory, hiddenPaths, readOnlyPaths);
         return await sandbox.StartAsync(
-            new SandboxCommand(command, directory, SandboxLimits.Default, options.AllowedHosts, environment, hiddenPaths, readOnlyPaths), ct).ConfigureAwait(false);
+            new SandboxCommand(command, directory, SandboxLimits.Default, options.AllowedHosts, environment, hiddenPaths, readOnlyPaths, options.Toolchains), ct).ConfigureAwait(false);
     }
 
     /// <summary>Finds the protected paths in a folder of the working copy as it is now. Links are skipped; they lead nowhere inside the sandbox.</summary>

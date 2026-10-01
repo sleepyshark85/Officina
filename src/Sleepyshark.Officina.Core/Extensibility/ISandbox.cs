@@ -36,6 +36,7 @@ public interface ISandboxProcess : IAsyncDisposable
 /// <param name="Environment">Its environment variables, including the secrets its agent may use (SBX-05).</param>
 /// <param name="HiddenPaths">Files and folders in the working copy the command must not see (WS-05).</param>
 /// <param name="ReadOnlyPaths">Files and folders in the working copy the command must not change (WS-05).</param>
+/// <param name="Toolchains">Folders outside the system folders the command can read and run, ahead of the others on its path.</param>
 public sealed record SandboxCommand(
     string CommandLine,
     string Directory,
@@ -43,7 +44,8 @@ public sealed record SandboxCommand(
     IReadOnlyList<string> AllowedHosts,
     IReadOnlyDictionary<string, string> Environment,
     IReadOnlyList<string> HiddenPaths,
-    IReadOnlyList<string> ReadOnlyPaths);
+    IReadOnlyList<string> ReadOnlyPaths,
+    IReadOnlyList<string> Toolchains);
 
 /// <summary>What a command may use (SBX-01). Its time is limited by its owner, which stops it.</summary>
 /// <param name="Cpus">The processor time, in cores.</param>

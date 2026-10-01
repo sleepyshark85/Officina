@@ -1,0 +1,471 @@
+using System.ComponentModel;
+using System.Diagnostics;
+using System.IO.Pipes;
+using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
+using System.Security.AccessControl;
+using System.Security.Cryptography;
+using System.Security.Principal;
+using System.Text;
+using Sleepyshark.Officina.Core.Extensibility;
+
+namespace Sleepyshark.Officina.Sandbox;
+
+/// <summary>
+/// The Windows sandbox (DESIGN.md §7, S00a). Each working copy has its own AppContainer with no capabilities, so its
+/// commands have no network and can open only what is granted to the container: the working copy, a home folder of its
+/// own, and the toolchains, besides what Windows grants every app (such as Program Files). Protected paths carry entries
+/// that deny the container. Each command runs in a job object that sets its limits and ends everything it started.
+/// Allowed traffic goes through the filtering proxy on a named pipe only the container may open, which a small
+/// PowerShell forwarder inside the sandbox offers on a loopback port. No admin rights are needed.
+/// </summary>
+[SupportedOSPlatform("windows")]
+public sealed class WindowsSandbox : ISandbox
+{
+    // Listens on a free loopback port, says which, and carries each connection to the proxy's pipe.
+    private const string Forwarder = """
+        $l = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback, 0); $l.Start(); [Console]::WriteLine($l.LocalEndpoint.Port)
+        while ($true) {
+            $c = $l.AcceptTcpClient(); $s = $c.GetStream()
+            $p = [IO.Pipes.NamedPipeClientStream]::new('.', '{0}', [IO.Pipes.PipeDirection]::InOut, [IO.Pipes.PipeOptions]::Asynchronous); $p.Connect(5000)
+            $null = $s.CopyToAsync($p); $null = $p.CopyToAsync($s)
+        }
+        """;
+
+    // Copied from the host, so programs find Windows and the toolchains.
+    private static readonly string[] HostVariables = ["SystemRoot", "windir", "SystemDrive", "ComSpec", "PATH", "PATHEXT", "ProgramFiles",
+        "ProgramFiles(x86)", "ProgramW6432", "CommonProgramFiles", "ProgramData", "NUMBER_OF_PROCESSORS", "PROCESSOR_ARCHITECTURE", "OS"];
+
+    public string? Probe()
+    {
+        var directory = Directory.CreateTempSubdirectory("officina-probe-");
+        try
+        {
+            var process = StartAsync(new("exit 7", directory.FullName, SandboxLimits.Default, [], new Dictionary<string, string>(), [], [], []), default)
+                .AsTask().GetAwaiter().GetResult();
+            var exitCode = process.ExitCode.GetAwaiter().GetResult();
+            return exitCode == 7 ? null : $"a command in an AppContainer ended with {exitCode} instead of 7.";
+        }
+        catch (Win32Exception exception)
+        {
+            return $"commands cannot run in an AppContainer ({exception.Message}). Windows 10 or later is needed.";
+        }
+        finally
+        {
+            directory.Delete(recursive: true);
+        }
+    }
+
+    public ValueTask<ISandboxProcess> StartAsync(SandboxCommand command, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+        var (name, container) = Container(command.Directory);
+        var home = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), name));
+
+        // Modify, not full control, so the container can neither change the entries below nor delete a protected file
+        // through its folder.
+        Allow(new DirectoryInfo(command.Directory), container, FileSystemRights.Modify);
+        Allow(home, container, FileSystemRights.Modify);
+        foreach (var toolchain in command.Toolchains.Where(Directory.Exists))
+        {
+            Allow(new DirectoryInfo(toolchain), container, FileSystemRights.ReadAndExecute);
+        }
+
+        foreach (var path in command.HiddenPaths)
+        {
+            Deny(path, container, FileSystemRights.FullControl);
+        }
+
+        foreach (var path in command.ReadOnlyPaths)
+        {
+            Deny(path, container, FileSystemRights.Write | FileSystemRights.Delete | FileSystemRights.DeleteSubdirectoriesAndFiles);
+        }
+
+        var environment = new SortedDictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var variable in HostVariables)
+        {
+            if (Environment.GetEnvironmentVariable(variable) is { } value)
+            {
+                environment[variable] = value;
+            }
+        }
+
+        environment["PATH"] = string.Join(';', command.Toolchains.Append(environment.GetValueOrDefault("PATH", "")));
+        foreach (var variable in new[] { "USERPROFILE", "HOME", "APPDATA", "LOCALAPPDATA", "TEMP", "TMP" })
+        {
+            environment[variable] = home.FullName;
+        }
+
+        var job = new Job(command.Limits);
+        FilterProxy? proxy = null;
+        try
+        {
+            if (command.AllowedHosts.Count > 0)
+            {
+                var pipe = $"officina-{Guid.NewGuid():N}";
+                proxy = FilterProxy.OnNamedPipe(pipe, container, command.AllowedHosts);
+                var script = Convert.ToBase64String(Encoding.Unicode.GetBytes(Forwarder.Replace("{0}", pipe, StringComparison.Ordinal)));
+                var (_, forwarder) = Launch($"powershell.exe -NoLogo -NoProfile -NonInteractive -EncodedCommand {script}", command.Directory, environment, container, job);
+                var port = forwarder.ReadLine() ?? throw new Win32Exception("The proxy forwarder did not start.");
+                environment["HTTP_PROXY"] = environment["HTTPS_PROXY"] = $"http://127.0.0.1:{port.Trim()}";
+            }
+
+            foreach (var (variable, value) in command.Environment)
+            {
+                environment[variable] = value;
+            }
+
+            var (process, output) = Launch($"\"{environment["ComSpec"]}\" /d /s /c \"{command.CommandLine}\"", command.Directory, environment, container, job);
+            return ValueTask.FromResult<ISandboxProcess>(new SandboxProcess(ExitedAsync(process), [output], job.Dispose, command.Limits.OutputCharacters, proxy));
+        }
+        catch
+        {
+            job.Dispose();
+            proxy?.DisposeAsync().AsTask().GetAwaiter().GetResult();
+            throw;
+        }
+    }
+
+    /// <summary>The working copy's AppContainer, created the first time; its name comes from the folder, so each agent has its own (SBX-06).</summary>
+    private static (string Name, SecurityIdentifier Sid) Container(string directory)
+    {
+        var name = $"officina-{Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(Path.GetFullPath(directory))))[..16]}";
+        var result = Native.CreateAppContainerProfile(name, name, "Officina sandbox", IntPtr.Zero, 0, out var sid);
+        if (result == AlreadyExists)
+        {
+            result = Native.DeriveAppContainerSidFromAppContainerName(name, out sid);
+        }
+
+        if (result != 0)
+        {
+            throw new Win32Exception(result);
+        }
+
+        try
+        {
+            return (name, new SecurityIdentifier(sid));
+        }
+        finally
+        {
+            Native.FreeSid(sid);
+        }
+    }
+
+    // HRESULT_FROM_WIN32(ERROR_ALREADY_EXISTS).
+    private const int AlreadyExists = unchecked((int)0x800700B7);
+
+    /// <summary>Grants the container rights over a folder and everything in it, once.</summary>
+    private static void Allow(DirectoryInfo folder, SecurityIdentifier container, FileSystemRights rights) =>
+        Add(folder, new FileSystemAccessRule(container, rights, InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit, PropagationFlags.None, AccessControlType.Allow));
+
+    /// <summary>Denies the container rights over a file, or a folder and everything in it, once. A deny entry wins over the grants.</summary>
+    private static void Deny(string path, SecurityIdentifier container, FileSystemRights rights)
+    {
+        if (Directory.Exists(path))
+        {
+            Add(new DirectoryInfo(path), new FileSystemAccessRule(container, rights, InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit, PropagationFlags.None, AccessControlType.Deny));
+        }
+        else
+        {
+            Add(new FileInfo(path), new FileSystemAccessRule(container, rights, AccessControlType.Deny));
+        }
+    }
+
+    // Setting an entry rewrites the entries of everything below, so it is done only when missing.
+    private static void Add(FileSystemInfo item, FileSystemAccessRule rule)
+    {
+        FileSystemSecurity security = item is DirectoryInfo folder ? folder.GetAccessControl() : ((FileInfo)item).GetAccessControl();
+        if (security.GetAccessRules(true, false, typeof(SecurityIdentifier)).Cast<FileSystemAccessRule>()
+            .Any(existing => existing.IdentityReference == rule.IdentityReference && existing.AccessControlType == rule.AccessControlType))
+        {
+            return;
+        }
+
+        security.AddAccessRule(rule);
+        if (item is DirectoryInfo directory)
+        {
+            directory.SetAccessControl((DirectorySecurity)security);
+        }
+        else
+        {
+            ((FileInfo)item).SetAccessControl((FileSecurity)security);
+        }
+    }
+
+    private static async Task<int> ExitedAsync(Process process)
+    {
+        using (process)
+        {
+            await process.WaitForExitAsync().ConfigureAwait(false);
+            return process.ExitCode;
+        }
+    }
+
+    /// <summary>Starts a process in the container and the job, with its output and errors on one pipe and no input.</summary>
+    private static (Process Process, StreamReader Output) Launch(
+        string commandLine, string directory, SortedDictionary<string, string> environment, SecurityIdentifier container, Job job)
+    {
+        using var input = new AnonymousPipeServerStream(PipeDirection.Out, HandleInheritability.Inheritable);
+        var output = new AnonymousPipeServerStream(PipeDirection.In, HandleInheritability.Inheritable);
+        var sid = new byte[container.BinaryLength];
+        container.GetBinaryForm(sid, 0);
+        var sidMemory = Marshal.AllocHGlobal(sid.Length);
+        var capabilities = Marshal.AllocHGlobal(Marshal.SizeOf<Native.SecurityCapabilities>());
+        var handles = Marshal.AllocHGlobal(2 * IntPtr.Size);
+        var block = Marshal.StringToHGlobalUni(string.Concat(environment.Select(variable => $"{variable.Key}={variable.Value}\0")) + "\0");
+        var attributes = IntPtr.Zero;
+        try
+        {
+            Marshal.Copy(sid, 0, sidMemory, sid.Length);
+            Marshal.StructureToPtr(new Native.SecurityCapabilities { AppContainerSid = sidMemory }, capabilities, false);
+            Marshal.Copy(new[] { input.ClientSafePipeHandle.DangerousGetHandle(), output.ClientSafePipeHandle.DangerousGetHandle() }, 0, handles, 2);
+
+            // The process runs in the container with no capabilities, and inherits only its two pipe handles.
+            var size = IntPtr.Zero;
+            Native.InitializeProcThreadAttributeList(IntPtr.Zero, 2, 0, ref size);
+            attributes = Marshal.AllocHGlobal(size);
+            Check(Native.InitializeProcThreadAttributeList(attributes, 2, 0, ref size));
+            Check(Native.UpdateProcThreadAttribute(attributes, 0, Native.SecurityCapabilitiesAttribute, capabilities,
+                Marshal.SizeOf<Native.SecurityCapabilities>(), IntPtr.Zero, IntPtr.Zero));
+            Check(Native.UpdateProcThreadAttribute(attributes, 0, Native.HandleListAttribute, handles, 2 * IntPtr.Size, IntPtr.Zero, IntPtr.Zero));
+            var startup = new Native.StartupInfoEx
+            {
+                StartupInfo = new()
+                {
+                    Size = Marshal.SizeOf<Native.StartupInfoEx>(),
+                    Flags = Native.UseStdHandles,
+                    StdInput = input.ClientSafePipeHandle.DangerousGetHandle(),
+                    StdOutput = output.ClientSafePipeHandle.DangerousGetHandle(),
+                    StdError = output.ClientSafePipeHandle.DangerousGetHandle(),
+                },
+                AttributeList = attributes,
+            };
+
+            // Suspended until it is in the job, so nothing it starts escapes the limits.
+            Check(Native.CreateProcessW(null, (commandLine + '\0').ToCharArray(), IntPtr.Zero, IntPtr.Zero, true, Native.CreationFlags, block, directory,
+                ref startup, out var started));
+            try
+            {
+                Check(Native.AssignProcessToJobObject(job.Handle, started.Process));
+                var process = Process.GetProcessById(started.ProcessId);
+                _ = process.SafeHandle;
+                Check(Native.ResumeThread(started.Thread) != uint.MaxValue);
+                output.DisposeLocalCopyOfClientHandle();
+                return (process, new StreamReader(output));
+            }
+            finally
+            {
+                Native.CloseHandle(started.Thread);
+                Native.CloseHandle(started.Process);
+            }
+        }
+        catch
+        {
+            output.Dispose();
+            throw;
+        }
+        finally
+        {
+            if (attributes != IntPtr.Zero)
+            {
+                Native.DeleteProcThreadAttributeList(attributes);
+                Marshal.FreeHGlobal(attributes);
+            }
+
+            Marshal.FreeHGlobal(block);
+            Marshal.FreeHGlobal(handles);
+            Marshal.FreeHGlobal(capabilities);
+            Marshal.FreeHGlobal(sidMemory);
+        }
+    }
+
+    private static void Check(bool succeeded)
+    {
+        if (!succeeded)
+        {
+            throw new Win32Exception(Marshal.GetLastPInvokeError());
+        }
+    }
+
+    /// <summary>A command's job object: its limits, and the end of everything in it when it is closed.</summary>
+    private sealed class Job : IDisposable
+    {
+        private IntPtr handle;
+
+        public Job(SandboxLimits limits)
+        {
+            handle = Native.CreateJobObjectW(IntPtr.Zero, null);
+            Check(handle != IntPtr.Zero);
+            var extended = new Native.ExtendedLimits
+            {
+                Basic = new()
+                {
+                    LimitFlags = Native.KillOnJobClose | Native.LimitActiveProcesses | Native.LimitJobMemory | Native.DieOnUnhandledException,
+                    ActiveProcessLimit = (uint)limits.Processes,
+                },
+                JobMemoryLimit = checked((UIntPtr)(ulong)limits.MemoryBytes),
+            };
+            Check(Native.SetInformationJobObject(handle, Native.ExtendedLimitInformation, ref extended, Marshal.SizeOf<Native.ExtendedLimits>()));
+
+            // A hard cap, in hundredths of a percent of all the machine's processors.
+            var cpu = new Native.CpuRate { ControlFlags = 0x1 | 0x4, Rate = (uint)Math.Clamp(limits.Cpus / Environment.ProcessorCount * 10_000, 1, 10_000) };
+            Check(Native.SetInformationJobObject(handle, Native.CpuRateControlInformation, ref cpu, Marshal.SizeOf<Native.CpuRate>()));
+        }
+
+        public IntPtr Handle => handle;
+
+        /// <summary>Ends every process in the job. Safe to call more than once.</summary>
+        public void Dispose()
+        {
+            var closing = Interlocked.Exchange(ref handle, IntPtr.Zero);
+            if (closing != IntPtr.Zero)
+            {
+                Native.TerminateJobObject(closing, 1);
+                Native.CloseHandle(closing);
+            }
+        }
+    }
+
+    private static class Native
+    {
+        public const int UseStdHandles = 0x100;
+        public const uint CreationFlags = 0x00080000 | 0x4 | 0x400 | 0x08000000; // extended startup info, suspended, Unicode environment, no window
+        public const int ExtendedLimitInformation = 9;
+        public const int CpuRateControlInformation = 15;
+        public const uint LimitActiveProcesses = 0x8;
+        public const uint LimitJobMemory = 0x200;
+        public const uint DieOnUnhandledException = 0x400;
+        public const uint KillOnJobClose = 0x2000;
+        public static readonly IntPtr HandleListAttribute = 0x00020002;
+        public static readonly IntPtr SecurityCapabilitiesAttribute = 0x00020009;
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct SecurityCapabilities
+        {
+            public IntPtr AppContainerSid;
+            public IntPtr Capabilities;
+            public uint CapabilityCount;
+            public uint Reserved;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct StartupInfo
+        {
+            public int Size;
+            public IntPtr Reserved;
+            public IntPtr Desktop;
+            public IntPtr Title;
+            public int X;
+            public int Y;
+            public int XSize;
+            public int YSize;
+            public int XCountChars;
+            public int YCountChars;
+            public int FillAttribute;
+            public int Flags;
+            public short ShowWindow;
+            public short Reserved2Size;
+            public IntPtr Reserved2;
+            public IntPtr StdInput;
+            public IntPtr StdOutput;
+            public IntPtr StdError;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct StartupInfoEx
+        {
+            public StartupInfo StartupInfo;
+            public IntPtr AttributeList;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct ProcessInformation
+        {
+            public IntPtr Process;
+            public IntPtr Thread;
+            public int ProcessId;
+            public int ThreadId;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct BasicLimits
+        {
+            public long PerProcessUserTimeLimit;
+            public long PerJobUserTimeLimit;
+            public uint LimitFlags;
+            public UIntPtr MinimumWorkingSetSize;
+            public UIntPtr MaximumWorkingSetSize;
+            public uint ActiveProcessLimit;
+            public UIntPtr Affinity;
+            public uint PriorityClass;
+            public uint SchedulingClass;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct ExtendedLimits
+        {
+            public BasicLimits Basic;
+            public ulong ReadOperationCount;
+            public ulong WriteOperationCount;
+            public ulong OtherOperationCount;
+            public ulong ReadTransferCount;
+            public ulong WriteTransferCount;
+            public ulong OtherTransferCount;
+            public UIntPtr ProcessMemoryLimit;
+            public UIntPtr JobMemoryLimit;
+            public UIntPtr PeakProcessMemoryUsed;
+            public UIntPtr PeakJobMemoryUsed;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct CpuRate
+        {
+            public uint ControlFlags;
+            public uint Rate;
+        }
+
+        [DllImport("userenv.dll", CharSet = CharSet.Unicode)]
+        public static extern int CreateAppContainerProfile(string name, string displayName, string description, IntPtr capabilities, uint count, out IntPtr sid);
+
+        [DllImport("userenv.dll", CharSet = CharSet.Unicode)]
+        public static extern int DeriveAppContainerSidFromAppContainerName(string name, out IntPtr sid);
+
+        [DllImport("advapi32.dll")]
+        public static extern IntPtr FreeSid(IntPtr sid);
+
+        [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        public static extern IntPtr CreateJobObjectW(IntPtr attributes, string? name);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        public static extern bool SetInformationJobObject(IntPtr job, int informationClass, ref ExtendedLimits information, int length);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        public static extern bool SetInformationJobObject(IntPtr job, int informationClass, ref CpuRate information, int length);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        public static extern bool AssignProcessToJobObject(IntPtr job, IntPtr process);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        public static extern bool TerminateJobObject(IntPtr job, uint exitCode);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        public static extern bool CloseHandle(IntPtr handle);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        public static extern bool InitializeProcThreadAttributeList(IntPtr list, int count, int flags, ref IntPtr size);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        public static extern bool UpdateProcThreadAttribute(IntPtr list, uint flags, IntPtr attribute, IntPtr value, IntPtr size, IntPtr previous, IntPtr returnSize);
+
+        [DllImport("kernel32.dll")]
+        public static extern void DeleteProcThreadAttributeList(IntPtr list);
+
+        [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        public static extern bool CreateProcessW(
+            string? application, char[] commandLine, IntPtr processAttributes, IntPtr threadAttributes, bool inheritHandles, uint flags,
+            IntPtr environment, string directory, ref StartupInfoEx startup, out ProcessInformation information);
+
+        [DllImport("kernel32.dll")]
+        public static extern uint ResumeThread(IntPtr thread);
+    }
+}

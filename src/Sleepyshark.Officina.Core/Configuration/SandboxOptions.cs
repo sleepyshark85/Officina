@@ -12,6 +12,10 @@ public sealed record SandboxOptions
         Example = """["api.nuget.org", "*.nuget.org"]""")]
     public IReadOnlyList<string> AllowedHosts { get; init; } = [];
 
+    [Setting("Folders of toolchains installed outside the system folders, such as an SDK in the home folder. Commands can read and run them, and find them on the path.",
+        Example = """["/home/dev/.dotnet"]""")]
+    public IReadOnlyList<string> Toolchains { get; init; } = [];
+
     [Setting("Rules for commands, in order. Each command of a command line is decided by the first rule that matches it, and the strictest decision applies. A command no rule matches is asked about.",
         Example = """[{ "match": "dotnet build*", "action": "allow" }, { "match": "git push*", "action": "deny" }]""")]
     public IReadOnlyList<CommandRule> CommandRules { get; init; } = [];
