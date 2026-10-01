@@ -90,7 +90,8 @@ public sealed partial record Condition
     /// </summary>
     public IEnumerable<string> Check(JsonElement argumentsSchema)
     {
-        var tests = new object?[] { Is, In, Gt, Gte, Lt, Lte, Exists }.Count(test => test is not null);
+        // The numeric comparisons may be combined into one range test, such as gte with lt; Holds requires all of them.
+        var tests = new object?[] { Is, In, Gt ?? Gte ?? Lt ?? Lte, Exists }.Count(test => test is not null);
         var groups = new object?[] { All, Any, Not }.Count(group => group is not null);
         if (Field is null ? tests != 0 || groups != 1 : tests != 1 || groups != 0)
         {

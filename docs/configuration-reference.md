@@ -373,8 +373,8 @@ arguments and task fields. A condition that refers to free-text output fails val
 ```jsonc
 { "field": "output.severity", "is": "high" }
 { "field": "output.category", "in": ["bug", "regression"] }
-{ "field": "output.score", "gte": 0.8 }                 // gt | gte | lt | lte
-{ "field": "checks.tests.passed", "is": true }
+{ "field": "output.score", "gte": 0.8 }                 // gt | gte | lt | lte, combinable into a range
+{ "field": "checks.tests.passed", "is": "true" }
 { "field": "output.ticket", "exists": true }
 { "all": [ <condition>, <condition> ] }                 // and
 { "any": [ <condition>, <condition> ] }                 // or

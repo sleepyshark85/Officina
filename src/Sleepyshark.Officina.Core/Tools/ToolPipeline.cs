@@ -70,11 +70,7 @@ public sealed class ToolPipeline
         await Parallel.ForEachAsync(
             Enumerable.Range(0, requests.Count),
             new ParallelOptions { MaxDegreeOfParallelism = limit, CancellationToken = ct },
-            async (index, token) =>
-            {
-                var result = await RunAsync(context, requests[index], token).ConfigureAwait(false);
-                results[index] = result with { Content = secrets.Remove(result.Content) };
-            }).ConfigureAwait(false);
+            async (index, token) => results[index] = await RunAsync(context, requests[index], token).ConfigureAwait(false)).ConfigureAwait(false);
         return results;
     }
 
@@ -145,12 +141,14 @@ public sealed class ToolPipeline
         var (result, detail) = await InvokeAsync(tool, new ToolCall(arguments, context.Caller, key, secrets), ct).ConfigureAwait(false);
         var outcome = result.Error is null ? AuditOutcome.Completed : AuditOutcome.Failed;
         await AuditAsync(context, tool, arguments, null, outcome, ct, detail).ConfigureAwait(false);
-        return result.Content.Length <= tool.Options.MaxResultLength
-            ? result
-            : result with
-            {
-                Content = $"{result.Content[..tool.Options.MaxResultLength]}\n[Trimmed: the first {tool.Options.MaxResultLength} of {result.Content.Length} characters.]",
-            };
+
+        // Secrets are removed before trimming, so a secret cut in half cannot leave its start behind (INV-06).
+        var content = secrets.Remove(result.Content);
+        var max = tool.Options.MaxResultLength;
+        return result with
+        {
+            Content = content.Length <= max ? content : $"{content[..max]}\n[Trimmed: the first {max} of {content.Length} characters.]",
+        };
     }
 
     /// <summary>The checks before a call runs, in order (TOOL-05); each yields what it decides when it does not allow the call.</summary>

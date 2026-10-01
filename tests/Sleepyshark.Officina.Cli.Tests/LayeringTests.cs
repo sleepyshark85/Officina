@@ -79,7 +79,7 @@ public sealed class LayeringTests : IDisposable
               "tools": { "create_issue": { "source": "extension:Acme.CreateIssue", "kind": "write", "gates": ["no-main"], "timeout": "00:00:30" } },
               "toolSets": { "issues": ["create_issue"] },
               "gates": {
-                "no-main": { "use": "builtin:deny", "when": { "all": [ { "field": "args.branch", "in": ["main"] }, { "not": { "field": "args.force", "is": true } } ] } }
+                "no-main": { "use": "builtin:deny", "when": { "all": [ { "field": "args.branch", "in": ["main"] }, { "not": { "field": "args.force", "is": "true" } } ] } }
               },
               "policies": { "permissionRules": [ { "tool": "create_issue", "when": { "field": "args.count", "gte": 2 }, "action": "ask" } ] }
             }

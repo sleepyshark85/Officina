@@ -15,8 +15,11 @@ internal sealed record CatalogTool(string Name, ToolOptions Options, ITool? Impl
     public ToolKind Kind { get; } =
         Implementation?.Descriptor.Kind == ToolKind.Write || Options.Kind == ToolKind.Write || Options.Irreversible ? ToolKind.Write : ToolKind.Read;
 
-    /// <summary>Configuration can make a tool unsafe to run in parallel, never safe.</summary>
-    public bool ParallelSafe { get; } = Implementation?.Descriptor.ParallelSafe == true && Options.ParallelSafe != false;
+    /// <summary>
+    /// Configuration can make a tool unsafe to run in parallel, never safe. An irreversible tool never is, so a second
+    /// identical call in the same reply finds the first one's intent (TOOL-10).
+    /// </summary>
+    public bool ParallelSafe { get; } = Implementation?.Descriptor.ParallelSafe == true && Options.ParallelSafe != false && !Options.Irreversible;
 
     public Approval Approval { get; } = Options.Approval ?? (Options.Irreversible ? Approval.Always : Approval.Never);
 }

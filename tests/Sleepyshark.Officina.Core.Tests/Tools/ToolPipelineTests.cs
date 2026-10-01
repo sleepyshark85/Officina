@@ -222,6 +222,20 @@ public class ToolPipelineTests
     }
 
     [Fact]
+    public async Task Identical_irreversible_calls_in_one_reply_run_once_even_if_the_tool_declares_itself_parallel_safe()
+    {
+        var pay = new FakeTool(ToolKind.Write, parallelSafe: true);
+        setup.Tools["pay"] = pay;
+        var pipeline = setup.Create(Options(("pay", Extension("pay") with { GateExemption = "Tests only.", Irreversible = true, Approval = Approval.Never })));
+        var request = new ToolRequest("pay", Args("""{ "amount": 5 }"""));
+
+        var results = await pipeline.RunAsync(Context, [request, request], TestContext.Current.CancellationToken);
+
+        Assert.Single(pay.Calls);
+        Assert.Equal(ToolResult.Human, results[1].RouteTo);
+    }
+
+    [Fact]
     public async Task An_intent_without_an_outcome_is_never_run_again_after_a_restart()
     {
         using var crash = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
@@ -313,6 +327,19 @@ public class ToolPipelineTests
 
         Assert.Equal("aaaaaaaaaa\n[Trimmed: the first 10 of 50 characters.]", result.Content);
         Assert.Empty(setup.Audit.Entries);
+    }
+
+    [Fact]
+    public async Task A_secret_cut_by_trimming_leaves_no_part_of_itself()
+    {
+        setup.Secrets["TOKEN"] = "tok-s3cr3t";
+        setup.Tools["read_log"] = new FakeTool(ToolKind.Read, run: async (call, ct) =>
+            ToolResult.Success($"auth {await call.Secrets.GetAsync("TOKEN", ct)} done"));
+        var pipeline = setup.Create(Options(("read_log", Extension("read_log") with { MaxResultLength = 9 })));
+
+        var result = await RunAsync(pipeline, "read_log");
+
+        Assert.Equal("auth [sec\n[Trimmed: the first 9 of 18 characters.]", result.Content);
     }
 
     // TOOL-08, TEST-13, INV-06, SEC-05.

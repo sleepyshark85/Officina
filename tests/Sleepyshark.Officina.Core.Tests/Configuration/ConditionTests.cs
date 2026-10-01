@@ -32,6 +32,7 @@ public class ConditionTests
         { new() { Field = "args.labels[0]", In = ["feature"] }, false },
         { new() { Field = "args.count", Gt = 3 }, false },
         { new() { Field = "args.count", Gte = 3 }, true },
+        { new() { Field = "args.count", Gte = 0, Lt = 3 }, false },
         { new() { Field = "args.count", Lt = 3.5m }, true },
         { new() { Field = "args.count", Lte = 2 }, false },
         { new() { Field = "args.branch", Gt = 0 }, false },
@@ -53,7 +54,7 @@ public class ConditionTests
     public void A_condition_that_fits_the_schema_has_no_problems() =>
         Assert.Empty(new Condition
         {
-            Any = [new() { Field = "args.labels[0]", In = ["bug"] }, new() { Field = "args.count", Gte = 2 }, new() { Field = "args.draft", Is = "true" }],
+            Any = [new() { Field = "args.labels[0]", In = ["bug"] }, new() { Field = "args.count", Gte = 2, Lt = 10 }, new() { Field = "args.draft", Is = "true" }],
         }.Check(Args(Schema)));
 
     public static TheoryData<Condition, string> Problems => new()

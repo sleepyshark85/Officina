@@ -42,7 +42,7 @@ public sealed record ToolOptions
     [Range(1, int.MaxValue, ErrorMessage = "must be at least 1.")]
     public int MaxResultLength { get; init; } = 32_000;
 
-    [Setting("Whether calls may run at the same time as other calls. Unset uses the tool's declaration; `true` cannot loosen a tool that declares itself unsafe.",
+    [Setting("Whether calls may run at the same time as other calls. Unset uses the tool's declaration; `true` cannot loosen a tool that declares itself unsafe. Irreversible tools never run in parallel.",
         Example = "false")]
     public bool? ParallelSafe { get; init; }
 

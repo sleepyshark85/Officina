@@ -10,6 +10,4 @@ public sealed record GateDecision(PolicyAction Action, string? Reason = null, st
     public static GateDecision Deny(string reason) => new(PolicyAction.Deny, reason);
 
     public static GateDecision Ask(string reason) => new(PolicyAction.Ask, reason);
-
-    public static GateDecision Route(string to, string reason) => new(PolicyAction.Route, reason, to);
 }
