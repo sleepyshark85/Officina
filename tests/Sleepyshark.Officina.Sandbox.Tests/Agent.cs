@@ -31,7 +31,7 @@ internal sealed class Agent : IAsyncDisposable
             Options, Tools.Tools.Concat(others).ToDictionary(),
             new Dictionary<string, IGate> { [CommandRules.Id] = new CommandRules(Options.Capabilities.Sandbox!) },
             new Dictionary<string, IKnowledgeSource>(),
-            Storage, new EventBus(new InMemoryEventLog(), Options.Storage, Time), Human, new InMemorySecretSource(new Dictionary<string, string> { ["NUGET_TOKEN"] = "t0ken" }), Time);
+            Storage, new EventBus(Storage.Events, Options.Storage, Time), Human, new InMemorySecretSource(new Dictionary<string, string> { ["NUGET_TOKEN"] = "t0ken" }), Time);
     }
 
     public OfficinaOptions Options { get; }
@@ -52,6 +52,9 @@ internal sealed class Agent : IAsyncDisposable
     public InMemoryStorage Storage { get; } = new();
 
     public InMemoryAuditLog Audit => Storage.Audit;
+
+    /// <summary>The events published, as stored.</summary>
+    public InMemoryEventLog Events => Storage.Events;
 
     public FakeTimeProvider Time { get; } = new();
 

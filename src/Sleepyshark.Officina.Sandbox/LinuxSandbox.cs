@@ -73,11 +73,14 @@ public sealed class LinuxSandbox : ISandbox
         };
         var commandLine = command.CommandLine;
         FilterProxy? proxy = null;
+
+        // The proxy is told before the command can connect, and reports into its output once it runs.
+        SandboxProcess? sandboxed = null;
         if (command.AllowedHosts.Count > 0)
         {
             // A Unix socket path is limited to 108 bytes, so it lives in the runtime folder, not the working copy.
             var socket = Path.Combine(Environment.GetEnvironmentVariable("XDG_RUNTIME_DIR") ?? Path.GetTempPath(), $"officina-{Guid.NewGuid():N}.sock");
-            proxy = FilterProxy.OnUnixSocket(socket, command.AllowedHosts);
+            proxy = FilterProxy.OnUnixSocket(socket, command.AllowedHosts, line => sandboxed?.Add(line));
             Add(start, "--bind", socket, ProxySocket);
             foreach (var name in new[] { "HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy" })
             {
@@ -100,8 +103,9 @@ public sealed class LinuxSandbox : ISandbox
         start.RedirectStandardError = true;
         var process = Process.Start(start)!;
         process.StandardInput.Close();
-        return ValueTask.FromResult<ISandboxProcess>(new SandboxProcess(
-            ExitedAsync(process), [process.StandardOutput, process.StandardError], () => process.Kill(entireProcessTree: true), limits.OutputCharacters, proxy));
+        sandboxed = new SandboxProcess(
+            ExitedAsync(process), [process.StandardOutput, process.StandardError], () => process.Kill(entireProcessTree: true), limits.OutputCharacters, proxy);
+        return ValueTask.FromResult<ISandboxProcess>(sandboxed);
     }
 
     private static async Task<int> ExitedAsync(Process process)

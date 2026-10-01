@@ -1,3 +1,4 @@
+using Sleepyshark.Officina.Core.Events;
 using Sleepyshark.Officina.Core.Configuration;
 using Sleepyshark.Officina.Core.Extensibility;
 using Sleepyshark.Officina.Testing;
@@ -55,6 +56,20 @@ public sealed class SandboxToolsTests : IAsyncDisposable
     }
 
     // SBX-04.
+    [Fact]
+    public async Task Command_output_is_published_line_by_line_without_secrets()
+    {
+        sandbox.Reply("Restoring with t0ken\nRestored", exitCode: 0).Reply("Listening", exitCode: null);
+
+        await dev.CallAsync("run_command", new { command = "dotnet restore" });
+        await dev.CallAsync("start_process", new { command = "dotnet run" });
+        await dev.CallAsync("stop_process", new { id = "p1" });
+
+        var published = (await dev.Events.ReadAsync(null, "run-1", 0, TestContext.Current.CancellationToken))
+            .Select(read => read.Payload).OfType<ToolOutput>().Select(output => (output.Tool, output.Line));
+        Assert.Equal([("run_command", "Restoring with [secret]"), ("run_command", "Restored"), ("start_process", "Listening")], published);
+    }
+
     [Fact]
     public async Task The_model_receives_trimmed_output_and_the_full_output_is_kept_as_an_artifact()
     {

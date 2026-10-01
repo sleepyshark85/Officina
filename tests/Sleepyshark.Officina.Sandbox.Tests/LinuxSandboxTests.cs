@@ -100,6 +100,8 @@ public sealed class LinuxSandboxTests : IDisposable
         Assert.Contains(Server.Greeting, output, StringComparison.Ordinal);
         Assert.Contains("403 Forbidden", output, StringComparison.Ordinal);
         Assert.Contains("Connection refused", output, StringComparison.Ordinal);
+        Assert.Contains($"[Network: allowed 127.0.0.1:{server.Port}.]", output, StringComparison.Ordinal);
+        Assert.Contains("[Network: refused example.com, which is not an allowed host.]", output, StringComparison.Ordinal);
     }
 
     [Fact(Skip = LinuxOnly, SkipUnless = nameof(OnLinux))]

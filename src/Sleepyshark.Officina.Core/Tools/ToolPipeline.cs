@@ -178,8 +178,12 @@ public sealed class ToolPipeline
         // ING-06: only a tool configured for real values gets them, and what it returns is masked again.
         var real = tool.Options.ReceivesMaskedValues && context.Masker is not null;
         var masker = real || tool.Options.MaskResults || (tool.Options.KnowledgeSource() is { } source && options.Knowledge[source].Mask) ? context.Masker : null;
-        var (result, detail) = await InvokeAsync(tool, new ToolCall(real ? context.Masker!.Restore(arguments) : arguments, context.Caller, key, secrets, record), ct)
-            .ConfigureAwait(false);
+
+        // Output the tool streams is published with known secrets removed (INV-06), and masked like its result.
+        ValueTask PublishAsync(string line, CancellationToken token) =>
+            events.PublishAsync(context, new ToolOutput(tool.Name, masker?.Mask(secrets.Remove(line)) ?? secrets.Remove(line)), token);
+        var (result, detail) = await InvokeAsync(
+            tool, new ToolCall(real ? context.Masker!.Restore(arguments) : arguments, context.Caller, key, secrets, record, PublishAsync), ct).ConfigureAwait(false);
         detail = detail is null || masker is null ? detail : masker.Mask(detail);
         if (tool.Options.Untrusted && result.Error is null)
         {

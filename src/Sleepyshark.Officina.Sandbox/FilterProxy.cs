@@ -18,25 +18,30 @@ internal sealed class FilterProxy : IAsyncDisposable
     private static readonly byte[] Established = Encoding.ASCII.GetBytes("HTTP/1.1 200 Connection established\r\n\r\n");
 
     private readonly IReadOnlyList<string> allowedHosts;
+    private readonly Action<string> report;
     private readonly Func<CancellationToken, Task<Stream>> accept;
     private readonly Action close;
     private readonly CancellationTokenSource stop = new();
     private readonly Task accepting;
 
-    private FilterProxy(IReadOnlyList<string> allowedHosts, Func<CancellationToken, Task<Stream>> accept, Action close)
+    private FilterProxy(IReadOnlyList<string> allowedHosts, Action<string> report, Func<CancellationToken, Task<Stream>> accept, Action close)
     {
         this.allowedHosts = allowedHosts;
+        this.report = report;
         this.accept = accept;
         this.close = close;
         accepting = AcceptAsync();
     }
 
-    public static FilterProxy OnUnixSocket(string path, IReadOnlyList<string> allowedHosts)
+    /// <param name="path">The socket's path.</param>
+    /// <param name="allowedHosts">The hosts the proxy dials.</param>
+    /// <param name="report">Where each decision is told, as a line of the command's output.</param>
+    public static FilterProxy OnUnixSocket(string path, IReadOnlyList<string> allowedHosts, Action<string> report)
     {
         var listener = new Socket(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified);
         listener.Bind(new UnixDomainSocketEndPoint(path));
         listener.Listen();
-        return new(allowedHosts, async ct => new NetworkStream(await listener.AcceptAsync(ct).ConfigureAwait(false), ownsSocket: true), () =>
+        return new(allowedHosts, report, async ct => new NetworkStream(await listener.AcceptAsync(ct).ConfigureAwait(false), ownsSocket: true), () =>
         {
             listener.Dispose();
             File.Delete(path);
@@ -46,13 +51,14 @@ internal sealed class FilterProxy : IAsyncDisposable
     /// <param name="name">The pipe's name.</param>
     /// <param name="client">The only one besides the host who may open the pipe: the sandbox's container.</param>
     /// <param name="allowedHosts">The hosts the proxy dials.</param>
+    /// <param name="report">Where each decision is told, as a line of the command's output.</param>
     [SupportedOSPlatform("windows")]
-    public static FilterProxy OnNamedPipe(string name, SecurityIdentifier client, IReadOnlyList<string> allowedHosts)
+    public static FilterProxy OnNamedPipe(string name, SecurityIdentifier client, IReadOnlyList<string> allowedHosts, Action<string> report)
     {
         var security = new PipeSecurity();
         security.AddAccessRule(new PipeAccessRule(WindowsIdentity.GetCurrent().User!, PipeAccessRights.FullControl, AccessControlType.Allow));
         security.AddAccessRule(new PipeAccessRule(client, PipeAccessRights.ReadWrite, AccessControlType.Allow));
-        return new(allowedHosts, async ct =>
+        return new(allowedHosts, report, async ct =>
         {
             var pipe = NamedPipeServerStreamAcl.Create(
                 name, PipeDirection.InOut, NamedPipeServerStream.MaxAllowedServerInstances, PipeTransmissionMode.Byte, PipeOptions.Asynchronous, 0, 0, security);
@@ -122,9 +128,12 @@ internal sealed class FilterProxy : IAsyncDisposable
             var target = new Uri(connect ? $"tcp://{request[1]}" : request[1]);
             if (!Allows(target.Host) || target.Port < 0)
             {
+                report($"[Network: refused {target.Host}, which is not an allowed host.]");
                 await client.WriteAsync(Forbidden, stop.Token).ConfigureAwait(false);
                 return;
             }
+
+            report($"[Network: allowed {target.Host}:{target.Port}.]");
 
             using var upstream = new TcpClient();
             await upstream.ConnectAsync(target.Host, target.Port, stop.Token).ConfigureAwait(false);

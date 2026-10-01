@@ -95,6 +95,7 @@ public sealed class SandboxTools : IAsyncDisposable
         await foreach (var line in process.Output.ReadAllAsync(ct).ConfigureAwait(false))
         {
             output.Append(line).Append('\n');
+            await call.Output(line, ct).ConfigureAwait(false);
         }
 
         return ToolResult.Success($"{output}[exit code {await process.ExitCode.WaitAsync(ct).ConfigureAwait(false)}]");
@@ -103,7 +104,7 @@ public sealed class SandboxTools : IAsyncDisposable
     private async ValueTask<ToolResult> StartAsync(ToolCall call, CancellationToken ct)
     {
         var id = $"p{Interlocked.Increment(ref started)}";
-        background[id] = new Background(await StartCommandAsync(call, ct).ConfigureAwait(false));
+        background[id] = new Background(await StartCommandAsync(call, ct).ConfigureAwait(false), call.Output);
         return ToolResult.Success($"Started {id}.");
     }
 
@@ -162,17 +163,17 @@ public sealed class SandboxTools : IAsyncDisposable
 
     private static ToolResult Unknown(ToolCall call) => ToolResult.Failed(ToolErrorCategory.InvalidArguments, $"there is no background process {Id(call)}");
 
-    /// <summary>A background process, and the output the agent has not read yet.</summary>
+    /// <summary>A background process, and the output the agent has not read yet, which is published as it arrives.</summary>
     private sealed class Background : IAsyncDisposable
     {
         private readonly ISandboxProcess process;
         private readonly StringBuilder unread = new();
         private readonly Task drained;
 
-        public Background(ISandboxProcess process)
+        public Background(ISandboxProcess process, Func<string, CancellationToken, ValueTask> publish)
         {
             this.process = process;
-            drained = DrainAsync();
+            drained = DrainAsync(publish);
         }
 
         /// <summary>The output since the last read, then whether the process still runs.</summary>
@@ -192,7 +193,7 @@ public sealed class SandboxTools : IAsyncDisposable
             await drained.ConfigureAwait(false);
         }
 
-        private async Task DrainAsync()
+        private async Task DrainAsync(Func<string, CancellationToken, ValueTask> publish)
         {
             await foreach (var line in process.Output.ReadAllAsync().ConfigureAwait(false))
             {
@@ -200,6 +201,8 @@ public sealed class SandboxTools : IAsyncDisposable
                 {
                     unread.Append(line).Append('\n');
                 }
+
+                await publish(line, CancellationToken.None).ConfigureAwait(false);
             }
         }
     }

@@ -63,7 +63,8 @@ internal sealed class SandboxProcess : ISandboxProcess
         }
     }
 
-    private void Add(string line)
+    /// <summary>Adds a line of the sandbox's own to the output, such as a decision of the proxy.</summary>
+    public void Add(string line)
     {
         lock (output)
         {

@@ -86,6 +86,7 @@ public sealed class WindowsSandboxTests : IDisposable
 
         Assert.Single(output.Split('\n'), line => line == Server.Greeting);
         Assert.Contains("403 Forbidden", output, StringComparison.Ordinal);
+        Assert.Contains("[Network: refused example.com, which is not an allowed host.]", output, StringComparison.Ordinal);
     }
 
     [Fact(Skip = WindowsOnly, SkipUnless = nameof(OnWindows))]

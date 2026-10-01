@@ -27,6 +27,7 @@ public sealed record CoreEvent(string RunId, string Agent, string? Step, long Se
 [JsonDerivedType(typeof(CacheHitWarning), "cacheHitWarning")]
 [JsonDerivedType(typeof(ToolCallStarted), "toolCallStarted")]
 [JsonDerivedType(typeof(ToolCallEnded), "toolCallEnded")]
+[JsonDerivedType(typeof(ToolOutput), "toolOutput")]
 [JsonDerivedType(typeof(ApprovalRequested), "approvalRequested")]
 [JsonDerivedType(typeof(ApprovalAnswered), "approvalAnswered")]
 public abstract record EventPayload
@@ -61,6 +62,9 @@ public sealed record ToolCallStarted(string Tool, string Arguments) : EventPaylo
 
 /// <summary>A tool call ended; the error is set when it did not succeed.</summary>
 public sealed record ToolCallEnded(string Tool, ToolErrorCategory? Error) : EventPayload;
+
+/// <summary>A line of output from a running tool, such as a sandboxed command (SBX-04). Known secrets are removed (INV-06).</summary>
+public sealed record ToolOutput(string Tool, string Line) : EventPayload;
 
 public sealed record ApprovalRequested(string Tool, string Reason) : EventPayload;
 

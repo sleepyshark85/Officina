@@ -98,12 +98,15 @@ public sealed class WindowsSandbox : ISandbox
 
         var job = new Job(command.Limits);
         FilterProxy? proxy = null;
+
+        // The proxy is told before the command can connect, and reports into its output once it runs.
+        SandboxProcess? sandboxed = null;
         try
         {
             if (command.AllowedHosts.Count > 0)
             {
                 var pipe = $"officina-{Guid.NewGuid():N}";
-                proxy = FilterProxy.OnNamedPipe(pipe, container, command.AllowedHosts);
+                proxy = FilterProxy.OnNamedPipe(pipe, container, command.AllowedHosts, line => sandboxed?.Add(line));
                 var script = Convert.ToBase64String(Encoding.Unicode.GetBytes(Forwarder.Replace("{0}", pipe, StringComparison.Ordinal)));
                 var (_, forwarder) = Launch($"powershell.exe -NoLogo -NoProfile -NonInteractive -EncodedCommand {script}", home.FullName, environment, container, job);
                 var port = forwarder.ReadLine() ?? throw new Win32Exception("The proxy forwarder did not start.");
@@ -116,7 +119,8 @@ public sealed class WindowsSandbox : ISandbox
             }
 
             var (process, output) = Launch($"\"{environment["ComSpec"]}\" /d /s /c \"{command.CommandLine}\"", command.Directory, environment, container, job);
-            return ValueTask.FromResult<ISandboxProcess>(new SandboxProcess(ExitedAsync(process), [output], job.Dispose, command.Limits.OutputCharacters, proxy));
+            sandboxed = new SandboxProcess(ExitedAsync(process), [output], job.Dispose, command.Limits.OutputCharacters, proxy);
+            return ValueTask.FromResult<ISandboxProcess>(sandboxed);
         }
         catch
         {
