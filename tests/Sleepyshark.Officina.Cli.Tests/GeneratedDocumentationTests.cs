@@ -29,7 +29,7 @@ public sealed partial class GeneratedDocumentationTests
     [Fact]
     public void The_examples_in_the_configuration_guide_validate_against_the_schema()
     {
-        var examples = JsonBlock().Matches(File.ReadAllText(Path.Combine(Root, "CONFIGURATION.md"))).Select(match => match.Groups["json"].Value).ToArray();
+        var examples = JsonBlock().Matches(File.ReadAllText(Path.Combine(Root, "CONFIGURATION.md")).ReplaceLineEndings("\n")).Select(match => match.Groups["json"].Value).ToArray();
 
         Assert.NotEmpty(examples);
         Assert.All(examples, example => AssertValid(example));
