@@ -27,6 +27,18 @@ public sealed partial record OfficinaOptions
     [Setting("Agent definitions, by name.", Example = """{ "extractor": { "instructions": "Extract the invoice number." } }""")]
     public IReadOnlyDictionary<string, AgentDefinition> Agents { get; init; } = new Dictionary<string, AgentDefinition>();
 
+    [Setting("Tools, by the name the model sees.", Example = """{ "create_issue": { "source": "extension:Acme.CreateIssue", "gates": ["issue-dedupe"] } }""")]
+    public IReadOnlyDictionary<string, ToolOptions> Tools { get; init; } = new Dictionary<string, ToolOptions>();
+
+    [Setting("Named groups of tools, by name in `tools`. Agents are offered tools by tool set.", Example = """{ "issues": ["create_issue", "find_issue"] }""")]
+    public IReadOnlyDictionary<string, IReadOnlyList<string>> ToolSets { get; init; } = new Dictionary<string, IReadOnlyList<string>>();
+
+    [Setting("Gates, by name. Tools and policies refer to them by name.", Example = """{ "issue-dedupe": { "use": "extension:Acme.IssueDedupeGate" } }""")]
+    public IReadOnlyDictionary<string, GateOptions> Gates { get; init; } = new Dictionary<string, GateOptions>();
+
+    [Setting("Permission rules, gates for all tools, and anonymous callers' permissions.", Example = """{ "gates": ["no-main-branch"] }""")]
+    public PolicyOptions Policies { get; init; } = new();
+
     [Setting("Defaults for every run.", Example = """{ "permissionMode": "ask" }""")]
     public RunDefaults Run { get; init; } = new();
 }

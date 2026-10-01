@@ -5,4 +5,9 @@
     <ProjectReference Include="..\..\src\Sleepyshark.Officina.Testing\Sleepyshark.Officina.Testing.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- The clock is a system boundary (DESIGN.md §11). -->
+    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
+  </ItemGroup>
+
 </Project>

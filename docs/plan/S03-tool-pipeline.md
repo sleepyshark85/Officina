@@ -1,6 +1,6 @@
 # S03 — Tool pipeline
 
-**Milestone:** M2 · **Size:** M · **Depends on:** S02 · **Issue:** [#5](https://github.com/sleepyshark85/Officina/issues/5) · **Status:** todo
+**Milestone:** M2 · **Size:** M · **Depends on:** S02 · **Issue:** [#5](https://github.com/sleepyshark85/Officina/issues/5) · **Status:** done
 
 ## Goal
 
@@ -10,14 +10,14 @@ Every tool call goes through one governed path (DESIGN.md §5).
 
 ## Acceptance criteria
 
-- [ ] The steps run in the order of DESIGN.md §5, and the first that does not allow the call decides. There is a test per row.
-- [ ] Every write-tool attempt is audited, including denied, asked and failed ones.
-- [ ] Irreversible tools record their intent before running; a recorded intent with no outcome is never re-run.
-- [ ] Errors reach the model as a category and a short message only. A planted secret never appears in model input, logs or errors.
-- [ ] Calls marked safe run in parallel, and their results come back in the order requested.
-- [ ] Provider server-side tools are enabled only explicitly and are audited after the fact.
-- [ ] A write tool without a gate fails validation.
-- [ ] The condition language (approval rules and gate conditions) is implemented, checked against the schema it reads, and tested.
+- [x] The steps run in the order of DESIGN.md §5, and the first that does not allow the call decides. There is a test per row.
+- [x] Every write-tool attempt is audited, including denied, asked and failed ones.
+- [x] Irreversible tools record their intent before running; a recorded intent with no outcome is never re-run.
+- [x] Errors reach the model as a category and a short message only. A planted secret never appears in model input, logs or errors.
+- [x] Calls marked safe run in parallel, and their results come back in the order requested.
+- [x] Provider server-side tools are enabled only explicitly and are audited after the fact.
+- [x] A write tool without a gate fails validation.
+- [x] The condition language (approval rules and gate conditions) is implemented, checked against the schema it reads, and tested.
 
 ## Notes
 

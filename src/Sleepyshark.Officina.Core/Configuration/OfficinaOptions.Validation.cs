@@ -37,11 +37,67 @@ public sealed partial record OfficinaOptions : IValidatableObject
 
         foreach (var (name, agent) in Agents)
         {
-            errors = errors.Concat(Names([name], "agents")).Concat(Annotations(agent, $"agents.{name}")).Concat(ModelExists(name, agent));
+            errors = errors.Concat(Names([name], "agents")).Concat(Annotations(agent, $"agents.{name}")).Concat(ModelExists(name, agent))
+                .Concat(References($"agents.{name}.tools", "tool set", agent.Tools, "toolSets", ToolSets.Keys));
         }
 
-        return errors.Concat(InstructionPlaceholders.Check(this));
+        return errors.Concat(ToolSettings()).Concat(InstructionPlaceholders.Check(this));
     }
+
+    /// <summary>
+    /// The tool settings that can be checked without the tools themselves. The tool pipeline checks the rest when it is
+    /// built with the application's tools (TOOL-02).
+    /// </summary>
+    private IEnumerable<ConfigurationError> ToolSettings()
+    {
+        var errors = Names(Tools.Keys, "tools").Concat(Names(ToolSets.Keys, "toolSets")).Concat(Names(Gates.Keys, "gates"))
+            .Concat(References("policies.gates", "gate", Policies.Gates, "gates", Gates.Keys));
+        foreach (var (name, tool) in Tools)
+        {
+            errors = errors.Concat(Annotations(tool, $"tools.{name}")).Concat(References($"tools.{name}.gates", "gate", tool.Gates, "gates", Gates.Keys));
+            if (tool.Source is not null && tool.ExtensionId() is null && tool.ProviderTool() is null)
+            {
+                errors = errors.Append(new(ValidationPhase.Shape, $"tools.{name}.source", $"\"{tool.Source}\" is not a tool source.",
+                    "Use extension:<id> for a tool the application registers, or provider:<name> for a provider's own tool."));
+            }
+            else if (tool.ProviderTool() is not null && string.IsNullOrWhiteSpace(tool.Reason))
+            {
+                // TOOL-13: a provider tool skips the per-call steps, so it is enabled only explicitly, with a reason.
+                errors = errors.Append(new(ValidationPhase.Tools, $"tools.{name}.reason", "is required for a provider tool.",
+                    "Say why the agents need it; the provider runs it without gates or approval."));
+            }
+        }
+
+        foreach (var (name, tools) in ToolSets)
+        {
+            errors = errors.Concat(References($"toolSets.{name}", "tool", tools, "tools", Tools.Keys));
+        }
+
+        foreach (var (name, gate) in Gates)
+        {
+            errors = errors.Concat(Annotations(gate, $"gates.{name}"));
+            if (gate.Use is not null and not GateOptions.RequireApproval and not GateOptions.Deny && gate.ExtensionId() is null)
+            {
+                errors = errors.Append(new(ValidationPhase.Shape, $"gates.{name}.use", $"\"{gate.Use}\" is not a gate.",
+                    $"Use {GateOptions.RequireApproval}, {GateOptions.Deny}, or extension:<id> for a gate the application registers."));
+            }
+        }
+
+        foreach (var (index, rule) in Policies.PermissionRules.Index())
+        {
+            var path = $"policies.permissionRules[{index}]";
+            errors = errors.Concat(Annotations(rule, path)).Concat(rule.Tool is null ? [] : References($"{path}.tool", "tool", [rule.Tool], "tools", Tools.Keys));
+            if (rule.Action == PolicyAction.Route)
+            {
+                errors = errors.Concat(rule.To is null
+                    ? [new(ValidationPhase.Shape, $"{path}.to", "is required to route.", "Name the agent the turn is handed to.")]
+                    : References($"{path}.to", "agent", [rule.To], "agents", Agents.Keys));
+            }
+        }
+
+        return errors;
+    }
+
 
     private IEnumerable<ConfigurationError> FormatVersionSupported() =>
         FormatVersion == CurrentFormatVersion
@@ -73,6 +129,9 @@ public sealed partial record OfficinaOptions : IValidatableObject
         names.Where(name => name.IndexOfAny(['.', '[', ']']) >= 0)
             .Select(name => new ConfigurationError(
                 ValidationPhase.Shape, $"{section}.{name}", $"\"{name}\" is not a valid name.", "Leave out '.', '[' and ']'."));
+
+    private static IEnumerable<ConfigurationError> References(string path, string kind, IEnumerable<string> names, string section, IEnumerable<string> known) =>
+        names.Where(name => !known.Contains(name)).Select(name => Missing(path, kind, name, section, known));
 
     private static ConfigurationError Missing(string path, string kind, string name, string section, IEnumerable<string> known) =>
         new(ValidationPhase.References, path, $"{kind} \"{name}\" does not exist.",
