@@ -12,12 +12,16 @@ public sealed class FakeSandbox : ISandbox
 {
     private readonly ConcurrentQueue<(string Output, int? ExitCode)> replies = new();
     private readonly ConcurrentQueue<FakeSandboxProcess> processes = new();
+    private readonly TaskCompletionSource<FakeSandboxProcess> firstStarted = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
     /// <summary>What <see cref="Probe"/> reports: null when the machine can isolate commands.</summary>
     public string? Problem { get; init; }
 
     /// <summary>The processes started so far, in order.</summary>
     public IReadOnlyList<FakeSandboxProcess> Processes => [.. processes];
+
+    /// <summary>The first process, once it has started.</summary>
+    public Task<FakeSandboxProcess> FirstStarted => firstStarted.Task;
 
     /// <summary>Adds a reply to the end of the script.</summary>
     /// <param name="output">The command's output.</param>
@@ -40,6 +44,7 @@ public sealed class FakeSandbox : ISandbox
 
         var process = new FakeSandboxProcess(command, reply.Output, reply.ExitCode);
         processes.Enqueue(process);
+        firstStarted.TrySetResult(process);
         return ValueTask.FromResult<ISandboxProcess>(process);
     }
 }

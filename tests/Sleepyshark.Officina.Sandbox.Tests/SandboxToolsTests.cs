@@ -30,8 +30,28 @@ public sealed class SandboxToolsTests : IAsyncDisposable
 
         Assert.Equal("Build succeeded.\n[exit code 0]", result.Content);
         var command = Assert.Single(sandbox.Processes).Command;
-        Assert.Equal(("dotnet build", Agent.WorkingCopy, SandboxLimits.Default), (command.CommandLine, command.Directory, command.Limits));
+        Assert.Equal(("dotnet build", dev.WorkingCopy, SandboxLimits.Default), (command.CommandLine, command.Directory, command.Limits));
         Assert.Equal(["*.nuget.org"], command.AllowedHosts);
+    }
+
+    [Fact]
+    public async Task Commands_are_given_the_protected_paths_as_they_are_when_the_command_starts()
+    {
+        foreach (var path in new[] { ".env", "src/.env.local", "secrets/key.pem", "sof.json", "src/app.cs" })
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(Path.Combine(dev.WorkingCopy, path))!);
+            await File.WriteAllTextAsync(Path.Combine(dev.WorkingCopy, path), "x", TestContext.Current.CancellationToken);
+        }
+
+        Directory.CreateDirectory(Path.Combine(dev.WorkingCopy, ".git"));
+        sandbox.Reply("");
+
+        await dev.CallAsync("run_command", new { command = "dotnet build" });
+
+        var command = Assert.Single(sandbox.Processes).Command;
+        string[] Relative(IEnumerable<string> paths) => [.. paths.Select(path => Path.GetRelativePath(dev.WorkingCopy, path).Replace('\\', '/')).Order(StringComparer.Ordinal)];
+        Assert.Equal([".env", ".git", "secrets/key.pem", "src/.env.local"], Relative(command.HiddenPaths));
+        Assert.Equal(["sof.json"], Relative(command.ReadOnlyPaths));
     }
 
     [Fact]
@@ -99,16 +119,13 @@ public sealed class SandboxToolsTests : IAsyncDisposable
         sandbox.Reply("", exitCode: null);
 
         var call = dev.CallAsync("run_command", new { command = "dotnet test" });
-        while (sandbox.Processes.Count == 0)
-        {
-            await Task.Delay(1, TestContext.Current.CancellationToken);
-        }
+        var process = await sandbox.FirstStarted;
 
         dev.Time.Advance(dev.Options.Tools["run_command"].Timeout);
 
         Assert.Equal(ToolErrorCategory.Timeout, (await call).Error);
-        await sandbox.Processes[0].ExitCode;
-        Assert.True(sandbox.Processes[0].Stopped);
+        await process.ExitCode;
+        Assert.True(process.Stopped);
     }
 
     [Fact]
@@ -116,7 +133,7 @@ public sealed class SandboxToolsTests : IAsyncDisposable
     {
         var unavailable = new FakeSandbox { Problem = "bubblewrap cannot create namespaces." };
 
-        var exception = Assert.Throws<InvalidOperationException>(() => new SandboxTools(unavailable, Options, "dev", Agent.WorkingCopy));
+        var exception = Assert.Throws<InvalidOperationException>(() => new SandboxTools(unavailable, Options, new(), "dev", "/work/dev"));
 
         Assert.Equal("Commands cannot run, because this machine cannot sandbox them: bubblewrap cannot create namespaces.", exception.Message);
     }

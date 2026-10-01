@@ -80,7 +80,7 @@ internal sealed class FilterProxy : IAsyncDisposable
 
             var connect = request[0] == "CONNECT";
             var target = new Uri(connect ? $"tcp://{request[1]}" : request[1]);
-            if (!Allows(target.Host))
+            if (!Allows(target.Host) || target.Port < 0)
             {
                 await client.WriteAsync(Forbidden, stop.Token).ConfigureAwait(false);
                 return;

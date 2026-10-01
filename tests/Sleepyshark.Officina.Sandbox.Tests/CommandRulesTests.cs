@@ -30,6 +30,7 @@ public sealed class CommandRulesTests : IAsyncDisposable
 
     [Theory]
     [InlineData("dotnet build", "allowed")]
+    [InlineData("dotnet test 2>&1", "allowed")]
     [InlineData("git push --force", "denied")]
     [InlineData("rm -rf bin", "asked")]
     [InlineData("make", "asked")]

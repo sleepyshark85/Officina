@@ -8,7 +8,8 @@ namespace Sleepyshark.Officina.Sandbox;
 /// <summary>
 /// The command rules, as the gate of the tools that run commands (SBX-02). Each command of a command line is decided by
 /// the first rule that matches it, and one no rule matches is asked about. The strictest decision applies to the whole
-/// line, so an allowed command cannot carry another along with it.
+/// line. Rules sort what an agent means to do; they cannot see what an allowed program runs in turn, such as a build's
+/// own steps, so the sandbox, its mounts and the proxy are the guarantee.
 /// </summary>
 public sealed partial class CommandRules(SandboxOptions options) : IGate
 {
@@ -18,7 +19,8 @@ public sealed partial class CommandRules(SandboxOptions options) : IGate
     public ValueTask<GateDecision> EvaluateAsync(GateContext context, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(context);
-        var line = context.Arguments.GetProperty("command").GetString() ?? "";
+        // Joining output streams, as in 2>&1, is not a second command.
+        var line = StreamJoins().Replace(context.Arguments.GetProperty("command").GetString() ?? "", ">");
         var commands = Separators().Split(line).Select(command => command.Trim()).Where(command => command.Length > 0).ToList();
 
         // A substitution runs a command no rule sees, so a line with one is never allowed by rule alone.
@@ -35,6 +37,9 @@ public sealed partial class CommandRules(SandboxOptions options) : IGate
     private CommandAction Decide(string command) =>
         options.CommandRules.FirstOrDefault(rule => FileSystemName.MatchesSimpleExpression(rule.Match, command, ignoreCase: false))?.Action
         ?? CommandAction.Ask;
+
+    [GeneratedRegex(@"[0-9]*>&[0-9]+|&>")]
+    private static partial Regex StreamJoins();
 
     [GeneratedRegex(@"[;&|\n]")]
     private static partial Regex Separators();
