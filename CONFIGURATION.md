@@ -15,11 +15,12 @@ Status: draft for M0 design review · 2026-09-30 · companion to `REQUIREMENTS.m
 - **Presets are ready-made files** that sit between the code defaults and your file. For example,
   `preset:coding-team` will set up the whole team; presets arrive with the coding team.
 - **Layers, lowest to highest:** code defaults < `sof.json` < `sof.<environment>.json`
-  < environment variables (`SOF__section__setting`) < run options (CLI flags). Loading uses
-  Microsoft.Extensions.Configuration, so setting names match ignoring case, a list should be set in one
-  layer only (lists merge by position), and `null` only unsets a setting that may be unset.
-- **To see what is in effect,** run `sof config show --origin`. It prints the effective value of
-  every setting and the file, variable or option it came from, down to "code default, core 1.2.0" (CFG-04).
+  < environment variables (`SOF__section__setting`) < CLI options. Loading uses
+  Microsoft.Extensions.Configuration, so setting names match ignoring case, unknown settings are ignored,
+  a list should be set in one layer only (lists merge by position), and `null` only unsets a setting that
+  may be unset. Agent definitions cannot build on each other yet.
+- **To see what is in effect,** run `sof config show --origin`. It lists every setting with its effective
+  value and the file, variable or option it came from, down to "code default, core 1.2.0" (CFG-04).
 - **Everything is validated before anything runs** (CFG-06). `sof config validate` checks a
   file without running it. A value of the wrong type is reported one at a time.
 

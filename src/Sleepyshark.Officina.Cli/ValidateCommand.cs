@@ -17,7 +17,7 @@ internal static class ValidateCommand
                 return code;
             }
 
-            host.Out.WriteLine($"The configuration is valid (code defaults{string.Concat(configuration.Layers.Select(layer => ", " + layer))}).");
+            host.Out.WriteLine("The configuration is valid.");
             return ExitCodes.Success;
         });
         return command;

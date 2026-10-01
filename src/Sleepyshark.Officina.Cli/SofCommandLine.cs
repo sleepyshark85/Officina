@@ -1,5 +1,4 @@
 using System.CommandLine;
-using Sleepyshark.Officina.Core.Configuration;
 
 namespace Sleepyshark.Officina.Cli;
 
@@ -30,19 +29,6 @@ public static class SofCommandLine
             return ExitCodes.Usage;
         }
 
-        try
-        {
-            return parse.Invoke(new InvocationConfiguration { Output = host.Out, Error = host.Error, EnableDefaultExceptionHandler = false });
-        }
-        catch (ConfigurationException exception)
-        {
-            // Names something the configuration does not have, such as an agent.
-            foreach (var error in exception.Errors)
-            {
-                host.Error.WriteLine($"error: {error}");
-            }
-
-            return ExitCodes.Usage;
-        }
+        return parse.Invoke(new InvocationConfiguration { Output = host.Out, Error = host.Error, EnableDefaultExceptionHandler = false });
     }
 }

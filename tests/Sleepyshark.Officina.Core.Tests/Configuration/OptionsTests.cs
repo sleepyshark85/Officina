@@ -43,14 +43,4 @@ public class OptionsTests
         Assert.Equal("claude-opus-5-5", options.Models[ModelProfile.DefaultName].Model);
         Assert.Equal(new SecretReference("ANTHROPIC_API_KEY"), options.Providers["claude"].ApiKey);
     }
-
-    [Fact]
-    public void Options_are_written_in_the_file_format_with_every_default()
-    {
-        var json = ConfigurationJson.Write(new OfficinaOptions());
-
-        Assert.Contains("\"permissionMode\": \"ask\"", json, StringComparison.Ordinal);
-        Assert.Contains("\"time\": \"08:00:00\"", json, StringComparison.Ordinal);
-        Assert.Contains("\"secret\": \"ANTHROPIC_API_KEY\"", json, StringComparison.Ordinal);
-    }
 }

@@ -30,9 +30,8 @@ public class RunConfigurationTests
         var runs = kit.Runs.Runs;
         Assert.Equal(2, runs.Count);
         Assert.NotEqual(runs[0].RunId, runs[1].RunId);
-        Assert.Equal(("extractor", CoreVersion.Value, ConfigurationJson.Write(Options)), (runs[0].Agent, runs[0].CoreVersion, runs[0].Configuration));
-        Assert.Contains("Extract the total of {{project.name}} invoices.", runs[0].Configuration, StringComparison.Ordinal);
-        Assert.Contains("\"cost\": 25", runs[0].Configuration, StringComparison.Ordinal);
+        Assert.Equal(("extractor", CoreVersion.Value), (runs[0].Agent, runs[0].CoreVersion));
+        Assert.Same(Options, runs[0].Configuration);
     }
 
     [Fact]
@@ -45,7 +44,7 @@ public class RunConfigurationTests
 
         var run = Assert.Single(kit.Runs.Runs);
         Assert.Equal(AgentRunner.InlineAgentName, run.Agent);
-        Assert.Contains("Be brief.", run.Configuration, StringComparison.Ordinal);
+        Assert.Equal("Be brief.", run.Configuration.Agents[AgentRunner.InlineAgentName].Instructions);
     }
 
     [Fact]

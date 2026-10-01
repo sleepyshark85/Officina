@@ -4,7 +4,7 @@ namespace Sleepyshark.Officina.Dependencies.Tests;
 public sealed class DependencyRulesTests : IDisposable
 {
     private const string Core = "Sleepyshark.Officina.Core";
-    private const string Hosting = "Sleepyshark.Officina.Hosting";
+    private const string Team = "Sleepyshark.Officina.Team";
     private const string Testing = "Sleepyshark.Officina.Testing";
     private const string Provider = "Sleepyshark.Officina.Providers.Claude";
     private const string Cli = "Sleepyshark.Officina.Cli";
@@ -17,11 +17,11 @@ public sealed class DependencyRulesTests : IDisposable
     [Fact]
     public void A_project_other_than_the_provider_referencing_the_Anthropic_SDK_fails()
     {
-        repository.AddProject(Hosting, [Core, "Anthropic"], new() { ["Anthropic"] = [ExtensionsAi] });
+        repository.AddProject(Team, [Core, "Anthropic"], new() { ["Anthropic"] = [ExtensionsAi] });
 
         var violations = repository.Check();
 
-        Assert.Contains($"{Hosting} references the Anthropic SDK (Anthropic). Only {Provider} may.", violations);
+        Assert.Contains($"{Team} references the Anthropic SDK (Anthropic). Only {Provider} may.", violations);
     }
 
     [Fact]
@@ -61,9 +61,9 @@ public sealed class DependencyRulesTests : IDisposable
     [Fact]
     public void Another_project_getting_Microsoft_Extensions_AI_fails()
     {
-        repository.AddProject(Hosting, [Core, "Some.Library"], new() { ["Some.Library"] = [ExtensionsAi] });
+        repository.AddProject(Team, [Core, "Some.Library"], new() { ["Some.Library"] = [ExtensionsAi] });
 
-        Assert.Contains($"{Hosting} gets {ExtensionsAi} other than through the Anthropic SDK in {Provider}.", repository.Check());
+        Assert.Contains($"{Team} gets {ExtensionsAi} other than through the Anthropic SDK in {Provider}.", repository.Check());
     }
 
     [Theory]
@@ -97,8 +97,8 @@ public sealed class DependencyRulesTests : IDisposable
     [Fact]
     public void A_project_that_was_not_restored_fails()
     {
-        repository.AddUnrestoredProject(Hosting);
+        repository.AddUnrestoredProject(Team);
 
-        Assert.Contains(repository.Check(), violation => violation.StartsWith($"{Hosting} has not been restored", StringComparison.Ordinal));
+        Assert.Contains(repository.Check(), violation => violation.StartsWith($"{Team} has not been restored", StringComparison.Ordinal));
     }
 }

@@ -1,6 +1,6 @@
 using Sleepyshark.Officina.Core.Configuration;
 
-namespace Sleepyshark.Officina.Hosting.Tests;
+namespace Sleepyshark.Officina.Cli.Tests;
 
 /// <summary>
 /// Attempts to weaken an invariant through the settings that exist so far are rejected with a message naming the
@@ -41,7 +41,7 @@ public sealed class InvariantTests : IDisposable
 
         var configuration = folder.Load();
 
-        Assert.True(configuration.IsValid, string.Join('\n', configuration.Errors));
+        Assert.Empty(configuration.Errors);
         Assert.Equal(new RunBudget(), configuration.Options.Run.Budget);
     }
 

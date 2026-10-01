@@ -7,12 +7,13 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Configuration.Binder" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Json" />
     <PackageReference Include="System.CommandLine" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Sleepyshark.Officina.Core\Sleepyshark.Officina.Core.csproj" />
-    <ProjectReference Include="..\Sleepyshark.Officina.Hosting\Sleepyshark.Officina.Hosting.csproj" />
     <ProjectReference Include="..\Sleepyshark.Officina.Team\Sleepyshark.Officina.Team.csproj" />
     <ProjectReference Include="..\Sleepyshark.Officina.Workspace\Sleepyshark.Officina.Workspace.csproj" />
     <ProjectReference Include="..\Sleepyshark.Officina.Sandbox\Sleepyshark.Officina.Sandbox.csproj" />

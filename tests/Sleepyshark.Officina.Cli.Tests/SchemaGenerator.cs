@@ -5,14 +5,14 @@ using System.Text.Json.Nodes;
 using System.Text.Json.Schema;
 using Sleepyshark.Officina.Core.Configuration;
 
-namespace Sleepyshark.Officina.Hosting.Documentation;
+namespace Sleepyshark.Officina.Cli.Tests;
 
 /// <summary>
 /// Generates the JSON Schema of configuration files from the Options classes with the built-in exporter, adding the
 /// descriptions, examples, defaults and ranges of <see cref="SettingAttribute"/> (CFG-15). The schema is for editors;
 /// validation is done by the loader. A file may set only some settings, so the schema requires nothing.
 /// </summary>
-public static class SchemaGenerator
+internal static class SchemaGenerator
 {
     public const string SchemaId = "https://raw.githubusercontent.com/sleepyshark85/Officina/main/docs/officina.schema.json";
 

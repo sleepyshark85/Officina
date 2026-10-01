@@ -2,30 +2,24 @@ using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace Sleepyshark.Officina.Core.Configuration;
+namespace Sleepyshark.Officina.Cli;
 
 /// <summary>
-/// The JSON form of the Options classes: the configuration file format (configuration reference §2), also used to
-/// store the resolved configuration of each run (CFG-07).
+/// The JSON form of the Options classes: names and value forms as in configuration files. <c>sof config show</c> writes
+/// settings with it, and the editor schema is generated from it, which is why it disallows unknown members.
 /// </summary>
 public static class ConfigurationJson
 {
-    /// <summary>Strict serializer settings: unknown settings, wrong types and missing required settings are errors.</summary>
     public static JsonSerializerOptions Options { get; } = Create();
-
-    /// <summary>The configuration as indented JSON with every setting, defaults included.</summary>
-    public static string Write(OfficinaOptions options) => JsonSerializer.Serialize(options, Options).ReplaceLineEndings("\n");
 
     private static JsonSerializerOptions Create()
     {
         var options = new JsonSerializerOptions
         {
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
             UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow,
             RespectNullableAnnotations = true,
-            RespectRequiredConstructorParameters = true,
-            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-            WriteIndented = true,
             Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
             Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase, allowIntegerValues: false) },
         };

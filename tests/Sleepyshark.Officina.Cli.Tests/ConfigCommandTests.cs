@@ -19,7 +19,7 @@ public sealed partial class ConfigCommandTests : IDisposable
     public void Dispose() => sof.Dispose();
 
     [Fact]
-    public void Show_with_origin_names_the_layer_of_every_value()
+    public void Show_with_origin_lists_every_setting_with_its_source()
     {
         sof.Write("sof.json", Smallest).Write("sof.prod.json", """{ "run": { "budget": { "time": "02:00:00" } } }""");
         sof.Variables["SOF_ENVIRONMENT"] = "prod";
@@ -29,36 +29,13 @@ public sealed partial class ConfigCommandTests : IDisposable
 
         Assert.Equal(0, exitCode);
         var lines = output.Split('\n', StringSplitOptions.RemoveEmptyEntries).Select(line => Spaces().Replace(line, " ")).ToArray();
-        Assert.Contains("project.name \"invoice-api\" application file sof.json", lines);
-        Assert.Contains("run.budget.cost 40 run option --budget", lines);
-        Assert.Contains("run.budget.time \"02:00:00\" environment file sof.prod.json", lines);
+        Assert.Contains("project.name \"invoice-api\" sof.json", lines);
+        Assert.Contains("run.budget.cost 40 option --budget", lines);
+        Assert.Contains("run.budget.time \"02:00:00\" sof.prod.json", lines);
         Assert.Contains("run.permissionMode \"auto\" environment variable SOF__run__permissionMode", lines);
         Assert.Contains("models.default.model \"claude-opus-5-5\" code default, core 0.1.0", lines);
-        const string AnyLayer = @" (code default, core \d|application file|environment file|environment variable|run option)";
+        const string AnyLayer = @" (code default, core \d|sof\.json|sof\.prod\.json|environment variable|option)";
         Assert.All(lines, line => Assert.Matches(AnyLayer, line));
-    }
-
-    [Fact]
-    public void Show_for_an_agent_lists_only_what_applies_to_it()
-    {
-        sof.Write("sof.json", """{ "agents": { "a": { "instructions": "x" }, "b": { "instructions": "y" } } }""");
-
-        var (exitCode, output, _) = sof.Run("config", "show", "--agent", "a");
-
-        Assert.Equal(0, exitCode);
-        Assert.Contains("agents.a.instructions", output, StringComparison.Ordinal);
-        Assert.DoesNotContain("agents.b", output, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void Show_for_an_unknown_agent_is_a_usage_error()
-    {
-        sof.Write("sof.json", Smallest);
-
-        var (exitCode, _, error) = sof.Run("config", "show", "--agent", "nobody");
-
-        Assert.Equal(2, exitCode);
-        Assert.Contains("error: agents.nobody: does not exist. Use one of: extractor.", error, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -69,7 +46,7 @@ public sealed partial class ConfigCommandTests : IDisposable
         var (exitCode, output, error) = sof.Run("config", "validate");
 
         Assert.Equal(0, exitCode);
-        Assert.Equal("The configuration is valid (code defaults, application file sof.json).\n", output);
+        Assert.Equal("The configuration is valid.\n", output);
         Assert.Empty(error);
     }
 
@@ -89,7 +66,7 @@ public sealed partial class ConfigCommandTests : IDisposable
             """
             error: sof.json: agents.a.model: model profile "strong" does not exist. Add it to models, or use one of: default.
             error: sof.json: agents.a.instructions: placeholder {{caller.id}} is not allowed in instructions. Instructions are the same for every call, so they cannot use caller, work or time values.
-            error: --budget: run.budget.cost: must be greater than zero. A limit can be high, but never zero, negative or unlimited.
+            error: option --budget: run.budget.cost: must be greater than zero. A limit can be high, but never zero, negative or unlimited.
             3 errors.
 
             """.ReplaceLineEndings("\n"),
@@ -100,7 +77,7 @@ public sealed partial class ConfigCommandTests : IDisposable
     [InlineData("config", "explode")]
     [InlineData("config", "show", "--colour")]
     [InlineData("config", "show", "--dir")]
-    [InlineData("config", "validate", "--agent", "nope")]
+    [InlineData("config", "show", "--agent", "a")]
     [InlineData("deploy")]
     public void A_wrong_command_line_is_a_usage_error(params string[] args) => Assert.Equal(2, sof.Run(args).ExitCode);
 

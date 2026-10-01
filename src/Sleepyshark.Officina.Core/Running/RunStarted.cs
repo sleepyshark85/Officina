@@ -1,3 +1,5 @@
+using Sleepyshark.Officina.Core.Configuration;
+
 namespace Sleepyshark.Officina.Core.Running;
 
 /// <summary>
@@ -7,5 +9,5 @@ namespace Sleepyshark.Officina.Core.Running;
 /// <param name="RunId">The run's id.</param>
 /// <param name="Agent">The agent definition the run starts with.</param>
 /// <param name="CoreVersion">The core that ran it.</param>
-/// <param name="Configuration">Every setting, as JSON in the file format.</param>
-public sealed record RunStarted(string RunId, string Agent, string CoreVersion, string Configuration);
+/// <param name="Configuration">The resolved configuration. Durable storage (S08) writes it as text.</param>
+public sealed record RunStarted(string RunId, string Agent, string CoreVersion, OfficinaOptions Configuration);

@@ -2,6 +2,12 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Sleepyshark.Officina.Cli\Sleepyshark.Officina.Cli.csproj" />
+    <ProjectReference Include="..\..\src\Sleepyshark.Officina.Testing\Sleepyshark.Officina.Testing.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Validates the documentation's examples against the generated schema. -->
+    <PackageReference Include="JsonSchema.Net" />
   </ItemGroup>
 
 </Project>

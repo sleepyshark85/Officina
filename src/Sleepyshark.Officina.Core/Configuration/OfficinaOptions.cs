@@ -2,8 +2,8 @@ namespace Sleepyshark.Officina.Core.Configuration;
 
 /// <summary>
 /// The whole configuration. Files and the programmatic form both produce this object (CFG-02), and every property's
-/// initial value is its default (CFG-16). Records with collections compare those by reference; to compare two
-/// configurations, compare <see cref="ConfigurationJson.Write"/>.
+/// initial value is its default (CFG-16). Records with collections compare those by reference, so two equal-looking
+/// configurations are not <c>Equals</c>; compare their serialized form instead.
 /// </summary>
 public sealed partial record OfficinaOptions
 {

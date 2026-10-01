@@ -1,13 +1,12 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Json.Schema;
-using Sleepyshark.Officina.Hosting.Documentation;
 
-namespace Sleepyshark.Officina.Hosting.Tests;
+namespace Sleepyshark.Officina.Cli.Tests;
 
 /// <summary>
-/// The JSON Schema and the settings reference are generated from the Options classes, and the committed copies
-/// must be current (CFG-15, DOC-01). To regenerate them, run the tests with OFFICINA_UPDATE_GENERATED=1.
+/// The JSON Schema and the settings reference are generated from the Options classes by this test project, and the
+/// committed copies must be current (CFG-15, DOC-01). To regenerate them, run the tests with OFFICINA_UPDATE_GENERATED=1.
 /// </summary>
 public sealed partial class GeneratedDocumentationTests
 {

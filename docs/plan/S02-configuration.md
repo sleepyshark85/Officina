@@ -6,7 +6,7 @@
 
 Build the configuration machinery: Options classes, loading, layers, validation, and showing where each value came from.
 
-**Closes:** CFG-01, CFG-02, CFG-04, CFG-05, CFG-06, CFG-07, CFG-08, CFG-09, CFG-10, CFG-14, CFG-15, CFG-16, CFG-17, MDL-02, MDL-03, DOC-01, TEST-05
+**Closes:** CFG-01, CFG-02, CFG-04, CFG-06, CFG-07, CFG-08, CFG-09, CFG-10, CFG-14, CFG-15, CFG-16, CFG-17, MDL-02, MDL-03, DOC-01, TEST-05
 
 ## Acceptance criteria
 

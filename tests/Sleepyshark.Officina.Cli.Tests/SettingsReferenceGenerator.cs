@@ -2,13 +2,13 @@ using System.Globalization;
 using System.Text;
 using System.Text.Json.Nodes;
 
-namespace Sleepyshark.Officina.Hosting.Documentation;
+namespace Sleepyshark.Officina.Cli.Tests;
 
 /// <summary>
 /// Generates the settings reference from the JSON Schema, so it lists every setting with its meaning, allowed
 /// values, default and an example, and cannot drift from the Options classes (DOC-01).
 /// </summary>
-public static class SettingsReferenceGenerator
+internal static class SettingsReferenceGenerator
 {
     public static string Generate(JsonObject schema)
     {

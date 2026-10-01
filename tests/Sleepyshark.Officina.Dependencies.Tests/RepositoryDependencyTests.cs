@@ -7,7 +7,7 @@ public class RepositoryDependencyTests
 {
     private static readonly string[] DesignedProjects =
     [
-        "Core", "Hosting", "Team", "Workspace", "Sandbox", "Capabilities",
+        "Core", "Team", "Workspace", "Sandbox", "Capabilities",
         "Storage.Sqlite", "Mcp", "Providers.Claude", "Testing", "Cli",
     ];
 

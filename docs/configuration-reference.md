@@ -720,19 +720,19 @@ workspace hides it from agents.
 
 ---
 
-## 13. Layering and merging (CFG-04, CFG-05)
+## 13. Layering and merging (CFG-04)
 
-Configuration is loaded with Microsoft.Extensions.Configuration. Layers, lowest to highest:
+The CLI loads configuration with Microsoft.Extensions.Configuration. Layers, lowest to highest:
 
 ```
-code defaults (Options classes) < application file < environment file < environment variables < run options
+code defaults (Options classes) < sof.json < sof.<environment>.json < environment variables < command-line options
 ```
 
 - **Environment variables** use the form `SOF__agents__developer__budget__turn__cost=8`.
-- **Run options** are what the host passes when it starts a run, for example the CLI's `--budget 40`.
-- **Setting names match ignoring case**, in files and variables alike. Names of named items keep the
-  case they were first written in.
-- **Presets and file-level `extends`** are not available yet; presets arrive with the coding team.
+- **Command-line options** are what the CLI passes, for example `--budget 40`.
+- **Setting names match ignoring case**, in files and variables alike.
+- **Unknown settings are ignored.**
+- **Presets and `extends`** (between files or agent definitions) are not available yet; they arrive with the coding team.
 
 Merge rules:
 
@@ -742,15 +742,9 @@ Merge rules:
 | Named map (`agents`, `tools`, …) | Merged by name; a new name adds an entry |
 | List | Merged by position, so set a list in one layer only |
 | `null` | Makes a setting that may be unset unset. It does not remove other values, and it never removes a budget. |
-| `extends` on a definition | The definition inherits every setting of its base that it does not set itself; cycles and missing bases are rejected |
 
-`sof config show [--agent <name>] [--origin]` prints the effective configuration. With
-`--origin`, each value shows the layer and the file, variable or option it came from (CFG-04, TEST-05),
-such as `application file sof.json`, `environment variable SOF__run__permissionMode`,
-`run option --budget` or `code default, core 0.1.0`. A value inherited through `extends` also names the
-definition it came from. Origins are per file; they carry no line numbers.
-
-In code, a definition builds on another with a C# `with` expression; `extends` exists in files only.
+`sof config show` lists every effective setting, defaults included. With `--origin`, each one also shows
+its source: the file, environment variable or option that set it, or `code default, core 0.1.0`.
 
 ---
 
@@ -773,8 +767,8 @@ Validation runs in this order:
 | # | Phase | Rejects |
 |---|---|---|
 | 1 | Parse | Invalid JSON, unknown `formatVersion` |
-| 2 | Shape | Unknown settings, wrong types, values outside allowed ranges, missing required settings |
-| 3 | Merge | Cycles in `extends`, missing base definitions |
+| 2 | Shape | Wrong types, values outside allowed ranges, missing required settings (unknown settings are ignored) |
+| 3 | Merge | Cycles in `extends`, missing presets (with presets) |
 | 4 | References | Missing models, tools, tool sets, gates, checks, knowledge sources, agents, tool servers, extensions, secrets (by name only; secrets are not read), unknown placeholders |
 | 5 | Capabilities | Capabilities used but not enabled, unmet dependencies (§9) |
 | 6 | Provider | Settings or features the model or platform does not support (MDL-06), fallbacks that cannot serve their slots (MDL-04), models without prices when a cost budget is set |

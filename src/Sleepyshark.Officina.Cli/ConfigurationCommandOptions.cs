@@ -1,5 +1,4 @@
 using System.CommandLine;
-using Sleepyshark.Officina.Hosting.Configuration;
 
 namespace Sleepyshark.Officina.Cli;
 
@@ -25,37 +24,35 @@ internal sealed class ConfigurationCommandOptions
         command.Options.Add(permissionMode);
     }
 
-    public LoadedConfiguration Load(ParseResult parse, SofEnvironment host)
+    public SofConfiguration Load(ParseResult parse, SofEnvironment host)
     {
-        var runOptions = new List<RunOption>();
+        var options = new List<(string, string, string)>();
         if (parse.GetValue(budget) is { } cost)
         {
-            runOptions.Add(new RunOption("run.budget.cost", cost, "--budget"));
+            options.Add(("run.budget.cost", cost, "--budget"));
         }
 
         if (parse.GetValue(permissionMode) is { } mode)
         {
-            runOptions.Add(new RunOption("run.permissionMode", mode, "--permission-mode"));
+            options.Add(("run.permissionMode", mode, "--permission-mode"));
         }
 
-        return ConfigurationLoader.Load(new ConfigurationSources
-        {
-            Directory = Path.GetFullPath(parse.GetValue(directory) ?? ".", host.WorkingDirectory),
-            Environment = parse.GetValue(environment) ?? host.Variables.GetValueOrDefault(ConfigurationSources.EnvironmentVariable),
-            EnvironmentVariables = host.Variables,
-            RunOptions = runOptions,
-        });
+        return SofConfiguration.Load(
+            Path.GetFullPath(parse.GetValue(directory) ?? ".", host.WorkingDirectory),
+            parse.GetValue(environment) ?? host.Variables.GetValueOrDefault("SOF_ENVIRONMENT"),
+            host.Variables,
+            options);
     }
 
     /// <summary>Prints every error; the exit code says whether there were any.</summary>
-    public static int ReportErrors(LoadedConfiguration configuration, SofEnvironment host)
+    public static int ReportErrors(SofConfiguration configuration, SofEnvironment host)
     {
         foreach (var error in configuration.Errors)
         {
             host.Error.WriteLine($"error: {error}");
         }
 
-        if (configuration.IsValid)
+        if (configuration.Errors.Count == 0)
         {
             return ExitCodes.Success;
         }

@@ -65,7 +65,7 @@ public sealed class AgentRunner
             ? registered
             : throw new InvalidOperationException($"Agent \"{name}\" uses provider \"{profile.Provider}\", which has no implementation registered.");
 
-        var started = new RunStarted(Guid.CreateVersion7().ToString(), name, CoreVersion.Value, ConfigurationJson.Write(resolved));
+        var started = new RunStarted(Guid.CreateVersion7().ToString(), name, CoreVersion.Value, resolved);
         await runs.RecordStartAsync(started, ct).ConfigureAwait(false);
 
         var instructions = InstructionPlaceholders.Fill(agent.Instructions, resolved.Project, name, agent);
