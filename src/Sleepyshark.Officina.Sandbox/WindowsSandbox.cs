@@ -174,47 +174,46 @@ public sealed class WindowsSandbox : ISandbox
 
     /// <summary>
     /// Takes a protected path out of the working copy's grant: it stops inheriting, and the container keeps only the
-    /// rights given, if any. An AppContainer opens only what is granted to it, so a hidden path cannot be opened at all;
-    /// an entry that denies the container would not stop it reading.
+    /// rights given, if any. An AppContainer opens only what is granted to it, so a hidden path cannot be opened at all.
+    /// An entry that denies the container does not stop it, as tests on Windows showed.
     /// </summary>
     private static void Protect(string path, SecurityIdentifier container, FileSystemRights? rights)
     {
-        if (Directory.Exists(path))
+        FileSystemInfo item = Directory.Exists(path) ? new DirectoryInfo(path) : new FileInfo(path);
+        var security = Read(item);
+        if (security.AreAccessRulesProtected)
         {
-            var folder = new DirectoryInfo(path);
-            var security = folder.GetAccessControl();
-            if (Withdraw(security, container, rights is null ? null : new(container, rights.Value, Everything, PropagationFlags.None, AccessControlType.Allow)))
-            {
-                folder.SetAccessControl(security);
-            }
+            return;
+        }
+
+        // Inherited entries become the item's own only once written, so the container's is removed in a second write.
+        security.SetAccessRuleProtection(isProtected: true, preserveInheritance: true);
+        Write(item, security);
+        security = Read(item);
+        security.PurgeAccessRules(container);
+        if (rights is { } kept)
+        {
+            security.AddAccessRule(item is DirectoryInfo
+                ? new FileSystemAccessRule(container, kept, Everything, PropagationFlags.None, AccessControlType.Allow)
+                : new FileSystemAccessRule(container, kept, AccessControlType.Allow));
+        }
+
+        Write(item, security);
+    }
+
+    private static FileSystemSecurity Read(FileSystemInfo item) =>
+        item is DirectoryInfo folder ? folder.GetAccessControl() : ((FileInfo)item).GetAccessControl();
+
+    private static void Write(FileSystemInfo item, FileSystemSecurity security)
+    {
+        if (item is DirectoryInfo folder)
+        {
+            folder.SetAccessControl((DirectorySecurity)security);
         }
         else
         {
-            var file = new FileInfo(path);
-            var security = file.GetAccessControl();
-            if (Withdraw(security, container, rights is null ? null : new(container, rights.Value, AccessControlType.Allow)))
-            {
-                file.SetAccessControl(security);
-            }
+            ((FileInfo)item).SetAccessControl((FileSecurity)security);
         }
-    }
-
-    /// <summary>Stops inheriting and keeps only the container's given rule; false if that was done before.</summary>
-    private static bool Withdraw(FileSystemSecurity security, SecurityIdentifier container, FileSystemAccessRule? kept)
-    {
-        if (security.AreAccessRulesProtected)
-        {
-            return false;
-        }
-
-        security.SetAccessRuleProtection(isProtected: true, preserveInheritance: true);
-        security.PurgeAccessRules(container);
-        if (kept is not null)
-        {
-            security.AddAccessRule(kept);
-        }
-
-        return true;
     }
 
     private static async Task<int> ExitedAsync(Process process)
