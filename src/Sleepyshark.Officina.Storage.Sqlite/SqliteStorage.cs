@@ -135,12 +135,15 @@ public sealed class SqliteStorage : IStorage, IRunStore, IEventLog, IAuditLog
     {
         ArgumentNullException.ThrowIfNull(retention);
 
-        // A kind without a retention period is kept, so it needs no statement.
+        // A kind without a retention period is kept, so it needs no statement. Audit always has a period, so the
+        // statement is never empty.
         (string Table, TimeSpan? Period)[] kinds = [("runs", retention.Runs), ("events", retention.Events), ("audit", retention.Audit)];
         var expired = kinds.Where(kind => kind.Period is not null).ToList();
+
+        // Subtracting ticks, not dates, so a very long period cannot go below the earliest date.
         return ExecuteAsync(
             string.Concat(expired.Select(kind => $"DELETE FROM {kind.Table} WHERE time < ${kind.Table};")), ct,
-            [.. expired.Select(kind => ($"${kind.Table}", (object?)(now - kind.Period!.Value).UtcTicks))]);
+            [.. expired.Select(kind => ($"${kind.Table}", (object?)(now.UtcTicks - kind.Period!.Value.Ticks)))]);
     }
 
     private static RunStarted ReadRun(SqliteDataReader row) => new(
