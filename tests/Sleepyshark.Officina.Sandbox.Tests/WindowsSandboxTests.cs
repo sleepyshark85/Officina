@@ -94,7 +94,7 @@ public sealed class WindowsSandboxTests : IDisposable
         using var server = new Server();
 
         var (output, _) = await real.RunAsync(
-            $"curl -s -w \" T1=%{{time_total}} first=%{{time_starttransfer}}\" http://127.0.0.1:{server.Port}/ & powershell -c Get-Date -Format HH:mm:ss.fff & curl -s -i http://example.com/ & curl -s -m 5 --noproxy * http://127.0.0.1:{server.Port}/",
+            $"curl -s -w \" T1=%{{time_total}} first=%{{time_starttransfer}}\" http://127.0.0.1:{server.Port}/ & curl -s -w \" T1b=%{{time_total}} first=%{{time_starttransfer}}\" http://127.0.0.1:{server.Port}/ & curl -s -i http://example.com/ & curl -s -m 5 --noproxy * http://127.0.0.1:{server.Port}/",
             ["127.0.0.1"]);
         Assert.Fail(output);
 
