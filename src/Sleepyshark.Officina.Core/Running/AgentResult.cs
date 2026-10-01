@@ -28,7 +28,7 @@ public sealed record AgentResult(
     ImmutableArray<CacheWarning> CacheWarnings,
     Handoff? Handoff = null);
 
-/// <summary>A model call that read less of its input from the cache than <c>context.cacheHitWarning</c> (COST-01).</summary>
+/// <summary>A model call that read less of its input from the cache than <c>operations.telemetry.cacheHitWarning</c> (COST-01).</summary>
 /// <param name="Iteration">Which call of the turn, from 1.</param>
 /// <param name="HitRate">The share of the call's input read from the cache.</param>
 public sealed record CacheWarning(int Iteration, double HitRate);

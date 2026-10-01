@@ -39,8 +39,8 @@ Last updated 2026-10-02.
   - S19 snapshots and restores the workspace, and cleans up worktrees left by a crash.
   - S05 moved CTX-06 to S07 and CTX-07 to S06, and left boundary ② and the memory-change case of TEST-09 to S17;
     its Notes list the rest (S06, S09, S10, S18).
-  - S08 publishes a turn's `CacheWarnings` as warning events (COST-01). The threshold is `context.cacheHitWarning`
-    per agent, not `operations.telemetry.cacheHitWarning` as the configuration draft shows.
+  - S08 publishes a turn's `CacheWarnings` as warning events (COST-01); the threshold is
+    `operations.telemetry.cacheHitWarning`.
   - S11 maps cache boundaries to `cache_control`, putting boundary ③ on the last cacheable block before a
     turn-scoped message; maps `Role.System` to mid-conversation system messages and `TurnScoped` to `clear_at`; and
     reports `CacheBoundaries` and `TurnScopedMessages` in its capabilities.
@@ -107,7 +107,7 @@ A slice is **done** when:
 
 - **Now, in parallel:** S00a, S00b and S01.
 - **Critical path:** S01 → S02 → S03 → S04 → S05 → S11 → S12 → S13 → S20 → S21.
-- **Can run alongside once S04 is done:** S06, S07, S08, S09, S10, and S16 (once S08 is done).
+- **Can run alongside once S04 is done:** S08, S10, S09 and S16 (once S08 is done), and S06 and S07 (once S05 is done).
 - **The coding track can start early:** S14 needs only S03. S15 needs S00a and S14.
 
 ## Keeping it current

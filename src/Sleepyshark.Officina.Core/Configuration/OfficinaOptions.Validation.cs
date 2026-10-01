@@ -22,7 +22,9 @@ public sealed partial record OfficinaOptions : IValidatableObject
         var errors = FormatVersionSupported()
             .Concat(Annotations(Run, "run", ValidationPhase.Invariants))
             .Concat(Run.Budget is null ? [] : Annotations(Run.Budget, "run.budget", ValidationPhase.Invariants))
-            .Concat(Names(Project.Values.Keys, "project.values"));
+            .Concat(Names(Project.Values.Keys, "project.values"))
+            .Concat(Annotations(Operations, "operations"))
+            .Concat(Operations.Telemetry is null ? [] : Annotations(Operations.Telemetry, "operations.telemetry"));
 
         foreach (var (name, provider) in Providers)
         {

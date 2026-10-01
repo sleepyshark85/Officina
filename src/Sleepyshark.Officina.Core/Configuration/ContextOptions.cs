@@ -15,10 +15,4 @@ public sealed record ContextOptions
         Example = "\"01:00:00\"")]
     [Range(typeof(TimeSpan), "00:00:00", "01:00:00", MinimumIsExclusive = true, ErrorMessage = "must be more than zero and at most one hour.")]
     public TimeSpan HistoryCacheLifetime { get; init; } = TimeSpan.FromMinutes(5);
-
-    // COST-01.
-    [Setting("The share of a model call's input read from the provider's cache, from 0 to 1, below which a warning is raised. The first call of a turn is not checked.",
-        Example = "0.7")]
-    [Range(0d, 1d, ErrorMessage = "must be between 0 and 1.")]
-    public double CacheHitWarning { get; init; } = 0.7;
 }

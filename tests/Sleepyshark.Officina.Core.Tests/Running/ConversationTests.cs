@@ -198,25 +198,25 @@ public class ConversationTests
 
     // CTX-09, CTX-11, CFG-14.
     [Fact]
-    public void Operating_facts_may_use_the_time_and_the_history_cache_lasts_at_most_an_hour()
+    public void Operating_facts_may_use_the_time_the_history_cache_lasts_at_most_an_hour_and_the_warning_is_a_share()
     {
         var options = Options(("read", Extension("read")));
         var context = new ContextOptions
         {
             OperatingFacts = ["{{now}} {{now:date}} {{project.name}}", "{{caller.id}}", "{{now:time}}", "{{secret.KEY}}"],
             HistoryCacheLifetime = TimeSpan.FromHours(2),
-            CacheHitWarning = 1.5,
         };
         options = options with
         {
             Project = new() { Name = "app" },
             Agents = new Dictionary<string, AgentDefinition> { [Agent] = options.Agents[Agent] with { Context = context } },
+            Operations = new() { Telemetry = new() { CacheHitWarning = 1.5 } },
         };
 
         Assert.Equal(
             [
-                "agents.dev.context.cacheHitWarning", "agents.dev.context.historyCacheLifetime", "agents.dev.context.operatingFacts[1]",
-                "agents.dev.context.operatingFacts[2]", "agents.dev.context.operatingFacts[3]",
+                "agents.dev.context.historyCacheLifetime", "agents.dev.context.operatingFacts[1]", "agents.dev.context.operatingFacts[2]",
+                "agents.dev.context.operatingFacts[3]", "operations.telemetry.cacheHitWarning",
             ],
             options.Validate().Select(error => error.Path).Order(StringComparer.Ordinal));
     }

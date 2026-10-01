@@ -98,6 +98,15 @@ internal static class SettingsReferenceGenerator
             allowed += $", ≥ {least}";
         }
 
+        if (property["exclusiveMaximum"] is { } below)
+        {
+            allowed += $", < {below}";
+        }
+        else if (property["maximum"] is { } most)
+        {
+            allowed += $", ≤ {most}";
+        }
+
         return allowed.Length == 0 ? "any JSON value" : allowed;
     }
 

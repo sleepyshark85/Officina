@@ -513,7 +513,7 @@ PAT-02). Data moves only through declared `input` and `output` (PAT-04).
     "Today: {{now:date}}"
   ],
   "recordScope": "all",               // REC-06: all | "task" | { "kinds": [...] }
-  "cache": { "prefixTtl": "01:00:00", "historyTtl": "00:05:00" }   // CTX-11
+  "historyCacheLifetime": "00:05:00"  // CTX-11: at most 1 hour; the prefix is always cached for 1 hour
 }
 ```
 

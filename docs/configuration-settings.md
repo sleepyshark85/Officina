@@ -19,6 +19,7 @@ It lists the settings the code has today. Settings that later slices add are spe
 | `gates` | named entries | `{}` | Gates, by name. Tools and policies refer to them by name. | `{"issue-dedupe":{"use":"extension:Acme.IssueDedupeGate"}}` |
 | `policies` | section | `{"permissionRules":[],"gates":[],"anonymousPermissions":[]}` | Permission rules, gates for all tools, and anonymous callers' permissions. | `{"gates":["no-main-branch"]}` |
 | `run` | section | `{"budget":{"cost":25,"time":"08:00:00"},"permissionMode":"ask"}` | Defaults for every run. | `{"permissionMode":"ask"}` |
+| `operations` | section | `{"telemetry":{"cacheHitWarning":0.7}}` | How the engine is operated. | `{"telemetry":{"cacheHitWarning":0.7}}` |
 | `capabilities` | section | `{}` | Optional capabilities and their settings. All are off by default. | `{"workspace":{"keepWorkingCopies":true}}` |
 
 ## `project`
@@ -57,7 +58,7 @@ It lists the settings the code has today. Settings that later slices add are spe
 | `tools` | list | `[]` | The tool sets, by name in `toolSets`, whose tools the agent is offered. The same tools are offered whoever the caller is. | `["files","issues"]` |
 | `permissions` | list |  | Narrows the caller's permissions for this agent's tool calls: a permission counts only if the caller holds it and it is listed here. Unset keeps the caller's. | `["issues:write"]` |
 | `maxParallelToolCalls` | whole number, ≥ 1 | `4` | The most tool calls from one reply that run at the same time, when every tool called is safe to run in parallel. | `4` |
-| `context` | section | `{"operatingFacts":[],"historyCacheLifetime":"00:05:00","cacheHitWarning":0.7}` | How the agent's model input is built. Required. | `{"operatingFacts":["Today is {{now:date}}."]}` |
+| `context` | section | `{"operatingFacts":[],"historyCacheLifetime":"00:05:00"}` | How the agent's model input is built. Required. | `{"operatingFacts":["Today is {{now:date}}."]}` |
 | `stopWhen` | section | `{"finished":true}` | When a turn is complete. They combine: the first that holds completes the turn. Required. | `{"finished":false,"finishTool":"submit_report"}` |
 | `budget` | section | `{"turn":{"iterations":50,"toolCalls":200,"tokens":3000000,"cost":5,"time":"00:45:00"}}` | The agent's budgets. They can be high, but they cannot be removed or unlimited. Required. | `{"turn":{"iterations":50,"cost":5}}` |
 | `stall` | section | `{"iterationsWithoutProgress":3}` | When a turn has stalled. Required. | `{"iterationsWithoutProgress":5}` |
@@ -102,6 +103,12 @@ It lists the settings the code has today. Settings that later slices add are spe
 | `budget` | section | `{"cost":25,"time":"08:00:00"}` | The run's budget. It can be high, but it cannot be removed or unlimited. Required. Live: the owner may change it during a run. | `{"cost":25,"time":"08:00:00"}` |
 | `permissionMode` | `"ask"`, `"auto"`, `"readOnly"` | `"ask"` | How tool calls that need permission are decided: `ask` the owner, `auto` by the rules, or `readOnly`. Live: the owner may change it during a run. | `"ask"` |
 
+## `operations`
+
+| Setting | Allowed values | Default | Description | Example |
+|---|---|---|---|---|
+| `telemetry` | section | `{"cacheHitWarning":0.7}` | Measurements and the warnings raised from them. Required. | `{"cacheHitWarning":0.7}` |
+
 ## `capabilities`
 
 | Setting | Allowed values | Default | Description | Example |
@@ -129,7 +136,6 @@ It lists the settings the code has today. Settings that later slices add are spe
 |---|---|---|---|---|
 | `operatingFacts` | list | `[]` | Facts added after the history for every model call, in this order, such as limits or the date. Placeholders may use `{{now}}` and `{{now:date}}`, and the project and agent values. | `["Today is {{now:date}}.","Replies are limited to 300 words."]` |
 | `historyCacheLifetime` | time span (`hh:mm:ss` or `d.hh:mm:ss`) | `"00:05:00"` | How long the provider keeps the conversation cached between model calls, as `hh:mm:ss`, at most one hour. Agents that often wait for approvals benefit from longer. | `"01:00:00"` |
-| `cacheHitWarning` | number, ≥ 0 | `0.7` | The share of a model call's input read from the provider's cache, from 0 to 1, below which a warning is raised. The first call of a turn is not checked. | `0.7` |
 
 ## `agents.<name>.stopWhen`
 
@@ -183,6 +189,12 @@ It lists the settings the code has today. Settings that later slices add are spe
 |---|---|---|---|---|
 | `cost` | number, > 0 | `25` | The most the run may spend, in USD. Live: the owner may change it during a run. | `25` |
 | `time` | time span (`hh:mm:ss` or `d.hh:mm:ss`) | `"08:00:00"` | The longest the run may take, as `hh:mm:ss` or `d.hh:mm:ss`. Live: the owner may change it during a run. | `"08:00:00"` |
+
+## `operations.telemetry`
+
+| Setting | Allowed values | Default | Description | Example |
+|---|---|---|---|---|
+| `cacheHitWarning` | number, ≥ 0, ≤ 1 | `0.7` | The share of a model call's input read from the provider's cache, from 0 to 1, below which a warning is raised. The first call of a turn is not checked. | `0.7` |
 
 ## `capabilities.workspace`
 

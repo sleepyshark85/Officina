@@ -21,6 +21,7 @@ internal sealed class Turn
     private readonly ProjectOptions project;
     private readonly AgentDefinition agent;
     private readonly RunBudget runBudget;
+    private readonly double cacheHitWarning;
     private readonly Conversation conversation;
     private readonly ConcurrentQueue<Message> inbox;
     private readonly IModelProvider provider;
@@ -54,6 +55,7 @@ internal sealed class Turn
         project = options.Project;
         agent = options.Agents[context.Agent];
         runBudget = options.Run.Budget;
+        cacheHitWarning = options.Operations.Telemetry.CacheHitWarning;
         var profile = options.Models[agent.Model];
         price = options.Providers[profile.Provider].Prices.GetValueOrDefault(profile.Model);
         conversation = new Conversation(profile, [.. tools.Offered(context.Agent)], instructions, agent.Context, provider.Capabilities);
@@ -228,7 +230,7 @@ internal sealed class Turn
     private void CheckCacheHits(Usage call)
     {
         var input = call.Input + call.CacheRead + call.CacheWrite;
-        if (iterations > 1 && input > 0 && (double)call.CacheRead / input is var rate && rate < agent.Context.CacheHitWarning)
+        if (iterations > 1 && input > 0 && (double)call.CacheRead / input is var rate && rate < cacheHitWarning)
         {
             cacheWarnings.Add(new CacheWarning(iterations, rate));
         }
