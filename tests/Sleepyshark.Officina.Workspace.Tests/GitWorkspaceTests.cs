@@ -63,7 +63,7 @@ public class GitWorkspaceTests
         var checkedFiles = new List<string>();
         var check = new Check(async context =>
         {
-            checkedFiles.Add(await File.ReadAllTextAsync(Path.Combine(context.Directory, "a.txt"), Ct));
+            checkedFiles.Add(await File.ReadAllTextAsync(Path.Combine(context.Directory!, "a.txt"), Ct));
             return new(true, []);
         });
         using var workspace = await repository.OpenAsync(checks: new() { ["build"] = check });
@@ -84,7 +84,7 @@ public class GitWorkspaceTests
     public async Task A_change_that_breaks_the_baseline_checks_is_rejected_and_the_baseline_stays()
     {
         using var repository = await CreateAsync(("a.txt", "one\n"));
-        var build = new Check(async context => (await File.ReadAllTextAsync(Path.Combine(context.Directory, "a.txt"), Ct)).Contains("broken", StringComparison.Ordinal)
+        var build = new Check(async context => (await File.ReadAllTextAsync(Path.Combine(context.Directory!, "a.txt"), Ct)).Contains("broken", StringComparison.Ordinal)
             ? new(false, ["a.txt does not compile"])
             : new(true, []));
         using var workspace = await repository.OpenAsync(checks: new() { ["build"] = Check.Passing, ["tests"] = build });

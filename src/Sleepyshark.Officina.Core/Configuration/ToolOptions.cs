@@ -8,7 +8,7 @@ namespace Sleepyshark.Officina.Core.Configuration;
 /// </summary>
 public sealed record ToolOptions
 {
-    [Setting("Where the tool comes from: `extension:<id>` for a tool the application registers, `mcp:<server>/<tool>` for a tool of a server in `toolServers`, `knowledge:<name>` to search a source in `knowledge`, or `provider:<name>` for a tool the model provider runs itself.",
+    [Setting("Where the tool comes from: `extension:<id>` for a tool the application registers, `mcp:<server>/<tool>` for a tool of a server in `toolServers`, `knowledge:<name>` to search a source in `knowledge`, `provider:<name>` for a tool the model provider runs itself, or `builtin:<name>` for a built-in tool: `record.propose_fact`, `record.propose_finding`, `record.propose_decision` and `record.cite` propose changes to the run record, and `artifact.page` reads an artifact, such as a trimmed result in full.",
         Example = "\"extension:Acme.CreateIssue\"")]
     [Required(ErrorMessage = Messages.Required)]
     public required string Source { get; init; }
@@ -38,7 +38,7 @@ public sealed record ToolOptions
     [Range(1, int.MaxValue, ErrorMessage = "must be at least 1.")]
     public int MaxAttempts { get; init; } = 1;
 
-    [Setting("The most characters of a result that enter the conversation; the rest is cut off.", Example = "8000")]
+    [Setting("The most characters of a result that enter the conversation. The full result is kept as an artifact, which a `builtin:artifact.page` tool reads.", Example = "8000")]
     [Range(1, int.MaxValue, ErrorMessage = "must be at least 1.")]
     public int MaxResultLength { get; init; } = 32_000;
 
@@ -72,6 +72,9 @@ public sealed record ToolOptions
 
     /// <summary>The knowledge source the tool searches, for a <c>knowledge:</c> source.</summary>
     public string? KnowledgeSource() => After(Source, "knowledge:");
+
+    /// <summary>The built-in tool, for a <c>builtin:</c> source.</summary>
+    public string? BuiltinTool() => After(Source, "builtin:");
 
     /// <summary>The provider's name for its own tool, for a <c>provider:</c> source (TOOL-13).</summary>
     public string? ProviderTool() => After(Source, "provider:");

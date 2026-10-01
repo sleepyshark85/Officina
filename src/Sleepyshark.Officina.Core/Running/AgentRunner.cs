@@ -5,6 +5,7 @@ using Sleepyshark.Officina.Core.Events;
 using Sleepyshark.Officina.Core.Extensibility;
 using Sleepyshark.Officina.Core.Messages;
 using Sleepyshark.Officina.Core.Observability;
+using Sleepyshark.Officina.Core.Records;
 using Sleepyshark.Officina.Core.Tools;
 
 namespace Sleepyshark.Officina.Core.Running;
@@ -22,24 +23,26 @@ public sealed class AgentRunner
     private readonly IStorage storage;
     private readonly TimeProvider time;
     private readonly ToolPipeline pipeline;
+    private readonly IReadOnlyDictionary<string, ICheck> checks;
     private readonly IReadOnlyDictionary<string, IKnowledgeSource> knowledge;
     private readonly Dictionary<string, IHistoryShortener> shortening;
     private readonly Admission admission;
     private readonly ConcurrentDictionary<string, SemaphoreSlim> turns = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, ConcurrentQueue<(Sender From, string Text)>> inboxes = new(StringComparer.Ordinal);
 
-    /// <summary>Validates the configuration in full, with the application's tools and gates; nothing runs if it has errors (CFG-06).</summary>
+    /// <summary>Validates the configuration in full, with the application's tools, gates and checks; nothing runs if it has errors (CFG-06).</summary>
     /// <param name="options">The configuration, fixed for the runner's lifetime. A changed configuration needs a new runner (CFG-08).</param>
     /// <param name="providers">The provider implementations, by their name in <c>providers</c>.</param>
     /// <param name="storage">
-    /// Where each run is recorded with the configuration it used (CFG-07), with its events and audit entries, and where
-    /// conversations are kept.
+    /// Where each run is recorded with the configuration it used (CFG-07), with its events, audit entries, record and
+    /// artifacts, and where conversations are kept.
     /// </param>
     /// <param name="tools">
     /// The application's tools, by the id that <c>extension:&lt;id&gt;</c> sources name, and the tool servers' tools, by
     /// the <c>&lt;server&gt;/&lt;tool&gt;</c> that <c>mcp:</c> sources name.
     /// </param>
     /// <param name="gates">The application's gates, by the id that <c>extension:&lt;id&gt;</c> gates name.</param>
+    /// <param name="checks">The application's checks, by the id that <c>extension:&lt;id&gt;</c> checks name.</param>
     /// <param name="knowledge">The application's knowledge sources, by the id that <c>extension:&lt;id&gt;</c> sources name.</param>
     /// <param name="human">Who approves tool calls that need approval.</param>
     /// <param name="secrets">Where tools read credentials.</param>
@@ -52,6 +55,7 @@ public sealed class AgentRunner
         IStorage storage,
         IReadOnlyDictionary<string, ITool> tools,
         IReadOnlyDictionary<string, IGate> gates,
+        IReadOnlyDictionary<string, ICheck> checks,
         IReadOnlyDictionary<string, IKnowledgeSource> knowledge,
         IHumanChannel human,
         ISecretSource secrets,
@@ -61,11 +65,20 @@ public sealed class AgentRunner
         ArgumentNullException.ThrowIfNull(providers);
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(storage);
+        ArgumentNullException.ThrowIfNull(checks);
         this.providers = providers;
         this.storage = storage;
         this.time = time;
         Events = new EventBus(storage.Events, options.Storage, time);
-        pipeline = new ToolPipeline(options, tools, gates, knowledge, storage.Audit, Events, human, secrets, time);
+        pipeline = new ToolPipeline(options, tools, gates, knowledge, storage, Events, human, secrets, time);
+        var unregistered = options.Checks.Where(check => !checks.ContainsKey(check.Value.ExtensionId()!))
+            .Select(check => ToolCatalog.Unregistered($"checks.{check.Key}.use", "check", check.Value.ExtensionId()!)).ToList();
+        if (unregistered.Count > 0)
+        {
+            throw new ConfigurationException(unregistered);
+        }
+
+        this.checks = checks;
         this.knowledge = knowledge;
         shortening = Shortening(options, providers, shorteners ?? new Dictionary<string, IHistoryShortener>());
         admission = new Admission(options.Policies, time);
@@ -185,13 +198,15 @@ public sealed class AgentRunner
         var (admitted, masker, rejection) = admission.Admit(work, agent);
         if (rejection is not null)
         {
-            return new AgentResult(AgentOutcome.Rejected, rejection, new TurnStatistics(0, 0, Usage.None, 0m, TimeSpan.Zero), [], []);
+            return new AgentResult(AgentOutcome.Rejected, rejection, new TurnStatistics(0, 0, Usage.None, 0m, TimeSpan.Zero), [], [], [], []);
         }
 
         var context = new ToolContext(work.RunId, name, work.Caller) { Masker = masker };
         var instructions = InstructionPlaceholders.Fill(agent.Instructions, Options.Project, name, agent);
+        var record = new RunRecord(storage.Records, context, time);
         var turn = new Turn(
-            context, Options, provider, pipeline, knowledge, storage.Conversations, shortening.GetValueOrDefault(name), Events, instructions, admitted, Inbox(name), time);
+            context, Options, provider, pipeline, record, checks, knowledge, storage.Conversations, shortening.GetValueOrDefault(name), Events, instructions, admitted,
+            Inbox(name), time);
         var oneAtATime = turns.GetOrAdd(name, _ => new SemaphoreSlim(1, 1));
         var entered = false;
         Activity? activity = null;

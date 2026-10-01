@@ -1,6 +1,7 @@
 using Sleepyshark.Officina.Core.Configuration;
 using Sleepyshark.Officina.Core.Extensibility;
 using Sleepyshark.Officina.Core.Messages;
+using Sleepyshark.Officina.Core.Records;
 using Sleepyshark.Officina.Core.Running;
 using Sleepyshark.Officina.Testing;
 using static Sleepyshark.Officina.Core.Tests.Tools.ToolSetup;
@@ -63,6 +64,25 @@ public class KnowledgeTests
         Assert.Equal(
             new ToolResultContent("call-1", $"<data source=\"tool:search_handbook\">\n{Found}\n</data>", false),
             result.Transcript.SelectMany(message => message.Content).OfType<ToolResultContent>().Single());
+    }
+
+    // OUT-04, REC-01: before the turn and as a tool; a citation id may hold spaces.
+    [Fact]
+    public async Task Retrieved_passages_join_the_run_record_as_citations_that_answers_can_cite()
+    {
+        handbook = new FakeKnowledgeSource(Coverage.Covered, ("hb-4.2", "Refunds take 5 days."), ("Fees, section 2", "No fees."));
+        var kit = Kit(new() { BeforeTurn = ["handbook"] }, ("search_handbook", new() { Source = "knowledge:handbook" }));
+        kit.Model.CallTools(("search_handbook", """{ "question": "fees" }""")).Reply("5 days [cite:hb-4.2], and no fees [cite:Fees, section 2].");
+
+        var result = await kit.RunAsync(Agent, Work, Ct);
+
+        Assert.Equal(AgentOutcome.Completed, result.Outcome);
+        Assert.Equal(
+            [
+                new Citation("hb-4.2", "knowledge:handbook", "hb-4.2", "Refunds take 5 days."),
+                new Citation("Fees, section 2", "knowledge:handbook", "Fees, section 2", "No fees."),
+            ],
+            result.Record.Select(entry => entry.Item));
     }
 
     [Fact]

@@ -53,7 +53,7 @@ public sealed class SqliteStorageTests : StorageContract, IDisposable
         var options = new OfficinaOptions { Agents = new Dictionary<string, AgentDefinition> { ["extractor"] = new() { Instructions = "Extract." } } };
         var runner = new AgentRunner(
             options, new Dictionary<string, IModelProvider> { ["claude"] = new ScriptedModelProvider().Reply("A-17") }, await CreateAsync(),
-            new Dictionary<string, ITool>(), new Dictionary<string, IGate>(), new Dictionary<string, IKnowledgeSource>(), new ScriptedHuman(),
+            new Dictionary<string, ITool>(), new Dictionary<string, IGate>(), new Dictionary<string, ICheck>(), new Dictionary<string, IKnowledgeSource>(), new ScriptedHuman(),
             new InMemorySecretSource(new Dictionary<string, string>()), new FakeTimeProvider());
 
         await runner.RunAsync("extractor", "Invoice A-17", ct: Ct);
@@ -90,7 +90,7 @@ public sealed class SqliteStorageTests : StorageContract, IDisposable
 
     private static AgentRunner Runner(OfficinaOptions options, ScriptedModelProvider model, IStorage storage) => new(
         options, new Dictionary<string, IModelProvider> { ["claude"] = model }, storage, new Dictionary<string, ITool>(), new Dictionary<string, IGate>(),
-        new Dictionary<string, IKnowledgeSource>(), new ScriptedHuman(), new InMemorySecretSource(new Dictionary<string, string>()), new FakeTimeProvider());
+        new Dictionary<string, ICheck>(), new Dictionary<string, IKnowledgeSource>(), new ScriptedHuman(), new InMemorySecretSource(new Dictionary<string, string>()), new FakeTimeProvider());
 
     private async Task<List<(string, string)>> QueryAsync(string sql)
     {

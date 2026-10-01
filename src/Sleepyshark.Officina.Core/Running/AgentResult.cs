@@ -1,5 +1,7 @@
 using System.Collections.Immutable;
+using Sleepyshark.Officina.Core.Extensibility;
 using Sleepyshark.Officina.Core.Messages;
+using Sleepyshark.Officina.Core.Records;
 
 namespace Sleepyshark.Officina.Core.Running;
 
@@ -19,13 +21,19 @@ public enum AgentOutcome
 /// <param name="Statistics">What the turn used.</param>
 /// <param name="Transcript">The conversation, in which every tool request has its result (LOOP-09).</param>
 /// <param name="CacheWarnings">The model calls that read too little of their input from the cache (COST-01).</param>
-/// <param name="Handoff">The handoff, when handed off. With this result's statistics and transcript it is everything EGR-02 lists.</param>
+/// <param name="Record">The run record as the turn last read it: its facts, findings, decisions and citations.</param>
+/// <param name="Artifacts">The artifacts the turn's tool calls produced (OUT-05).</param>
+/// <param name="Handoff">
+/// The handoff, when handed off. With this result's record, statistics and transcript it is everything EGR-02 lists.
+/// </param>
 public sealed record AgentResult(
     AgentOutcome Outcome,
     string Output,
     TurnStatistics Statistics,
     ImmutableArray<Message> Transcript,
     ImmutableArray<CacheWarning> CacheWarnings,
+    ImmutableArray<RecordEntry> Record,
+    ImmutableArray<Artifact> Artifacts,
     Handoff? Handoff = null);
 
 /// <summary>A model call that read less of its input from the cache than <c>operations.telemetry.cacheHitWarning</c> (COST-01).</summary>

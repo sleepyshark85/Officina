@@ -44,6 +44,10 @@ public sealed record AgentDefinition
     [Required(ErrorMessage = Messages.Required)]
     public ContextOptions Context { get; init; } = new();
 
+    [Setting("What the output must be before a turn completes with it.", Example = """{ "format": "structured", "schema": "{ \"type\": \"object\" }" }""")]
+    [Required(ErrorMessage = Messages.Required)]
+    public OutputOptions Output { get; init; } = new();
+
     [Setting("When a turn is complete. They combine: the first that holds completes the turn.",
         Example = """{ "finished": false, "finishTool": "submit_report" }""")]
     [Required(ErrorMessage = Messages.Required)]

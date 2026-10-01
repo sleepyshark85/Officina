@@ -21,7 +21,7 @@ namespace is its name.
 | `Sleepyshark.Officina.Workspace` | Capabilities | Git-backed workspace: baseline, working copies, integration queue, edit safety; `workspace.*` tools | Core; the git CLI at run time | `workspace` is on |
 | `Sleepyshark.Officina.Sandbox` | Capabilities | Linux sandbox (bubblewrap, cgroups v2) and Windows sandbox (AppContainer, Job Objects); filtering network proxy; `sandbox.*` tools | Core | `sandbox` is on |
 | `Sleepyshark.Officina.Capabilities` | Capabilities | Human interaction, project memory, checkpoints; `human.*` and `memory.*` tools | Core | Each part when its capability is on |
-| `Sleepyshark.Officina.Storage.Sqlite` | Storage.Sqlite | Default storage, conversations included: one SQLite file in WAL mode, plus artifact files on disk | Core, `Microsoft.Data.Sqlite` | Configured as storage (the CLI's default) |
+| `Sleepyshark.Officina.Storage.Sqlite` | Storage.Sqlite | Default storage, conversations, the run record and artifacts included: one SQLite file in WAL mode; artifacts are text rows in it | Core, `Microsoft.Data.Sqlite` | Configured as storage (the CLI's default) |
 | `Sleepyshark.Officina.Mcp` | Mcp | Own MCP client for stdio and Streamable HTTP. Turns each server tool into a core tool. | Core | `toolServers` are configured |
 | `Sleepyshark.Officina.Providers.Claude` | Providers.Claude | The Claude provider: maps requests (§9), places cache markers, streams, classifies errors, ships the price table | Core, Anthropic C# SDK | A `claude` provider is configured (the default) |
 | `Sleepyshark.Officina.Testing` | Testing | Test kit: scripted models, controllable clock, fake tools, in-memory workspace, sandbox and storage, record and replay (TEST-01, TEST-02) | Core | In tests, and by `sof config dry-run` (CFG-12) |
@@ -52,9 +52,11 @@ Dependency rules, enforced by the dependency check, which runs as a test in CI (
 - **Turn engine.** This is the only primitive (principle 4). Patterns, including the team, call
   `RunTurnAsync(slot, input)` and nothing else, so budgets, cancellation, events and handoffs
   behave the same everywhere.
-- **Run coordinator.** It serializes all shared-state writes: record proposals, task changes and
-  memory changes. Each write is one SQLite transaction with a revision check (REC-02, REC-04,
-  CONC-01).
+- **Optimistic revisions.** Shared state is written without a coordinator or lock. A record
+  proposal is validated against the record as read, then appended with the next revision; the
+  store's key (run, revision) refuses a revision already taken, and the core then reads, validates
+  and tries again. No write overwrites another, across threads and processes (REC-02, REC-04,
+  CONC-01). Task and memory changes follow the same pattern.
 - **Model gateway.** Per provider, it runs a token bucket fed by the provider's rate-limit
   responses. Agents are served round-robin, with the lead first (MDL-08).
 - **Event bus.** Each event takes the runner's next sequence number, so every agent's events are in
@@ -201,9 +203,10 @@ decides the outcome.
 
 ## 8. State and durability
 
-- **Storage.** SQLite in WAL mode, with a single writer per run, plus artifact files. Tables:
-  runs (with the resolved configuration, CFG-07), conversations (append-only, a row per turn), record
-  entries, tasks and task history, memory, checkpoints, events, audit.
+- **Storage.** SQLite in WAL mode. Tables: runs (with the resolved configuration, CFG-07),
+  conversations (append-only, a row per turn), record entries (keyed by run and revision),
+  artifacts (text rows, such as the full text of a trimmed tool result), tasks and task history,
+  memory, checkpoints, events, audit.
 - **Checkpoints are cheap because history is append-only.** A checkpoint stores:
   - the message count of each conversation;
   - the revisions of the record, the task board and memory;

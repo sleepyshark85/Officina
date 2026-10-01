@@ -25,7 +25,7 @@ public enum HandoffReason
 /// <summary>
 /// Work handed on, built entirely from recorded state; no model is asked to summarise (EGR-02). A handoff goes to a
 /// human only on an explicit signal, such as a gate's route, never because of words in the model's text (EGR-04).
-/// The run record (S06) adds facts, findings, decisions and citations.
+/// Its result carries the run record's facts, findings, decisions and citations.
 /// </summary>
 /// <param name="Reason">Why.</param>
 /// <param name="To">An agent, <see cref="ToolResult.Human"/>, or null for the step that started the work.</param>

@@ -225,6 +225,34 @@ public class ValidationTests
         Assert.Equal(("agents.extractor.context.history.shortening", "\"summarise\" is not a way to shorten history."), (error.Path, error.Problem));
     }
 
+    // OUT-01, OUT-03, LOOP-05, REC-06.
+    [Fact]
+    public void Output_settings_and_checks_are_checked_with_what_refers_to_them()
+    {
+        var options = new OfficinaOptions
+        {
+            Agents = new Dictionary<string, AgentDefinition>
+            {
+                ["extractor"] = Extractor with { Output = new() { Format = OutputFormat.Structured, Checks = ["styel"] }, Context = new() { Record = ["facts"] } },
+                ["checker"] = Extractor with { Output = new() { Schema = "{ \"type\": 5 }" }, StopWhen = new() { Finished = false, ChecksPass = true } },
+            },
+            Checks = new Dictionary<string, CheckOptions> { ["style"] = new() { Use = "builtin:style" } },
+        };
+
+        var errors = options.Validate();
+
+        Assert.Equal(
+            [
+                ("agents.extractor.context.record", "\"facts\" is not a kind of record entry."),
+                ("agents.extractor.output.schema", "is required for structured output."),
+                ("agents.checker.stopWhen.checksPass", "needs checks to pass, but output.checks is empty."),
+                ("checks.style.use", "\"builtin:style\" is not a check."),
+                ("agents.extractor.output.checks", "check \"styel\" does not exist."),
+            ],
+            errors.Where(error => error.Path != "agents.checker.output.schema").Select(error => (error.Path, error.Problem)));
+        Assert.StartsWith("is not valid JSON Schema: ", errors.Single(error => error.Path == "agents.checker.output.schema").Problem, StringComparison.Ordinal);
+    }
+
     private static OfficinaOptions WithAgent(AgentDefinition agent) =>
         new() { Agents = new Dictionary<string, AgentDefinition> { ["extractor"] = agent } };
 }

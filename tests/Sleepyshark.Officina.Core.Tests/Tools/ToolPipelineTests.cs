@@ -325,14 +325,18 @@ public class ToolPipelineTests
 
     // Row 8: trim the result, audit the outcome (TOOL-09, TOOL-11).
     [Fact]
-    public async Task A_long_result_is_trimmed_before_it_enters_the_conversation()
+    public async Task A_long_result_is_trimmed_before_it_enters_the_conversation_and_kept_in_full_to_page_through()
     {
-        setup.Tools["read_log"] = new FakeTool(ToolKind.Read, run: (_, _) => ValueTask.FromResult(ToolResult.Success(new string('a', 50))));
-        var pipeline = setup.Create(Options(("read_log", Extension("read_log") with { MaxResultLength = 10 })));
+        setup.Tools["read_log"] = new FakeTool(ToolKind.Read, run: (_, _) => ValueTask.FromResult(ToolResult.Success(new string('a', 40) + "end")));
+        var pipeline = setup.Create(Options(
+            ("read_log", Extension("read_log") with { MaxResultLength = 10 }), ("page", new() { Source = "builtin:artifact.page" })));
 
         var result = await RunAsync(pipeline, "read_log");
+        var page = await RunAsync(pipeline, "page", """{ "artifact": 1, "offset": 38 }""");
 
-        Assert.Equal("aaaaaaaaaa\n[Trimmed: the first 10 of 50 characters.]", result.Content);
+        Assert.Equal("aaaaaaaaaa\n[Trimmed: the first 10 of 43 characters. The full result is artifact 1.]", result.Content);
+        Assert.Equal("aaend\n[Characters 38 to 43 of 43.]", page.Content);
+        Assert.Equal(ToolErrorCategory.InvalidArguments, (await RunAsync(pipeline, "page", """{ "artifact": 1 }""", Context with { RunId = "run-2" })).Error);
         Assert.Empty(setup.Audit.Entries);
     }
 
@@ -346,7 +350,8 @@ public class ToolPipelineTests
 
         var result = await RunAsync(pipeline, "read_log");
 
-        Assert.Equal("auth [sec\n[Trimmed: the first 9 of 18 characters.]", result.Content);
+        Assert.Equal("auth [sec\n[Trimmed: the first 9 of 18 characters. The full result is artifact 1.]", result.Content);
+        Assert.Equal("auth [secret] done", (await setup.Storage.Artifacts.ReadAsync("acme", "run-1", 1, TestContext.Current.CancellationToken))!.Content);
     }
 
     // TOOL-08, TEST-13, INV-06, SEC-05.

@@ -43,6 +43,9 @@ public sealed partial record OfficinaOptions
     [Setting("Permission rules, gates for all tools, anonymous callers' permissions, masking and rate limits.", Example = """{ "gates": ["no-main-branch"] }""")]
     public PolicyOptions Policies { get; init; } = new();
 
+    [Setting("Checks of output, by name. Agents refer to them by name in `output.checks`.", Example = """{ "no-secrets": { "use": "extension:Acme.NoSecretsCheck" } }""")]
+    public IReadOnlyDictionary<string, CheckOptions> Checks { get; init; } = new Dictionary<string, CheckOptions>();
+
     [Setting("Knowledge sources, by name.", Example = """{ "handbook": { "use": "extension:Acme.HandbookIndex" } }""")]
     public IReadOnlyDictionary<string, KnowledgeOptions> Knowledge { get; init; } = new Dictionary<string, KnowledgeOptions>();
 

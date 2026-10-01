@@ -2,7 +2,10 @@ using System.ComponentModel.DataAnnotations;
 
 namespace Sleepyshark.Officina.Core.Configuration;
 
-/// <summary>When a turn is complete (LOOP-05). They combine: the first that holds completes the turn.</summary>
+/// <summary>
+/// When a turn is complete (LOOP-05). They combine: the first that holds completes the turn, with output that must
+/// still pass its checks (INV-09).
+/// </summary>
 public sealed record StopConditions
 {
     [Setting("The turn completes when the model finishes its reply. When this is `false` and the model finishes, the turn ends in a handoff.",
@@ -12,6 +15,10 @@ public sealed record StopConditions
     [Setting("A tool, by name in `tools`, that completes the turn when a call of it succeeds. The call's arguments are the output.",
         Example = "\"submit_report\"")]
     public string? FinishTool { get; init; }
+
+    [Setting("The turn completes as soon as its output passes the checks in `output.checks`, which then run after every model reply. A reply that only calls tools is checked with empty output.",
+        Example = "true")]
+    public bool ChecksPass { get; init; }
 
     [Setting("The turn completes after this many model calls, with the model's last text as the output.", Example = "1")]
     [Range(1, int.MaxValue, ErrorMessage = "must be at least 1.")]

@@ -1,8 +1,10 @@
+using System.Collections.Immutable;
+
 namespace Sleepyshark.Officina.Core.Extensibility;
 
 /// <summary>
-/// The result of a tool call: content, an error, or a route to another agent. An error carries only its category and
-/// a short message, never internal details (TOOL-08).
+/// The result of a tool call: content with any artifacts, an error, or a route to another agent. An error carries only
+/// its category and a short message, never internal details (TOOL-08).
 /// </summary>
 public sealed record ToolResult
 {
@@ -16,6 +18,9 @@ public sealed record ToolResult
     /// <summary>What the model reads: the result, or the error's category and short message.</summary>
     public string Content { get; internal init; }
 
+    /// <summary>Files, reports or data the call produced. The turn's result carries them (OUT-05); the model does not read them.</summary>
+    public ImmutableArray<Artifact> Artifacts { get; internal init; } = [];
+
     public ToolErrorCategory? Error { get; }
 
     /// <summary>Whether trying the call again may help.</summary>
@@ -27,10 +32,10 @@ public sealed record ToolResult
     /// <summary>The <see cref="RouteTo"/> of a call that goes to a human.</summary>
     public const string Human = "human";
 
-    public static ToolResult Success(string content)
+    public static ToolResult Success(string content, params IEnumerable<Artifact> artifacts)
     {
         ArgumentNullException.ThrowIfNull(content);
-        return new(content, null, null);
+        return new(content, null, null) { Artifacts = [.. artifacts] };
     }
 
     /// <param name="category">Why the call did not succeed.</param>

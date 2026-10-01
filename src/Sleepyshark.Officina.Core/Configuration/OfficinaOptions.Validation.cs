@@ -1,7 +1,10 @@
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Json.Schema;
 using Sleepyshark.Officina.Core.Events;
+using Sleepyshark.Officina.Core.Records;
+using Sleepyshark.Officina.Core.Tools;
 
 namespace Sleepyshark.Officina.Core.Configuration;
 
@@ -61,6 +64,16 @@ public sealed partial record OfficinaOptions : IValidatableObject
                 errors = errors.Append(new(ValidationPhase.Tools, $"agents.{name}.context.history.strategy",
                     "cannot keep history while masking is on and the agent has a tool that receives masked values.",
                     "Set the strategy to none, turn policies.masking.enabled off, or remove receivesMaskedValues from the agent's tools."));
+            }
+        }
+
+        foreach (var (name, check) in Checks)
+        {
+            errors = errors.Concat(Names([name], "checks")).Concat(Annotations(check, $"checks.{name}"));
+            if (check.Use is not null && check.ExtensionId() is null)
+            {
+                errors = errors.Append(new(ValidationPhase.Shape, $"checks.{name}.use", $"\"{check.Use}\" is not a check.",
+                    "Use extension:<id> for a check the application registers."));
             }
         }
 
@@ -158,10 +171,15 @@ public sealed partial record OfficinaOptions : IValidatableObject
             {
                 errors = errors.Concat(References($"tools.{name}.source", "knowledge source", [knowledge], "knowledge", Knowledge.Keys));
             }
+            else if (tool.BuiltinTool() is { } builtin)
+            {
+                errors = ToolCatalog.Builtins.Contains(builtin) ? errors : errors.Append(new(ValidationPhase.References, $"tools.{name}.source",
+                    $"built-in tool \"{builtin}\" does not exist.", $"Use one of: {string.Join(", ", ToolCatalog.Builtins)}."));
+            }
             else if (tool.Source is not null && tool.ExtensionId() is null && tool.ProviderTool() is null)
             {
                 errors = errors.Append(new(ValidationPhase.Shape, $"tools.{name}.source", $"\"{tool.Source}\" is not a tool source.",
-                    "Use extension:<id>, mcp:<server>/<tool>, knowledge:<name>, or provider:<name> for a provider's own tool."));
+                    "Use extension:<id>, mcp:<server>/<tool>, knowledge:<name>, builtin:<name>, or provider:<name> for a provider's own tool."));
             }
             else if (tool.ProviderTool() is not null && string.IsNullOrWhiteSpace(tool.Reason))
             {
@@ -233,7 +251,10 @@ public sealed partial record OfficinaOptions : IValidatableObject
         return errors;
     }
 
-    /// <summary>The settings of an agent's turns (LOOP-05, LOOP-06, LOOP-07) and their input. The turn budget is an invariant (INV-07).</summary>
+    /// <summary>
+    /// The settings of an agent's turns (LOOP-05, LOOP-06, LOOP-07), their input and their output (OUT). The turn budget
+    /// is an invariant (INV-07).
+    /// </summary>
     private IEnumerable<ConfigurationError> TurnSettings(string name, AgentDefinition agent)
     {
         var path = $"agents.{name}";
@@ -241,25 +262,62 @@ public sealed partial record OfficinaOptions : IValidatableObject
             .Concat(agent.Budget?.Turn is null ? [] : Annotations(agent.Budget.Turn, $"{path}.budget.turn", ValidationPhase.Invariants))
             .Concat(agent.Stall is null ? [] : Annotations(agent.Stall, $"{path}.stall"))
             .Concat(agent.Context is null ? [] : Annotations(agent.Context, $"{path}.context"))
-            .Concat(agent.Context?.History is null ? [] : Annotations(agent.Context.History, $"{path}.context.history"));
+            .Concat(agent.Context?.History is null ? [] : Annotations(agent.Context.History, $"{path}.context.history"))
+            .Concat((agent.Context?.Record ?? []).Where(kind => !RecordItem.Kinds.Contains(kind)).Select(kind => new ConfigurationError(
+                ValidationPhase.Shape, $"{path}.context.record", $"\"{kind}\" is not a kind of record entry.",
+                $"Use one of: {string.Join(", ", RecordItem.Kinds.Order(StringComparer.Ordinal))}.")));
         if (agent.Context?.History is { Shortening: { } shortening } history && shortening != HistoryOptions.Provider && history.ExtensionId() is null)
         {
             errors = errors.Append(new(ValidationPhase.Shape, $"{path}.context.history.shortening", $"\"{shortening}\" is not a way to shorten history.",
                 $"Use {HistoryOptions.Provider}, or extension:<id> for a shortener the application registers."));
         }
 
+        if (agent.Output is { } output)
+        {
+            errors = errors.Concat(Annotations(output, $"{path}.output"))
+                .Concat(References($"{path}.output.checks", "check", output.Checks, "checks", Checks.Keys))
+                .Concat(OutputSchema($"{path}.output", output));
+        }
+
         if (agent.StopWhen is { } stop)
         {
             errors = errors.Concat(Annotations(stop, $"{path}.stopWhen"))
                 .Concat(stop.FinishTool is null ? [] : References($"{path}.stopWhen.finishTool", "tool", [stop.FinishTool], "tools", Tools.Keys));
-            if (!stop.Finished && stop.FinishTool is null && stop.MaxIterations is null)
+            if (!stop.Finished && stop.FinishTool is null && stop.MaxIterations is null && !stop.ChecksPass)
             {
                 errors = errors.Append(new(ValidationPhase.Shape, $"{path}.stopWhen", "has no condition, so no turn can complete.",
-                    "Keep \"finished\": true, or set \"finishTool\" or \"maxIterations\"."));
+                    "Keep \"finished\": true, or set \"finishTool\", \"checksPass\" or \"maxIterations\"."));
+            }
+
+            if (stop.ChecksPass && agent.Output?.Checks.Count == 0)
+            {
+                errors = errors.Append(new(ValidationPhase.Shape, $"{path}.stopWhen.checksPass", "needs checks to pass, but output.checks is empty.",
+                    "Name the checks in output.checks."));
             }
         }
 
         return errors;
+    }
+
+    /// <summary>Structured output needs a schema, and the schema must be valid JSON Schema (OUT-01).</summary>
+    private static IEnumerable<ConfigurationError> OutputSchema(string path, OutputOptions output)
+    {
+        if (output.Schema is null)
+        {
+            return output.Format == OutputFormat.Structured
+                ? [new(ValidationPhase.Shape, $"{path}.schema", "is required for structured output.", "Give the JSON Schema the output must match.")]
+                : [];
+        }
+
+        try
+        {
+            JsonSchema.FromText(output.Schema);
+            return [];
+        }
+        catch (Exception exception) when (exception is JsonSchemaException or JsonException or InvalidOperationException)
+        {
+            return [new(ValidationPhase.Shape, $"{path}.schema", $"is not valid JSON Schema: {exception.Message}", "")];
+        }
     }
 
     private IEnumerable<ConfigurationError> FormatVersionSupported() =>

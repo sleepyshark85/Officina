@@ -67,7 +67,7 @@ internal sealed class IntegrationQueue(string root, string baseline, string runI
 
             foreach (var (name, check) in checks)
             {
-                var result = await check.RunAsync(new CheckContext(scratch), ct).ConfigureAwait(false);
+                var result = await check.RunAsync(new CheckContext(scratch, null, []), ct).ConfigureAwait(false);
                 if (!result.Passed)
                 {
                     return new(IntegrationOutcome.ChecksFailed, [.. result.Findings.Select(finding => $"{name}: {finding}")]);

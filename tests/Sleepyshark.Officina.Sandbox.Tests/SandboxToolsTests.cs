@@ -54,15 +54,17 @@ public sealed class SandboxToolsTests : IAsyncDisposable
         Assert.Equal(["sof.json"], Relative(command.ReadOnlyPaths));
     }
 
+    // SBX-04.
     [Fact]
-    public async Task The_model_receives_trimmed_output()
+    public async Task The_model_receives_trimmed_output_and_the_full_output_is_kept_as_an_artifact()
     {
         sandbox.Reply(string.Join('\n', Enumerable.Repeat("warning: obsolete API", 20)), exitCode: 1);
 
         var result = await dev.CallAsync("run_command", new { command = "dotnet build" });
 
         Assert.StartsWith("warning: obsolete API", result.Content, StringComparison.Ordinal);
-        Assert.EndsWith("[Trimmed: the first 100 of 453 characters.]", result.Content, StringComparison.Ordinal);
+        Assert.EndsWith("[Trimmed: the first 100 of 453 characters. The full result is artifact 1.]", result.Content, StringComparison.Ordinal);
+        Assert.Equal(453, (await dev.Storage.Artifacts.ReadAsync(null, "run-1", 1, TestContext.Current.CancellationToken))!.Content.Length);
     }
 
     [Fact]

@@ -8,21 +8,23 @@ using Sleepyshark.Officina.Core.Configuration;
 using Sleepyshark.Officina.Core.Events;
 using Sleepyshark.Officina.Core.Extensibility;
 using Sleepyshark.Officina.Core.Observability;
+using Sleepyshark.Officina.Core.Records;
 
 namespace Sleepyshark.Officina.Core.Tools;
 
 /// <summary>
 /// The one path every tool call takes (TOOL-07, DESIGN.md §5): argument validation, permission rules, the gates for all
 /// tools and then the tool's own, human approval, the idempotency lookup, the audit intent, the call itself with its
-/// time limit and retries, and finally masking, trimming and the audit outcome. The first step that does not allow a call
-/// decides it. Every write-tool attempt is audited, whichever step it stops at (TOOL-11). Each call is published
-/// as it starts and ends, and traced (EVT-01, OBS-01).
+/// time limit and retries, and finally masking, trimming, which keeps the full result as an artifact, and the audit
+/// outcome. The first step that does not allow a call decides it. Every write-tool attempt is audited, whichever step it
+/// stops at (TOOL-11). Each call is published as it starts and ends, and traced (EVT-01, OBS-01).
 /// </summary>
 public sealed class ToolPipeline
 {
     private readonly OfficinaOptions options;
     private readonly ToolCatalog catalog;
     private readonly IReadOnlyDictionary<string, IGate> gates;
+    private readonly IStorage storage;
     private readonly IAuditLog audit;
     private readonly EventBus events;
     private readonly IHumanChannel human;
@@ -36,7 +38,7 @@ public sealed class ToolPipeline
     /// </param>
     /// <param name="gates">The application's gates, by the id that <c>extension:&lt;id&gt;</c> gates name.</param>
     /// <param name="knowledge">The application's knowledge sources, by the id that <c>extension:&lt;id&gt;</c> sources name.</param>
-    /// <param name="audit">Where every write-tool attempt is recorded.</param>
+    /// <param name="storage">Where every write-tool attempt is audited, the run record is kept, and trimmed results are kept in full.</param>
     /// <param name="events">Where tool calls and approvals are published.</param>
     /// <param name="human">Who approves calls that need approval.</param>
     /// <param name="secrets">Where tools read credentials.</param>
@@ -47,7 +49,7 @@ public sealed class ToolPipeline
         IReadOnlyDictionary<string, ITool> tools,
         IReadOnlyDictionary<string, IGate> gates,
         IReadOnlyDictionary<string, IKnowledgeSource> knowledge,
-        IAuditLog audit,
+        IStorage storage,
         EventBus events,
         IHumanChannel human,
         ISecretSource secrets,
@@ -57,10 +59,12 @@ public sealed class ToolPipeline
         ArgumentNullException.ThrowIfNull(tools);
         ArgumentNullException.ThrowIfNull(gates);
         ArgumentNullException.ThrowIfNull(knowledge);
-        catalog = ToolCatalog.Create(options, tools, gates, knowledge);
+        ArgumentNullException.ThrowIfNull(storage);
+        catalog = ToolCatalog.Create(options, tools, gates, knowledge, storage.Artifacts);
         this.options = options;
         this.gates = gates;
-        this.audit = audit ?? throw new ArgumentNullException(nameof(audit));
+        this.storage = storage;
+        audit = storage.Audit;
         this.events = events ?? throw new ArgumentNullException(nameof(events));
         this.human = human ?? throw new ArgumentNullException(nameof(human));
         this.secrets = new KnownSecrets(secrets ?? throw new ArgumentNullException(nameof(secrets)));
@@ -124,8 +128,9 @@ public sealed class ToolPipeline
         }
 
         var arguments = request.Arguments;
+        var record = new RunRecord(storage.Records, context, time);
         var approved = false;
-        await foreach (var stop in StepsAsync(context, tool, arguments, ct).ConfigureAwait(false))
+        await foreach (var stop in StepsAsync(context, tool, arguments, record, ct).ConfigureAwait(false))
         {
             if (approved && stop.Action == PolicyAction.Ask)
             {
@@ -173,7 +178,7 @@ public sealed class ToolPipeline
         // ING-06: only a tool configured for real values gets them, and what it returns is masked again.
         var real = tool.Options.ReceivesMaskedValues && context.Masker is not null;
         var masker = real || tool.Options.MaskResults || (tool.Options.KnowledgeSource() is { } source && options.Knowledge[source].Mask) ? context.Masker : null;
-        var (result, detail) = await InvokeAsync(tool, new ToolCall(real ? context.Masker!.Restore(arguments) : arguments, context.Caller, key, secrets), ct)
+        var (result, detail) = await InvokeAsync(tool, new ToolCall(real ? context.Masker!.Restore(arguments) : arguments, context.Caller, key, secrets, record), ct)
             .ConfigureAwait(false);
         detail = detail is null || masker is null ? detail : masker.Mask(detail);
         if (tool.Options.Untrusted && result.Error is null)
@@ -193,18 +198,24 @@ public sealed class ToolPipeline
         // Secrets are removed and values masked before trimming, so a value cut in half cannot leave its start behind (INV-06).
         var content = secrets.Remove(result.Content);
         content = masker?.Mask(content) ?? content;
+        result = result with { Artifacts = [.. result.Artifacts.Select(artifact => artifact with { Content = secrets.Remove(artifact.Content) })] };
         var max = tool.Options.MaxResultLength;
-        return result with
+        if (content.Length <= max)
         {
-            Content = content.Length <= max ? content : $"{content[..max]}\n[Trimmed: the first {max} of {content.Length} characters.]",
-        };
+            return result with { Content = content };
+        }
+
+        var full = await storage.Artifacts.SaveAsync(context.Caller.Tenant, context.RunId, new Artifact($"{tool.Name} result", content), time.GetUtcNow(), ct)
+            .ConfigureAwait(false);
+        return result with { Content = $"{content[..max]}\n[Trimmed: the first {max} of {content.Length} characters. The full result is artifact {full}.]" };
     }
 
     /// <summary>The checks before a call runs, in order (TOOL-05); each yields what it decides when it does not allow the call.</summary>
-    private async IAsyncEnumerable<Stop> StepsAsync(ToolContext context, CatalogTool tool, JsonElement arguments, [EnumeratorCancellation] CancellationToken ct)
+    private async IAsyncEnumerable<Stop> StepsAsync(
+        ToolContext context, CatalogTool tool, JsonElement arguments, RunRecord record, [EnumeratorCancellation] CancellationToken ct)
     {
         // 1. Arguments (MSG-07).
-        var validation = tool.Schema!.Evaluate(arguments, new EvaluationOptions { OutputFormat = OutputFormat.List });
+        var validation = tool.Schema!.Evaluate(arguments, new EvaluationOptions { OutputFormat = Json.Schema.OutputFormat.List });
         if (!validation.IsValid)
         {
             var problem = (validation.Details ?? []).Where(detail => detail.Errors is not null)
@@ -239,7 +250,7 @@ public sealed class ToolPipeline
         {
             var gate = options.Gates[name];
             var decision = gate.ExtensionId() is { } id
-                ? await gates[id].EvaluateAsync(new GateContext(context.Agent, tool.Name, arguments, context.Caller, context.ReadUntrusted), ct).ConfigureAwait(false)
+                ? await gates[id].EvaluateAsync(new GateContext(context.Agent, tool.Name, arguments, context.Caller, context.ReadUntrusted, record), ct).ConfigureAwait(false)
                 : gate.When?.Holds(arguments) == false || (gate.Use == GateOptions.UntrustedContentApproval && !context.ReadUntrusted) ? GateDecision.Allow
                 : gate.Use == GateOptions.Deny ? GateDecision.Deny($"gate {name}")
                 : GateDecision.Ask($"gate {name}");
