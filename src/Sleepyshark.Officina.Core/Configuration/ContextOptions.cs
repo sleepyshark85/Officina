@@ -18,7 +18,7 @@ public sealed record ContextOptions
 
     // REC-06, CTX-01: an empty list switches the record's sections off. Unset rather than a list default, because the
     // configuration binder adds a file's items to a default list instead of replacing it.
-    [Setting("The kinds of run record entry the agent sees in its model input: `fact`, `finding`, `decision` and `citation`; unset for all of them. Facts come before retrieved knowledge, and the rest after it.",
+    [Setting("The kinds of run record entry the agent sees in its model input: `fact`, `finding`, `decision` and `citation`; unset for `fact`, `finding` and `decision`; list `citation` to show citations too. Facts come before retrieved knowledge, and the rest after it.",
         Example = """["fact", "decision"]""")]
     public IReadOnlyList<string>? Record { get; init; }
 

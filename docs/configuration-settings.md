@@ -182,7 +182,7 @@ It lists the settings the code has today. Settings that later slices add are spe
 |---|---|---|---|---|
 | `operatingFacts` | list | `[]` | Facts added after the history for every model call, in this order, such as limits or the date. Placeholders may use `{{now}}` and `{{now:date}}`, and the project and agent values. | `["Today is {{now:date}}.","Replies are limited to 300 words."]` |
 | `historyCacheLifetime` | time span (`hh:mm:ss` or `d.hh:mm:ss`) | `"00:05:00"` | How long the provider keeps the conversation cached between model calls, as `hh:mm:ss`, at most one hour. Agents that often wait for approvals benefit from longer. | `"01:00:00"` |
-| `record` | list |  | The kinds of run record entry the agent sees in its model input: `fact`, `finding`, `decision` and `citation`; unset for all of them. Facts come before retrieved knowledge, and the rest after it. | `["fact","decision"]` |
+| `record` | list |  | The kinds of run record entry the agent sees in its model input: `fact`, `finding`, `decision` and `citation`; unset for `fact`, `finding` and `decision`; list `citation` to show citations too. Facts come before retrieved knowledge, and the rest after it. | `["fact","decision"]` |
 | `retrieval` | section | `{"beforeTurn":[],"handOffWhenNotCovered":false}` | Knowledge retrieved before each turn. Required. | `{"beforeTurn":["handbook"],"handOffWhenNotCovered":true}` |
 | `history` | section | `{"strategy":"none","shortening":"provider","lastTurns":10}` | What history a request starts with, and how it is shortened. Required. | `{"strategy":"shortened"}` |
 

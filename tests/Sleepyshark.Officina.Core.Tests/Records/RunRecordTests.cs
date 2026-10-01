@@ -96,8 +96,8 @@ public class RunRecordTests
         Assert.Contains("r4 decision on db: Postgres, because scale (by dev)\n", Context(kit.Model.Requests[5]));
     }
 
-    // CTX-07, CTX-01: facts first, each with its as-of time, in revision order; the rest, including the retrieved
-    // passages' citations, after the passages.
+    // CTX-07, CTX-01: facts first, each with its as-of time, in revision order; findings and decisions after the passages.
+    // The passage's citation is r1, which the context leaves out by default.
     [Fact]
     public async Task The_records_entries_join_the_volatile_context_in_a_consistent_order()
     {
@@ -124,7 +124,6 @@ public class RunRecordTests
             hb-1: Refunds take 5 days.
             </data>
             <data source="record">
-            r1 citation [cite:hb-1]: knowledge:handbook, hb-1: "Refunds take 5 days."
             r3 finding: found
             </data>
             Today is 2000-01-01.
@@ -154,15 +153,15 @@ public class RunRecordTests
     [Fact]
     public async Task An_agent_sees_only_the_kinds_of_entry_it_is_configured_to()
     {
-        var kit = Kit(agent => agent with { Context = new() { Record = ["decision"] } });
+        var kit = Kit(agent => agent with { Context = new() { Record = ["citation"] } });
         kit.Model.CallTools(("fact", """{ "subject": "a", "value": "1", "source": "s" }"""))
-            .CallTools(("decision", """{ "subject": "db", "choice": "SQLite", "reason": "local" }"""))
+            .CallTools(("cite", """{ "id": "inv-1", "document": "invoice.pdf", "location": "page 1", "quote": "Total: 42" }"""))
             .Reply("Done.");
 
         await kit.RunAsync(Agent, "Work.", Ct);
 
         Assert.Equal(
-            "<context>\n<data source=\"record\">\nr2 decision on db: SQLite, because local (by dev)\n</data>\n</context>",
+            "<context>\n<data source=\"record\">\nr2 citation [cite:inv-1]: invoice.pdf, page 1: \"Total: 42\"\n</data>\n</context>",
             Context(kit.Model.Requests[2]));
     }
 

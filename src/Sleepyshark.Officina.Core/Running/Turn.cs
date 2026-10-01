@@ -25,6 +25,9 @@ namespace Sleepyshark.Officina.Core.Running;
 /// </summary>
 internal sealed class Turn
 {
+    /// <summary>The kinds of record entry the volatile context holds by default, as CTX-01 lists them; citations are opt-in.</summary>
+    private static readonly string[] DefaultKinds = ["fact", "finding", "decision"];
+
     private readonly ToolContext context;
     private readonly ProjectOptions project;
     private readonly AgentDefinition agent;
@@ -294,7 +297,8 @@ internal sealed class Turn
     private List<string> Facts()
     {
         var now = time.GetUtcNow();
-        var shown = entries.Where(entry => agent.Context.Record?.Contains(entry.Item.Kind) ?? true).ToList();
+        var kinds = agent.Context.Record ?? DefaultKinds;
+        var shown = entries.Where(entry => kinds.Contains(entry.Item.Kind)).ToList();
         return [.. Record(shown.Where(entry => entry.Item is Fact)), .. retrieved, .. Record(shown.Where(entry => entry.Item is not Fact)),
             .. agent.Context.OperatingFacts.Select(fact => InstructionPlaceholders.Fill(fact, project, context.Agent, agent, now, context.Caller))];
 

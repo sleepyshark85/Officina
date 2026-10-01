@@ -28,6 +28,8 @@ The shared run record, and checked output.
   a taken revision, and the core then validates again (REC-04). Answers and entries cite as `[cite:<id>]`, where the id
   is any text without `]`. Retrieved passages join the record as citations by their source's id, before the turn and
   through `knowledge:` tools, so the default `resolve` rule accepts answers that cite them (OUT-04).
+- The volatile context shows facts, findings and decisions by default (CTX-01); citations only when `context.record`
+  lists them, so a retrieved passage is not sent twice.
 - A trimmed tool result is kept in full as an artifact, which `builtin:artifact.page` reads (TOOL-09, SBX-04). Gates get
   the run record (TOOL-06). The `officina.checks` metric gives check pass rates (OBS-02).
 - An accepted proposal is a new call, and an identical proposal is not added again, so the stall rule needs nothing more

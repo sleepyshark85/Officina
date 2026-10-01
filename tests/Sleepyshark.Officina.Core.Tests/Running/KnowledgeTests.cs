@@ -20,7 +20,7 @@ public class KnowledgeTests
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     [Fact]
-    public async Task Before_the_turn_the_work_is_searched_and_the_passages_join_the_volatile_context_as_data_and_the_record_as_citations()
+    public async Task Before_the_turn_the_work_is_searched_and_the_passages_join_the_volatile_context_as_data()
     {
         var kit = Kit(new() { BeforeTurn = ["handbook"] });
         kit.Model.Reply("5 days.");
@@ -29,11 +29,7 @@ public class KnowledgeTests
 
         Assert.Equal(new RetrievalQuery(Work, Caller.Anonymous, 8), Assert.Single(handbook.Queries));
         Assert.Equal(
-            [
-                Message.User(Work),
-                Message.User($"<context>\n<data source=\"knowledge:handbook\">\n{Found}\n</data>\n<data source=\"record\">\n"
-                    + "r1 citation [cite:hb-4.2]: knowledge:handbook, hb-4.2: \"Refunds take 5 days.\"\n</data>\n</context>"),
-            ],
+            [Message.User(Work), Message.User($"<context>\n<data source=\"knowledge:handbook\">\n{Found}\n</data>\n</context>")],
             Assert.Single(kit.Model.Requests).History);
     }
 
