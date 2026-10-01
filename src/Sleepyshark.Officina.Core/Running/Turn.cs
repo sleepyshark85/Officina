@@ -211,7 +211,7 @@ internal sealed class Turn
     /// </summary>
     private async Task<StopReason> CallModelAsync(ModelRequest request, CancellationToken ct)
     {
-        using var activity = Telemetry.StartModelCall(context, request.Profile.Model);
+        using var activity = Telemetry.StartModelCall(context, request.Profile.Provider, request.Profile.Model);
         var callStarted = time.GetTimestamp();
         var callUsage = Usage.None;
         var callCost = 0m;
@@ -246,7 +246,7 @@ internal sealed class Turn
             }
         }
 
-        Telemetry.ModelCallEnded(activity, context, request.Profile.Model, stop, callUsage, callCost, time.GetElapsedTime(callStarted));
+        Telemetry.ModelCallEnded(activity, context, request.Profile.Provider, request.Profile.Model, stop, callUsage, callCost, time.GetElapsedTime(callStarted));
         await events.PublishAsync(context, new ModelCallEnded(stop, callUsage, callCost), ct).ConfigureAwait(false);
         AddText();
         if (CheckCacheHits(callUsage) is { } warning)

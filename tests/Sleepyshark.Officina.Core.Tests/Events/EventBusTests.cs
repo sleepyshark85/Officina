@@ -27,7 +27,9 @@ public class EventBusTests
             await release.Task;
             return ToolResult.Success("ok");
         });
-        kit = new TestKit(Options(("read", Extension("read"))), new Dictionary<string, ITool> { ["read"] = read });
+        // Every kind is stored, so a reader that catches up sees the streamed text too.
+        var options = Options(("read", Extension("read"))) with { Storage = new() { UnstoredEvents = [] } };
+        kit = new TestKit(options, new Dictionary<string, ITool> { ["read"] = read });
         kit.Model.CallTools(("read", """{"path":"a.txt"}"""));
     }
 
@@ -99,12 +101,11 @@ public class EventBusTests
 
     // EVT-05.
     [Fact]
-    public async Task Kinds_configured_as_unstored_are_published_but_not_stored()
+    public async Task Streamed_text_is_not_stored_by_default()
     {
         var kit = new TestKit(new OfficinaOptions
         {
             Agents = new Dictionary<string, AgentDefinition> { [Agent] = new() { Instructions = "Work." } },
-            Storage = new StorageOptions { UnstoredEvents = ["textGenerated"] },
         });
         kit.Model.Reply("Done.");
 

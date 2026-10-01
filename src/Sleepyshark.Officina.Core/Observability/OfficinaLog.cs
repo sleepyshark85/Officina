@@ -4,8 +4,9 @@ namespace Sleepyshark.Officina.Core.Observability;
 
 /// <summary>
 /// The structured log (OBS-03), as an event source the host forwards to its logging, for example with OpenTelemetry's
-/// event source bridge. Each entry names its run and agent, and the current activity identifies the turn. No entry
-/// holds conversation content: only names, categories and internal error details with known secrets removed.
+/// event source bridge. Each entry names its run and agent; a run has one turn until loop patterns (S13) add steps,
+/// which then join the entries. No entry holds conversation content: only names, categories and internal error details
+/// with known secrets removed.
 /// </summary>
 [EventSource(Name = SourceName)]
 internal sealed class OfficinaLog : EventSource

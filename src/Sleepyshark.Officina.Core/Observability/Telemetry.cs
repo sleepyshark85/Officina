@@ -27,21 +27,28 @@ public static class Telemetry
 
     internal static Activity? StartTurn(ToolContext context) => Start($"invoke_agent {context.Agent}", ActivityKind.Internal, context, "invoke_agent");
 
-    internal static Activity? StartModelCall(ToolContext context, string model) =>
-        Start($"chat {model}", ActivityKind.Client, context, "chat")?.SetTag("gen_ai.request.model", model);
+    /// <param name="context">Who makes the call.</param>
+    /// <param name="provider">The provider, by its configured name; the Claude provider (S11) maps it to the well-known name.</param>
+    /// <param name="model">The model.</param>
+    internal static Activity? StartModelCall(ToolContext context, string provider, string model) =>
+        Start($"chat {model}", ActivityKind.Client, context, "chat")?.SetTag("gen_ai.provider.name", provider).SetTag("gen_ai.request.model", model);
 
     internal static Activity? StartToolCall(ToolContext context, string tool) =>
         Start($"execute_tool {tool}", ActivityKind.Internal, context, "execute_tool")?.SetTag("gen_ai.tool.name", tool);
 
-    internal static void ModelCallEnded(Activity? activity, ToolContext context, string model, StopReason stop, Usage usage, decimal cost, TimeSpan elapsed)
+    internal static void ModelCallEnded(
+        Activity? activity, ToolContext context, string provider, string model, StopReason stop, Usage usage, decimal cost, TimeSpan elapsed)
     {
         var input = usage.Input + usage.CacheRead + usage.CacheWrite;
         activity?.SetTag("gen_ai.response.finish_reasons", new[] { stop.ToString() })
             .SetTag("gen_ai.usage.input_tokens", input)
             .SetTag("gen_ai.usage.output_tokens", usage.Output)
             .SetTag("gen_ai.usage.cache_read.input_tokens", usage.CacheRead)
-            .SetTag("gen_ai.usage.cache_creation.input_tokens", usage.CacheWrite);
-        var tags = new TagList { { "gen_ai.operation.name", "chat" }, { "gen_ai.request.model", model }, { "gen_ai.agent.name", context.Agent } };
+            .SetTag("gen_ai.usage.cache_write.input_tokens", usage.CacheWrite);
+        var tags = new TagList
+        {
+            { "gen_ai.operation.name", "chat" }, { "gen_ai.provider.name", provider }, { "gen_ai.request.model", model }, { "gen_ai.agent.name", context.Agent },
+        };
         Duration.Record(elapsed.TotalSeconds, tags);
         Iterations.Add(1, tags);
         Cost.Add((double)cost, tags);

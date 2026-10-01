@@ -134,12 +134,13 @@ public sealed class SqliteStorage : IStorage, IRunStore, IEventLog, IAuditLog
     public ValueTask DeleteExpiredAsync(RetentionOptions retention, DateTimeOffset now, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(retention);
-        return ExecuteAsync(
-            "DELETE FROM runs WHERE time < $runs; DELETE FROM events WHERE time < $events; DELETE FROM audit WHERE time < $audit;", ct,
-            ("$runs", Cutoff(retention.Runs)), ("$events", Cutoff(retention.Events)), ("$audit", Cutoff(retention.Audit)));
 
-        // A kind without a retention period is never older than the cutoff.
-        long Cutoff(TimeSpan? period) => period is { } kept ? (now - kept).UtcTicks : long.MinValue;
+        // A kind without a retention period is kept, so it needs no statement.
+        (string Table, TimeSpan? Period)[] kinds = [("runs", retention.Runs), ("events", retention.Events), ("audit", retention.Audit)];
+        var expired = kinds.Where(kind => kind.Period is not null).ToList();
+        return ExecuteAsync(
+            string.Concat(expired.Select(kind => $"DELETE FROM {kind.Table} WHERE time < ${kind.Table};")), ct,
+            [.. expired.Select(kind => ($"${kind.Table}", (object?)(now - kind.Period!.Value).UtcTicks))]);
     }
 
     private static RunStarted ReadRun(SqliteDataReader row) => new(

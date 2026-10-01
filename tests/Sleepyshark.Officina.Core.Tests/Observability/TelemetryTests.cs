@@ -82,12 +82,14 @@ public sealed class TelemetryTests : IDisposable
         var turn = Assert.Single(spans, span => span.DisplayName == $"invoke_agent {Observed}");
         Assert.Equal(
             ["chat claude-opus-5-5", "execute_tool read", "chat claude-opus-5-5", "execute_tool edit", "chat claude-opus-5-5"],
-            spans.Where(span => span.ParentSpanId == turn.SpanId).OrderBy(span => span.StartTimeUtc).Select(span => span.DisplayName));
+            spans.Where(span => span.ParentSpanId == turn.SpanId).Select(span => span.DisplayName));
         Assert.All(spans, span => Assert.Equal(Observed, span.GetTagItem("gen_ai.agent.name")));
 
         var chat = spans.Last(span => span.DisplayName.StartsWith("chat", StringComparison.Ordinal));
-        Assert.Equal(("chat", "claude-opus-5-5", 130L, 20L), (chat.GetTagItem("gen_ai.operation.name"), chat.GetTagItem("gen_ai.request.model"),
-            chat.GetTagItem("gen_ai.usage.input_tokens"), chat.GetTagItem("gen_ai.usage.output_tokens")));
+        Assert.Equal(("chat", "claude", "claude-opus-5-5", 130L, 20L, 30L, 0L), (chat.GetTagItem("gen_ai.operation.name"),
+            chat.GetTagItem("gen_ai.provider.name"), chat.GetTagItem("gen_ai.request.model"), chat.GetTagItem("gen_ai.usage.input_tokens"),
+            chat.GetTagItem("gen_ai.usage.output_tokens"), chat.GetTagItem("gen_ai.usage.cache_read.input_tokens"),
+            chat.GetTagItem("gen_ai.usage.cache_write.input_tokens")));
 
         var edit = Assert.Single(spans, span => span.DisplayName == "execute_tool edit");
         Assert.Equal(("NotAuthorised", ActivityStatusCode.Error), (edit.GetTagItem("error.type"), edit.Status));
@@ -110,7 +112,10 @@ public sealed class TelemetryTests : IDisposable
             ["gen_ai.client.operation.duration", "gen_ai.client.token.usage", "officina.cost", "officina.handoffs", "officina.iterations", "officina.tool.calls"],
             mine.Select(measurement => measurement.Name).Distinct().Order());
         Assert.Contains(mine, measurement => measurement.Name == "gen_ai.client.token.usage" && measurement.Value == 130
-            && (string?)measurement.Tags["gen_ai.token.type"] == "input" && (string?)measurement.Tags["gen_ai.request.model"] == "claude-opus-5-5");
+            && (string?)measurement.Tags["gen_ai.token.type"] == "input" && (string?)measurement.Tags["gen_ai.request.model"] == "claude-opus-5-5"
+            && (string?)measurement.Tags["gen_ai.provider.name"] == "claude");
+        Assert.Contains(mine, measurement => measurement.Name == "gen_ai.client.operation.duration"
+            && (string?)measurement.Tags["gen_ai.operation.name"] == "chat" && (string?)measurement.Tags["gen_ai.provider.name"] == "claude");
         Assert.Contains(mine, measurement => measurement.Name == "officina.tool.calls" && (string?)measurement.Tags["officina.tool.outcome"] == "Failed");
         Assert.Contains(mine, measurement => measurement.Name == "officina.handoffs" && (string?)measurement.Tags["officina.handoff.reason"] == "ProviderRefusal");
     }

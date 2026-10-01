@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using Sleepyshark.Officina.Core.Configuration;
 using Sleepyshark.Officina.Core.Events;
 using Sleepyshark.Officina.Core.Extensibility;
@@ -115,14 +116,15 @@ public sealed class AgentRunner
         var context = new ToolContext(Guid.CreateVersion7().ToString(), name, caller);
         var instructions = InstructionPlaceholders.Fill(agent.Instructions, Options.Project, name, agent);
         var turn = new Turn(context, Options, provider, pipeline, knowledge, Events, instructions, input, Inbox(name), time);
-        using var activity = Telemetry.StartTurn(context);
         var oneAtATime = turns.GetOrAdd(name, _ => new SemaphoreSlim(1, 1));
         var entered = false;
+        Activity? activity = null;
         AgentResult result;
         try
         {
             await oneAtATime.WaitAsync(ct).ConfigureAwait(false);
             entered = true;
+            activity = Telemetry.StartTurn(context); // after the wait, so the span covers the turn only
             await storage.DeleteExpiredAsync(Options.Storage.Retention, time.GetUtcNow(), ct).ConfigureAwait(false);
             var started = new RunStarted(context.RunId, name, context.Caller.Id, time.GetUtcNow(), CoreVersion.Value, Options);
             await storage.Runs.RecordStartAsync(context.Caller.Tenant, started, ct).ConfigureAwait(false);
@@ -158,6 +160,7 @@ public sealed class AgentRunner
         var reason = result.Handoff?.Reason.ToString() ?? (result.Outcome == AgentOutcome.Failed ? result.Output : "");
         Telemetry.TurnEnded(activity, context, result.Outcome.ToString(), result.Handoff?.Reason.ToString());
         OfficinaLog.Log.TurnEnded(context.RunId, name, result.Outcome.ToString(), reason);
+        activity?.Dispose();
         return result;
     }
 }

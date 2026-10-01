@@ -105,13 +105,13 @@ public sealed class ToolPipeline
         using var activity = Telemetry.StartToolCall(context, request.Name);
         var started = time.GetTimestamp();
         await events.PublishAsync(context, new ToolCallStarted(request.Name, secrets.Remove(request.Arguments.GetRawText())), ct).ConfigureAwait(false);
-        var result = await DecideAndRunAsync(context, request, ct).ConfigureAwait(false);
+        var result = await DecideAndRunAsync(context, request, activity, ct).ConfigureAwait(false);
         Telemetry.ToolCallEnded(activity, context, request.Name, result.Error?.ToString() ?? "ok", time.GetElapsedTime(started));
         await events.PublishAsync(context, new ToolCallEnded(request.Name, result.Error), ct).ConfigureAwait(false);
         return result;
     }
 
-    private async Task<ToolResult> DecideAndRunAsync(ToolContext context, ToolRequest request, CancellationToken ct)
+    private async Task<ToolResult> DecideAndRunAsync(ToolContext context, ToolRequest request, Activity? activity, CancellationToken ct)
     {
         if (!catalog.TryGet(context.Agent, request.Name, out var tool) || tool.Implementation is null)
         {
@@ -128,7 +128,7 @@ public sealed class ToolPipeline
                 continue;
             }
 
-            Telemetry.Decided(Activity.Current, stop.DecidedBy, stop.Action.ToString());
+            Telemetry.Decided(activity, stop.DecidedBy, stop.Action.ToString());
             await AuditAsync(context, tool, arguments, stop.DecidedBy, stop.Action switch
             {
                 PolicyAction.Ask => AuditOutcome.Asked,

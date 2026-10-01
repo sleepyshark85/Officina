@@ -60,7 +60,7 @@ public sealed class SqliteStorageTests : StorageContract, IDisposable
         var (runId, configuration) = Assert.Single(await QueryAsync("SELECT run_id, configuration FROM runs"));
         Assert.Equal(JsonSerializer.Serialize(options, ConfigurationJson.Options), configuration);
         Assert.Equal(
-            ["turnStarted", "textGenerated", "modelCallEnded", "turnEnded"],
+            ["turnStarted", "modelCallEnded", "turnEnded"],
             (await (await CreateAsync()).Events.ReadAsync(null, runId, 0, Ct)).Select(read => read.Payload.Kind));
     }
 

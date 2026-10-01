@@ -21,8 +21,8 @@ public interface IStorage
     ValueTask<OwnerData> ExportAsync(string? tenant, string owner, CancellationToken ct);
 
     /// <summary>
-    /// Deletes an owner's runs and their events on request (PRIV-02). Audit entries stay until their retention ends,
-    /// because the audit log keeps what its retention rules require.
+    /// Deletes an owner's runs and their events on request (PRIV-02). Audit entries stay until their retention period,
+    /// which always exists, ends: the audit log keeps only what its retention rules require.
     /// </summary>
     ValueTask DeleteAsync(string? tenant, string owner, CancellationToken ct);
 
