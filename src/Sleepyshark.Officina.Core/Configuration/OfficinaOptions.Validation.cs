@@ -19,7 +19,8 @@ public sealed partial record OfficinaOptions : IValidatableObject
     private IEnumerable<ConfigurationError> Errors()
     {
         // INV-07: the budget is an invariant, so a value outside its range is an attempt to weaken it.
-        var errors = Annotations(Run, "run", ValidationPhase.Invariants)
+        var errors = FormatVersionSupported()
+            .Concat(Annotations(Run, "run", ValidationPhase.Invariants))
             .Concat(Run.Budget is null ? [] : Annotations(Run.Budget, "run.budget", ValidationPhase.Invariants))
             .Concat(Names(Project.Values.Keys, "project.values"));
 
@@ -41,6 +42,12 @@ public sealed partial record OfficinaOptions : IValidatableObject
 
         return errors.Concat(InstructionPlaceholders.Check(this));
     }
+
+    private IEnumerable<ConfigurationError> FormatVersionSupported() =>
+        FormatVersion == CurrentFormatVersion
+            ? []
+            : [new(ValidationPhase.Parse, "formatVersion", $"format version {FormatVersion} is not supported.",
+                $"This core reads format version {CurrentFormatVersion}.")];
 
     /// <summary>The section's <c>[Required]</c> and <c>[Range]</c> annotations; each message is the problem and the fix.</summary>
     private static IEnumerable<ConfigurationError> Annotations(object section, string path, ValidationPhase phase = ValidationPhase.Shape)

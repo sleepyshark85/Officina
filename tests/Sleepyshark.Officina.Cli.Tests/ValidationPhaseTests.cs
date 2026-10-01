@@ -35,6 +35,29 @@ public sealed class ValidationPhaseTests : IDisposable
         Assert.Contains("sof.json", error.Problem, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void Phase_1_parse_rejects_an_unknown_format_version()
+    {
+        folder.Write("sof.json", """{ "formatVersion": 2 }""");
+
+        var error = Assert.Single(folder.Load().Errors);
+
+        Assert.Equal((ValidationPhase.Parse, "formatVersion", "format version 2 is not supported.", "sof.json"), (error.Phase, error.Path, error.Problem, error.Location));
+    }
+
+    [Fact]
+    public void Phase_2_rejects_a_secret_written_as_plain_text_without_repeating_it()
+    {
+        const string key = "sk-ant-api03-0123456789abcdefghij";
+        folder.Write("sof.json", $$"""{ "providers": { "claude": { "apiKey": "{{key}}" } } }""");
+
+        var error = Assert.Single(folder.Load().Errors);
+
+        Assert.Equal((ValidationPhase.Shape, "providers.claude.apiKey"), (error.Phase, error.Path));
+        Assert.StartsWith("Write { \"secret\": \"NAME\" }", error.Fix, StringComparison.Ordinal);
+        Assert.DoesNotContain(key, error.ToString(), StringComparison.Ordinal);
+    }
+
     [Theory]
     [InlineData("""{ "run": { "permissionMode": "sometimes" } }""", "Run:PermissionMode")]
     [InlineData("""{ "run": { "budget": { "time": "8 hours" } } }""", "Run:Budget:Time")]

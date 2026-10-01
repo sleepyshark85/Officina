@@ -55,7 +55,9 @@ public sealed class SofConfiguration
         AddText(builder, describe, variables
             .Where(variable => variable.Key.StartsWith(VariablePrefix, StringComparison.Ordinal))
             .Select(variable => (
-                variable.Key[VariablePrefix.Length..].Replace("__", ":", StringComparison.Ordinal), variable.Value, $"environment variable {variable.Key}")));
+                variable.Key[VariablePrefix.Length..].Replace("__", ":", StringComparison.Ordinal),
+                variable.Value,
+                $"environment variable {variable.Key}")));
         AddText(builder, describe, options.Select(option => (option.Path.Replace('.', ':'), option.Value, $"option {option.Option}")));
 
         IConfigurationRoot root;
@@ -85,6 +87,7 @@ public sealed class SofConfiguration
         }
 
         var configuration = new SofConfiguration(bound, errors, root, describe);
+        errors.AddRange(PlainTextSecrets(root).Select(error => error with { Location = configuration.Provided(error.Path) }));
         errors.AddRange(bound.Validate().Select(error => error with { Location = configuration.Provided(error.Path) }));
         return configuration;
     }
@@ -115,6 +118,19 @@ public sealed class SofConfiguration
 
         return null;
     }
+
+    /// <summary>
+    /// A secret written as a value instead of a reference (CFG-09). The binder skips a value where a section belongs, and
+    /// the default reference would apply in its place, so it is reported, without repeating the value.
+    /// </summary>
+    private static IEnumerable<ConfigurationError> PlainTextSecrets(IConfigurationRoot root) =>
+        root.GetSection("providers").GetChildren()
+            .Where(provider => provider.GetSection("apiKey").Value is { Length: > 0 })
+            .Select(provider => new ConfigurationError(
+                ValidationPhase.Shape,
+                $"providers.{provider.Key}.apiKey",
+                "is a value, but it must reference a secret.",
+                "Write { \"secret\": \"NAME\" } and put the value in the secret source, such as an environment variable NAME."));
 
     /// <summary>Environment variables or command-line options, as one in-memory layer that remembers what set each key.</summary>
     private static void AddText(
