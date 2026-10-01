@@ -80,8 +80,7 @@ public class RunConfigurationTests
             },
         };
 
-        var providers = new Dictionary<string, IModelProvider>();
-        var error = Assert.Throws<ConfigurationException>(() => new AgentRunner(invalid, providers, new InMemoryRunStore()));
+        var error = Assert.Throws<ConfigurationException>(() => new TestKit(invalid));
 
         Assert.Equal(["agents.a.instructions", "agents.a.model", "agents.b.instructions"], error.Errors.Select(item => item.Path));
         Assert.Contains("agents.b.instructions: placeholder {{now:date}} is not allowed in instructions.", error.Message, StringComparison.Ordinal);

@@ -31,4 +31,23 @@ public sealed record AgentDefinition
     [Setting("The most tool calls from one reply that run at the same time, when every tool called is safe to run in parallel.", Example = "4")]
     [Range(1, int.MaxValue, ErrorMessage = "must be at least 1.")]
     public int MaxParallelToolCalls { get; init; } = 4;
+
+    [Setting("When a turn is complete. They combine: the first that holds completes the turn.",
+        Example = """{ "finished": false, "finishTool": "submit_report" }""")]
+    [Required(ErrorMessage = Messages.Required)]
+    public StopConditions StopWhen { get; init; } = new();
+
+    // INV-07: a turn always has a budget.
+    [Setting("The agent's budgets. They can be high, but they cannot be removed or unlimited.",
+        Example = """{ "turn": { "iterations": 50, "cost": 5 } }""")]
+    [Required(ErrorMessage = "cannot be removed. Set a limit; it can be high, but it always exists.")]
+    public AgentBudget Budget { get; init; } = new();
+
+    [Setting("When a turn has stalled.", Example = """{ "iterationsWithoutProgress": 5 }""")]
+    [Required(ErrorMessage = Messages.Required)]
+    public StallOptions Stall { get; init; } = new();
+
+    [Setting("Whether a turn ends in a handoff for a policy gap when every tool call of an iteration is refused. With `false`, the refusals go back to the model.",
+        Example = "false")]
+    public bool HandOffOnPolicyGap { get; init; } = true;
 }

@@ -11,7 +11,7 @@ It lists the settings the code has today. Settings that later slices add are spe
 | `$schema` | text |  | The JSON Schema of the file, for editor completion. Files only. |  |
 | `formatVersion` | whole number | `1` | The configuration format version. Unknown versions are rejected. | `1` |
 | `project` | section | `{"values":{}}` | The project's identity, and values usable in placeholders. | `{"name":"invoice-api"}` |
-| `providers` | named entries | `{"claude":{"apiKey":{"secret":"ANTHROPIC_API_KEY"}}}` | Model providers, by name. | `{"claude":{"apiKey":{"secret":"ANTHROPIC_API_KEY"}}}` |
+| `providers` | named entries | `{"claude":{"apiKey":{"secret":"ANTHROPIC_API_KEY"},"prices":{}}}` | Model providers, by name. | `{"claude":{"apiKey":{"secret":"ANTHROPIC_API_KEY"}}}` |
 | `models` | named entries | `{"default":{"provider":"claude","model":"claude-opus-5-5","toolChoice":"auto","settings":{}}}` | Model profiles, by name. Agents refer to them by name. | `{"strong":{"effort":"high"}}` |
 | `agents` | named entries | `{}` | Agent definitions, by name. | `{"extractor":{"instructions":"Extract the invoice number."}}` |
 | `tools` | named entries | `{}` | Tools, by the name the model sees. | `{"create_issue":{"source":"extension:Acme.CreateIssue","gates":["issue-dedupe"]}}` |
@@ -33,6 +33,7 @@ It lists the settings the code has today. Settings that later slices add are spe
 | Setting | Allowed values | Default | Description | Example |
 |---|---|---|---|---|
 | `apiKey` | section |  | The provider's credential, as the name of a secret, which is read when it is used. | `{"secret":"ANTHROPIC_API_KEY"}` |
+| `prices` | named entries | `{}` | Prices per million tokens, by model id, for reporting cost and enforcing cost budgets. A model without a price costs nothing. | `{"claude-opus-5-5":{"input":4,"output":20,"cacheRead":0.2,"cacheWrite":5}}` |
 
 ## `models.<name>`
 
@@ -56,6 +57,10 @@ It lists the settings the code has today. Settings that later slices add are spe
 | `tools` | list | `[]` | The tool sets, by name in `toolSets`, whose tools the agent is offered. The same tools are offered whoever the caller is. | `["files","issues"]` |
 | `permissions` | list |  | Narrows the caller's permissions for this agent's tool calls: a permission counts only if the caller holds it and it is listed here. Unset keeps the caller's. | `["issues:write"]` |
 | `maxParallelToolCalls` | whole number, ≥ 1 | `4` | The most tool calls from one reply that run at the same time, when every tool called is safe to run in parallel. | `4` |
+| `stopWhen` | section | `{"finished":true}` | When a turn is complete. They combine: the first that holds completes the turn. Required. | `{"finished":false,"finishTool":"submit_report"}` |
+| `budget` | section | `{"turn":{"iterations":50,"toolCalls":200,"tokens":3000000,"cost":5,"time":"00:45:00"}}` | The agent's budgets. They can be high, but they cannot be removed or unlimited. Required. | `{"turn":{"iterations":50,"cost":5}}` |
+| `stall` | section | `{"iterationsWithoutProgress":3}` | When a turn has stalled. Required. | `{"iterationsWithoutProgress":5}` |
+| `handOffOnPolicyGap` | boolean | `true` | Whether a turn ends in a handoff for a policy gap when every tool call of an iteration is refused. With `false`, the refusals go back to the model. | `false` |
 
 ## `tools.<name>`
 
@@ -108,6 +113,35 @@ It lists the settings the code has today. Settings that later slices add are spe
 |---|---|---|---|---|
 | `secret` | text |  | The name of the secret, such as the environment variable that holds it. Required. | `"ANTHROPIC_API_KEY"` |
 
+## `providers.<name>.prices.<name>`
+
+| Setting | Allowed values | Default | Description | Example |
+|---|---|---|---|---|
+| `input` | number, ≥ 0 | `0` | USD per million input tokens. | `4` |
+| `output` | number, ≥ 0 | `0` | USD per million output tokens. | `20` |
+| `cacheRead` | number, ≥ 0 | `0` | USD per million tokens read from the cache. | `0.2` |
+| `cacheWrite` | number, ≥ 0 | `0` | USD per million tokens written to the cache. | `5` |
+
+## `agents.<name>.stopWhen`
+
+| Setting | Allowed values | Default | Description | Example |
+|---|---|---|---|---|
+| `finished` | boolean | `true` | The turn completes when the model finishes its reply. When this is `false` and the model finishes, the turn ends in a handoff. | `false` |
+| `finishTool` | text |  | A tool, by name in `tools`, that completes the turn when a call of it succeeds. The call's arguments are the output. | `"submit_report"` |
+| `maxIterations` | whole number, ≥ 1 |  | The turn completes after this many model calls, with the model's last text as the output. | `1` |
+
+## `agents.<name>.budget`
+
+| Setting | Allowed values | Default | Description | Example |
+|---|---|---|---|---|
+| `turn` | section | `{"iterations":50,"toolCalls":200,"tokens":3000000,"cost":5,"time":"00:45:00"}` | The limits of each turn, checked before every model call. A turn that reaches one ends in a handoff. Required. | `{"iterations":50,"cost":5}` |
+
+## `agents.<name>.stall`
+
+| Setting | Allowed values | Default | Description | Example |
+|---|---|---|---|---|
+| `iterationsWithoutProgress` | whole number, ≥ 1 | `3` | A turn ends in a handoff after this many tool-calling iterations in a row that only repeat earlier calls and get the same results. | `5` |
+
 ## `gates.<name>.when`
 
 | Setting | Allowed values | Default | Description | Example |
@@ -147,6 +181,16 @@ It lists the settings the code has today. Settings that later slices add are spe
 |---|---|---|---|---|
 | `protectedPaths` | list | `[]` | Paths agents cannot see or change, in addition to the fixed ones: `.git`, `**/.env*` and `.sof/**` are hidden, and `sof.json` and `sof.*.json` are read-only. | `[{"path":"secrets/**","access":"hidden"}]` |
 | `keepWorkingCopies` | boolean | `false` | Whether an agent's working copy is kept when its task ends, so the owner can look at it. | `true` |
+
+## `agents.<name>.budget.turn`
+
+| Setting | Allowed values | Default | Description | Example |
+|---|---|---|---|---|
+| `iterations` | whole number, ≥ 1 | `50` | The most model calls in a turn. | `50` |
+| `toolCalls` | whole number, ≥ 1 | `200` | The most tool calls in a turn, including tools the provider runs itself. | `200` |
+| `tokens` | whole number, ≥ 1 | `3000000` | The most tokens a turn may use: input, output, cache reads and cache writes together. | `3000000` |
+| `cost` | number, > 0 | `5` | The most a turn may spend, in USD. | `5` |
+| `time` | time span (`hh:mm:ss` or `d.hh:mm:ss`) | `"00:45:00"` | The longest a turn may take, as `hh:mm:ss`. | `"00:45:00"` |
 
 ## `capabilities.workspace.protectedPaths[]`
 

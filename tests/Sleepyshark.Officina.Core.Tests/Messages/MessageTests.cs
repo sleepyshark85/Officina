@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using System.Reflection;
+using System.Text.Json;
 using Sleepyshark.Officina.Core.Messages;
 
 namespace Sleepyshark.Officina.Core.Tests.Messages;
@@ -68,6 +69,7 @@ public class MessageTests
     private static bool IsImmutable(Type type) =>
         type.IsEnum
         || type == typeof(string)
+        || type == typeof(JsonElement)
         || type.IsPrimitive
         || MessageTypes.Contains(type)
         || (type.IsGenericType

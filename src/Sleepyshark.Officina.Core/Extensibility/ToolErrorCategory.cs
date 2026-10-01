@@ -10,4 +10,7 @@ public enum ToolErrorCategory
     Timeout,
     Unavailable,
     Failed,
+
+    /// <summary>The turn was cancelled before the call had a result (LOOP-09).</summary>
+    Cancelled,
 }
