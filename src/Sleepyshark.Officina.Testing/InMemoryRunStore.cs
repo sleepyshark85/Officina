@@ -3,31 +3,17 @@ using Sleepyshark.Officina.Core.Running;
 
 namespace Sleepyshark.Officina.Testing;
 
-/// <summary>Keeps runs in memory, for tests. Durable stores (S08) implement <see cref="IRunStore"/> in their own projects.</summary>
+/// <summary>Keeps runs in memory, for tests.</summary>
 public sealed class InMemoryRunStore : IRunStore
 {
-    private readonly Lock gate = new();
-    private readonly List<RunStarted> runs = [];
+    internal TenantRows<RunStarted> Rows { get; } = new();
 
-    public IReadOnlyList<RunStarted> Runs
+    /// <summary>Every run, in every tenant, in the order started.</summary>
+    public IReadOnlyList<RunStarted> Runs => Rows.All;
+
+    public ValueTask RecordStartAsync(string? tenant, RunStarted run, CancellationToken ct)
     {
-        get
-        {
-            lock (gate)
-            {
-                return [.. runs];
-            }
-        }
-    }
-
-    public ValueTask RecordStartAsync(RunStarted run, CancellationToken ct)
-    {
-        ArgumentNullException.ThrowIfNull(run);
-        lock (gate)
-        {
-            runs.Add(run);
-        }
-
+        Rows.Add(tenant, run);
         return ValueTask.CompletedTask;
     }
 }

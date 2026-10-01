@@ -190,7 +190,7 @@ public sealed class LayeringTests : IDisposable
 
         await kit.RunAsync("dev", "go", TestContext.Current.CancellationToken);
 
-        Assert.Same(options, Assert.Single(kit.Runs.Runs).Configuration);
+        Assert.Same(options, Assert.Single(kit.Storage.Runs.Runs).Configuration);
     }
 
     private static string Json(OfficinaOptions options) => JsonSerializer.Serialize(options, ConfigurationJson.Options);

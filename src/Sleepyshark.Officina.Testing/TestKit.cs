@@ -7,7 +7,7 @@ namespace Sleepyshark.Officina.Testing;
 
 /// <summary>
 /// Runs agents offline (TEST-01). The scripted model stands in for every provider of the configuration, so a definition
-/// runs unchanged; the audit log, the human, the secret source and the clock are stand-ins too.
+/// runs unchanged; the human, the secret source and the clock are stand-ins too, and storage is in memory.
 /// </summary>
 public sealed class TestKit
 {
@@ -28,11 +28,10 @@ public sealed class TestKit
         Runner = new AgentRunner(
             options,
             options.Providers.Keys.ToDictionary(name => name, IModelProvider (_) => Model),
-            Runs,
+            Storage,
             tools ?? new Dictionary<string, ITool>(),
             gates ?? new Dictionary<string, IGate>(),
             knowledge ?? new Dictionary<string, IKnowledgeSource>(),
-            Audit,
             Human,
             new InMemorySecretSource(Secrets),
             Time);
@@ -40,10 +39,8 @@ public sealed class TestKit
 
     public ScriptedModelProvider Model { get; }
 
-    /// <summary>The runs started so far, with their configuration.</summary>
-    public InMemoryRunStore Runs { get; } = new();
-
-    public InMemoryAuditLog Audit { get; } = new();
+    /// <summary>The runs started so far with their configuration, their events, and the audit log.</summary>
+    public InMemoryStorage Storage { get; } = new();
 
     public ScriptedHuman Human { get; } = new();
 

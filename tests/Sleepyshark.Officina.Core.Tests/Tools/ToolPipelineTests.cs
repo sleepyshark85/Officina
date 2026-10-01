@@ -1,4 +1,5 @@
 using Sleepyshark.Officina.Core.Configuration;
+using Sleepyshark.Officina.Core.Events;
 using Sleepyshark.Officina.Core.Extensibility;
 using Sleepyshark.Officina.Core.Tools;
 using Sleepyshark.Officina.Testing;
@@ -185,6 +186,12 @@ public class ToolPipelineTests
         Assert.Equal((ToolErrorCategory.PolicyViolation, "policy violation: approval denied"), (result.Error, result.Content));
         Assert.Empty(createIssue.Calls);
         Assert.Equal(("human", AuditOutcome.Denied), (setup.Audit.Entries[^1].DecidedBy, setup.Audit.Entries[^1].Outcome));
+
+        // EVT-01.
+        Assert.Equal(
+            [new ToolCallStarted("create_issue", """{ "title": "x" }"""), new ApprovalRequested("create_issue", "the tool needs approval"),
+                new ApprovalAnswered("create_issue", false), new ToolCallEnded("create_issue", ToolErrorCategory.PolicyViolation)],
+            (await setup.Events.ReadAsync("acme", "run-1", 0, TestContext.Current.CancellationToken)).Select(read => read.Payload));
     }
 
     [Fact]
@@ -361,7 +368,7 @@ public class ToolPipelineTests
     }
 
     [Fact]
-    public async Task A_secret_the_tool_read_never_reaches_the_model_or_the_audit_log()
+    public async Task A_secret_the_tool_read_never_reaches_the_model_the_audit_log_or_events()
     {
         setup.Secrets["TRACKER_TOKEN"] = "tok-s3cr3t";
         setup.Tools["create_issue"] = new FakeTool(ToolKind.Write, run: async (call, ct) =>
@@ -373,6 +380,9 @@ public class ToolPipelineTests
 
         Assert.Equal("created with [secret]", echoed.Content);
         Assert.DoesNotContain(setup.Audit.Entries, entry => $"{entry}".Contains("tok-s3cr3t", StringComparison.Ordinal));
+        Assert.DoesNotContain(
+            await setup.Events.ReadAsync("acme", "run-1", 0, TestContext.Current.CancellationToken),
+            read => $"{read.Payload}".Contains("tok-s3cr3t", StringComparison.Ordinal));
     }
 
     // LOOP-08.

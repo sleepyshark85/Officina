@@ -1,0 +1,206 @@
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using Microsoft.Data.Sqlite;
+using Sleepyshark.Officina.Core.Configuration;
+using Sleepyshark.Officina.Core.Events;
+using Sleepyshark.Officina.Core.Extensibility;
+using Sleepyshark.Officina.Core.Running;
+
+namespace Sleepyshark.Officina.Storage.Sqlite;
+
+/// <summary>
+/// The default local storage (STO-01, DESIGN.md §8): one SQLite file in WAL mode. Every row carries its tenant, and
+/// every statement filters by it (SEC-02). The file carries the format version of what it holds, and a file in any
+/// other version is refused rather than misread (REL-04).
+/// </summary>
+public sealed class SqliteStorage : IStorage, IRunStore, IEventLog, IAuditLog
+{
+    /// <summary>The only format version this storage reads and writes.</summary>
+    public const int FormatVersion = 1;
+
+    private const string Schema = """
+        CREATE TABLE runs (
+            run_id TEXT PRIMARY KEY, tenant TEXT, owner TEXT, agent TEXT NOT NULL, time INTEGER NOT NULL,
+            core_version TEXT NOT NULL, configuration TEXT NOT NULL);
+        CREATE INDEX runs_owner ON runs (tenant, owner);
+        CREATE TABLE events (
+            tenant TEXT, run_id TEXT NOT NULL, agent TEXT NOT NULL, step TEXT, sequence INTEGER NOT NULL,
+            time INTEGER NOT NULL, payload TEXT NOT NULL);
+        CREATE INDEX events_run ON events (tenant, run_id, sequence);
+        CREATE TABLE audit (
+            position INTEGER PRIMARY KEY, tenant TEXT, run_id TEXT NOT NULL, agent TEXT NOT NULL, caller TEXT,
+            tool TEXT NOT NULL, arguments TEXT NOT NULL, decided_by TEXT, outcome TEXT NOT NULL, time INTEGER NOT NULL,
+            idempotency_key TEXT NOT NULL, detail TEXT);
+        CREATE INDEX audit_run ON audit (tenant, run_id);
+        """;
+
+    private const string OwnerRuns = "SELECT run_id FROM runs WHERE tenant IS $tenant AND owner = $owner";
+
+    private static readonly JsonSerializerOptions EventJson = new(JsonSerializerDefaults.Web) { Converters = { new JsonStringEnumConverter() } };
+
+    private readonly string connectionString;
+
+    private SqliteStorage(string connectionString) => this.connectionString = connectionString;
+
+    IRunStore IStorage.Runs => this;
+
+    IEventLog IStorage.Events => this;
+
+    IAuditLog IStorage.Audit => this;
+
+    /// <summary>Opens the storage in a file, creating it if it does not exist.</summary>
+    /// <exception cref="InvalidDataException">The file holds data in another format version.</exception>
+    public static async Task<SqliteStorage> OpenAsync(string path, CancellationToken ct)
+    {
+        // Without pooling, no connection keeps the file open after use, so it can be moved or deleted.
+        var storage = new SqliteStorage(new SqliteConnectionStringBuilder { DataSource = path, Pooling = false }.ToString());
+        await using var connection = await storage.ConnectAsync(ct).ConfigureAwait(false);
+        await using var command = Command(connection, "PRAGMA user_version");
+        var version = (long)(await command.ExecuteScalarAsync(ct).ConfigureAwait(false))!;
+        if (version == 0)
+        {
+            command.CommandText = $"BEGIN; {Schema} PRAGMA user_version = {FormatVersion}; COMMIT;";
+            await command.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+        }
+        else if (version != FormatVersion)
+        {
+            throw new InvalidDataException(
+                $"{path} holds data in format version {version}, and this core reads format version {FormatVersion} only.");
+        }
+
+        command.CommandText = "PRAGMA journal_mode = WAL";
+        await command.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+        return storage;
+    }
+
+    public ValueTask RecordStartAsync(string? tenant, RunStarted run, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(run);
+        return ExecuteAsync(
+            "INSERT INTO runs VALUES ($run_id, $tenant, $owner, $agent, $time, $core_version, $configuration)", ct,
+            ("$run_id", run.RunId), ("$tenant", tenant), ("$owner", run.Owner), ("$agent", run.Agent), ("$time", run.Time.UtcTicks),
+            ("$core_version", run.CoreVersion), ("$configuration", JsonSerializer.Serialize(run.Configuration, ConfigurationJson.Options)));
+    }
+
+    public ValueTask AppendAsync(string? tenant, CoreEvent coreEvent, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(coreEvent);
+        return ExecuteAsync(
+            "INSERT INTO events VALUES ($tenant, $run_id, $agent, $step, $sequence, $time, $payload)", ct,
+            ("$tenant", tenant), ("$run_id", coreEvent.RunId), ("$agent", coreEvent.Agent), ("$step", coreEvent.Step),
+            ("$sequence", coreEvent.Sequence), ("$time", coreEvent.Time.UtcTicks), ("$payload", JsonSerializer.Serialize(coreEvent.Payload, EventJson)));
+    }
+
+    public async ValueTask<IReadOnlyList<CoreEvent>> ReadAsync(string? tenant, string runId, long after, CancellationToken ct) =>
+        await QueryAsync(
+            "SELECT * FROM events WHERE tenant IS $tenant AND run_id = $run_id AND sequence > $after ORDER BY sequence", ReadEvent, ct,
+            ("$tenant", tenant), ("$run_id", runId), ("$after", after)).ConfigureAwait(false);
+
+    public ValueTask AppendAsync(string? tenant, AuditEntry entry, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(entry);
+        return ExecuteAsync(
+            """
+            INSERT INTO audit (tenant, run_id, agent, caller, tool, arguments, decided_by, outcome, time, idempotency_key, detail)
+            VALUES ($tenant, $run_id, $agent, $caller, $tool, $arguments, $decided_by, $outcome, $time, $idempotency_key, $detail)
+            """, ct,
+            ("$tenant", tenant), ("$run_id", entry.RunId), ("$agent", entry.Agent), ("$caller", entry.Caller), ("$tool", entry.Tool),
+            ("$arguments", entry.Arguments), ("$decided_by", entry.DecidedBy), ("$outcome", entry.Outcome.ToString()),
+            ("$time", entry.Time.UtcTicks), ("$idempotency_key", entry.IdempotencyKey), ("$detail", entry.Detail));
+    }
+
+    public async ValueTask<IReadOnlyList<AuditEntry>> ReadAsync(string? tenant, string runId, CancellationToken ct) =>
+        await QueryAsync(
+            "SELECT * FROM audit WHERE tenant IS $tenant AND run_id = $run_id ORDER BY position", ReadAuditEntry, ct,
+            ("$tenant", tenant), ("$run_id", runId)).ConfigureAwait(false);
+
+    public async ValueTask<OwnerData> ExportAsync(string? tenant, string owner, CancellationToken ct)
+    {
+        (string, object?)[] parameters = [("$tenant", tenant), ("$owner", owner)];
+        var runs = await QueryAsync("SELECT * FROM runs WHERE tenant IS $tenant AND owner = $owner ORDER BY time", ReadRun, ct, parameters)
+            .ConfigureAwait(false);
+        var events = await QueryAsync(
+            $"SELECT * FROM events WHERE tenant IS $tenant AND run_id IN ({OwnerRuns}) ORDER BY sequence", ReadEvent, ct, parameters).ConfigureAwait(false);
+        var audit = await QueryAsync(
+            $"SELECT * FROM audit WHERE tenant IS $tenant AND run_id IN ({OwnerRuns}) ORDER BY position", ReadAuditEntry, ct, parameters).ConfigureAwait(false);
+        return new OwnerData(runs, events, audit);
+    }
+
+    public ValueTask DeleteAsync(string? tenant, string owner, CancellationToken ct) =>
+        ExecuteAsync(
+            $"DELETE FROM events WHERE tenant IS $tenant AND run_id IN ({OwnerRuns}); DELETE FROM runs WHERE tenant IS $tenant AND owner = $owner;", ct,
+            ("$tenant", tenant), ("$owner", owner));
+
+    public ValueTask DeleteExpiredAsync(RetentionOptions retention, DateTimeOffset now, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(retention);
+        return ExecuteAsync(
+            "DELETE FROM runs WHERE time < $runs; DELETE FROM events WHERE time < $events; DELETE FROM audit WHERE time < $audit;", ct,
+            ("$runs", Cutoff(retention.Runs)), ("$events", Cutoff(retention.Events)), ("$audit", Cutoff(retention.Audit)));
+
+        // A kind without a retention period is never older than the cutoff.
+        long Cutoff(TimeSpan? period) => period is { } kept ? (now - kept).UtcTicks : long.MinValue;
+    }
+
+    private static RunStarted ReadRun(SqliteDataReader row) => new(
+        row.GetString(row.GetOrdinal("run_id")), row.GetString(row.GetOrdinal("agent")), Text(row, "owner"), Time(row),
+        row.GetString(row.GetOrdinal("core_version")),
+        JsonSerializer.Deserialize<OfficinaOptions>(row.GetString(row.GetOrdinal("configuration")), ConfigurationJson.Options)!);
+
+    private static CoreEvent ReadEvent(SqliteDataReader row) => new(
+        row.GetString(row.GetOrdinal("run_id")), row.GetString(row.GetOrdinal("agent")), Text(row, "step"),
+        row.GetInt64(row.GetOrdinal("sequence")), Time(row),
+        JsonSerializer.Deserialize<EventPayload>(row.GetString(row.GetOrdinal("payload")), EventJson)!);
+
+    private static AuditEntry ReadAuditEntry(SqliteDataReader row) => new(
+        row.GetString(row.GetOrdinal("run_id")), row.GetString(row.GetOrdinal("agent")), Text(row, "caller"), row.GetString(row.GetOrdinal("tool")),
+        row.GetString(row.GetOrdinal("arguments")), Text(row, "decided_by"), Enum.Parse<AuditOutcome>(row.GetString(row.GetOrdinal("outcome"))),
+        Time(row), row.GetString(row.GetOrdinal("idempotency_key")), Text(row, "detail"));
+
+    private static string? Text(SqliteDataReader row, string column) =>
+        row.IsDBNull(row.GetOrdinal(column)) ? null : row.GetString(row.GetOrdinal(column));
+
+    private static DateTimeOffset Time(SqliteDataReader row) => new(row.GetInt64(row.GetOrdinal("time")), TimeSpan.Zero);
+
+    private async ValueTask ExecuteAsync(string sql, CancellationToken ct, params (string Name, object? Value)[] parameters)
+    {
+        await using var connection = await ConnectAsync(ct).ConfigureAwait(false);
+        await using var transaction = await connection.BeginTransactionAsync(ct).ConfigureAwait(false);
+        await using var command = Command(connection, sql, parameters);
+        await command.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+        await transaction.CommitAsync(ct).ConfigureAwait(false);
+    }
+
+    private async Task<List<T>> QueryAsync<T>(string sql, Func<SqliteDataReader, T> read, CancellationToken ct, params (string Name, object? Value)[] parameters)
+    {
+        await using var connection = await ConnectAsync(ct).ConfigureAwait(false);
+        await using var command = Command(connection, sql, parameters);
+        await using var reader = await command.ExecuteReaderAsync(ct).ConfigureAwait(false);
+        var rows = new List<T>();
+        while (await reader.ReadAsync(ct).ConfigureAwait(false))
+        {
+            rows.Add(read(reader));
+        }
+
+        return rows;
+    }
+
+    private async Task<SqliteConnection> ConnectAsync(CancellationToken ct)
+    {
+        var connection = new SqliteConnection(connectionString);
+        await connection.OpenAsync(ct).ConfigureAwait(false);
+        return connection;
+    }
+
+    private static SqliteCommand Command(SqliteConnection connection, string sql, params (string Name, object? Value)[] parameters)
+    {
+        var command = connection.CreateCommand();
+        command.CommandText = sql;
+        foreach (var (name, value) in parameters)
+        {
+            command.Parameters.AddWithValue(name, value ?? DBNull.Value);
+        }
+
+        return command;
+    }
+}

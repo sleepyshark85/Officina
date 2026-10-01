@@ -6,19 +6,17 @@ Status: draft · 2026-10-01 · slices `REQUIREMENTS.md` (revision 2) into delive
 
 Last updated 2026-10-02.
 
-- **Done:** M0 spikes S00a and S00b; M1 slices S01 (walking skeleton) and S02 (configuration); S03 (tool pipeline); S04 (turn loop); S05 (context and caching); S10 (MCP and knowledge); S14 (git workspace).
+- **Done:** M0 spikes S00a and S00b; M1 slices S01 (walking skeleton) and S02 (configuration); S03 (tool pipeline); S04 (turn loop); S05 (context and caching); S08 (events, storage and observability); S10 (MCP and knowledge); S14 (git workspace).
 - **Doing:** S15 (sandbox). The Linux piece is in review; the Windows piece follows.
 - **Waiting:** the M0 design review sign-off on `REQUIREMENTS.md`, `CONFIGURATION.md` and `DESIGN.md`.
-- **Next:** S06, S07 and S08. The Windows piece of S15 can run alongside them.
+- **Next:** S06, S07, S09 and S16. The Windows piece of S15 can run alongside them.
 - **Open follow-ups:**
   - S02 kept a `formatVersion` check, though only version 1 exists. Consider removing the setting
     until a version 2 exists (principle 13).
   - S02 rejects a plain-text `apiKey`, because the binder would otherwise skip it silently and
     fall back to the default secret reference. Kept on purpose.
-  - S08 writes each run's resolved configuration as text when it adds durable storage (CFG-07).
   - S06 keeps a trimmed result's full text as an artifact (TOOL-09) and gives gates the run record
     (TOOL-06); S18 adds the task board to `GateContext`.
-  - S08 adds the durable `IAuditLog`, tool-call events, and a log for read tools' internal error details.
   - S11 maps provider tools and their limits, such as maximum uses, to the Claude request.
   - S11: secrets declared in configuration, such as the provider API key and the tool servers' `env` and
     `headers`, must join the tool pipeline's redaction set when they are resolved, so they are removed like
@@ -28,7 +26,8 @@ Last updated 2026-10-02.
     should then hand off as "approval denied or timed out"; S04 counts it as a refusal towards a policy gap.
   - S04 left parts of its requirements to the slices that add the state they need; its Notes list them
     (S06, S07, S09, S14, S16, S18, S19).
-  - S08 publishes streamed model text as events (EVT-01, MDL-07).
+  - S08 left parts of its requirements to the slices that add the state they need; its Notes list them
+    (S06, S07, S09, S11, S13, S16–S20).
   - S11 ships the price table, requires a price when a cost budget is set, and splits `prices.*.cacheWrite`
     by cache lifetime (MDL-09). Until then a model without a configured price costs nothing.
   - S06 adds the `checks` section; `capabilities.workspace.baselineChecks` then names the checks
@@ -46,8 +45,6 @@ Last updated 2026-10-02.
   - S19 snapshots and restores the workspace, and cleans up worktrees left by a crash.
   - S05 moved CTX-06 to S07 and CTX-07 to S06, and left boundary ② and the memory-change case of TEST-09 to S17;
     its Notes list the rest (S06, S09, S18).
-  - S08 publishes a turn's `CacheWarnings` as warning events (COST-01); the threshold is
-    `operations.telemetry.cacheHitWarning`.
   - S11 maps cache boundaries to `cache_control`, putting boundary ③ on the last cacheable block before a
     turn-scoped message; maps `Role.System` to mid-conversation system messages and `TurnScoped` to `clear_at`; and
     reports `CacheBoundaries` and `TurnScopedMessages` in its capabilities.
@@ -95,7 +92,7 @@ A slice is **done** when:
 | [S05](S05-context-and-caching.md) | Context and caching | M2 | M | S04 | [#7](https://github.com/sleepyshark85/Officina/issues/7) | done |
 | [S06](S06-run-record-and-output.md) | Run record and output | M2 | M | S04, S05 | [#8](https://github.com/sleepyshark85/Officina/issues/8) | todo |
 | [S07](S07-history-and-conversations.md) | History and conversation store | M2 | S | S05 | [#9](https://github.com/sleepyshark85/Officina/issues/9) | todo |
-| [S08](S08-events-storage-observability.md) | Events, storage and observability | M2 | M | S04 | [#10](https://github.com/sleepyshark85/Officina/issues/10) | todo |
+| [S08](S08-events-storage-observability.md) | Events, storage and observability | M2 | M | S04 | [#10](https://github.com/sleepyshark85/Officina/issues/10) | done |
 | [S09](S09-triggers-and-admission.md) | Triggers and admission | M2 | M | S04, S08 | [#11](https://github.com/sleepyshark85/Officina/issues/11) | todo |
 | [S10](S10-mcp-and-knowledge.md) | MCP and knowledge sources | M2 | M | S03 | [#12](https://github.com/sleepyshark85/Officina/issues/12) | done |
 | [S11](S11-claude-provider.md) | Claude provider | M3 | M | S00b, S05 | [#13](https://github.com/sleepyshark85/Officina/issues/13) | todo |

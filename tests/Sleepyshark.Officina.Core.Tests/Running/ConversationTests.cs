@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Sleepyshark.Officina.Core.Configuration;
+using Sleepyshark.Officina.Core.Events;
 using Sleepyshark.Officina.Core.Extensibility;
 using Sleepyshark.Officina.Core.Messages;
 using Sleepyshark.Officina.Core.Running;
@@ -194,6 +195,10 @@ public class ConversationTests
         var result = await kit.RunAsync(Agent, "work", Ct);
 
         Assert.Equal(warned ? [new CacheWarning(2, cacheRead / 100d)] : [], result.CacheWarnings);
+        var runId = kit.Storage.Runs.Runs.Single().RunId;
+        Assert.Equal(
+            result.CacheWarnings,
+            (await kit.Storage.Events.ReadAsync(null, runId, 0, Ct)).Select(read => read.Payload).OfType<CacheHitWarning>().Select(read => read.Warning));
     }
 
     // CTX-09, CTX-11, CFG-14.

@@ -2,11 +2,12 @@ using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace Sleepyshark.Officina.Cli;
+namespace Sleepyshark.Officina.Core.Configuration;
 
 /// <summary>
 /// The JSON form of the Options classes: names and value forms as in configuration files. <c>sof config show</c> writes
-/// settings with it, and the editor schema is generated from it, which is why it disallows unknown members.
+/// settings with it, durable storage keeps each run's configuration in it (CFG-07), and the editor schema is generated
+/// from it, which is why it disallows unknown members.
 /// </summary>
 public static class ConfigurationJson
 {

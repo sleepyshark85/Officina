@@ -27,7 +27,7 @@ public class RunConfigurationTests
         await kit.RunAsync("extractor", "a", ct);
         await kit.RunAsync("extractor", "b", ct);
 
-        var runs = kit.Runs.Runs;
+        var runs = kit.Storage.Runs.Runs;
         Assert.Equal(2, runs.Count);
         Assert.NotEqual(runs[0].RunId, runs[1].RunId);
         Assert.Equal(("extractor", CoreVersion.Value), (runs[0].Agent, runs[0].CoreVersion));

@@ -52,6 +52,9 @@ public sealed partial record OfficinaOptions
     [Setting("How the engine is operated.", Example = """{ "telemetry": { "cacheHitWarning": 0.7 } }""")]
     public OperationsOptions Operations { get; init; } = new();
 
+    [Setting("What is stored, and for how long.", Example = """{ "unstoredEvents": ["textGenerated"], "retention": { "events": "30.00:00:00" } }""")]
+    public StorageOptions Storage { get; init; } = new();
+
     [Setting("Optional capabilities and their settings. All are off by default.", Example = """{ "workspace": { "keepWorkingCopies": true } }""")]
     public CapabilitiesOptions Capabilities { get; init; } = new();
 }
