@@ -40,6 +40,15 @@ public sealed class LayeringTests : IDisposable
         Assert.Equal(["modelCallEnded"], folder.Load().Options.Storage.UnstoredEvents);
     }
 
+    // The binder reads an empty list in a file as no value, so it leaves the default.
+    [Fact]
+    public void An_empty_list_in_a_file_leaves_the_default()
+    {
+        folder.Write("sof.json", """{ "storage": { "unstoredEvents": [] } }""");
+
+        Assert.Null(folder.Load().Options.Storage.UnstoredEvents);
+    }
+
     [Fact]
     public void Environment_variables_are_a_layer_between_the_files_and_the_options()
     {

@@ -33,8 +33,9 @@ host; the core only knows how the work arrived. `agents.<name>.triggers` limits 
 
 Parts of the closed requirements need state that later slices add:
 - S19: the per-run rate limit (ING-03), once work can join a running run; long-running runs resume.
-- S07: conversations keep history only for the `conversation` trigger, so requests and batches stay stateless
-  (TRG-04), and the masking table is kept with the conversation so tokens stay stable across its turns (ING-06).
-- S06, S07: the run record and stored history receive content already masked (ING-02).
+- Requests and batches are stateless under the default history strategy, `none` (TRG-04, CTX-06 from S07).
+- S06: the run record receives content already masked (ING-02), as S07's stored history does.
+- Kept history and masking together need the token table kept with the conversation (ING-06); see the plan's
+  open follow-ups.
 - S11: maps `ModelRequest.Batch` to Message Batches when the provider's `batch` feature is on (MDL-10, CLD-11).
 - S20: the coding team preset turns masking off (ING-02).

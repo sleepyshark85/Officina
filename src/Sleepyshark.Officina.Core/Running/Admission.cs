@@ -39,7 +39,7 @@ internal sealed class Admission(PolicyOptions policies, TimeProvider time)
 
         public bool TryAcquire(string? key)
         {
-            if (limit is null)
+            if (limit is not { Permits: { } permits, Window: { } length })
             {
                 return true;
             }
@@ -47,9 +47,9 @@ internal sealed class Admission(PolicyOptions policies, TimeProvider time)
             lock (windows)
             {
                 var now = time.GetTimestamp();
-                var (start, used) = windows.TryGetValue(key ?? "", out var window) && time.GetElapsedTime(window.Start, now) < limit.Window ? window : (now, 0);
-                windows[key ?? ""] = (start, Math.Min(used + 1, limit.Permits));
-                return used < limit.Permits;
+                var (start, used) = windows.TryGetValue(key ?? "", out var window) && time.GetElapsedTime(window.Start, now) < length ? window : (now, 0);
+                windows[key ?? ""] = (start, Math.Min(used + 1, permits));
+                return used < permits;
             }
         }
     }

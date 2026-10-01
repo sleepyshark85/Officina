@@ -141,7 +141,7 @@ It lists the settings the code has today. Settings that later slices add are spe
 
 | Setting | Allowed values | Default | Description | Example |
 |---|---|---|---|---|
-| `unstoredEvents` | list |  | Kinds of event that are published live but not stored, so a reader that joins late or falls behind does not see them. Unset leaves out streamed text only: storing each piece slows the agent, and the conversation keeps the text. | `["textGenerated","modelCallEnded"]` |
+| `unstoredEvents` | list |  | Kinds of event that are published live but not stored, so a reader that joins late or falls behind does not see them. Unset leaves out streamed text only: storing each piece slows the agent, and the conversation keeps the text. An empty list in a file counts as unset; to store every kind, set an empty list in code. | `["textGenerated","modelCallEnded"]` |
 | `retention` | section | `{"audit":"365.00:00:00"}` | How long each kind of stored data is kept. Runs, conversations and events without a period are kept until they are deleted. | `{"events":"30.00:00:00"}` |
 
 ## `capabilities`
@@ -311,8 +311,8 @@ It lists the settings the code has today. Settings that later slices add are spe
 
 | Setting | Allowed values | Default | Description | Example |
 |---|---|---|---|---|
-| `permits` | whole number, ≥ 1 | `0` | How many work items are admitted in each window. | `20` |
-| `window` | time span (`hh:mm:ss` or `d.hh:mm:ss`) | `"00:00:00"` | How long a window lasts, as `hh:mm:ss`. | `"01:00:00"` |
+| `permits` | whole number, ≥ 1 |  | How many work items are admitted in each window. Required. | `20` |
+| `window` | time span (`hh:mm:ss` or `d.hh:mm:ss`) |  | How long a window lasts, as `hh:mm:ss`. Required. | `"01:00:00"` |
 
 ## `capabilities.workspace.protectedPaths[]`
 

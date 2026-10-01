@@ -5,7 +5,7 @@ namespace Sleepyshark.Officina.Core.Configuration;
 /// <summary>What is stored, and for how long (EVT-05, PRIV-01). The host chooses the storage itself in code (STO-01).</summary>
 public sealed record StorageOptions
 {
-    [Setting("Kinds of event that are published live but not stored, so a reader that joins late or falls behind does not see them. Unset leaves out streamed text only: storing each piece slows the agent, and the conversation keeps the text.",
+    [Setting("Kinds of event that are published live but not stored, so a reader that joins late or falls behind does not see them. Unset leaves out streamed text only: storing each piece slows the agent, and the conversation keeps the text. An empty list in a file counts as unset; to store every kind, set an empty list in code.",
         Example = """["textGenerated", "modelCallEnded"]""")]
     public IReadOnlyList<string>? UnstoredEvents { get; init; }
 
