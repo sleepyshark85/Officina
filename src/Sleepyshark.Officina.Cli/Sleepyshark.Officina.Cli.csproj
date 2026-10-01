@@ -21,6 +21,8 @@
     <ProjectReference Include="..\Sleepyshark.Officina.Storage.Sqlite\Sleepyshark.Officina.Storage.Sqlite.csproj" />
     <ProjectReference Include="..\Sleepyshark.Officina.Mcp\Sleepyshark.Officina.Mcp.csproj" />
     <ProjectReference Include="..\Sleepyshark.Officina.Providers.Claude\Sleepyshark.Officina.Providers.Claude.csproj" />
+    <!-- The scripted model of config dry-run (CFG-12). -->
+    <ProjectReference Include="..\Sleepyshark.Officina.Testing\Sleepyshark.Officina.Testing.csproj" />
   </ItemGroup>
 
 </Project>

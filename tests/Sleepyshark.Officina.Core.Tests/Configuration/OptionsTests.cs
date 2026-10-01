@@ -17,7 +17,7 @@ public class OptionsTests
             .SelectMany(type => type.GetProperties(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly))
             .ToArray();
 
-        Assert.Equal(16, OptionsTypes.Length);
+        Assert.Equal(21, OptionsTypes.Length);
         Assert.All(settings, property => Assert.DoesNotMatch(RequirementId, property.GetCustomAttribute<SettingAttribute>()?.Description ?? ""));
         Assert.All(settings, property =>
         {
@@ -42,5 +42,9 @@ public class OptionsTests
         Assert.Equal(TimeSpan.FromHours(8), options.Run.Budget.Time);
         Assert.Equal("claude-opus-5-5", options.Models[ModelProfile.DefaultName].Model);
         Assert.Equal(new SecretReference("ANTHROPIC_API_KEY"), options.Providers["claude"].ApiKey);
+
+        // REQUIREMENTS.md §13, decision 13.
+        var agent = new AgentDefinition { Instructions = "Work." };
+        Assert.Equal((50, 3), (agent.Budget.Turn.Iterations, agent.Stall.IterationsWithoutProgress));
     }
 }

@@ -15,5 +15,6 @@ The shared run record, and checked output.
 - [ ] Concurrent writers never overwrite each other silently (stress test).
 - [ ] Invalid structured output is retried twice, then handed off.
 - [ ] Output checks run in order, and the first failure decides.
+- [ ] The stop condition "the output passes its checks" completes a turn (LOOP-05, left over from S04).
 - [ ] Citation rules work in all three modes: off, resolve and required.
 - [ ] Results can carry artifacts.

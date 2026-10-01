@@ -4,4 +4,9 @@
     <ProjectReference Include="..\Sleepyshark.Officina.Core\Sleepyshark.Officina.Core.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- The controllable clock (DESIGN.md §11). -->
+    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
+  </ItemGroup>
+
 </Project>

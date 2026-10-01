@@ -13,11 +13,11 @@ internal sealed class Sof : IDisposable
         return this;
     }
 
-    public (int ExitCode, string Output, string Error) Run(params string[] args)
+    public async Task<(int ExitCode, string Output, string Error)> RunAsync(params string[] args)
     {
         using var output = new StringWriter();
         using var error = new StringWriter();
-        var exitCode = SofCommandLine.Run(args, new SofEnvironment(output, error, Directory, Variables));
+        var exitCode = await SofCommandLine.RunAsync(args, new SofEnvironment(output, error, Directory, Variables));
         return (exitCode, output.ToString().ReplaceLineEndings("\n"), error.ToString().ReplaceLineEndings("\n"));
     }
 

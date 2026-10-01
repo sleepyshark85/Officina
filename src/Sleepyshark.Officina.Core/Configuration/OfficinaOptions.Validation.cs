@@ -27,7 +27,8 @@ public sealed partial record OfficinaOptions : IValidatableObject
         foreach (var (name, provider) in Providers)
         {
             errors = errors.Concat(Names([name], "providers")).Concat(Annotations(provider, $"providers.{name}"))
-                .Concat(provider.ApiKey is null ? [] : Annotations(provider.ApiKey, $"providers.{name}.apiKey"));
+                .Concat(provider.ApiKey is null ? [] : Annotations(provider.ApiKey, $"providers.{name}.apiKey"))
+                .Concat(provider.Prices.SelectMany(price => Annotations(price.Value, $"providers.{name}.prices.{price.Key}")));
         }
 
         foreach (var (name, profile) in Models)
@@ -38,7 +39,7 @@ public sealed partial record OfficinaOptions : IValidatableObject
         foreach (var (name, agent) in Agents)
         {
             errors = errors.Concat(Names([name], "agents")).Concat(Annotations(agent, $"agents.{name}")).Concat(ModelExists(name, agent))
-                .Concat(References($"agents.{name}.tools", "tool set", agent.Tools, "toolSets", ToolSets.Keys));
+                .Concat(References($"agents.{name}.tools", "tool set", agent.Tools, "toolSets", ToolSets.Keys)).Concat(TurnSettings(name, agent));
         }
 
         foreach (var (index, path) in (Capabilities.Workspace?.ProtectedPaths ?? []).Index())
@@ -103,6 +104,26 @@ public sealed partial record OfficinaOptions : IValidatableObject
         return errors;
     }
 
+    /// <summary>The settings of an agent's turns (LOOP-05, LOOP-06, LOOP-07). The turn budget is an invariant (INV-07).</summary>
+    private IEnumerable<ConfigurationError> TurnSettings(string name, AgentDefinition agent)
+    {
+        var path = $"agents.{name}";
+        var errors = (agent.Budget is null ? [] : Annotations(agent.Budget, $"{path}.budget", ValidationPhase.Invariants))
+            .Concat(agent.Budget?.Turn is null ? [] : Annotations(agent.Budget.Turn, $"{path}.budget.turn", ValidationPhase.Invariants))
+            .Concat(agent.Stall is null ? [] : Annotations(agent.Stall, $"{path}.stall"));
+        if (agent.StopWhen is { } stop)
+        {
+            errors = errors.Concat(Annotations(stop, $"{path}.stopWhen"))
+                .Concat(stop.FinishTool is null ? [] : References($"{path}.stopWhen.finishTool", "tool", [stop.FinishTool], "tools", Tools.Keys));
+            if (!stop.Finished && stop.FinishTool is null && stop.MaxIterations is null)
+            {
+                errors = errors.Append(new(ValidationPhase.Shape, $"{path}.stopWhen", "has no condition, so no turn can complete.",
+                    "Keep \"finished\": true, or set \"finishTool\" or \"maxIterations\"."));
+            }
+        }
+
+        return errors;
+    }
 
     private IEnumerable<ConfigurationError> FormatVersionSupported() =>
         FormatVersion == CurrentFormatVersion
