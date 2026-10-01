@@ -235,3 +235,28 @@ decides the outcome.
 | Claude beta features (turn-scoped system messages, compaction) change or are not on the chosen model | Each one is behind a provider feature flag, with the append-only fallback always available |
 | Integration queue throughput with slow test suites | Measure in M6. The option is to batch compatible changes into one baseline check run. |
 | The 90% benchmark target depends on the model | The goal set's difficulty is agreed before M6 (TEST-31) |
+
+## 11. Testing
+
+Tests replace only what sits at a **system boundary**: something outside the process or outside our
+control. Everything inside Officina is tested with the real objects, never mocks.
+
+| Boundary | Test double | From |
+|---|---|---|
+| Model provider | Scripted model; recorded exchanges replayed offline (TEST-02) | `Sleepyshark.Officina.Testing` |
+| External tool servers and network | A reference MCP test server; a local HTTP listener | Testing |
+| OS processes and sandbox | Fake sandbox that records commands and returns scripted output | Testing |
+| Clock | `FakeTimeProvider` (the core takes `TimeProvider`, never `DateTime.Now`) | Testing |
+| Environment variables and secret source | An in-memory secret source; variables set per test | Testing |
+| The human | A scripted human channel that answers approvals and questions | Testing |
+
+Inside the boundary, use the real thing:
+- **Configuration, validation, the tool pipeline, gates, context building, the run record, patterns:**
+  real objects wired as in production.
+- **Files:** real files in a temporary directory, not a mocked file system.
+- **Git and the workspace:** a real git repository in a temporary directory.
+- **Storage:** the in-memory store or SQLite in a temporary file, both real implementations that
+  pass the same contract tests.
+
+A test that needs a mock of an internal type is a sign that the design needs a seam at a real
+boundary instead.
