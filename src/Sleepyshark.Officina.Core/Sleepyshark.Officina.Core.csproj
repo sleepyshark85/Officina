@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Core depends on the .NET base library only (TEST-32). -->
+
+</Project>

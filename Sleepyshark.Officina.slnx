@@ -1,0 +1,20 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Sleepyshark.Officina.Capabilities/Sleepyshark.Officina.Capabilities.csproj" />
+    <Project Path="src/Sleepyshark.Officina.Cli/Sleepyshark.Officina.Cli.csproj" />
+    <Project Path="src/Sleepyshark.Officina.Core/Sleepyshark.Officina.Core.csproj" />
+    <Project Path="src/Sleepyshark.Officina.Hosting/Sleepyshark.Officina.Hosting.csproj" />
+    <Project Path="src/Sleepyshark.Officina.Mcp/Sleepyshark.Officina.Mcp.csproj" />
+    <Project Path="src/Sleepyshark.Officina.Providers.Claude/Sleepyshark.Officina.Providers.Claude.csproj" />
+    <Project Path="src/Sleepyshark.Officina.Sandbox/Sleepyshark.Officina.Sandbox.csproj" />
+    <Project Path="src/Sleepyshark.Officina.Storage.Sqlite/Sleepyshark.Officina.Storage.Sqlite.csproj" />
+    <Project Path="src/Sleepyshark.Officina.Team/Sleepyshark.Officina.Team.csproj" />
+    <Project Path="src/Sleepyshark.Officina.Testing/Sleepyshark.Officina.Testing.csproj" />
+    <Project Path="src/Sleepyshark.Officina.Workspace/Sleepyshark.Officina.Workspace.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Sleepyshark.Officina.Core.Tests/Sleepyshark.Officina.Core.Tests.csproj" />
+    <Project Path="tests/Sleepyshark.Officina.Dependencies.Tests/Sleepyshark.Officina.Dependencies.Tests.csproj" />
+    <Project Path="tests/Sleepyshark.Officina.Testing.Tests/Sleepyshark.Officina.Testing.Tests.csproj" />
+  </Folder>
+</Solution>

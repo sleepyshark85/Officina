@@ -1,2 +1,7 @@
 __pycache__/
 .sof/
+bin/
+obj/
+TestResults/
+*.user
+.vs/
