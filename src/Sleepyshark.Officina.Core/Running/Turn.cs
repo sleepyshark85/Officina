@@ -27,7 +27,7 @@ internal sealed class Turn
     private readonly List<Message> transcript;
     private readonly List<ToolAttempt> attempts = [];
     private List<ToolUseContent> pending = [];
-    private long started;
+    private long? started;
     private int iterations;
     private int toolCalls;
     private int withoutProgress;
@@ -55,7 +55,6 @@ internal sealed class Turn
         this.time = time;
         this.work = work;
         transcript = [Message.User(work)];
-        started = time.GetTimestamp();
     }
 
     public async Task<AgentResult> RunAsync(CancellationToken ct)
@@ -106,29 +105,30 @@ internal sealed class Turn
         }
     }
 
-    public AgentResult HandOff(HandoffReason reason, string detail, string? to = null, ToolRequest? pendingAction = null)
-    {
-        CancelPending();
-        return End(AgentOutcome.HandedOff, detail, new Handoff(reason, to, detail, work, [.. attempts], pendingAction, lastText));
-    }
+    public AgentResult HandOff(HandoffReason reason, string detail, string? to = null, ToolRequest? pendingAction = null) =>
+        End(AgentOutcome.HandedOff, detail, () => new Handoff(reason, to, detail, work, [.. attempts], pendingAction, lastText));
 
     /// <summary>Ends the turn after an exception the turn could not turn into a handoff (REL-02).</summary>
-    public AgentResult Fail(Exception exception) => End(AgentOutcome.Failed, $"the turn failed: {exception.GetType().Name}", null);
+    public AgentResult Fail(Exception exception) => End(AgentOutcome.Failed, $"the turn failed: {exception.GetType().Name}");
 
-    private AgentResult Complete(string output) => End(AgentOutcome.Completed, output, null);
+    private AgentResult Complete(string output) => End(AgentOutcome.Completed, output);
 
-    private AgentResult End(AgentOutcome outcome, string output, Handoff? handoff)
+    /// <summary>Ends the turn. The handoff, if any, is built once every tool request has its result, so it lists them all.</summary>
+    private AgentResult End(AgentOutcome outcome, string output, Func<Handoff>? handoff = null)
     {
         CancelPending();
-        var statistics = new TurnStatistics(iterations, toolCalls, usage, cost, time.GetElapsedTime(started));
-        return new AgentResult(outcome, output, statistics, [.. transcript], handoff);
+        var statistics = new TurnStatistics(iterations, toolCalls, usage, cost, Elapsed);
+        return new AgentResult(outcome, output, statistics, [.. transcript], handoff?.Invoke());
     }
+
+    /// <summary>Time since the turn started; zero for a turn cancelled before it started.</summary>
+    private TimeSpan Elapsed => started is { } at ? time.GetElapsedTime(at) : TimeSpan.Zero;
 
     /// <summary>Which limit of the turn's or the run's budget is used up, if any (LOOP-06, COST-02).</summary>
     private string? Exhausted()
     {
         var turn = agent.Budget.Turn;
-        var elapsed = time.GetElapsedTime(started);
+        var elapsed = Elapsed;
         return iterations >= turn.Iterations ? "turn's iteration"
             : toolCalls >= turn.ToolCalls ? "turn's tool-call"
             : usage.Total >= turn.Tokens ? "turn's token"
