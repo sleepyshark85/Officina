@@ -40,14 +40,14 @@ internal sealed class Conversation
     public void Add(Message message) => history.Add(message);
 
     /// <summary>
-    /// The next call's request: the history with the volatile context added, after new user content only, so a paused
+    /// The next call's request: the history with the volatile context added, except after a reply, so a paused
     /// reply is continued as it is. Before it is sent, it is checked to start with exactly what the previous call sent.
     /// </summary>
     /// <param name="facts">The volatile context, rebuilt for this call (LOOP-10); none when it is off.</param>
     /// <exception cref="InvalidOperationException">The request would change content already sent (CTX-10).</exception>
     public ModelRequest Next(IReadOnlyList<string> facts)
     {
-        if (facts.Count > 0 && history[^1].Role == Role.User)
+        if (facts.Count > 0 && history[^1].Role != Role.Assistant)
         {
             AddVolatile(facts);
         }

@@ -100,6 +100,23 @@ public class ConversationTests
         Assert.Equal(Context(turnScoped: false, "Today is 2026-10-03."), requests[2].History[^1]);
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task The_volatile_context_follows_an_operator_message(bool turnScoped)
+    {
+        var kit = Kit(Cached with { TurnScopedMessages = turnScoped }, new() { OperatingFacts = Facts }, kit => kit.Runner.Send(Agent, Sender.Operator, "Keep it short."));
+        kit.Time.SetUtcNow(new DateTimeOffset(2026, 10, 2, 23, 59, 0, TimeSpan.Zero));
+        kit.Model.CallTools(("read", """{ "path": "a.cs" }""")).Reply("Done.");
+
+        await kit.RunAsync(Agent, "work", Ct);
+
+        var expected = turnScoped
+            ? Context(turnScoped: true, "Today is 2026-10-03.", "Replies are limited to 300 words.")
+            : Context(turnScoped: false, "Today is 2026-10-03.");
+        Assert.Equal([Message.System("<message from=\"operator\">\nKeep it short.\n</message>"), expected], kit.Model.Requests[1].History[^2..]);
+    }
+
     // CTX-11, TEST-09: the shared prefix lasts an hour, longest first, and the history's boundary is kept first.
     [Theory]
     [InlineData(4, new[] { CachePoint.Instructions, CachePoint.History })]
