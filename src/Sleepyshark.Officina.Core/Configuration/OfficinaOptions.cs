@@ -27,6 +27,10 @@ public sealed partial record OfficinaOptions
     [Setting("Agent definitions, by name.", Example = """{ "extractor": { "instructions": "Extract the invoice number." } }""")]
     public IReadOnlyDictionary<string, AgentDefinition> Agents { get; init; } = new Dictionary<string, AgentDefinition>();
 
+    [Setting("External tool servers (MCP), by name. Tools use their tools with `mcp:<server>/<tool>` sources.",
+        Example = """{ "github": { "command": "github-mcp-server", "args": ["stdio"] } }""")]
+    public IReadOnlyDictionary<string, ToolServerOptions> ToolServers { get; init; } = new Dictionary<string, ToolServerOptions>();
+
     [Setting("Tools, by the name the model sees.", Example = """{ "create_issue": { "source": "extension:Acme.CreateIssue", "gates": ["issue-dedupe"] } }""")]
     public IReadOnlyDictionary<string, ToolOptions> Tools { get; init; } = new Dictionary<string, ToolOptions>();
 
@@ -38,6 +42,9 @@ public sealed partial record OfficinaOptions
 
     [Setting("Permission rules, gates for all tools, and anonymous callers' permissions.", Example = """{ "gates": ["no-main-branch"] }""")]
     public PolicyOptions Policies { get; init; } = new();
+
+    [Setting("Knowledge sources, by name.", Example = """{ "handbook": { "use": "extension:Acme.HandbookIndex" } }""")]
+    public IReadOnlyDictionary<string, KnowledgeOptions> Knowledge { get; init; } = new Dictionary<string, KnowledgeOptions>();
 
     [Setting("Defaults for every run.", Example = """{ "permissionMode": "ask" }""")]
     public RunDefaults Run { get; init; } = new();

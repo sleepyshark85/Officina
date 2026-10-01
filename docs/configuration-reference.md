@@ -53,7 +53,8 @@ constant in code, and can be dropped from this draft rather than built speculati
 | `{ "file": "path" }` | File contents | `"instructions": { "file": "prompts/lead.md" }` |
 | `"builtin:<id>"` | A component shipped with the core | `"builtin:workspace.edit_file"` |
 | `"extension:<id>"` | A component supplied by the application (§11) | `"extension:Acme.CreateIssue"` |
-| `"mcp:<server>/<tool>"` | A tool from an external tool server; `*` selects all its tools | `"mcp:github/*"` |
+| `"mcp:<server>/<tool>"` | A tool from an external tool server | `"mcp:github/create_pull_request"` |
+| `"knowledge:<name>"` | A tool that searches a knowledge source (CTX-04) | `"knowledge:handbook"` |
 | `"provider:<tool>"` | A provider server-side tool (TOOL-13) | `"provider:web_search"` |
 | `"preset:<id>"` | A preset shipped with the core | `"preset:coding-team"` |
 | Durations | A .NET time span: `"hh:mm:ss"`, or `"d.hh:mm:ss"` with days | `"00:30:00"`, `"1.00:00:00"` |
@@ -219,8 +220,7 @@ An unknown placeholder is an error, never an empty string.
     "transport": "stdio",                        // stdio | http (Streamable HTTP)
     "command": "github-mcp-server",
     "args": ["stdio"],
-    "env": { "GITHUB_TOKEN": { "secret": "GITHUB_TOKEN" } },
-    "startTimeout": "00:00:20"
+    "env": { "GITHUB_TOKEN": { "secret": "GITHUB_TOKEN" } }
   },
   "tracker": {
     "transport": "http",
@@ -230,8 +230,8 @@ An unknown placeholder is an error, never an empty string.
 }
 ```
 
-Tool lists from servers are read when the configuration is validated. They are sorted by name, so
-the stable prefix does not depend on the server's order. A server whose tool list changes during a
+Tool lists from servers are read when the host connects to them, before the tools are validated.
+Tools are offered sorted by name, so the stable prefix does not depend on the server's order. A server whose tool list changes during a
 run does not change running conversations (CTX-10); new conversations see the new list.
 
 ### 5.4 Tools
@@ -260,8 +260,9 @@ example, a tool that declares itself `write` cannot be configured as `read`.
     "maxAttempts": 1,
     "receivesMaskedValues": true                                   // ING-06
   },
-  "github":      { "source": "mcp:github/*", "kind": "write", "gates": ["github-writes"] },
-  "github_read": { "source": "mcp:github/get_*", "kind": "read" },
+  "create_pr":   { "source": "mcp:github/create_pull_request", "gates": ["github-writes"] },
+  "get_issue":   { "source": "mcp:github/get_issue", "kind": "read" },
+  "search_handbook": { "source": "knowledge:handbook" },           // CTX-04, as a tool
   "web_search":  {
     "source": "provider:web_search",
     "reason": "Lead researches unfamiliar libraries",               // required (TOOL-13)
@@ -297,7 +298,6 @@ Built-in tool packs (TOOL-01) are only offered when their capability is on (CAP-
 - **`memory.*`:** `propose_change`.
 - **`human.*`:** `ask_owner`, `request_handoff` (HITL-06, EGR-04).
 - **`artifact.*`:** `page` (TOOL-09).
-- **`knowledge.*`:** `search` (CTX-04).
 - **`control.*`:** `finish`, the designated finish tool (LOOP-05).
 
 ### 5.5 Tool sets
@@ -359,8 +359,9 @@ signal (INV-01). The reviewer is never the author (TASK-06).
 }
 ```
 
-How an agent uses a source (before the turn, as a tool, or both) is set per agent in
-`context.retrieval` (§7.3).
+An agent searches a source before each turn when its `context.retrieval.beforeTurn` lists it
+(§7.3), and when it chooses through a tool whose source is `knowledge:<name>` (§5.4). Both can be
+used together. A search returns at most 8 passages.
 
 ---
 
@@ -413,6 +414,7 @@ missing makes every other test false.
     "instructions": { "file": "prompts/developer.md" },
     "model": "strong",                         // default model slot
     "tools": ["files", "shell", "record"],     // default tool sets for all this agent's model slots
+    "toolDescriptionsOnDemand": false,         // TOOL-12: offer names only; describe_tool gives the rest
     "pattern": { "type": "toolLoop" },         // §7.2
     "context": { },                            // §7.3
     "output": { },                             // §7.4
@@ -502,11 +504,9 @@ PAT-02). Data moves only through declared `input` and `output` (PAT-04).
     "taskStatus": true
   },
   "history": { "strategy": "shortened", "shortening": "provider", "lastTurns": null },  // CTX-06, HIST-01
-  "retrieval": {                      // CTX-04, CTX-05
-    "sources": ["handbook"],
-    "mode": ["beforeTurn", "asTool"],
-    "notCovered": "handoff",          // handoff | continue
-    "maxPassages": 8
+  "retrieval": {                      // CTX-04, CTX-05; as a tool, see §5.8
+    "beforeTurn": ["handbook"],
+    "handOffWhenNotCovered": true     // policy gap when no source covers the work
   },
   "operatingFacts": [                 // CTX-09; volatile, so caller/work/now placeholders are allowed
     "Caller: {{caller.id}}",

@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Sleepyshark.Officina.Mcp\Sleepyshark.Officina.Mcp.csproj" />
+    <ProjectReference Include="..\..\src\Sleepyshark.Officina.Testing\Sleepyshark.Officina.Testing.csproj" />
+    <!-- Tool servers are a system boundary (DESIGN.md §11): the tests start this one as a separate process. -->
+    <ProjectReference Include="..\Sleepyshark.Officina.Mcp.TestServer\Sleepyshark.Officina.Mcp.TestServer.csproj" />
+  </ItemGroup>
+
+</Project>

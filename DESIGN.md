@@ -16,11 +16,11 @@ namespace is its name.
 
 | Project | Box in the diagram | What it contains | Depends on | Loaded when |
 |---|---|---|---|---|
-| `Sleepyshark.Officina.Core` | Core | Options classes and validation; turn engine; built-in loop patterns; context builder; tool pipeline; run record; budgets; events; audit; extension interfaces (§4); built-in `record.*`, `control.*` and `artifact.*` tools | .NET base library and a JSON Schema validator only | Always |
+| `Sleepyshark.Officina.Core` | Core | Options classes and validation; turn engine; built-in loop patterns; context builder; tool pipeline; run record; budgets; events; audit; extension interfaces (§4); built-in `record.*`, `control.*` and `artifact.*` tools; knowledge retrieval and its tools | .NET base library and a JSON Schema validator only | Always |
 | `Sleepyshark.Officina.Team` | Capabilities | Team pattern, lead role support, task board, helper agents; `tasks.*` and `team.*` tools | Core | `team` or `taskBoard` is on |
 | `Sleepyshark.Officina.Workspace` | Capabilities | Git-backed workspace: baseline, working copies, integration queue, edit safety; `workspace.*` tools | Core; the git CLI at run time | `workspace` is on |
 | `Sleepyshark.Officina.Sandbox` | Capabilities | Linux sandbox (bubblewrap, cgroups v2) and Windows sandbox (AppContainer, Job Objects); filtering network proxy; `sandbox.*` tools | Core | `sandbox` is on |
-| `Sleepyshark.Officina.Capabilities` | Capabilities | Conversation store, human interaction, project memory, checkpoints, knowledge retrieval; `human.*`, `memory.*` and `knowledge.*` tools | Core | Each part when its capability is on |
+| `Sleepyshark.Officina.Capabilities` | Capabilities | Conversation store, human interaction, project memory, checkpoints; `human.*` and `memory.*` tools | Core | Each part when its capability is on |
 | `Sleepyshark.Officina.Storage.Sqlite` | Storage.Sqlite | Default storage: one SQLite file in WAL mode, plus artifact files on disk | Core, `Microsoft.Data.Sqlite` | Configured as storage (the CLI's default) |
 | `Sleepyshark.Officina.Mcp` | Mcp | Own MCP client for stdio and Streamable HTTP. Turns each server tool into a core tool. | Core | `toolServers` are configured |
 | `Sleepyshark.Officina.Providers.Claude` | Providers.Claude | The Claude provider: maps requests (§9), places cache markers, streams, classifies errors, ships the price table | Core, Anthropic C# SDK | A `claude` provider is configured (the default) |
@@ -139,7 +139,7 @@ public interface ISecretSource     { ValueTask<SecretValue> GetAsync(string name
 | `ITool` | Add an application tool | The model asks for the tool and the tool pipeline lets the call through (§5) | `ToolCall`: validated arguments, caller identity, idempotency key, read-only view of the run record | `ToolResult`: content, artifacts, or an error category (TOOL-08) | `Descriptor` declares the name, input schema, kind (read or write) and defaults. A write tool needs a gate (INV-04). No access to configuration, budgets or other agents (INV-10). |
 | `IGate` | Add a rule that needs code | Before each call of a tool it is attached to (TOOL-05) | `GateContext`: tool, arguments, caller, run record, task board when on, and whether the agent has read untrusted content | `GateDecision`: allow, deny with a reason, ask a human, or route | Deterministic: no model calls and no side effects. |
 | `ICheck` | Add an output or verification check | Output is produced (OUT-03), a task is submitted (TASK-05), or a change is integrated (WS-02) | `CheckContext`: output, artifacts, read-only working copy, task | `CheckResult`: passed or failed, with findings | Only the result decides; nothing the agent says can override it (INV-09). Commands run in the sandbox. |
-| `IKnowledgeSource` | Search the application's own data | Before a turn, or when the agent calls `knowledge.search` (CTX-04) | `RetrievalQuery`: question, caller, maximum passages | `Retrieval`: passages, citations, and covered, partly covered or not covered (CTX-05) | Results are labelled as data (INV-08). It sees only the caller's tenant (SEC-02). |
+| `IKnowledgeSource` | Search the application's own data | Before a turn, or when the agent calls a `knowledge:` tool (CTX-04) | `RetrievalQuery`: question, caller, maximum passages | `Retrieval`: passages, citations, and covered, partly covered or not covered (CTX-05) | Results are labelled as data (INV-08). It sees only the caller's tenant (SEC-02). |
 | `ILoopPattern` | Add a loop pattern | A step selects the pattern by name (PAT-07) | `PatternContext`: `RunTurnAsync`, nested-step runner, step outcomes, budget drawn from the parent | `StepOutcome`: completed, handed off, failed or cancelled | It can only call the core's primitives, so budgets, cancellation, events and handoffs apply (PAT-06). |
 | `IHumanChannel` | Change how humans are reached | An approval, question, sign-off or owner message is needed (HITL) | `HumanRequest`: kind, agent, summary, pending action, deadline | `HumanAnswer`: approve, approve a changed version, deny, or text | The core applies timeouts (HITL-02). A changed version goes through the checks again. |
 | `IEventConsumer` | Display or forward events | For each event, from its own bounded queue | `CoreEvent`: run, agent, step, sequence number, payload | Nothing | A slow or failing consumer is detached and catches up from the log; it never slows agents (EVT-04). |
@@ -243,7 +243,7 @@ control. Everything inside Officina is tested with the real objects, never mocks
 | Boundary | Test double | From |
 |---|---|---|
 | Model provider | Scripted model; recorded exchanges replayed offline (TEST-02) | `Sleepyshark.Officina.Testing` |
-| External tool servers and network | A reference MCP test server; a local HTTP listener | Testing |
+| External tool servers and network | A reference MCP test server, over stdio and HTTP | `tests/Sleepyshark.Officina.Mcp.TestServer` |
 | OS processes and sandbox | Fake sandbox that records commands and returns scripted output | Testing |
 | Clock | `FakeTimeProvider` (the core takes `TimeProvider`, never `DateTime.Now`) | Testing |
 | Environment variables and secret source | An in-memory secret source; variables set per test | Testing |

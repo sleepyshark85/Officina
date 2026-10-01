@@ -24,6 +24,10 @@ public sealed record AgentDefinition
         Example = """["files", "issues"]""")]
     public IReadOnlyList<string> Tools { get; init; } = [];
 
+    [Setting("Whether the model is offered only the tools' names, and reads a tool's description and arguments with `describe_tool` when it needs them. For agents with many tools.",
+        Example = "true")]
+    public bool ToolDescriptionsOnDemand { get; init; }
+
     [Setting("Narrows the caller's permissions for this agent's tool calls: a permission counts only if the caller holds it and it is listed here. Unset keeps the caller's.",
         Example = """["issues:write"]""")]
     public IReadOnlyList<string>? Permissions { get; init; }

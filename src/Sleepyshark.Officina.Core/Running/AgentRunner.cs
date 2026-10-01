@@ -17,6 +17,7 @@ public sealed class AgentRunner
     private readonly IRunStore runs;
     private readonly TimeProvider time;
     private readonly ToolPipeline pipeline;
+    private readonly IReadOnlyDictionary<string, IKnowledgeSource> knowledge;
     private readonly ConcurrentDictionary<string, SemaphoreSlim> turns = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, ConcurrentQueue<Message>> inboxes = new(StringComparer.Ordinal);
 
@@ -24,8 +25,12 @@ public sealed class AgentRunner
     /// <param name="options">The configuration, fixed for the runner's lifetime. A changed configuration needs a new runner (CFG-08).</param>
     /// <param name="providers">The provider implementations, by their name in <c>providers</c>.</param>
     /// <param name="runs">Where each run is recorded with the configuration it used (CFG-07).</param>
-    /// <param name="tools">The application's tools, by the id that <c>extension:&lt;id&gt;</c> sources name.</param>
+    /// <param name="tools">
+    /// The application's tools, by the id that <c>extension:&lt;id&gt;</c> sources name, and the tool servers' tools, by
+    /// the <c>&lt;server&gt;/&lt;tool&gt;</c> that <c>mcp:</c> sources name.
+    /// </param>
     /// <param name="gates">The application's gates, by the id that <c>extension:&lt;id&gt;</c> gates name.</param>
+    /// <param name="knowledge">The application's knowledge sources, by the id that <c>extension:&lt;id&gt;</c> sources name.</param>
     /// <param name="audit">Where every write-tool attempt is recorded.</param>
     /// <param name="human">Who approves tool calls that need approval.</param>
     /// <param name="secrets">Where tools read credentials.</param>
@@ -37,6 +42,7 @@ public sealed class AgentRunner
         IRunStore runs,
         IReadOnlyDictionary<string, ITool> tools,
         IReadOnlyDictionary<string, IGate> gates,
+        IReadOnlyDictionary<string, IKnowledgeSource> knowledge,
         IAuditLog audit,
         IHumanChannel human,
         ISecretSource secrets,
@@ -47,7 +53,8 @@ public sealed class AgentRunner
         this.providers = providers;
         this.runs = runs;
         this.time = time;
-        pipeline = new ToolPipeline(options, tools, gates, audit, human, secrets, time);
+        pipeline = new ToolPipeline(options, tools, gates, knowledge, audit, human, secrets, time);
+        this.knowledge = knowledge;
         Options = options;
     }
 
@@ -103,7 +110,7 @@ public sealed class AgentRunner
         var started = new RunStarted(Guid.CreateVersion7().ToString(), name, CoreVersion.Value, Options);
         var instructions = InstructionPlaceholders.Fill(agent.Instructions, Options.Project, name, agent);
 
-        var turn = new Turn(new ToolContext(started.RunId, name, caller), Options, provider, pipeline, instructions, input, Inbox(name), time);
+        var turn = new Turn(new ToolContext(started.RunId, name, caller), Options, provider, pipeline, knowledge, instructions, input, Inbox(name), time);
         var oneAtATime = turns.GetOrAdd(name, _ => new SemaphoreSlim(1, 1));
         var entered = false;
         try

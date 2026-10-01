@@ -15,4 +15,20 @@ public sealed record ContextOptions
         Example = "\"01:00:00\"")]
     [Range(typeof(TimeSpan), "00:00:00", "01:00:00", MinimumIsExclusive = true, ErrorMessage = "must be more than zero and at most one hour.")]
     public TimeSpan HistoryCacheLifetime { get; init; } = TimeSpan.FromMinutes(5);
+
+    [Setting("Knowledge retrieved before each turn.", Example = """{ "beforeTurn": ["handbook"], "handOffWhenNotCovered": true }""")]
+    [Required(ErrorMessage = Messages.Required)]
+    public RetrievalOptions Retrieval { get; init; } = new();
+}
+
+/// <summary>Knowledge retrieved before each turn (CTX-04, CTX-05). Agents search when they choose through <c>knowledge:</c> tools.</summary>
+public sealed record RetrievalOptions
+{
+    [Setting("Knowledge sources, by name in `knowledge`, searched with the turn's work before the turn starts. Their passages are given to the model as data in the volatile context.",
+        Example = """["handbook"]""")]
+    public IReadOnlyList<string> BeforeTurn { get; init; } = [];
+
+    [Setting("Whether the turn ends in a handoff for a policy gap, without calling the model, when no source searched before the turn covers the work.",
+        Example = "true")]
+    public bool HandOffWhenNotCovered { get; init; }
 }

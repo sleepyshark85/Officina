@@ -60,7 +60,7 @@ public class AgentRunnerTests
         };
         var providers = new Dictionary<string, IModelProvider> { ["first"] = first, ["second"] = second };
         var runner = new AgentRunner(
-            options, providers, new InMemoryRunStore(), new Dictionary<string, ITool>(), new Dictionary<string, IGate>(),
+            options, providers, new InMemoryRunStore(), new Dictionary<string, ITool>(), new Dictionary<string, IGate>(), new Dictionary<string, IKnowledgeSource>(),
             new InMemoryAuditLog(), new ScriptedHuman(), new InMemorySecretSource(new Dictionary<string, string>()), new FakeTimeProvider());
 
         var cheap = await runner.RunAsync("classifier", "input", ct: Ct);

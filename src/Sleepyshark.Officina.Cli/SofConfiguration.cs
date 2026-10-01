@@ -124,11 +124,12 @@ public sealed class SofConfiguration
     /// the default reference would apply in its place, so it is reported, without repeating the value.
     /// </summary>
     private static IEnumerable<ConfigurationError> PlainTextSecrets(IConfigurationRoot root) =>
-        root.GetSection("providers").GetChildren()
-            .Where(provider => provider.GetSection("apiKey").Value is { Length: > 0 })
-            .Select(provider => new ConfigurationError(
+        root.GetSection("providers").GetChildren().Select(provider => provider.GetSection("apiKey"))
+            .Concat(root.GetSection("toolServers").GetChildren().SelectMany(server => server.GetSection("env").GetChildren().Concat(server.GetSection("headers").GetChildren())))
+            .Where(secret => secret.Value is { Length: > 0 })
+            .Select(secret => new ConfigurationError(
                 ValidationPhase.Shape,
-                $"providers.{provider.Key}.apiKey",
+                secret.Path.Replace(':', '.'),
                 "is a value, but it must reference a secret.",
                 "Write { \"secret\": \"NAME\" } and put the value in the secret source, such as an environment variable NAME."));
 

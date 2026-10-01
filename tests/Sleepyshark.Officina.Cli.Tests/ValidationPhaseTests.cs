@@ -45,15 +45,18 @@ public sealed class ValidationPhaseTests : IDisposable
         Assert.Equal((ValidationPhase.Parse, "formatVersion", "format version 2 is not supported.", "sof.json"), (error.Phase, error.Path, error.Problem, error.Location));
     }
 
-    [Fact]
-    public void Phase_2_rejects_a_secret_written_as_plain_text_without_repeating_it()
+    [Theory]
+    [InlineData("""{ "providers": { "claude": { "apiKey": "KEY" } } }""", "providers.claude.apiKey")]
+    [InlineData("""{ "toolServers": { "github": { "command": "gh-mcp", "env": { "GITHUB_TOKEN": "KEY" } } } }""", "toolServers.github.env.GITHUB_TOKEN")]
+    [InlineData("""{ "toolServers": { "tracker": { "transport": "http", "url": "https://t/mcp", "headers": { "Authorization": "KEY" } } } }""", "toolServers.tracker.headers.Authorization")]
+    public void Phase_2_rejects_a_secret_written_as_plain_text_without_repeating_it(string text, string path)
     {
         const string key = "sk-ant-api03-0123456789abcdefghij";
-        folder.Write("sof.json", $$"""{ "providers": { "claude": { "apiKey": "{{key}}" } } }""");
+        folder.Write("sof.json", text.Replace("KEY", key, StringComparison.Ordinal));
 
         var error = Assert.Single(folder.Load().Errors);
 
-        Assert.Equal((ValidationPhase.Shape, "providers.claude.apiKey"), (error.Phase, error.Path));
+        Assert.Equal((ValidationPhase.Shape, path), (error.Phase, error.Path));
         Assert.StartsWith("Write { \"secret\": \"NAME\" }", error.Fix, StringComparison.Ordinal);
         Assert.DoesNotContain(key, error.ToString(), StringComparison.Ordinal);
     }

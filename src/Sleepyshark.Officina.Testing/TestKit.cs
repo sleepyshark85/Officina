@@ -14,11 +14,13 @@ public sealed class TestKit
     /// <param name="options">The configuration; the code defaults when omitted.</param>
     /// <param name="tools">The application's tools, by extension id.</param>
     /// <param name="gates">The application's gates, by extension id.</param>
+    /// <param name="knowledge">The application's knowledge sources, by extension id.</param>
     /// <param name="capabilities">What the scripted model claims to support; nothing when omitted.</param>
     public TestKit(
         OfficinaOptions? options = null,
         IReadOnlyDictionary<string, ITool>? tools = null,
         IReadOnlyDictionary<string, IGate>? gates = null,
+        IReadOnlyDictionary<string, IKnowledgeSource>? knowledge = null,
         ProviderCapabilities? capabilities = null)
     {
         options ??= new OfficinaOptions();
@@ -29,6 +31,7 @@ public sealed class TestKit
             Runs,
             tools ?? new Dictionary<string, ITool>(),
             gates ?? new Dictionary<string, IGate>(),
+            knowledge ?? new Dictionary<string, IKnowledgeSource>(),
             Audit,
             Human,
             new InMemorySecretSource(Secrets),

@@ -10,6 +10,9 @@ namespace Sleepyshark.Officina.Core.Configuration;
 /// </summary>
 public sealed partial record OfficinaOptions : IValidatableObject
 {
+    /// <summary>The tool that describes the others to an agent whose tool descriptions are loaded on demand (TOOL-12).</summary>
+    public const string DescribeTool = "describe_tool";
+
     /// <summary>Every error, ordered by phase.</summary>
     public IReadOnlyList<ConfigurationError> Validate() => [.. Errors().OrderBy(error => error.Phase)];
 
@@ -41,7 +44,36 @@ public sealed partial record OfficinaOptions : IValidatableObject
         foreach (var (name, agent) in Agents)
         {
             errors = errors.Concat(Names([name], "agents")).Concat(Annotations(agent, $"agents.{name}")).Concat(ModelExists(name, agent))
-                .Concat(References($"agents.{name}.tools", "tool set", agent.Tools, "toolSets", ToolSets.Keys)).Concat(TurnSettings(name, agent));
+                .Concat(References($"agents.{name}.tools", "tool set", agent.Tools, "toolSets", ToolSets.Keys)).Concat(TurnSettings(name, agent))
+                .Concat(References($"agents.{name}.context.retrieval.beforeTurn", "knowledge source", agent.Context?.Retrieval?.BeforeTurn ?? [], "knowledge", Knowledge.Keys));
+            if (agent.ToolDescriptionsOnDemand && agent.Tools.Where(ToolSets.ContainsKey).Any(set => ToolSets[set].Contains(DescribeTool)))
+            {
+                errors = errors.Append(new(ValidationPhase.Tools, $"agents.{name}.toolDescriptionsOnDemand", $"needs the tool name {DescribeTool}, which the agent is offered already.",
+                    $"Rename the tool {DescribeTool}."));
+            }
+        }
+
+        foreach (var (name, server) in ToolServers)
+        {
+            errors = errors.Concat(Names([name], "toolServers")).Concat(Annotations(server, $"toolServers.{name}"));
+            if (server.Transport == ToolServerTransport.Stdio && string.IsNullOrWhiteSpace(server.Command))
+            {
+                errors = errors.Append(new(ValidationPhase.Shape, $"toolServers.{name}.command", "is required for the stdio transport.", "Name the program that runs the server."));
+            }
+            else if (server.Transport == ToolServerTransport.Http && !Uri.TryCreate(server.Url, UriKind.Absolute, out _))
+            {
+                errors = errors.Append(new(ValidationPhase.Shape, $"toolServers.{name}.url", "must be an absolute URL for the http transport.", "Give the server's endpoint, such as https://host/mcp."));
+            }
+        }
+
+        foreach (var (name, source) in Knowledge)
+        {
+            errors = errors.Concat(Names([name], "knowledge")).Concat(Annotations(source, $"knowledge.{name}"));
+            if (source.Use is not null && source.ExtensionId() is null)
+            {
+                errors = errors.Append(new(ValidationPhase.Shape, $"knowledge.{name}.use", $"\"{source.Use}\" is not a knowledge source.",
+                    "Use extension:<id> for a source the application registers."));
+            }
         }
 
         foreach (var (index, path) in (Capabilities.Workspace?.ProtectedPaths ?? []).Index())
@@ -73,10 +105,20 @@ public sealed partial record OfficinaOptions : IValidatableObject
         foreach (var (name, tool) in Tools)
         {
             errors = errors.Concat(Annotations(tool, $"tools.{name}")).Concat(References($"tools.{name}.gates", "gate", tool.Gates, "gates", Gates.Keys));
-            if (tool.Source is not null && tool.ExtensionId() is null && tool.ProviderTool() is null)
+            if (tool.McpTool() is { } mcp)
+            {
+                errors = mcp.Split('/') is [var server, { Length: > 0 }] && server.Length > 0
+                    ? errors.Concat(References($"tools.{name}.source", "tool server", [server], "toolServers", ToolServers.Keys))
+                    : errors.Append(new(ValidationPhase.Shape, $"tools.{name}.source", $"\"{tool.Source}\" does not name a server and a tool.", "Write mcp:<server>/<tool>."));
+            }
+            else if (tool.KnowledgeSource() is { } knowledge)
+            {
+                errors = errors.Concat(References($"tools.{name}.source", "knowledge source", [knowledge], "knowledge", Knowledge.Keys));
+            }
+            else if (tool.Source is not null && tool.ExtensionId() is null && tool.ProviderTool() is null)
             {
                 errors = errors.Append(new(ValidationPhase.Shape, $"tools.{name}.source", $"\"{tool.Source}\" is not a tool source.",
-                    "Use extension:<id> for a tool the application registers, or provider:<name> for a provider's own tool."));
+                    "Use extension:<id>, mcp:<server>/<tool>, knowledge:<name>, or provider:<name> for a provider's own tool."));
             }
             else if (tool.ProviderTool() is not null && string.IsNullOrWhiteSpace(tool.Reason))
             {
