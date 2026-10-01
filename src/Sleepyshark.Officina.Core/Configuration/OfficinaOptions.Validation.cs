@@ -77,12 +77,13 @@ public sealed partial record OfficinaOptions : IValidatableObject
             }
         }
 
-        foreach (var (index, path) in (Capabilities.Workspace?.ProtectedPaths ?? []).Index())
+        // CAP-02: the settings of a capability that is off are not checked.
+        foreach (var (index, path) in (Capabilities.Workspace is { Enabled: true } workspace ? workspace.ProtectedPaths : []).Index())
         {
             errors = errors.Concat(Annotations(path, $"capabilities.workspace.protectedPaths[{index}]"));
         }
 
-        if (Capabilities.Sandbox is { } sandbox)
+        if (Capabilities.Sandbox is { Enabled: true } sandbox)
         {
             foreach (var (index, rule) in sandbox.CommandRules.Index())
             {
@@ -97,7 +98,33 @@ public sealed partial record OfficinaOptions : IValidatableObject
                 ValidationPhase.Shape, "storage.unstoredEvents", $"\"{kind}\" is not a kind of event.",
                 $"Use one of: {string.Join(", ", EventPayload.Kinds.Order(StringComparer.Ordinal))}.")));
 
-        return errors.Concat(ToolSettings()).Concat(InstructionPlaceholders.Check(this));
+        return errors.Concat(ToolSettings()).Concat(CapabilitySettings()).Concat(InstructionPlaceholders.Check(this));
+    }
+
+    /// <summary>CAP-03: every capability in use is on, and every capability on has the ones it requires.</summary>
+    private IEnumerable<ConfigurationError> CapabilitySettings()
+    {
+        var on = Capabilities.Switches().Where(capability => capability.Value).Select(capability => capability.Key).ToHashSet();
+        var errors = CapabilitiesOptions.Dependencies.Where(dependency => on.Contains(dependency.Capability) && !on.Contains(dependency.Requires))
+            .Select(dependency => new ConfigurationError(ValidationPhase.Capabilities, $"capabilities.{dependency.Capability}.enabled",
+                $"{dependency.Capability} needs the {dependency.Requires} capability, which is off.", $"Set capabilities.{dependency.Requires}.enabled to true."));
+        if (Knowledge.Count > 0 && !on.Contains("knowledge"))
+        {
+            errors = errors.Append(Off("knowledge", "knowledge"));
+        }
+
+        foreach (var (name, agent) in Agents)
+        {
+            if (agent.Context?.History is { Strategy: not HistoryStrategy.None } && !on.Contains("conversationStore"))
+            {
+                errors = errors.Append(Off($"agents.{name}.context.history.strategy", "conversationStore"));
+            }
+        }
+
+        return errors;
+
+        static ConfigurationError Off(string path, string capability) =>
+            new(ValidationPhase.Capabilities, path, $"needs the {capability} capability, which is off.", $"Set capabilities.{capability}.enabled to true.");
     }
 
     /// <summary>
@@ -171,7 +198,14 @@ public sealed partial record OfficinaOptions : IValidatableObject
         var errors = (agent.Budget is null ? [] : Annotations(agent.Budget, $"{path}.budget", ValidationPhase.Invariants))
             .Concat(agent.Budget?.Turn is null ? [] : Annotations(agent.Budget.Turn, $"{path}.budget.turn", ValidationPhase.Invariants))
             .Concat(agent.Stall is null ? [] : Annotations(agent.Stall, $"{path}.stall"))
-            .Concat(agent.Context is null ? [] : Annotations(agent.Context, $"{path}.context"));
+            .Concat(agent.Context is null ? [] : Annotations(agent.Context, $"{path}.context"))
+            .Concat(agent.Context?.History is null ? [] : Annotations(agent.Context.History, $"{path}.context.history"));
+        if (agent.Context?.History is { Shortening: { } shortening } history && shortening != HistoryOptions.Provider && history.ExtensionId() is null)
+        {
+            errors = errors.Append(new(ValidationPhase.Shape, $"{path}.context.history.shortening", $"\"{shortening}\" is not a way to shorten history.",
+                $"Use {HistoryOptions.Provider}, or extension:<id> for a shortener the application registers."));
+        }
+
         if (agent.StopWhen is { } stop)
         {
             errors = errors.Concat(Annotations(stop, $"{path}.stopWhen"))

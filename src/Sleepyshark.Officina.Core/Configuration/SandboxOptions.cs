@@ -5,6 +5,9 @@ namespace Sleepyshark.Officina.Core.Configuration;
 /// <summary>The sandbox that commands run in (SBX).</summary>
 public sealed record SandboxOptions
 {
+    [Setting("Whether the sandbox is on.", Example = "true")]
+    public bool Enabled { get; init; }
+
     [Setting("The hosts commands may reach, through a filtering proxy. `*.` matches any subdomain. Empty means no network.",
         Example = """["api.nuget.org", "*.nuget.org"]""")]
     public IReadOnlyList<string> AllowedHosts { get; init; } = [];

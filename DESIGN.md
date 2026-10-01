@@ -16,12 +16,12 @@ namespace is its name.
 
 | Project | Box in the diagram | What it contains | Depends on | Loaded when |
 |---|---|---|---|---|
-| `Sleepyshark.Officina.Core` | Core | Options classes and validation; turn engine; built-in loop patterns; context builder; tool pipeline; run record; budgets; events; audit; extension interfaces (§4); built-in `record.*`, `control.*` and `artifact.*` tools; knowledge retrieval and its tools | .NET base library and a JSON Schema validator only | Always |
+| `Sleepyshark.Officina.Core` | Core | Options classes and validation; turn engine; built-in loop patterns; context builder; conversation history and its shortening, kept through `IStorage.Conversations`; tool pipeline; run record; budgets; events; audit; extension interfaces (§4); built-in `record.*`, `control.*` and `artifact.*` tools; knowledge retrieval and its tools | .NET base library and a JSON Schema validator only | Always |
 | `Sleepyshark.Officina.Team` | Capabilities | Team pattern, lead role support, task board, helper agents; `tasks.*` and `team.*` tools | Core | `team` or `taskBoard` is on |
 | `Sleepyshark.Officina.Workspace` | Capabilities | Git-backed workspace: baseline, working copies, integration queue, edit safety; `workspace.*` tools | Core; the git CLI at run time | `workspace` is on |
 | `Sleepyshark.Officina.Sandbox` | Capabilities | Linux sandbox (bubblewrap, cgroups v2) and Windows sandbox (AppContainer, Job Objects); filtering network proxy; `sandbox.*` tools | Core | `sandbox` is on |
-| `Sleepyshark.Officina.Capabilities` | Capabilities | Conversation store, human interaction, project memory, checkpoints; `human.*` and `memory.*` tools | Core | Each part when its capability is on |
-| `Sleepyshark.Officina.Storage.Sqlite` | Storage.Sqlite | Default storage: one SQLite file in WAL mode, plus artifact files on disk | Core, `Microsoft.Data.Sqlite` | Configured as storage (the CLI's default) |
+| `Sleepyshark.Officina.Capabilities` | Capabilities | Human interaction, project memory, checkpoints; `human.*` and `memory.*` tools | Core | Each part when its capability is on |
+| `Sleepyshark.Officina.Storage.Sqlite` | Storage.Sqlite | Default storage, conversations included: one SQLite file in WAL mode, plus artifact files on disk | Core, `Microsoft.Data.Sqlite` | Configured as storage (the CLI's default) |
 | `Sleepyshark.Officina.Mcp` | Mcp | Own MCP client for stdio and Streamable HTTP. Turns each server tool into a core tool. | Core | `toolServers` are configured |
 | `Sleepyshark.Officina.Providers.Claude` | Providers.Claude | The Claude provider: maps requests (§9), places cache markers, streams, classifies errors, ships the price table | Core, Anthropic C# SDK | A `claude` provider is configured (the default) |
 | `Sleepyshark.Officina.Testing` | Testing | Test kit: scripted models, controllable clock, fake tools, in-memory workspace, sandbox and storage, record and replay (TEST-01, TEST-02) | Core | In tests, and by `sof config dry-run` (CFG-12) |
@@ -130,7 +130,7 @@ public interface IStorage          { IRunStore Runs { get; }  IConversationStore
                                      ValueTask DeleteExpiredAsync(RetentionOptions retention, DateTimeOffset now, CancellationToken ct); }
 public interface IMasker           { MaskResult Mask(string text, MaskScope scope);
                                      string Restore(string text, MaskScope scope); }
-public interface IHistoryShortener { ValueTask<History> ShortenAsync(History history, ShortenRequest request, CancellationToken ct); }
+public interface IHistoryShortener { ValueTask<ImmutableArray<Message>> ShortenAsync(ModelRequest request, CancellationToken ct); }
 public interface IWorkspace        { ValueTask<IWorkingCopy> OpenWorkingCopyAsync(TaskId task, AgentId agent, CancellationToken ct);
                                      ValueTask<IntegrationResult> IntegrateAsync(IWorkingCopy copy, CancellationToken ct);
                                      ValueTask<WorkspaceSnapshot> SnapshotAsync(CancellationToken ct);
@@ -151,7 +151,7 @@ public interface ISecretSource     { ValueTask<SecretValue> GetAsync(string name
 | `IHumanChannel` | Change how humans are reached | An approval, question, sign-off or owner message is needed (HITL) | `HumanRequest`: kind, agent, summary, pending action, deadline | `HumanAnswer`: approve, approve a changed version, deny, or text | The core applies timeouts (HITL-02). A changed version goes through the checks again. |
 | `IStorage` | Store state elsewhere | Whenever state is read or written | One store per kind of data: runs, conversations, records, tasks, memory, checkpoints, events, audit, artifacts | — | Conversations and the audit log are append-only. Every row carries its tenant, and every read and write names one (SEC-02). Stored data carries its format version, and data in an unknown version is refused (REL-04). Deleting an owner's data on request leaves audit entries to their retention (PRIV-02). |
 | `IMasker` | Replace masking | Work is admitted, or a configured tool result or passage arrives (ING-02) | Text and the run's masking scope | Masked text, and later the restored text for a tool allowed to see it (ING-06) | Restored values never reach the model, history or logs. |
-| `IHistoryShortener` | Replace history shortening | History is too long, or the provider reports the input is too long (HIST-04) | The history and a target size | Shortened history | The result is checked (HIST-02). It cannot change the run record, tasks or memory (HIST-03). |
+| `IHistoryShortener` | Replace history shortening | The provider reports the input is too long (HIST-04) | The request it reported | Shortened history; it may clear old tool results, keeping a note (HIST-05) | The result is checked (HIST-02). A model provider with its own mechanism implements it too (HIST-01). It cannot change the run record, tasks or memory (HIST-03). |
 | `IWorkspace` | Replace the git workspace | File tools run, a task starts or ends, a change is integrated, or a checkpoint is taken | Task, agent, working copy, snapshot | `IWorkingCopy` (read, read range, search, edit with the expected content hash, write, delete, move), integration result, snapshot | Edits fail if the file changed since it was read (WS-07). Integration is queued (WS-09). Protected paths are enforced (WS-05). |
 | `ISandbox` | Replace OS isolation | A command tool or a check runs a command | `SandboxCommand`: command, working copy and its protected paths, limits, network allow list, permitted secrets | `ISandboxProcess`: streamed output and exit code; disposing it stops the command | `Probe` must report whether isolation is available, and the core refuses to run commands without it (SBX-07). |
 | `ISecretSource` | Read secrets from elsewhere | A secret is needed, at the moment of use | The secret's name | The value | Values are never logged or placed in model input (INV-06). |
@@ -203,7 +203,7 @@ decides the outcome.
 ## 8. State and durability
 
 - **Storage.** SQLite in WAL mode, with a single writer per run, plus artifact files. Tables:
-  runs (with the resolved configuration, CFG-07), conversations and messages (append-only), record
+  runs (with the resolved configuration, CFG-07), conversations (append-only, a row per turn), record
   entries, tasks and task history, memory, checkpoints, events, audit.
 - **Checkpoints are cheap because history is append-only.** A checkpoint stores:
   - the message count of each conversation;

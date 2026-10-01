@@ -102,6 +102,25 @@ public sealed class ValidationPhaseTests : IDisposable
             errors.Select(error => (error.Path, error.Location!)).Order());
     }
 
+    // CAP-03, TEST-04.
+    [Fact]
+    public void Phase_5_capabilities_rejects_a_capability_in_use_that_is_off_and_an_unmet_dependency()
+    {
+        folder.Write("sof.json", """
+            {
+              "agents": { "a": { "instructions": "x", "context": { "history": { "strategy": "full" } } } },
+              "capabilities": { "sandbox": { "enabled": true } }
+            }
+            """);
+
+        Assert.Equal(
+            [
+                "sof.json: agents.a.context.history.strategy: needs the conversationStore capability, which is off. Set capabilities.conversationStore.enabled to true.",
+                "sof.json: capabilities.sandbox.enabled: sandbox needs the workspace capability, which is off. Set capabilities.workspace.enabled to true.",
+            ],
+            folder.Load().Errors.Select(error => error.ToString()).Order(StringComparer.Ordinal));
+    }
+
     [Fact]
     public void Phase_9_prefix_rejects_caller_work_and_time_placeholders_in_instructions()
     {

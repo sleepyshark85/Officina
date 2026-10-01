@@ -9,7 +9,7 @@ namespace Sleepyshark.Officina.Core.Running;
 /// <summary>
 /// Builds each model request of a conversation as DESIGN.md §3 describes. The stable prefix is built once, from the
 /// definition alone, so it is the same for every caller, work item and turn (CTX-02, CTX-03). The history only grows
-/// (CTX-10), and the volatile context, rebuilt for every call, is added at its end.
+/// (CTX-10), except when it is shortened (HIST-01), and the volatile context, rebuilt for every call, is added at its end.
 /// </summary>
 internal sealed class Conversation
 {
@@ -18,7 +18,8 @@ internal sealed class Conversation
 
     private readonly ModelRequest prefix;
     private readonly bool turnScoped;
-    private readonly List<Message> history = [];
+    private List<Message> history = [];
+    private int turnStart;
     private ModelRequest? previous;
     private IReadOnlyList<string> sent = [];
 
@@ -37,7 +38,45 @@ internal sealed class Conversation
 
     public ImmutableArray<Message> History => [.. history];
 
+    /// <summary>The messages of the current turn: those added since the earlier turns were continued.</summary>
+    public ImmutableArray<Message> CurrentTurn => [.. history.Skip(turnStart)];
+
+    /// <summary>Whether the history has been shortened.</summary>
+    public bool Shortened { get; private set; }
+
+    /// <summary>Continues the conversation from its earlier turns (CTX-06); the current turn starts after them.</summary>
+    public void Continue(IEnumerable<Message> earlier)
+    {
+        history.AddRange(earlier);
+        turnStart = history.Count;
+    }
+
     public void Add(Message message) => history.Add(message);
+
+    /// <summary>
+    /// Replaces the history with a shortened one, the only change to history already sent (HIST-01), once it is checked
+    /// (HIST-02). The next request is then checked against the shortened history.
+    /// </summary>
+    /// <returns>What is wrong with the shortened history, which is then not used; null when it replaced the history.</returns>
+    public string? Shorten(ImmutableArray<Message> shortened)
+    {
+        var current = CurrentTurn;
+        var content = shortened.IsDefault ? [] : shortened.SelectMany(message => message.Content).ToList();
+        var results = content.OfType<ToolResultContent>().Select(result => result.ToolUseId).ToHashSet();
+        var problem = shortened.IsDefaultOrEmpty || shortened[0].Role != Role.User ? "does not start with a user message"
+            : !content.OfType<ToolUseContent>().All(request => results.Contains(request.Id)) ? "has a tool request without its result"
+            : shortened.Length < current.Length || !shortened[^current.Length..].SequenceEqual(current) ? "changes the current turn"
+            : null;
+        if (problem is null)
+        {
+            history = [.. shortened];
+            turnStart = shortened.Length - current.Length;
+            previous = null;
+            Shortened = true;
+        }
+
+        return problem;
+    }
 
     /// <summary>
     /// The next call's request: the history with the volatile context added, except after a reply, so a paused
@@ -47,7 +86,8 @@ internal sealed class Conversation
     /// <exception cref="InvalidOperationException">The request would change content already sent (CTX-10).</exception>
     public ModelRequest Next(IReadOnlyList<string> facts)
     {
-        if (facts.Count > 0 && history[^1].Role != Role.Assistant)
+        // A call made again after "input too long" has no reply, so its context may be the last message already.
+        if (facts.Count > 0 && history[^1] is { Role: not Role.Assistant, TurnScoped: false })
         {
             AddVolatile(facts);
         }

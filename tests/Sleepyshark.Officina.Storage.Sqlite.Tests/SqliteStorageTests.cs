@@ -3,6 +3,7 @@ using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Time.Testing;
 using Sleepyshark.Officina.Core.Configuration;
 using Sleepyshark.Officina.Core.Extensibility;
+using Sleepyshark.Officina.Core.Messages;
 using Sleepyshark.Officina.Core.Running;
 using Sleepyshark.Officina.Testing;
 
@@ -36,13 +37,13 @@ public sealed class SqliteStorageTests : StorageContract, IDisposable
         {
             await connection.OpenAsync(Ct);
             await using var command = connection.CreateCommand();
-            command.CommandText = "PRAGMA user_version = 2";
+            command.CommandText = "PRAGMA user_version = 3";
             await command.ExecuteNonQueryAsync(Ct);
         }
 
         var error = await Assert.ThrowsAsync<InvalidDataException>(() => CreateAsync());
 
-        Assert.Equal($"{File} holds data in format version 2, and this core reads format version 1 only.", error.Message);
+        Assert.Equal($"{File} holds data in format version 3, and this core reads format version 2 only.", error.Message);
     }
 
     // CFG-07, STO-01.
@@ -63,6 +64,33 @@ public sealed class SqliteStorageTests : StorageContract, IDisposable
             ["turnStarted", "modelCallEnded", "turnEnded"],
             (await (await CreateAsync()).Events.ReadAsync(null, runId, 0, Ct)).Select(read => read.Payload.Kind));
     }
+
+    // CAP-05, CTX-06: a new runner on the same file stands in for a restarted process.
+    [Fact]
+    public async Task A_conversation_continues_with_its_full_history_after_a_restart()
+    {
+        var options = new OfficinaOptions
+        {
+            Agents = new Dictionary<string, AgentDefinition>
+            {
+                ["assistant"] = new() { Instructions = "Help.", Context = new() { History = new() { Strategy = HistoryStrategy.Full } } },
+            },
+            Capabilities = new() { ConversationStore = new() { Enabled = true } },
+        };
+        var before = new ScriptedModelProvider().Reply(new ContentReceived(new ReasoningContent("The user greets.", "sig")), new TextDelta("Hello."), new Stopped(StopReason.Finished));
+        await Runner(options, before, await CreateAsync()).RunAsync("assistant", "Hi.", ct: Ct);
+
+        var after = new ScriptedModelProvider().Reply("Fine.");
+        await Runner(options, after, await CreateAsync()).RunAsync("assistant", "How are you?", ct: Ct);
+
+        Assert.Equal(
+            [Message.User("Hi."), new(Role.Assistant, [new ReasoningContent("The user greets.", "sig"), new TextContent("Hello.")]), Message.User("How are you?")],
+            Assert.Single(after.Requests).History);
+    }
+
+    private static AgentRunner Runner(OfficinaOptions options, ScriptedModelProvider model, IStorage storage) => new(
+        options, new Dictionary<string, IModelProvider> { ["claude"] = model }, storage, new Dictionary<string, ITool>(), new Dictionary<string, IGate>(),
+        new Dictionary<string, IKnowledgeSource>(), new ScriptedHuman(), new InMemorySecretSource(new Dictionary<string, string>()), new FakeTimeProvider());
 
     private async Task<List<(string, string)>> QueryAsync(string sql)
     {

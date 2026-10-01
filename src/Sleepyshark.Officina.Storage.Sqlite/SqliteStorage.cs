@@ -1,9 +1,11 @@
+using System.Collections.Immutable;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Data.Sqlite;
 using Sleepyshark.Officina.Core.Configuration;
 using Sleepyshark.Officina.Core.Events;
 using Sleepyshark.Officina.Core.Extensibility;
+using Sleepyshark.Officina.Core.Messages;
 using Sleepyshark.Officina.Core.Running;
 
 namespace Sleepyshark.Officina.Storage.Sqlite;
@@ -13,10 +15,10 @@ namespace Sleepyshark.Officina.Storage.Sqlite;
 /// every statement filters by it (SEC-02). The file carries the format version of what it holds, and a file in any
 /// other version is refused rather than misread (REL-04).
 /// </summary>
-public sealed class SqliteStorage : IStorage, IRunStore, IEventLog, IAuditLog
+public sealed class SqliteStorage : IStorage, IRunStore, IConversationStore, IEventLog, IAuditLog
 {
     /// <summary>The only format version this storage reads and writes.</summary>
-    public const int FormatVersion = 1;
+    public const int FormatVersion = 2;
 
     private const string Schema = """
         CREATE TABLE runs (
@@ -32,17 +34,25 @@ public sealed class SqliteStorage : IStorage, IRunStore, IEventLog, IAuditLog
             tool TEXT NOT NULL, arguments TEXT NOT NULL, decided_by TEXT, outcome TEXT NOT NULL, time INTEGER NOT NULL,
             idempotency_key TEXT NOT NULL, detail TEXT);
         CREATE INDEX audit_run ON audit (tenant, run_id);
+        CREATE TABLE conversations (
+            position INTEGER PRIMARY KEY, tenant TEXT, owner TEXT, agent TEXT NOT NULL, time INTEGER NOT NULL,
+            shortened INTEGER NOT NULL, messages TEXT NOT NULL);
+        CREATE INDEX conversations_owner ON conversations (tenant, owner, agent);
         """;
+
+    private const string Conversation = "tenant IS $tenant AND agent = $agent AND owner IS $owner";
 
     private const string OwnerRuns = "SELECT run_id FROM runs WHERE tenant IS $tenant AND owner = $owner";
 
-    private static readonly JsonSerializerOptions EventJson = new(JsonSerializerDefaults.Web) { Converters = { new JsonStringEnumConverter() } };
+    private static readonly JsonSerializerOptions StoredJson = new(JsonSerializerDefaults.Web) { Converters = { new JsonStringEnumConverter() } };
 
     private readonly string connectionString;
 
     private SqliteStorage(string connectionString) => this.connectionString = connectionString;
 
     IRunStore IStorage.Runs => this;
+
+    IConversationStore IStorage.Conversations => this;
 
     IEventLog IStorage.Events => this;
 
@@ -88,7 +98,7 @@ public sealed class SqliteStorage : IStorage, IRunStore, IEventLog, IAuditLog
         return ExecuteAsync(
             "INSERT INTO events VALUES ($tenant, $run_id, $agent, $step, $sequence, $time, $payload)", ct,
             ("$tenant", tenant), ("$run_id", coreEvent.RunId), ("$agent", coreEvent.Agent), ("$step", coreEvent.Step),
-            ("$sequence", coreEvent.Sequence), ("$time", coreEvent.Time.UtcTicks), ("$payload", JsonSerializer.Serialize(coreEvent.Payload, EventJson)));
+            ("$sequence", coreEvent.Sequence), ("$time", coreEvent.Time.UtcTicks), ("$payload", JsonSerializer.Serialize(coreEvent.Payload, StoredJson)));
     }
 
     public async ValueTask<IReadOnlyList<CoreEvent>> ReadAsync(string? tenant, string runId, long after, CancellationToken ct) =>
@@ -123,12 +133,31 @@ public sealed class SqliteStorage : IStorage, IRunStore, IEventLog, IAuditLog
             $"SELECT * FROM events WHERE tenant IS $tenant AND run_id IN ({OwnerRuns}) ORDER BY sequence", ReadEvent, ct, parameters).ConfigureAwait(false);
         var audit = await QueryAsync(
             $"SELECT * FROM audit WHERE tenant IS $tenant AND run_id IN ({OwnerRuns}) ORDER BY position", ReadAuditEntry, ct, parameters).ConfigureAwait(false);
-        return new OwnerData(runs, events, audit);
+        var conversations = await QueryAsync(
+            "SELECT * FROM conversations WHERE tenant IS $tenant AND owner = $owner ORDER BY position", ReadTurn, ct, parameters).ConfigureAwait(false);
+        return new OwnerData(runs, events, audit, conversations);
     }
+
+    public ValueTask AppendAsync(string? tenant, ConversationTurn turn, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(turn);
+        return ExecuteAsync(
+            "INSERT INTO conversations (tenant, owner, agent, time, shortened, messages) VALUES ($tenant, $owner, $agent, $time, $shortened, $messages)", ct,
+            ("$tenant", tenant), ("$owner", turn.Owner), ("$agent", turn.Agent), ("$time", turn.Time.UtcTicks), ("$shortened", turn.Shortened),
+            ("$messages", JsonSerializer.Serialize(turn.Messages, StoredJson)));
+    }
+
+    public async ValueTask<IReadOnlyList<ConversationTurn>> ReadAsync(string? tenant, string agent, string? owner, CancellationToken ct) =>
+        await QueryAsync(
+            $"""
+            SELECT * FROM conversations WHERE {Conversation}
+            AND position >= (SELECT COALESCE(MAX(position), 0) FROM conversations WHERE {Conversation} AND shortened) ORDER BY position
+            """, ReadTurn, ct, ("$tenant", tenant), ("$agent", agent), ("$owner", owner)).ConfigureAwait(false);
 
     public ValueTask DeleteAsync(string? tenant, string owner, CancellationToken ct) =>
         ExecuteAsync(
-            $"DELETE FROM events WHERE tenant IS $tenant AND run_id IN ({OwnerRuns}); DELETE FROM runs WHERE tenant IS $tenant AND owner = $owner;", ct,
+            $"DELETE FROM events WHERE tenant IS $tenant AND run_id IN ({OwnerRuns}); DELETE FROM runs WHERE tenant IS $tenant AND owner = $owner;"
+            + " DELETE FROM conversations WHERE tenant IS $tenant AND owner = $owner;", ct,
             ("$tenant", tenant), ("$owner", owner));
 
     public ValueTask DeleteExpiredAsync(RetentionOptions retention, DateTimeOffset now, CancellationToken ct)
@@ -137,7 +166,8 @@ public sealed class SqliteStorage : IStorage, IRunStore, IEventLog, IAuditLog
 
         // A kind without a retention period is kept, so it needs no statement. Audit always has a period, so the
         // statement is never empty.
-        (string Table, TimeSpan? Period)[] kinds = [("runs", retention.Runs), ("events", retention.Events), ("audit", retention.Audit)];
+        (string Table, TimeSpan? Period)[] kinds =
+            [("runs", retention.Runs), ("conversations", retention.Conversations), ("events", retention.Events), ("audit", retention.Audit)];
         var expired = kinds.Where(kind => kind.Period is not null).ToList();
 
         // Subtracting ticks, not dates, so a very long period cannot go below the earliest date.
@@ -154,7 +184,11 @@ public sealed class SqliteStorage : IStorage, IRunStore, IEventLog, IAuditLog
     private static CoreEvent ReadEvent(SqliteDataReader row) => new(
         row.GetString(row.GetOrdinal("run_id")), row.GetString(row.GetOrdinal("agent")), Text(row, "step"),
         row.GetInt64(row.GetOrdinal("sequence")), Time(row),
-        JsonSerializer.Deserialize<EventPayload>(row.GetString(row.GetOrdinal("payload")), EventJson)!);
+        JsonSerializer.Deserialize<EventPayload>(row.GetString(row.GetOrdinal("payload")), StoredJson)!);
+
+    private static ConversationTurn ReadTurn(SqliteDataReader row) => new(
+        row.GetString(row.GetOrdinal("agent")), Text(row, "owner"), Time(row),
+        JsonSerializer.Deserialize<ImmutableArray<Message>>(row.GetString(row.GetOrdinal("messages")), StoredJson), row.GetBoolean(row.GetOrdinal("shortened")));
 
     private static AuditEntry ReadAuditEntry(SqliteDataReader row) => new(
         row.GetString(row.GetOrdinal("run_id")), row.GetString(row.GetOrdinal("agent")), Text(row, "caller"), row.GetString(row.GetOrdinal("tool")),

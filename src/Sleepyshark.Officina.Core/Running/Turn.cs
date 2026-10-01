@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Collections.Immutable;
 using System.Text;
 using System.Text.Json;
 using Sleepyshark.Officina.Core.Configuration;
@@ -15,7 +16,8 @@ namespace Sleepyshark.Officina.Core.Running;
 /// the next step by the stop reason alone (LOOP-03, INV-01), runs the tools the model asks for through the tool
 /// pipeline, and repeats until a stop condition holds (LOOP-05) or the turn must be handed off. The budget is checked
 /// before every model call (LOOP-06), and the turn always ends in a result (INV-07). Each call's input is built by the
-/// turn's <see cref="Conversation"/>, with the messages that arrived since the last call (CTX-08).
+/// turn's <see cref="Conversation"/>, with the messages that arrived since the last call (CTX-08). The conversation
+/// starts from the history its strategy keeps (CTX-06), and the turn is stored with it when it ends (CAP-05).
 /// </summary>
 internal sealed class Turn
 {
@@ -30,6 +32,8 @@ internal sealed class Turn
     private readonly ModelPrice? price;
     private readonly ToolPipeline tools;
     private readonly IReadOnlyList<(string Name, IKnowledgeSource Source)> beforeTurn;
+    private readonly IConversationStore conversations;
+    private readonly IHistoryShortener? shortener;
     private readonly EventBus events;
     private readonly TimeProvider time;
     private readonly string work;
@@ -50,6 +54,8 @@ internal sealed class Turn
     /// <param name="provider">The provider of the agent's model profile.</param>
     /// <param name="tools">The tool pipeline built from <paramref name="options"/>.</param>
     /// <param name="knowledge">The application's knowledge sources, by extension id.</param>
+    /// <param name="conversations">Where the agent's conversation is kept, when its history strategy keeps one.</param>
+    /// <param name="shortener">What shortens the history when the model reports it too long; null when it is not shortened.</param>
     /// <param name="events">Where model text and model calls are published.</param>
     /// <param name="instructions">The agent's instructions, placeholders filled.</param>
     /// <param name="work">What the turn is asked to do.</param>
@@ -61,6 +67,8 @@ internal sealed class Turn
         IModelProvider provider,
         ToolPipeline tools,
         IReadOnlyDictionary<string, IKnowledgeSource> knowledge,
+        IConversationStore conversations,
+        IHistoryShortener? shortener,
         EventBus events,
         string instructions,
         string work,
@@ -75,11 +83,12 @@ internal sealed class Turn
         var profile = options.Models[agent.Model];
         price = options.Providers[profile.Provider].Prices.GetValueOrDefault(profile.Model);
         conversation = new Conversation(profile, [.. tools.Offered(context.Agent)], instructions, agent.Context, provider.Capabilities);
-        conversation.Add(Message.User(work));
         this.inbox = inbox;
         this.provider = provider;
         this.tools = tools;
         beforeTurn = [.. agent.Context.Retrieval.BeforeTurn.Select(name => (name, knowledge[options.Knowledge[name].ExtensionId()!]))];
+        this.conversations = conversations;
+        this.shortener = shortener;
         this.events = events;
         this.time = time;
         this.work = work;
@@ -88,6 +97,27 @@ internal sealed class Turn
     public async Task<AgentResult> RunAsync(CancellationToken ct)
     {
         started = time.GetTimestamp();
+        var history = agent.Context.History;
+        if (history.Strategy != HistoryStrategy.None)
+        {
+            var earlier = await conversations.ReadAsync(context.Caller.Tenant, context.Agent, context.Caller.Id, ct).ConfigureAwait(false);
+            conversation.Continue((history.Strategy == HistoryStrategy.LastTurns ? earlier.TakeLast(history.LastTurns) : earlier).SelectMany(turn => turn.Messages));
+        }
+
+        conversation.Add(Message.User(work));
+        var result = await RunTurnAsync(ct).ConfigureAwait(false);
+        if (history.Strategy != HistoryStrategy.None)
+        {
+            var messages = conversation.Shortened ? conversation.History : conversation.CurrentTurn;
+            var turn = new ConversationTurn(context.Agent, context.Caller.Id, time.GetUtcNow(), messages, conversation.Shortened);
+            await conversations.AppendAsync(context.Caller.Tenant, turn, ct).ConfigureAwait(false);
+        }
+
+        return result;
+    }
+
+    private async Task<AgentResult> RunTurnAsync(CancellationToken ct)
+    {
         if (await RetrieveAsync(ct).ConfigureAwait(false) is { } notCovered)
         {
             return notCovered;
@@ -127,9 +157,7 @@ internal sealed class Turn
                 StopReason.Paused => null,
                 StopReason.OutputLimit => HandOff(HandoffReason.TruncatedOutput, "the reply reached the output limit"),
                 StopReason.Refused => HandOff(HandoffReason.ProviderRefusal, "the model refused"),
-
-                // S07 shortens the history once before handing off (HIST-04).
-                StopReason.InputTooLong => HandOff(HandoffReason.ProviderFailure, "the input is too long for the model"),
+                StopReason.InputTooLong => await ShortenAsync(request, ct).ConfigureAwait(false),
                 _ => HandOff(HandoffReason.ProviderFailure, "the model stopped for an unknown reason"),
             };
             if (result is not null)
@@ -180,6 +208,33 @@ internal sealed class Turn
 
         return beforeTurn.Count > 0 && !covered && agent.Context.Retrieval.HandOffWhenNotCovered
             ? HandOff(HandoffReason.PolicyGap, "the knowledge sources do not cover the work")
+            : null;
+    }
+
+    /// <summary>
+    /// HIST-04: when the model reports the input too long, the history is shortened once, and the call is made again. If
+    /// it cannot be, or the input is still too long, the turn ends in a handoff.
+    /// </summary>
+    private async Task<AgentResult?> ShortenAsync(ModelRequest request, CancellationToken ct)
+    {
+        if (shortener is null || conversation.Shortened)
+        {
+            return HandOff(HandoffReason.ProviderFailure, "the input is too long for the model");
+        }
+
+        ImmutableArray<Message> shortened;
+        try
+        {
+            shortened = await shortener.ShortenAsync(request, ct).ConfigureAwait(false);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException || !ct.IsCancellationRequested)
+        {
+            // The exception's message may quote the history, so only its type is reported, as for a failed model call.
+            return HandOff(HandoffReason.ProviderFailure, $"the input is too long for the model, and shortening it failed: {exception.GetType().Name}");
+        }
+
+        return conversation.Shorten(shortened) is { } problem
+            ? HandOff(HandoffReason.ProviderFailure, $"the input is too long for the model, and the shortened history {problem}")
             : null;
     }
 

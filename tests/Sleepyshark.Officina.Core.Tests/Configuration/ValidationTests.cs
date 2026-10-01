@@ -103,7 +103,7 @@ public class ValidationTests
     [Fact]
     public void A_protected_path_needs_a_path()
     {
-        var workspace = new WorkspaceOptions { ProtectedPaths = [new() { Path = null! }] };
+        var workspace = new WorkspaceOptions { Enabled = true, ProtectedPaths = [new() { Path = null! }] };
 
         var error = Assert.Single(new OfficinaOptions { Capabilities = new() { Workspace = workspace } }.Validate());
 
@@ -115,11 +115,12 @@ public class ValidationTests
     {
         var sandbox = new SandboxOptions
         {
+            Enabled = true,
             CommandRules = [new() { Match = null! }],
             Secrets = new Dictionary<string, IReadOnlyList<string>> { ["develper"] = ["NUGET_TOKEN"] },
         };
 
-        var options = WithAgent(Extractor) with { Capabilities = new() { Sandbox = sandbox } };
+        var options = WithAgent(Extractor) with { Capabilities = new() { Sandbox = sandbox, Workspace = new() { Enabled = true } } };
 
         Assert.Equal(
             [("capabilities.sandbox.commandRules[0].match", "is required but not set. Add it; it has no default."), ("capabilities.sandbox.secrets", "agent \"develper\" does not exist.")],
@@ -162,6 +163,7 @@ public class ValidationTests
                 ["remote"] = new() { Transport = ToolServerTransport.Http, Url = "tracker/mcp" },
             },
             Knowledge = new Dictionary<string, KnowledgeOptions> { ["handbook"] = new() { Use = "builtin:index" } },
+            Capabilities = new() { Knowledge = new() { Enabled = true } },
             Tools = new Dictionary<string, ToolOptions>
             {
                 ["a"] = new() { Source = "mcp:github/create_issue" },
@@ -176,6 +178,51 @@ public class ValidationTests
                 "agents.extractor.context.retrieval.beforeTurn", "tools.a.source", "tools.c.source",
             ],
             options.Validate().Select(error => error.Path));
+    }
+
+    // CAP-01, CAP-03, TEST-04.
+    [Fact]
+    public void A_capability_in_use_must_be_on()
+    {
+        var options = WithAgent(Extractor with { Context = new() { History = new() { Strategy = HistoryStrategy.Full } } }) with
+        {
+            Knowledge = new Dictionary<string, KnowledgeOptions> { ["handbook"] = new() { Use = "extension:Handbook" } },
+        };
+
+        Assert.Equal(
+            [
+                ("knowledge", "needs the knowledge capability, which is off.", "Set capabilities.knowledge.enabled to true."),
+                ("agents.extractor.context.history.strategy", "needs the conversationStore capability, which is off.", "Set capabilities.conversationStore.enabled to true."),
+            ],
+            options.Validate().Select(error => (error.Path, error.Problem, error.Fix)));
+    }
+
+    // CAP-03, TEST-04.
+    [Fact]
+    public void A_capability_that_is_on_needs_the_ones_it_requires()
+    {
+        var error = Assert.Single((WithAgent(Extractor) with { Capabilities = new() { Sandbox = new() { Enabled = true } } }).Validate());
+
+        Assert.Equal(
+            (ValidationPhase.Capabilities, "capabilities.sandbox.enabled", "sandbox needs the workspace capability, which is off.", "Set capabilities.workspace.enabled to true."),
+            (error.Phase, error.Path, error.Problem, error.Fix));
+    }
+
+    // CAP-02, TEST-08: its tools and storage are in the history tests.
+    [Fact]
+    public void The_settings_of_a_capability_that_is_off_are_not_required()
+    {
+        var sandbox = new SandboxOptions { CommandRules = [new() { Match = null! }] };
+
+        Assert.Empty((WithAgent(Extractor) with { Capabilities = new() { Sandbox = sandbox } }).Validate());
+    }
+
+    [Fact]
+    public void History_is_shortened_by_the_provider_or_an_extension()
+    {
+        var error = Assert.Single(WithAgent(Extractor with { Context = new() { History = new() { Shortening = "summarise" } } }).Validate());
+
+        Assert.Equal(("agents.extractor.context.history.shortening", "\"summarise\" is not a way to shorten history."), (error.Path, error.Problem));
     }
 
     private static OfficinaOptions WithAgent(AgentDefinition agent) =>

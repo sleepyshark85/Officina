@@ -1,8 +1,15 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace Sleepyshark.Officina.Core.Messages;
 
-/// <summary>One piece of a message (MSG-02).</summary>
+/// <summary>One piece of a message (MSG-02). Its JSON form names its kind, so a stored conversation reads back as it was.</summary>
+[JsonPolymorphic(TypeDiscriminatorPropertyName = "kind")]
+[JsonDerivedType(typeof(TextContent), "text")]
+[JsonDerivedType(typeof(ReasoningContent), "reasoning")]
+[JsonDerivedType(typeof(ToolUseContent), "toolUse")]
+[JsonDerivedType(typeof(ToolResultContent), "toolResult")]
+[JsonDerivedType(typeof(ProviderContent), "provider")]
 public abstract record Content;
 
 public sealed record TextContent : Content
@@ -49,6 +56,12 @@ public sealed record ToolUseContent : Content
     public string Name { get; }
 
     public JsonElement Arguments { get; }
+
+    // JSON compares by value, so a call read back or rebuilt from other JSON is the same call.
+    public bool Equals(ToolUseContent? other) =>
+        other is not null && Id == other.Id && Name == other.Name && JsonElement.DeepEquals(Arguments, other.Arguments);
+
+    public override int GetHashCode() => HashCode.Combine(Id, Name);
 }
 
 /// <summary>The result of the tool call with the id <see cref="ToolUseId"/>.</summary>
@@ -76,4 +89,8 @@ public sealed record ProviderContent : Content
     public ProviderContent(JsonElement data) => Data = data.Clone();
 
     public JsonElement Data { get; }
+
+    public bool Equals(ProviderContent? other) => other is not null && JsonElement.DeepEquals(Data, other.Data);
+
+    public override int GetHashCode() => Data.ValueKind.GetHashCode();
 }

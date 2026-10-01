@@ -9,11 +9,15 @@ public sealed class InMemoryStorage : IStorage
 {
     public InMemoryRunStore Runs { get; } = new();
 
+    public InMemoryConversationStore Conversations { get; } = new();
+
     public InMemoryEventLog Events { get; } = new();
 
     public InMemoryAuditLog Audit { get; } = new();
 
     IRunStore IStorage.Runs => Runs;
+
+    IConversationStore IStorage.Conversations => Conversations;
 
     IEventLog IStorage.Events => Events;
 
@@ -24,7 +28,8 @@ public sealed class InMemoryStorage : IStorage
         var runs = Runs.Rows.Where(tenant, run => run.Owner == owner);
         var ids = runs.Select(run => run.RunId).ToHashSet();
         return ValueTask.FromResult(new OwnerData(
-            runs, Events.Rows.Where(tenant, coreEvent => ids.Contains(coreEvent.RunId)), Audit.Rows.Where(tenant, entry => ids.Contains(entry.RunId))));
+            runs, Events.Rows.Where(tenant, coreEvent => ids.Contains(coreEvent.RunId)), Audit.Rows.Where(tenant, entry => ids.Contains(entry.RunId)),
+            Conversations.Rows.Where(tenant, turn => turn.Owner == owner)));
     }
 
     public ValueTask DeleteAsync(string? tenant, string owner, CancellationToken ct)
@@ -32,6 +37,7 @@ public sealed class InMemoryStorage : IStorage
         var ids = Runs.Rows.Where(tenant, run => run.Owner == owner).Select(run => run.RunId).ToHashSet();
         Events.Rows.RemoveAll((rowTenant, coreEvent) => rowTenant == tenant && ids.Contains(coreEvent.RunId));
         Runs.Rows.RemoveAll((rowTenant, run) => rowTenant == tenant && ids.Contains(run.RunId));
+        Conversations.Rows.RemoveAll((rowTenant, turn) => rowTenant == tenant && turn.Owner == owner);
         return ValueTask.CompletedTask;
     }
 
@@ -39,6 +45,7 @@ public sealed class InMemoryStorage : IStorage
     {
         ArgumentNullException.ThrowIfNull(retention);
         Runs.Rows.RemoveAll((_, run) => now - run.Time > retention.Runs);
+        Conversations.Rows.RemoveAll((_, turn) => now - turn.Time > retention.Conversations);
         Events.Rows.RemoveAll((_, coreEvent) => now - coreEvent.Time > retention.Events);
         Audit.Rows.RemoveAll((_, entry) => now - entry.Time > retention.Audit);
         return ValueTask.CompletedTask;
