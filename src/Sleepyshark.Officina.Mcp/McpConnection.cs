@@ -26,7 +26,8 @@ internal abstract class McpConnection : IAsyncDisposable
             ["capabilities"] = new JsonObject(),
             ["clientInfo"] = new JsonObject { ["name"] = "officina", ["version"] = CoreVersion.Value },
         }, ct).ConfigureAwait(false);
-        if (result.GetProperty("protocolVersion").GetString() is var version && version != ProtocolVersion)
+        var version = result.GetProperty("protocolVersion").GetString();
+        if (version != ProtocolVersion)
         {
             throw new InvalidOperationException($"The tool server speaks protocol {version}; this client speaks {ProtocolVersion}.");
         }
