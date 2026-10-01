@@ -31,15 +31,14 @@ Last updated 2026-10-02.
     by cache lifetime (MDL-09). Until then a model without a configured price costs nothing.
   - S06 adds the `checks` section; `capabilities.workspace.baselineChecks` then names the checks
     `GitWorkspace` runs, which the host passes in code today (WS-02).
-  - S16 adds `IWorkspace` to Core with its first user, the `workspace.*` tools, and the test kit's
-    in-memory workspace (TEST-01, moved from S15: the sandbox needs only the working copy's folder).
-  - S16 gives each agent its `SandboxTools` over its working copy, disposes them when the agent, task
-    or run ends (SBX-03), and wires the tools and the command rules gate as built-ins. It also keeps
-    protected paths out of sandboxed commands, which today see the whole working copy (WS-05), and
-    mounts toolchains installed outside `/usr`.
-  - S08 publishes sandboxed command output and the proxy's allow and deny decisions as events (SBX-04).
   - S16 offers the `workspace.*` tools over `WorkingCopy` (read, search, edit, write; delete and
-    move with them), gives each agent its working copy, and shows the integration queue (WS-09).
+    move with them) through `IWorkspace` in Core, with the test kit's in-memory workspace (TEST-01,
+    moved from S15: the sandbox needs only the working copy's folder). It gives each agent its working
+    copy and its `SandboxTools`, disposes them when the agent, task or run ends (SBX-03), wires the
+    sandbox tools and the command rules gate as built-ins, and shows the integration queue (WS-09).
+  - S15 mounts toolchains installed outside `/usr` into the Linux sandbox. Its Windows piece keeps
+    protected paths out of commands with the AppContainer's ACLs, as the Linux piece does with mounts.
+  - S08 publishes sandboxed command output and the proxy's allow and deny decisions as events (SBX-04).
   - S18 turns an integration conflict or failed check into work for the author or the lead (WS-03),
     and integrates a task only after its verification checks pass (TASK-05).
   - S19 snapshots and restores the workspace, and cleans up worktrees left by a crash.

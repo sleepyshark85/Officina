@@ -13,8 +13,6 @@ namespace Sleepyshark.Officina.Sandbox.Tests;
 /// </summary>
 internal sealed class Agent : IAsyncDisposable
 {
-    public const string WorkingCopy = "/work/dev";
-
     private readonly ToolPipeline pipeline;
     private readonly string name;
 
@@ -22,7 +20,7 @@ internal sealed class Agent : IAsyncDisposable
     {
         this.name = name;
         Options = Configure(options ?? new());
-        Tools = new SandboxTools(sandbox, Options.Capabilities.Sandbox!, name, WorkingCopy);
+        Tools = new SandboxTools(sandbox, Options.Capabilities.Sandbox!, Options.Capabilities.Workspace!, name, WorkingCopy);
         var others = new Dictionary<string, ITool>
         {
             ["create_issue"] = CreateIssue,
@@ -35,6 +33,9 @@ internal sealed class Agent : IAsyncDisposable
     }
 
     public OfficinaOptions Options { get; }
+
+    /// <summary>The agent's working copy: a real, empty folder (DESIGN.md §11).</summary>
+    public string WorkingCopy { get; } = Directory.CreateTempSubdirectory("officina-copy-").FullName;
 
     public SandboxTools Tools { get; }
 
@@ -53,7 +54,14 @@ internal sealed class Agent : IAsyncDisposable
     /// <summary>The caller holds no permissions, so a tool that needs one is never authorised.</summary>
     public static Caller Owner { get; } = new("owner", null, new HashSet<string>(), new Dictionary<string, string>());
 
-    public ValueTask DisposeAsync() => Tools.DisposeAsync();
+    public async ValueTask DisposeAsync()
+    {
+        await Tools.DisposeAsync();
+        if (Directory.Exists(WorkingCopy))
+        {
+            Directory.Delete(WorkingCopy, recursive: true);
+        }
+    }
 
     public async Task<ToolResult> CallAsync(string tool, object arguments)
     {
@@ -80,7 +88,7 @@ internal sealed class Agent : IAsyncDisposable
             Tools = tools,
             ToolSets = new Dictionary<string, IReadOnlyList<string>> { ["all"] = [.. tools.Keys] },
             Gates = new Dictionary<string, GateOptions> { ["commands"] = new() { Use = $"extension:{CommandRules.Id}" } },
-            Capabilities = new() { Sandbox = options },
+            Capabilities = new() { Sandbox = options, Workspace = new() { ProtectedPaths = [new() { Path = "secrets/**" }] } },
         };
     }
 }

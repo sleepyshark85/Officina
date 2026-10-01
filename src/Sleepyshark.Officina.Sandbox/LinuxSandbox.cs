@@ -52,6 +52,17 @@ public sealed class LinuxSandbox : ISandbox
         }
 
         Add(start, "--proc", "/proc", "--dev", "/dev", "--tmpfs", "/tmp", "--bind", command.Directory, command.Directory, "--chdir", command.Directory);
+
+        // Protected paths (WS-05): a hidden folder becomes empty, a hidden file reads as empty, a read-only path is mounted read-only.
+        foreach (var path in command.HiddenPaths)
+        {
+            Add(start, Directory.Exists(path) ? ["--tmpfs", path] : ["--ro-bind", "/dev/null", path]);
+        }
+
+        foreach (var path in command.ReadOnlyPaths)
+        {
+            Add(start, "--ro-bind", path, path);
+        }
         var environment = new Dictionary<string, string>
         {
             ["PATH"] = "/usr/local/bin:/usr/bin:/bin:/usr/local/sbin:/usr/sbin:/sbin",

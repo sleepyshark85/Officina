@@ -14,18 +14,6 @@ public sealed class GitWorkspace : IDisposable
     /// <summary>The folder at the root where the workspace keeps its lock and worktrees.</summary>
     internal const string StateFolder = ".sof";
 
-    // Git's own files, secrets files (INV-06) and Officina's state are hidden, and its configuration is read-only (INV-10).
-    // Configuration can add protected paths, never remove these.
-    private static readonly ProtectedPath[] Fixed =
-    [
-        new() { Path = ".git" },
-        new() { Path = ".git/**" },
-        new() { Path = "**/.env*" },
-        new() { Path = $"{StateFolder}/**" },
-        new() { Path = "sof.json", Access = PathAccess.ReadOnly },
-        new() { Path = "sof.*.json", Access = PathAccess.ReadOnly },
-    ];
-
     private readonly string root;
     private readonly WorkspaceOptions options;
     private readonly FileStream runLock;
@@ -39,7 +27,7 @@ public sealed class GitWorkspace : IDisposable
         this.options = options;
         this.runLock = runLock;
         queue = new IntegrationQueue(root, baseline, runId, baselineChecks, time);
-        var paths = Fixed.Concat(options.ProtectedPaths).ToList();
+        var paths = WorkspaceOptions.FixedProtectedPaths.Concat(options.ProtectedPaths).ToList();
         hidden = Globs(paths.Where(path => path.Access == PathAccess.Hidden));
         readOnly = Globs(paths.Where(path => path.Access == PathAccess.ReadOnly));
     }

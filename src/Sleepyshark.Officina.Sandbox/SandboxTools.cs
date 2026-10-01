@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Text;
 using System.Text.Json;
+using Microsoft.Extensions.FileSystemGlobbing;
 using Sleepyshark.Officina.Core.Configuration;
 using Sleepyshark.Officina.Core.Extensibility;
 
@@ -10,7 +11,8 @@ namespace Sleepyshark.Officina.Sandbox;
 /// The tools that run commands in one agent's working copy, each in the sandbox (SBX-01): run a command, and start,
 /// read and stop background processes (SBX-03). Give <see cref="Run"/> and <see cref="Start"/> the
 /// <see cref="CommandRules"/> gate (SBX-02). The agent's commands receive the secrets its role may use, which the tool
-/// pipeline then removes from their output (SBX-05). Disposing the tools stops the agent's background processes; the
+/// pipeline then removes from their output (SBX-05). Commands cannot see the workspace's hidden paths or change its
+/// read-only ones (WS-05). Disposing the tools stops the agent's background processes; the
 /// host does it when the agent, its task or the run ends.
 /// </summary>
 public sealed class SandboxTools : IAsyncDisposable
@@ -32,18 +34,22 @@ public sealed class SandboxTools : IAsyncDisposable
     private readonly SandboxOptions options;
     private readonly string directory;
     private readonly IReadOnlyList<string> secrets;
+    private readonly Matcher hidden = new();
+    private readonly Matcher readOnly = new();
     private readonly ConcurrentDictionary<string, Background> background = new();
     private int started;
 
     /// <param name="sandbox">Where commands run.</param>
     /// <param name="options">The sandbox settings.</param>
+    /// <param name="workspace">The workspace settings, whose protected paths commands cannot reach.</param>
     /// <param name="agent">The agent the tools are for, whose secrets its commands receive.</param>
     /// <param name="directory">The agent's working copy.</param>
     /// <exception cref="InvalidOperationException">The machine cannot isolate commands, so none may run (SBX-07).</exception>
-    public SandboxTools(ISandbox sandbox, SandboxOptions options, string agent, string directory)
+    public SandboxTools(ISandbox sandbox, SandboxOptions options, WorkspaceOptions workspace, string agent, string directory)
     {
         ArgumentNullException.ThrowIfNull(sandbox);
         ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(workspace);
         if (sandbox.Probe() is { } problem)
         {
             throw new InvalidOperationException($"Commands cannot run, because this machine cannot sandbox them: {problem}");
@@ -53,6 +59,11 @@ public sealed class SandboxTools : IAsyncDisposable
         this.options = options;
         this.directory = directory;
         secrets = options.Secrets.GetValueOrDefault(agent) ?? [];
+        foreach (var path in WorkspaceOptions.FixedProtectedPaths.Concat(workspace.ProtectedPaths))
+        {
+            (path.Access == PathAccess.Hidden ? hidden : readOnly).AddInclude(path.Path);
+        }
+
         Tools = new Dictionary<string, ITool>
         {
             [Run] = new Tool("Runs a shell command in your working copy, and returns its output and exit code.", CommandSchema, ToolKind.Write, RunAsync),
@@ -119,7 +130,31 @@ public sealed class SandboxTools : IAsyncDisposable
         }
 
         var command = call.Arguments.GetProperty("command").GetString()!;
-        return await sandbox.StartAsync(new SandboxCommand(command, directory, SandboxLimits.Default, options.AllowedHosts, environment), ct).ConfigureAwait(false);
+        var (hiddenPaths, readOnlyPaths) = (new List<string>(), new List<string>());
+        Protect(directory, hiddenPaths, readOnlyPaths);
+        return await sandbox.StartAsync(
+            new SandboxCommand(command, directory, SandboxLimits.Default, options.AllowedHosts, environment, hiddenPaths, readOnlyPaths), ct).ConfigureAwait(false);
+    }
+
+    /// <summary>Finds the protected paths in a folder of the working copy as it is now. Links are skipped; they lead nowhere inside the sandbox.</summary>
+    private void Protect(string folder, List<string> hiddenPaths, List<string> readOnlyPaths)
+    {
+        foreach (var entry in new DirectoryInfo(folder).EnumerateFileSystemInfos("*", new EnumerationOptions { AttributesToSkip = FileAttributes.ReparsePoint }))
+        {
+            var relative = Path.GetRelativePath(directory, entry.FullName).Replace('\\', '/');
+            if (hidden.Match(relative).HasMatches)
+            {
+                hiddenPaths.Add(entry.FullName);
+            }
+            else if (readOnly.Match(relative).HasMatches)
+            {
+                readOnlyPaths.Add(entry.FullName);
+            }
+            else if (entry is DirectoryInfo)
+            {
+                Protect(entry.FullName, hiddenPaths, readOnlyPaths);
+            }
+        }
     }
 
     private static string Id(ToolCall call) => call.Arguments.GetProperty("id").GetString()!;

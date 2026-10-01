@@ -21,9 +21,11 @@ Isolated command execution on Linux and on Windows.
 - **Linux (done, in review):** what both operating systems share — `ISandbox` in Core, the `capabilities.sandbox`
   settings, the command rules gate, the `sandbox.*` tools with background processes, the filtering proxy, and the
   test kit's fake sandbox — and `LinuxSandbox` (bubblewrap, `systemd-run --user`, socat), tested against the real
-  operating system on Linux CI.
+  operating system on Linux CI. Commands cannot read the workspace's hidden paths or change its read-only ones (WS-05).
+- **Linux, still to do:** mount toolchains installed outside `/usr`, such as a .NET SDK in the home folder.
 - **Windows (to do):** `WindowsSandbox` (AppContainer per agent, Job Object per command), the proxy over a named pipe
-  with the small forwarder inside the sandbox, and the TEST-25 checks on windows-latest. It closes #17.
+  with the small forwarder inside the sandbox, protected paths kept out of commands with the AppContainer's ACLs, and
+  the TEST-25 checks on windows-latest. It closes #17.
 
 ## Notes
 

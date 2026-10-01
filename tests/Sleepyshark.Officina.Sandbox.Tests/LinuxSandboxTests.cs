@@ -45,6 +45,25 @@ public sealed class LinuxSandboxTests : IDisposable
     }
 
     [Fact(Skip = LinuxOnly, SkipUnless = nameof(OnLinux))]
+    public async Task Hidden_paths_cannot_be_read_and_read_only_paths_cannot_be_changed()
+    {
+        var git = Directory.CreateDirectory(Path.Combine(workingCopy, ".git")).FullName;
+        await File.WriteAllTextAsync(Path.Combine(git, "config"), "git-secret", Ct);
+        var env = Path.Combine(workingCopy, ".env");
+        await File.WriteAllTextAsync(env, "API_KEY=s3cret", Ct);
+        var configuration = Path.Combine(workingCopy, "sof.json");
+        await File.WriteAllTextAsync(configuration, "{}", Ct);
+
+        var (output, exitCode) = await RunAsync("cat .env .git/config; ls -A .git; echo '{ \"x\": 1 }' > sof.json", hidden: [git, env], readOnly: [configuration]);
+
+        Assert.NotEqual(0, exitCode);
+        Assert.DoesNotContain("s3cret", output, StringComparison.Ordinal);
+        Assert.DoesNotContain("git-secret", output, StringComparison.Ordinal);
+        Assert.Equal("{}", await File.ReadAllTextAsync(configuration, Ct));
+        Assert.Equal("API_KEY=s3cret", await File.ReadAllTextAsync(env, Ct));
+    }
+
+    [Fact(Skip = LinuxOnly, SkipUnless = nameof(OnLinux))]
     public async Task Commands_see_only_the_environment_they_are_given()
     {
         var (output, _) = await RunAsync("env", environment: new Dictionary<string, string> { ["NUGET_TOKEN"] = "t0ken" });
@@ -145,13 +164,18 @@ public sealed class LinuxSandboxTests : IDisposable
     private static SandboxLimits Small { get; } = new(1, 64 << 20, 16, 1000);
 
     private Task<ISandboxProcess> StartAsync(string commandLine) =>
-        sandbox.StartAsync(new(commandLine, workingCopy, SandboxLimits.Default, [], new Dictionary<string, string>()), Ct).AsTask();
+        sandbox.StartAsync(new(commandLine, workingCopy, SandboxLimits.Default, [], new Dictionary<string, string>(), [], []), Ct).AsTask();
 
     private async Task<(string Output, int ExitCode)> RunAsync(
-        string commandLine, IReadOnlyList<string>? allowedHosts = null, SandboxLimits? limits = null, Dictionary<string, string>? environment = null)
+        string commandLine,
+        IReadOnlyList<string>? allowedHosts = null,
+        SandboxLimits? limits = null,
+        Dictionary<string, string>? environment = null,
+        IReadOnlyList<string>? hidden = null,
+        IReadOnlyList<string>? readOnly = null)
     {
         await using var process = await sandbox.StartAsync(
-            new(commandLine, workingCopy, limits ?? SandboxLimits.Default, allowedHosts ?? [], environment ?? []), Ct);
+            new(commandLine, workingCopy, limits ?? SandboxLimits.Default, allowedHosts ?? [], environment ?? [], hidden ?? [], readOnly ?? []), Ct);
         var output = new StringBuilder();
         await foreach (var line in process.Output.ReadAllAsync(Ct))
         {

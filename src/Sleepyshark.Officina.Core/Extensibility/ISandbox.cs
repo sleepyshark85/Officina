@@ -34,8 +34,16 @@ public interface ISandboxProcess : IAsyncDisposable
 /// <param name="Limits">What the command may use.</param>
 /// <param name="AllowedHosts">The hosts it may reach through the filtering proxy, such as <c>*.nuget.org</c>; empty means no network.</param>
 /// <param name="Environment">Its environment variables, including the secrets its agent may use (SBX-05).</param>
+/// <param name="HiddenPaths">Files and folders in the working copy the command must not see (WS-05).</param>
+/// <param name="ReadOnlyPaths">Files and folders in the working copy the command must not change (WS-05).</param>
 public sealed record SandboxCommand(
-    string CommandLine, string Directory, SandboxLimits Limits, IReadOnlyList<string> AllowedHosts, IReadOnlyDictionary<string, string> Environment);
+    string CommandLine,
+    string Directory,
+    SandboxLimits Limits,
+    IReadOnlyList<string> AllowedHosts,
+    IReadOnlyDictionary<string, string> Environment,
+    IReadOnlyList<string> HiddenPaths,
+    IReadOnlyList<string> ReadOnlyPaths);
 
 /// <summary>What a command may use (SBX-01). Its time is limited by its owner, which stops it.</summary>
 /// <param name="Cpus">The processor time, in cores.</param>
