@@ -1,6 +1,6 @@
 # S10 — MCP and knowledge sources
 
-**Milestone:** M2 · **Size:** M · **Depends on:** S03 · **Status:** todo
+**Milestone:** M2 · **Size:** M · **Depends on:** S03 · **Issue:** [#12](https://github.com/sleepyshark85/Officina/issues/12) · **Status:** todo
 
 ## Goal
 

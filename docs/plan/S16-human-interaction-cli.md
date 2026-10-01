@@ -1,6 +1,6 @@
 # S16 — Human interaction and CLI
 
-**Milestone:** M5 · **Size:** M · **Depends on:** S04, S08 · **Status:** todo
+**Milestone:** M5 · **Size:** M · **Depends on:** S04, S08 · **Issue:** [#18](https://github.com/sleepyshark85/Officina/issues/18) · **Status:** todo
 
 ## Goal
 

@@ -1,6 +1,6 @@
 # S21 — Hardening and benchmark
 
-**Milestone:** M7 · **Size:** M · **Depends on:** S20 · **Status:** todo
+**Milestone:** M7 · **Size:** M · **Depends on:** S20 · **Issue:** [#23](https://github.com/sleepyshark85/Officina/issues/23) · **Status:** todo
 
 ## Goal
 

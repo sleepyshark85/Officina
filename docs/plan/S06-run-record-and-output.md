@@ -1,6 +1,6 @@
 # S06 — Run record and output
 
-**Milestone:** M2 · **Size:** M · **Depends on:** S04 · **Status:** todo
+**Milestone:** M2 · **Size:** M · **Depends on:** S04 · **Issue:** [#8](https://github.com/sleepyshark85/Officina/issues/8) · **Status:** todo
 
 ## Goal
 

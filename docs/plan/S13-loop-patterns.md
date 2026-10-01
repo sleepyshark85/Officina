@@ -1,6 +1,6 @@
 # S13 — Loop patterns
 
-**Milestone:** M4 · **Size:** M · **Depends on:** S04, S06 · **Status:** todo
+**Milestone:** M4 · **Size:** M · **Depends on:** S04, S06 · **Issue:** [#15](https://github.com/sleepyshark85/Officina/issues/15) · **Status:** todo
 
 ## Goal
 

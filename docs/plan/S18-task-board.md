@@ -1,6 +1,6 @@
 # S18 — Task board
 
-**Milestone:** M6 · **Size:** M · **Depends on:** S06, S08 · **Status:** todo
+**Milestone:** M6 · **Size:** M · **Depends on:** S06, S08 · **Issue:** [#20](https://github.com/sleepyshark85/Officina/issues/20) · **Status:** todo
 
 ## Goal
 

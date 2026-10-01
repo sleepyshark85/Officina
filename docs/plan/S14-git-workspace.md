@@ -1,6 +1,6 @@
 # S14 — Git workspace
 
-**Milestone:** M5 · **Size:** M · **Depends on:** S03 · **Status:** todo
+**Milestone:** M5 · **Size:** M · **Depends on:** S03 · **Issue:** [#16](https://github.com/sleepyshark85/Officina/issues/16) · **Status:** todo
 
 ## Goal
 

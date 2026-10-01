@@ -1,6 +1,6 @@
 # S17 — Project memory
 
-**Milestone:** M5 · **Size:** S · **Depends on:** S05, S16 · **Status:** todo
+**Milestone:** M5 · **Size:** S · **Depends on:** S05, S16 · **Issue:** [#19](https://github.com/sleepyshark85/Officina/issues/19) · **Status:** todo
 
 ## Goal
 

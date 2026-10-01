@@ -1,6 +1,6 @@
 # S15 — Sandbox
 
-**Milestone:** M5 · **Size:** M ×2 · **Depends on:** S00a, S14 · **Status:** todo
+**Milestone:** M5 · **Size:** M ×2 · **Depends on:** S00a, S14 · **Issue:** [#17](https://github.com/sleepyshark85/Officina/issues/17) · **Status:** todo
 
 ## Goal
 

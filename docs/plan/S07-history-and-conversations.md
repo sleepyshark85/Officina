@@ -1,6 +1,6 @@
 # S07 — History and conversation store
 
-**Milestone:** M2 · **Size:** S · **Depends on:** S05 · **Status:** todo
+**Milestone:** M2 · **Size:** S · **Depends on:** S05 · **Issue:** [#9](https://github.com/sleepyshark85/Officina/issues/9) · **Status:** todo
 
 ## Goal
 

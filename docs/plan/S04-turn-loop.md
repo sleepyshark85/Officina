@@ -1,6 +1,6 @@
 # S04 — Turn loop
 
-**Milestone:** M2 · **Size:** M · **Depends on:** S03 · **Status:** todo
+**Milestone:** M2 · **Size:** M · **Depends on:** S03 · **Issue:** [#6](https://github.com/sleepyshark85/Officina/issues/6) · **Status:** todo
 
 ## Goal
 

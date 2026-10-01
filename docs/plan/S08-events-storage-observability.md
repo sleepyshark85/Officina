@@ -1,6 +1,6 @@
 # S08 — Events, storage and observability
 
-**Milestone:** M2 · **Size:** M · **Depends on:** S04 · **Status:** todo
+**Milestone:** M2 · **Size:** M · **Depends on:** S04 · **Issue:** [#10](https://github.com/sleepyshark85/Officina/issues/10) · **Status:** todo
 
 ## Goal
 

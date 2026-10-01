@@ -1,6 +1,6 @@
 # S09 — Triggers and admission
 
-**Milestone:** M2 · **Size:** M · **Depends on:** S04, S08 · **Status:** todo
+**Milestone:** M2 · **Size:** M · **Depends on:** S04, S08 · **Issue:** [#11](https://github.com/sleepyshark85/Officina/issues/11) · **Status:** todo
 
 ## Goal
 

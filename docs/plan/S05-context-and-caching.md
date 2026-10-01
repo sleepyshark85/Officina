@@ -1,6 +1,6 @@
 # S05 — Context and caching
 
-**Milestone:** M2 · **Size:** M · **Depends on:** S04 · **Status:** todo
+**Milestone:** M2 · **Size:** M · **Depends on:** S04 · **Issue:** [#7](https://github.com/sleepyshark85/Officina/issues/7) · **Status:** todo
 
 ## Goal
 

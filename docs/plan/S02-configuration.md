@@ -1,6 +1,6 @@
 # S02 — Configuration
 
-**Milestone:** M1 · **Size:** M · **Depends on:** S01 · **Status:** todo
+**Milestone:** M1 · **Size:** M · **Depends on:** S01 · **Issue:** [#4](https://github.com/sleepyshark85/Officina/issues/4) · **Status:** todo
 
 ## Goal
 

@@ -1,6 +1,6 @@
 # S11 — Claude provider
 
-**Milestone:** M3 · **Size:** M · **Depends on:** S00b, S05 · **Status:** todo
+**Milestone:** M3 · **Size:** M · **Depends on:** S00b, S05 · **Issue:** [#13](https://github.com/sleepyshark85/Officina/issues/13) · **Status:** todo
 
 ## Goal
 

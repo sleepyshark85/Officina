@@ -1,6 +1,6 @@
 # S12 — Model gateway
 
-**Milestone:** M3 · **Size:** S · **Depends on:** S11 · **Status:** todo
+**Milestone:** M3 · **Size:** S · **Depends on:** S11 · **Issue:** [#14](https://github.com/sleepyshark85/Officina/issues/14) · **Status:** todo
 
 ## Goal
 

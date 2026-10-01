@@ -1,6 +1,6 @@
 # S20 — Team
 
-**Milestone:** M6 · **Size:** M · **Depends on:** S13, S18, S19 · **Status:** todo
+**Milestone:** M6 · **Size:** M · **Depends on:** S13, S18, S19 · **Issue:** [#22](https://github.com/sleepyshark85/Officina/issues/22) · **Status:** todo
 
 ## Goal
 

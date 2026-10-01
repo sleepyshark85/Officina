@@ -1,6 +1,6 @@
 # S03 — Tool pipeline
 
-**Milestone:** M2 · **Size:** M · **Depends on:** S02 · **Status:** todo
+**Milestone:** M2 · **Size:** M · **Depends on:** S02 · **Issue:** [#5](https://github.com/sleepyshark85/Officina/issues/5) · **Status:** todo
 
 ## Goal
 

@@ -1,6 +1,6 @@
 # S19 — Checkpoints and long runs
 
-**Milestone:** M6 · **Size:** M · **Depends on:** S08, S14 · **Status:** todo
+**Milestone:** M6 · **Size:** M · **Depends on:** S08, S14 · **Issue:** [#21](https://github.com/sleepyshark85/Officina/issues/21) · **Status:** todo
 
 ## Goal
 

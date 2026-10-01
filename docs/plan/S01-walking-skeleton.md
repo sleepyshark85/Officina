@@ -1,6 +1,6 @@
 # S01 — Walking skeleton
 
-**Milestone:** M1 · **Size:** M · **Depends on:** none · **Status:** todo
+**Milestone:** M1 · **Size:** M · **Depends on:** none · **Issue:** [#3](https://github.com/sleepyshark85/Officina/issues/3) · **Status:** todo
 
 ## Goal
 
