@@ -11,9 +11,13 @@ namespace Sleepyshark.Officina.Core.Tools;
 /// <param name="Schema">The arguments' schema, built once; null for a provider tool.</param>
 internal sealed record CatalogTool(string Name, ToolOptions Options, ITool? Implementation, JsonSchema? Schema)
 {
-    /// <summary>A tool is a write tool if it declares itself one, is configured as one, or is irreversible.</summary>
+    /// <summary>
+    /// A tool is a write tool if it declares itself one, is configured as one, or is irreversible. A tool server's tools
+    /// are writes unless configured as reads: what a server says about its tools is only a hint.
+    /// </summary>
     public ToolKind Kind { get; } =
-        Implementation?.Descriptor.Kind == ToolKind.Write || Options.Kind == ToolKind.Write || Options.Irreversible ? ToolKind.Write : ToolKind.Read;
+        Implementation?.Descriptor.Kind == ToolKind.Write || (Options.Kind ?? (Options.McpTool() is null ? ToolKind.Read : ToolKind.Write)) == ToolKind.Write
+        || Options.Irreversible ? ToolKind.Write : ToolKind.Read;
 
     /// <summary>
     /// Configuration can make a tool unsafe to run in parallel, never safe. An irreversible tool never is, so a second
@@ -28,6 +32,7 @@ internal sealed record CatalogTool(string Name, ToolOptions Options, ITool? Impl
 /// The configured tools joined with the application's implementations, and the tools each agent is offered. Building it
 /// checks what only the implementations reveal (TOOL-02): every source is registered, every input schema is valid,
 /// every write tool has a gate or an exemption (INV-04), and every condition fits the arguments it reads (CFG-13).
+/// A tool server's tools join exactly like the application's, so the same steps govern them (TEST-17).
 /// </summary>
 internal sealed class ToolCatalog
 {
@@ -36,7 +41,8 @@ internal sealed class ToolCatalog
     private ToolCatalog(Dictionary<string, Dictionary<string, CatalogTool>> byAgent) => this.byAgent = byAgent;
 
     /// <exception cref="ConfigurationException">The configuration has errors.</exception>
-    public static ToolCatalog Create(OfficinaOptions options, IReadOnlyDictionary<string, ITool> tools, IReadOnlyDictionary<string, IGate> gates)
+    public static ToolCatalog Create(
+        OfficinaOptions options, IReadOnlyDictionary<string, ITool> tools, IReadOnlyDictionary<string, IGate> gates, IReadOnlyDictionary<string, IKnowledgeSource> knowledge)
     {
         var errors = options.Validate().ToList();
         var catalog = new Dictionary<string, CatalogTool>();
@@ -44,8 +50,12 @@ internal sealed class ToolCatalog
         {
             foreach (var (name, tool) in options.Tools)
             {
-                catalog[name] = Join(name, tool, tools, errors);
+                catalog[name] = Join(name, tool, Implementation(name, tool, options, tools, knowledge, errors), errors);
             }
+
+            errors.AddRange(options.Knowledge
+                .Where(source => !knowledge.ContainsKey(source.Value.ExtensionId()!))
+                .Select(source => Unregistered($"knowledge.{source.Key}.use", "knowledge source", source.Value.ExtensionId()!)));
 
             errors.AddRange(options.Gates
                 .Where(gate => gate.Value.ExtensionId() is { } id && !gates.ContainsKey(id))
@@ -58,31 +68,74 @@ internal sealed class ToolCatalog
             throw new ConfigurationException([.. errors.OrderBy(error => error.Phase)]);
         }
 
-        return new(options.Agents.ToDictionary(
-            agent => agent.Key,
-            agent => agent.Value.Tools.SelectMany(set => options.ToolSets[set]).Distinct().ToDictionary(name => name, name => catalog[name])));
+        return new(options.Agents.ToDictionary(agent => agent.Key, agent => AgentTools(agent.Value, options, catalog)));
     }
 
     public bool TryGet(string agent, string name, out CatalogTool tool) => Tools(agent).TryGetValue(name, out tool!);
 
-    /// <summary>The tools an agent is offered, sorted by name. They depend only on its tool sets, never on the caller (TOOL-03).</summary>
-    public IReadOnlyList<ToolDefinition> Offered(string agent) =>
-        [.. Tools(agent).Values.OrderBy(tool => tool.Name, StringComparer.Ordinal).Select(tool => new ToolDefinition(
-            tool.Name, tool.Implementation?.Descriptor.Description, tool.Implementation?.Descriptor.InputSchema, tool.Options.ProviderTool()))];
+    /// <summary>
+    /// The tools an agent is offered, sorted by name. They depend only on its tool sets, never on the caller (TOOL-03).
+    /// When its tool descriptions are loaded on demand, its tools are offered by name only (TOOL-12).
+    /// </summary>
+    public IReadOnlyList<ToolDefinition> Offered(string agent)
+    {
+        var tools = Tools(agent);
+        var onDemand = tools.TryGetValue(OfficinaOptions.DescribeTool, out var describe) && describe.Implementation is DescribeTool;
+        return [.. tools.Values.OrderBy(tool => tool.Name, StringComparer.Ordinal).Select(tool =>
+            onDemand && tool.Implementation is not (null or DescribeTool)
+                ? new ToolDefinition(tool.Name, DescribeTool.Stub, DescribeTool.AnyArguments, null)
+                : new ToolDefinition(tool.Name, tool.Implementation?.Descriptor.Description, tool.Implementation?.Descriptor.InputSchema, tool.Options.ProviderTool()))];
+    }
 
     private Dictionary<string, CatalogTool> Tools(string agent) =>
         byAgent.TryGetValue(agent, out var tools) ? tools : throw ConfigurationException.UnknownAgent(agent, byAgent.Keys);
 
-    private static CatalogTool Join(string name, ToolOptions options, IReadOnlyDictionary<string, ITool> tools, List<ConfigurationError> errors)
+    /// <summary>The tools of an agent's tool sets, with <c>describe_tool</c> when their descriptions are loaded on demand.</summary>
+    private static Dictionary<string, CatalogTool> AgentTools(AgentDefinition agent, OfficinaOptions options, Dictionary<string, CatalogTool> catalog)
     {
-        if (options.ExtensionId() is not { } id)
+        var tools = agent.Tools.SelectMany(set => options.ToolSets[set]).Distinct().ToDictionary(name => name, name => catalog[name]);
+        if (agent.ToolDescriptionsOnDemand)
         {
-            return new(name, options, null, null);
+            var describe = new DescribeTool(tools);
+            tools[OfficinaOptions.DescribeTool] = new(
+                OfficinaOptions.DescribeTool, new() { Source = $"builtin:{OfficinaOptions.DescribeTool}" }, describe, JsonSchema.Build(describe.Descriptor.InputSchema));
         }
 
-        if (!tools.TryGetValue(id, out var implementation))
+        return tools;
+    }
+
+    /// <summary>What runs a tool's calls; null for a provider tool, or one that is missing.</summary>
+    private static ITool? Implementation(
+        string name, ToolOptions tool, OfficinaOptions options, IReadOnlyDictionary<string, ITool> tools, IReadOnlyDictionary<string, IKnowledgeSource> knowledge,
+        List<ConfigurationError> errors)
+    {
+        if (tool.KnowledgeSource() is { } source)
         {
-            errors.Add(Unregistered($"tools.{name}.source", "tool", id));
+            // An unregistered source is reported once, for its entry in knowledge.
+            return knowledge.TryGetValue(options.Knowledge[source].ExtensionId()!, out var found) ? new KnowledgeTool(source, found) : null;
+        }
+
+        if ((tool.ExtensionId() ?? tool.McpTool()) is not { } id)
+        {
+            return null;
+        }
+
+        if (tools.TryGetValue(id, out var implementation))
+        {
+            return implementation;
+        }
+
+        errors.Add(tool.McpTool() is null
+            ? Unregistered($"tools.{name}.source", "tool", id)
+            : new(ValidationPhase.References, $"tools.{name}.source", $"tool server \"{id.Split('/')[0]}\" has no tool \"{id[(id.IndexOf('/') + 1)..]}\".",
+                "Use a name from the server's tool list."));
+        return null;
+    }
+
+    private static CatalogTool Join(string name, ToolOptions options, ITool? implementation, List<ConfigurationError> errors)
+    {
+        if (implementation is null)
+        {
             return new(name, options, null, null);
         }
 
@@ -93,7 +146,7 @@ internal sealed class ToolCatalog
         }
         catch (Exception exception) when (exception is JsonSchemaException or System.Text.Json.JsonException or InvalidOperationException)
         {
-            errors.Add(new(ValidationPhase.Tools, $"tools.{name}", $"the input schema of {id} is not valid JSON Schema: {exception.Message}",
+            errors.Add(new(ValidationPhase.Tools, $"tools.{name}", $"the input schema of {options.ExtensionId() ?? options.Source} is not valid JSON Schema: {exception.Message}",
                 "Fix the tool's declared input schema."));
         }
 

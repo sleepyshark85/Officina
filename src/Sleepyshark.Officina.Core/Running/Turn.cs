@@ -27,10 +27,12 @@ internal sealed class Turn
     private readonly IModelProvider provider;
     private readonly ModelPrice? price;
     private readonly ToolPipeline tools;
+    private readonly IReadOnlyList<(string Name, IKnowledgeSource Source)> beforeTurn;
     private readonly TimeProvider time;
     private readonly string work;
     private readonly List<ToolAttempt> attempts = [];
     private readonly List<CacheWarning> cacheWarnings = [];
+    private readonly List<string> retrieved = [];
     private List<ToolUseContent> pending = [];
     private long? started;
     private int iterations;
@@ -44,12 +46,21 @@ internal sealed class Turn
     /// <param name="options">The configuration the run uses.</param>
     /// <param name="provider">The provider of the agent's model profile.</param>
     /// <param name="tools">The tool pipeline built from <paramref name="options"/>.</param>
+    /// <param name="knowledge">The application's knowledge sources, by extension id.</param>
     /// <param name="instructions">The agent's instructions, placeholders filled.</param>
     /// <param name="work">What the turn is asked to do.</param>
     /// <param name="inbox">Messages sent to the agent, which the turn adds to its history before each model call.</param>
     /// <param name="time">The clock for the time budgets and the operating facts.</param>
     public Turn(
-        ToolContext context, OfficinaOptions options, IModelProvider provider, ToolPipeline tools, string instructions, string work, ConcurrentQueue<Message> inbox, TimeProvider time)
+        ToolContext context,
+        OfficinaOptions options,
+        IModelProvider provider,
+        ToolPipeline tools,
+        IReadOnlyDictionary<string, IKnowledgeSource> knowledge,
+        string instructions,
+        string work,
+        ConcurrentQueue<Message> inbox,
+        TimeProvider time)
     {
         this.context = context;
         project = options.Project;
@@ -63,6 +74,7 @@ internal sealed class Turn
         this.inbox = inbox;
         this.provider = provider;
         this.tools = tools;
+        beforeTurn = [.. agent.Context.Retrieval.BeforeTurn.Select(name => (name, knowledge[options.Knowledge[name].ExtensionId()!]))];
         this.time = time;
         this.work = work;
     }
@@ -70,6 +82,11 @@ internal sealed class Turn
     public async Task<AgentResult> RunAsync(CancellationToken ct)
     {
         started = time.GetTimestamp();
+        if (await RetrieveAsync(ct).ConfigureAwait(false) is { } notCovered)
+        {
+            return notCovered;
+        }
+
         while (true)
         {
             if (Exhausted() is { } limit)
@@ -83,7 +100,7 @@ internal sealed class Turn
                 conversation.Add(message);
             }
 
-            var request = conversation.Next(OperatingFacts());
+            var request = conversation.Next(Facts());
             StopReason stop;
             try
             {
@@ -140,6 +157,26 @@ internal sealed class Turn
     /// <summary>Time since the turn started; zero for a turn cancelled before it started.</summary>
     private TimeSpan Elapsed => started is { } at ? time.GetElapsedTime(at) : TimeSpan.Zero;
 
+    /// <summary>
+    /// Searches the knowledge sources configured before the turn with its work, once, and keeps what each found as a
+    /// labelled fact of the volatile context (CTX-04). When none covers the work, the turn can end in a handoff for a
+    /// policy gap (CTX-05).
+    /// </summary>
+    private async Task<AgentResult?> RetrieveAsync(CancellationToken ct)
+    {
+        var covered = false;
+        foreach (var (name, source) in beforeTurn)
+        {
+            var retrieval = await source.RetrieveAsync(new RetrievalQuery(work, context.Caller, KnowledgeTool.MaxPassages), ct).ConfigureAwait(false);
+            covered |= retrieval.Coverage != Coverage.NotCovered;
+            retrieved.Add(Labels.Data($"knowledge:{name}", KnowledgeTool.Format(retrieval)));
+        }
+
+        return beforeTurn.Count > 0 && !covered && agent.Context.Retrieval.HandOffWhenNotCovered
+            ? HandOff(HandoffReason.PolicyGap, "the knowledge sources do not cover the work")
+            : null;
+    }
+
     /// <summary>Which limit of the turn's or the run's budget is used up, if any (LOOP-06, COST-02).</summary>
     private string? Exhausted()
     {
@@ -155,11 +192,11 @@ internal sealed class Turn
             : null;
     }
 
-    /// <summary>The agent's operating facts, filled for this call (CTX-09).</summary>
-    private List<string> OperatingFacts()
+    /// <summary>The volatile context for this call: the passages retrieved before the turn, then the agent's operating facts, filled for this call (CTX-09).</summary>
+    private List<string> Facts()
     {
         var now = time.GetUtcNow();
-        return [.. agent.Context.OperatingFacts.Select(fact => InstructionPlaceholders.Fill(fact, project, context.Agent, agent, now))];
+        return [.. retrieved, .. agent.Context.OperatingFacts.Select(fact => InstructionPlaceholders.Fill(fact, project, context.Agent, agent, now))];
     }
 
     /// <summary>

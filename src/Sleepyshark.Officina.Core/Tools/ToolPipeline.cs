@@ -25,8 +25,12 @@ public sealed class ToolPipeline
     private readonly TimeProvider time;
 
     /// <param name="options">The configuration, fixed for the pipeline's lifetime, so no agent can change its own rules (INV-10).</param>
-    /// <param name="tools">The application's tools, by the id that <c>extension:&lt;id&gt;</c> sources name.</param>
+    /// <param name="tools">
+    /// The application's tools, by the id that <c>extension:&lt;id&gt;</c> sources name, and the tool servers' tools, by
+    /// the <c>&lt;server&gt;/&lt;tool&gt;</c> that <c>mcp:</c> sources name.
+    /// </param>
     /// <param name="gates">The application's gates, by the id that <c>extension:&lt;id&gt;</c> gates name.</param>
+    /// <param name="knowledge">The application's knowledge sources, by the id that <c>extension:&lt;id&gt;</c> sources name.</param>
     /// <param name="audit">Where every write-tool attempt is recorded.</param>
     /// <param name="human">Who approves calls that need approval.</param>
     /// <param name="secrets">Where tools read credentials.</param>
@@ -36,6 +40,7 @@ public sealed class ToolPipeline
         OfficinaOptions options,
         IReadOnlyDictionary<string, ITool> tools,
         IReadOnlyDictionary<string, IGate> gates,
+        IReadOnlyDictionary<string, IKnowledgeSource> knowledge,
         IAuditLog audit,
         IHumanChannel human,
         ISecretSource secrets,
@@ -44,7 +49,8 @@ public sealed class ToolPipeline
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(tools);
         ArgumentNullException.ThrowIfNull(gates);
-        catalog = ToolCatalog.Create(options, tools, gates);
+        ArgumentNullException.ThrowIfNull(knowledge);
+        catalog = ToolCatalog.Create(options, tools, gates, knowledge);
         this.options = options;
         this.gates = gates;
         this.audit = audit ?? throw new ArgumentNullException(nameof(audit));

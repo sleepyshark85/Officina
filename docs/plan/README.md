@@ -6,10 +6,10 @@ Status: draft · 2026-10-01 · slices `REQUIREMENTS.md` (revision 2) into delive
 
 Last updated 2026-10-02.
 
-- **Done:** M0 spikes S00a and S00b; M1 slices S01 (walking skeleton) and S02 (configuration); S03 (tool pipeline); S04 (turn loop); S05 (context and caching); S14 (git workspace).
+- **Done:** M0 spikes S00a and S00b; M1 slices S01 (walking skeleton) and S02 (configuration); S03 (tool pipeline); S04 (turn loop); S05 (context and caching); S10 (MCP and knowledge); S14 (git workspace).
 - **Doing:** S15 (sandbox). The Linux piece is in review; the Windows piece follows.
 - **Waiting:** the M0 design review sign-off on `REQUIREMENTS.md`, `CONFIGURATION.md` and `DESIGN.md`.
-- **Next:** S06, S07, S08 and S10; S07 can start now that S05 is done. The Windows piece of S15 can run alongside them.
+- **Next:** S06, S07 and S08. The Windows piece of S15 can run alongside them.
 - **Open follow-ups:**
   - S02 kept a `formatVersion` check, though only version 1 exists. Consider removing the setting
     until a version 2 exists (principle 13).
@@ -20,8 +20,10 @@ Last updated 2026-10-02.
     (TOOL-06); S18 adds the task board to `GateContext`.
   - S08 adds the durable `IAuditLog`, tool-call events, and a log for read tools' internal error details.
   - S11 maps provider tools and their limits, such as maximum uses, to the Claude request.
-  - S11: secrets declared in configuration, such as the provider API key, must join the tool
-    pipeline's redaction set when they are resolved, so they are removed like secrets tools read (INV-06).
+  - S11: secrets declared in configuration, such as the provider API key and the tool servers' `env` and
+    `headers`, must join the tool pipeline's redaction set when they are resolved, so they are removed like
+    secrets tools read (INV-06).
+  - S07 adds the `knowledge` capability switch (CAP-01). S16 connects the tool servers in `sof run`.
   - S16 adds the approval timeout and the permission modes (HITL-01, HITL-02). A denied or timed-out approval
     should then hand off as "approval denied or timed out"; S04 counts it as a refusal towards a policy gap.
   - S04 left parts of its requirements to the slices that add the state they need; its Notes list them
@@ -43,7 +45,7 @@ Last updated 2026-10-02.
     and integrates a task only after its verification checks pass (TASK-05).
   - S19 snapshots and restores the workspace, and cleans up worktrees left by a crash.
   - S05 moved CTX-06 to S07 and CTX-07 to S06, and left boundary ② and the memory-change case of TEST-09 to S17;
-    its Notes list the rest (S06, S09, S10, S18).
+    its Notes list the rest (S06, S09, S18).
   - S08 publishes a turn's `CacheWarnings` as warning events (COST-01); the threshold is
     `operations.telemetry.cacheHitWarning`.
   - S11 maps cache boundaries to `cache_control`, putting boundary ③ on the last cacheable block before a
@@ -95,7 +97,7 @@ A slice is **done** when:
 | [S07](S07-history-and-conversations.md) | History and conversation store | M2 | S | S05 | [#9](https://github.com/sleepyshark85/Officina/issues/9) | todo |
 | [S08](S08-events-storage-observability.md) | Events, storage and observability | M2 | M | S04 | [#10](https://github.com/sleepyshark85/Officina/issues/10) | todo |
 | [S09](S09-triggers-and-admission.md) | Triggers and admission | M2 | M | S04, S08 | [#11](https://github.com/sleepyshark85/Officina/issues/11) | todo |
-| [S10](S10-mcp-and-knowledge.md) | MCP and knowledge sources | M2 | M | S03 | [#12](https://github.com/sleepyshark85/Officina/issues/12) | todo |
+| [S10](S10-mcp-and-knowledge.md) | MCP and knowledge sources | M2 | M | S03 | [#12](https://github.com/sleepyshark85/Officina/issues/12) | done |
 | [S11](S11-claude-provider.md) | Claude provider | M3 | M | S00b, S05 | [#13](https://github.com/sleepyshark85/Officina/issues/13) | todo |
 | [S12](S12-model-gateway.md) | Model gateway | M3 | S | S11 | [#14](https://github.com/sleepyshark85/Officina/issues/14) | todo |
 | [S13](S13-loop-patterns.md) | Loop patterns | M4 | M | S04, S06 | [#15](https://github.com/sleepyshark85/Officina/issues/15) | todo |

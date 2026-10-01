@@ -8,12 +8,12 @@ namespace Sleepyshark.Officina.Core.Configuration;
 /// </summary>
 public sealed record ToolOptions
 {
-    [Setting("Where the tool comes from: `extension:<id>` for a tool the application registers, or `provider:<name>` for a tool the model provider runs itself.",
+    [Setting("Where the tool comes from: `extension:<id>` for a tool the application registers, `mcp:<server>/<tool>` for a tool of a server in `toolServers`, `knowledge:<name>` to search a source in `knowledge`, or `provider:<name>` for a tool the model provider runs itself.",
         Example = "\"extension:Acme.CreateIssue\"")]
     [Required(ErrorMessage = Messages.Required)]
     public required string Source { get; init; }
 
-    [Setting("`write` for a tool that changes something. Unset uses the tool's declaration; a tool that declares itself `write` stays `write`.",
+    [Setting("`write` for a tool that changes something. Unset uses the tool's declaration, and `write` for a tool server's tools; a tool that declares itself `write` stays `write`.",
         Example = "\"write\"")]
     public ToolKind? Kind { get; init; }
 
@@ -55,6 +55,12 @@ public sealed record ToolOptions
 
     /// <summary>The id of the application's tool, for an <c>extension:</c> source.</summary>
     public string? ExtensionId() => After(Source, "extension:");
+
+    /// <summary>The server and the tool's name on it, as <c>&lt;server&gt;/&lt;tool&gt;</c>, for an <c>mcp:</c> source.</summary>
+    public string? McpTool() => After(Source, "mcp:");
+
+    /// <summary>The knowledge source the tool searches, for a <c>knowledge:</c> source.</summary>
+    public string? KnowledgeSource() => After(Source, "knowledge:");
 
     /// <summary>The provider's name for its own tool, for a <c>provider:</c> source (TOOL-13).</summary>
     public string? ProviderTool() => After(Source, "provider:");

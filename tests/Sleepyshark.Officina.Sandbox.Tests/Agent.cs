@@ -29,6 +29,7 @@ internal sealed class Agent : IAsyncDisposable
         pipeline = new ToolPipeline(
             Options, Tools.Tools.Concat(others).ToDictionary(),
             new Dictionary<string, IGate> { [CommandRules.Id] = new CommandRules(Options.Capabilities.Sandbox!) },
+            new Dictionary<string, IKnowledgeSource>(),
             Audit, Human, new InMemorySecretSource(new Dictionary<string, string> { ["NUGET_TOKEN"] = "t0ken" }), Time);
     }
 

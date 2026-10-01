@@ -151,6 +151,33 @@ public class ValidationTests
         Assert.Equal("sof.json:4:7: agents.dev.model: model profile \"x\" does not exist. Add it to models.", error.ToString());
     }
 
+    [Fact]
+    public void Tool_servers_and_knowledge_sources_are_checked_with_what_refers_to_them()
+    {
+        var options = WithAgent(Extractor with { Context = new() { Retrieval = new() { BeforeTurn = ["wiki"] } } }) with
+        {
+            ToolServers = new Dictionary<string, ToolServerOptions>
+            {
+                ["local"] = new(),
+                ["remote"] = new() { Transport = ToolServerTransport.Http, Url = "tracker/mcp" },
+            },
+            Knowledge = new Dictionary<string, KnowledgeOptions> { ["handbook"] = new() { Use = "builtin:index" } },
+            Tools = new Dictionary<string, ToolOptions>
+            {
+                ["a"] = new() { Source = "mcp:github/create_issue" },
+                ["b"] = new() { Source = "mcp:local" },
+                ["c"] = new() { Source = "knowledge:wiki" },
+            },
+        };
+
+        Assert.Equal(
+            [
+                "toolServers.local.command", "toolServers.remote.url", "knowledge.handbook.use", "tools.b.source",
+                "agents.extractor.context.retrieval.beforeTurn", "tools.a.source", "tools.c.source",
+            ],
+            options.Validate().Select(error => error.Path));
+    }
+
     private static OfficinaOptions WithAgent(AgentDefinition agent) =>
         new() { Agents = new Dictionary<string, AgentDefinition> { ["extractor"] = agent } };
 }
