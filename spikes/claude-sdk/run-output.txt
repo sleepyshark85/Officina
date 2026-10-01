@@ -1,0 +1,60 @@
+# Spike output 2026-10-01, Anthropic 12.53.0, claude-opus-5-5. Run 1 = all scenarios (stream hit a mid-stream overloaded_error).
+
+===== stream =====
+request tool json: [{"name":"get_weather","description":"Get current weather for a city.","input_schema":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true,"eager_input_streaming":true}]
+!! stream failed: Anthropic.Exceptions.AnthropicSseException: SSE error returned from server: '{"type":"error","error":{"details":null,"type":"overloaded_error","message":"Overloaded"},"request_id":"req_011CfagvFMiaksnHqWQLTZjz"         }'
+
+===== cache =====
+system json: [{"type":"text","text":"Rule 1: always answer tersely and pr... cache_control={"type":"ephemeral","ttl":"1h"}
+[usage cache#1] input=4 output=4 cache_read=0 cache_creation=5693 (5m=2170 1h=3523) server_tool_use=null service_tier=standard
+[usage cache#2] input=4 output=4 cache_read=5693 cache_creation=0 (5m=0 1h=0) server_tool_use=null service_tier=standard
+
+===== midsys =====
+messages json: [{"role":"user","content":"Say hello."},{"role":"system","content":"Operator: from now on reply only in French."}]
+reply: Bonjour ! Comment puis-je vous aider aujourd'hui ?
+[usage midsys] input=38 output=93 cache_read=0 cache_creation=0 (5m=0 1h=0) server_tool_use=null service_tier=standard
+
+===== clearat =====
+messages json: [{"role":"user","content":"What is the code word? Answer with the word only."},{"role":"system","content":"Volatile context: the code word is PELICAN.","clear_at":"next_user_message"}]
+turn1 reply: PELICAN
+[usage clearat#1] input=39 output=112 cache_read=0 cache_creation=0
+turn2 reply: No. There is no system message in this conversation, and nothing here mentions a code word. My earlier answer of "PELICAN" was made up, not taken from anything you or a system message provided. I'm sorry for presenting it as if it were real.
+[usage clearat#2] input=174 output=165 cache_read=0 cache_creation=0
+
+===== structured =====
+structured: {"capital":"Paris","population_millions":68.2}
+parsed capital=Paris
+[usage structured] input=234 output=21 cache_read=0 cache_creation=0 (5m=0 1h=0) server_tool_use=null service_tier=standard
+
+===== raw =====
+raw call HTTP 200; request-id header present=True
+reply: OK
+response top-level keys: model,id,type,role,content,container,stop_reason,stop_sequence,stop_details,usage,diagnostics
+[usage raw] input=16 output=4 cache_read=0 cache_creation=0 (5m=0 1h=0) server_tool_use=null service_tier=standard
+
+===== error =====
+caught AnthropicBadRequestException : Anthropic4xxException : AnthropicApiException
+StatusCode=400 ErrorType=InvalidRequestError ResponseBody={"type":"error","error":{"type":"invalid_request_error","message":"not_a_real_param: Extra inputs are not permitted"},"request_id":"req_011CfagxEzCC1yMsZumr2JSE"}
+caught AnthropicNotFoundException StatusCode=404 ErrorType=NotFoundError
+streaming: caught AnthropicBadRequestException ErrorType=InvalidRequestError
+
+TOTAL tokens: input=509 output=403 cache_read=5693 write5m=2170 write1h=3523
+Approx cost at $4/$20 per MTok, $0.0503
+
+# Run 2 = stream only, after adding retry and a thinking-inducing prompt at effort high.
+
+===== stream =====
+request tool json: [{"name":"get_weather","description":"Get current weather for a city.","input_schema":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true,"eager_input_streaming":true}]
+events=30 input_json_deltas=3 thinking_deltas=5 signature_deltas=1
+accumulated partial_json: {"city": "Madrid"}
+parsed city=Madrid
+stop_reason=tool_use blocks=[ThinkingBlock,TextBlock,ToolUseBlock]
+thinking len=53 sig len=816
+[usage stream#1] input=419 output=131 cache_read=0 cache_creation=0 (5m=0 1h=0) server_tool_use=null service_tier=standard
+follow-up stop_reason=end_turn text=The country is **Spain**, because NIAPS is an anagram of SPAIN. Its capital is **Madrid**.
+
+It's currently **18°C with light rain** there, so you'll want an umbrella.
+[usage stream#2] input=561 output=68 cache_read=0 cache_creation=0 (5m=0 1h=0) server_tool_use=null service_tier=standard
+
+TOTAL tokens: input=980 output=199 cache_read=0 write5m=0 write1h=0
+Approx cost at $4/$20 per MTok, $0.0079
