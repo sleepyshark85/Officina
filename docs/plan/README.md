@@ -12,7 +12,8 @@ Last updated 2026-10-02.
 - **Next:** S16. The Windows piece of S15 can run alongside it.
 - **Open follow-ups:**
   - S02 kept a `formatVersion` check, though only version 1 exists. Consider removing the setting
-    until a version 2 exists (principle 13).
+    until a version 2 exists (principle 13). S06 keeps `output.schema` as JSON text; when S13 or S16 want the
+    reference's `{ "file": … }` form, that is a format change.
   - S02 rejects a plain-text `apiKey`, because the binder would otherwise skip it silently and
     fall back to the default secret reference. Kept on purpose.
   - S18 adds the task board to `GateContext` (TOOL-06), and the `task` record scope (REC-06).

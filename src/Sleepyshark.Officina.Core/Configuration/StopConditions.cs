@@ -16,7 +16,7 @@ public sealed record StopConditions
         Example = "\"submit_report\"")]
     public string? FinishTool { get; init; }
 
-    [Setting("The turn completes as soon as its output passes the checks in `output.checks`, which then run after every model reply.",
+    [Setting("The turn completes as soon as its output passes the checks in `output.checks`, which then run after every model reply. A reply that only calls tools is checked with empty output.",
         Example = "true")]
     public bool ChecksPass { get; init; }
 

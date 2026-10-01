@@ -206,7 +206,7 @@ def runtime():
     # turn -> tools, turn -> events
     s.path("M 440,156 V 260"); s.label(440, 208, "TOOLS", where="beside")
     s.path(elbow_vh(512, 156, 208, 656, 260)); s.label(656, 236, "EVENTS", where="beside")
-    # tools -> coordinator, events -> storage, coordinator -> storage
+    # tools -> run record, events -> storage, run record -> storage
     s.path("M 392,288 H 344"); s.label(368, 288, "RECORD")
     s.path("M 744,288 H 792"); s.label(768, 288, "APPEND")
     s.path("M 272,316 V 372 Q 272,380 280,380 H 848 Q 856,380 856,372 V 316"); s.label(560, 380, "COMMIT")
@@ -215,12 +215,12 @@ def runtime():
     s.node(392, y1, 160, 56, "Turn engine", "the one primitive", "CORE", kind="focal")
     s.node(600, y1, 144, 56, "Model gateway", "rate limits · fallback", "SVC")
     s.node(792, y1, 128, 56, "Provider", "Claude API", "EXT", kind="external")
-    s.node(200, y2, 144, 56, "Run coordinator", "single writer", "SVC")
+    s.node(200, y2, 144, 56, "Run record", "optimistic revisions", "SVC")
     s.node(392, y2, 160, 56, "Tool pipeline", "gates · audit · run", "SVC")
     s.node(600, y2, 144, 56, "Event bus", "ordered per agent", "SVC")
     s.node(792, y2, 128, 56, "Storage", "SQLite · WAL", "DB", kind="store")
     s.legend(424, [("focal", "Primitive"), ("normal", "Component"), ("store", "Store"), ("external", "External"), (("line", LINK, None, "arrow-link"), "API call")])
-    svg = s.render("runtime", "Runtime", "Architecture of one run: agent actors hand turns to the turn engine, which calls the model through a shared gateway and runs tools through one pipeline, while a single coordinator and the event bus write to storage.", W, H)
+    svg = s.render("runtime", "Runtime", "Architecture of one run: agent actors hand turns to the turn engine, which calls the model through a shared gateway and runs tools through one pipeline, while the run record, by optimistic revisions, and the event bus write to storage.", W, H)
     page("runtime", "Architecture", "Runtime", svg,
          "The turn engine builds each model request itself (context builder). Patterns, including the team, only call the turn engine. "
          "Live consumers read the event bus through bounded queues and catch up from storage when they fall behind.")

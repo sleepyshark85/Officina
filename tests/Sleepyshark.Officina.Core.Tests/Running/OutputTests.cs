@@ -138,15 +138,18 @@ public class OutputTests
         Assert.Equal(outcome == AgentOutcome.HandedOff ? HandoffReason.OutputCheckFailed : null, result.Handoff?.Reason);
     }
 
-    [Fact]
-    public async Task Citations_resolve_by_default_when_a_knowledge_source_is_configured()
+    // OUT-04: a passage retrieved before the turn is a citation in the record.
+    [Theory]
+    [InlineData("Total 42 [cite:hb-1].", null)]
+    [InlineData("Total 42 [cite:missing].", "the output cites missing, which is not a citation in the run record")]
+    public async Task Citations_resolve_by_default_when_a_knowledge_source_is_configured(string output, string? problem)
     {
-        var kit = Kit(knowledge: true);
-        kit.Model.Reply("Total 42 [cite:missing].");
+        var kit = Kit(agent => agent with { Context = new() { Retrieval = new() { BeforeTurn = ["handbook"] } } }, knowledge: true);
+        kit.Model.Reply(output);
 
         var result = await kit.RunAsync(Agent, "Total?", Ct);
 
-        Assert.Equal("the output cites missing, which is not a citation in the run record", result.Handoff!.Detail);
+        Assert.Equal(problem, result.Handoff?.Detail);
     }
 
     // OUT-05: the result carries the artifacts, and the checks see them.
@@ -199,7 +202,7 @@ public class OutputTests
             {
                 ["report"] = new FakeTool(ToolKind.Read, run: (_, _) => ValueTask.FromResult(ToolResult.Success("written", new Artifact("report.md", "# Report")))),
             },
-            knowledge: new Dictionary<string, IKnowledgeSource> { ["handbook"] = new FakeKnowledgeSource(Coverage.Covered) },
+            knowledge: new Dictionary<string, IKnowledgeSource> { ["handbook"] = new FakeKnowledgeSource(Coverage.Covered, ("hb-1", "Total: 42")) },
             checks: options.Checks.Keys.ToDictionary(name => name, ICheck (name) => new NamedCheck(name, ran)));
     }
 

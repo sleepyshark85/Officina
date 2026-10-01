@@ -46,8 +46,8 @@ internal sealed class RecordTool : ITool
                 Get(arguments, "subject"), Get(arguments, "choice"), Get(arguments, "reason"),
                 arguments.TryGetProperty("replaces", out var replaces) ? replaces.GetInt64() : null)),
         ["record.cite"] = new RecordTool(
-            "Records a citation: a short id of your choice, the document, the location in it, and the words quoted. Answers and record entries then cite it as [cite:<id>].",
-            $$""" "id": { "type": "string", "pattern": "^[A-Za-z0-9_.:#-]+$" }, "document": {{Text}}, "location": {{Text}}, "quote": {{Text}} """,
+            "Records a citation: a short id of your choice, without ']', the document, the location in it, and the words quoted. Answers and record entries then cite it as [cite:<id>].",
+            $$""" "id": { "type": "string", "pattern": "^[^\\]]+$" }, "document": {{Text}}, "location": {{Text}}, "quote": {{Text}} """,
             """ "id", "document", "location", "quote" """,
             arguments => new Citation(Get(arguments, "id"), Get(arguments, "document"), Get(arguments, "location"), Get(arguments, "quote"))),
     };

@@ -1,6 +1,7 @@
 using Sleepyshark.Officina.Core.Configuration;
 using Sleepyshark.Officina.Core.Extensibility;
 using Sleepyshark.Officina.Core.Messages;
+using Sleepyshark.Officina.Core.Records;
 using Sleepyshark.Officina.Core.Running;
 using Sleepyshark.Officina.Testing;
 using static Sleepyshark.Officina.Core.Tests.Tools.ToolSetup;
@@ -19,7 +20,7 @@ public class KnowledgeTests
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     [Fact]
-    public async Task Before_the_turn_the_work_is_searched_and_the_passages_join_the_volatile_context_as_data()
+    public async Task Before_the_turn_the_work_is_searched_and_the_passages_join_the_volatile_context_as_data_and_the_record_as_citations()
     {
         var kit = Kit(new() { BeforeTurn = ["handbook"] });
         kit.Model.Reply("5 days.");
@@ -28,7 +29,11 @@ public class KnowledgeTests
 
         Assert.Equal(new RetrievalQuery(Work, Caller.Anonymous, 8), Assert.Single(handbook.Queries));
         Assert.Equal(
-            [Message.User(Work), Message.User($"<context>\n<data source=\"knowledge:handbook\">\n{Found}\n</data>\n</context>")],
+            [
+                Message.User(Work),
+                Message.User($"<context>\n<data source=\"knowledge:handbook\">\n{Found}\n</data>\n<data source=\"record\">\n"
+                    + "r1 citation [cite:hb-4.2]: knowledge:handbook, hb-4.2: \"Refunds take 5 days.\"\n</data>\n</context>"),
+            ],
             Assert.Single(kit.Model.Requests).History);
     }
 
@@ -63,6 +68,25 @@ public class KnowledgeTests
         Assert.Equal(
             new ToolResultContent("call-1", $"<data source=\"tool:search_handbook\">\n{Found}\n</data>", false),
             result.Transcript.SelectMany(message => message.Content).OfType<ToolResultContent>().Single());
+    }
+
+    // OUT-04, REC-01: before the turn and as a tool; a citation id may hold spaces.
+    [Fact]
+    public async Task Retrieved_passages_join_the_run_record_as_citations_that_answers_can_cite()
+    {
+        handbook = new FakeKnowledgeSource(Coverage.Covered, ("hb-4.2", "Refunds take 5 days."), ("Fees, section 2", "No fees."));
+        var kit = Kit(new() { BeforeTurn = ["handbook"] }, ("search_handbook", new() { Source = "knowledge:handbook" }));
+        kit.Model.CallTools(("search_handbook", """{ "question": "fees" }""")).Reply("5 days [cite:hb-4.2], and no fees [cite:Fees, section 2].");
+
+        var result = await kit.RunAsync(Agent, Work, Ct);
+
+        Assert.Equal(AgentOutcome.Completed, result.Outcome);
+        Assert.Equal(
+            [
+                new Citation("hb-4.2", "knowledge:handbook", "hb-4.2", "Refunds take 5 days."),
+                new Citation("Fees, section 2", "knowledge:handbook", "Fees, section 2", "No fees."),
+            ],
+            result.Record.Select(entry => entry.Item));
     }
 
     [Fact]

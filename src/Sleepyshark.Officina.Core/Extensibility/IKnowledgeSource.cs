@@ -21,7 +21,10 @@ public sealed record RetrievalQuery(string Question, Caller Caller, int MaxPassa
 public sealed record Retrieval(IReadOnlyList<Passage> Passages, Coverage Coverage);
 
 /// <summary>A passage and where it comes from.</summary>
-/// <param name="Citation">The id an answer cites it by, such as a document and section.</param>
+/// <param name="Citation">
+/// The id an answer cites it by, such as a document and section, without <c>]</c>. The passage joins the run record as a
+/// citation with this id, the source as its document and the text as its quote.
+/// </param>
 /// <param name="Text">The passage.</param>
 public sealed record Passage(string Citation, string Text);
 

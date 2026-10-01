@@ -224,7 +224,7 @@ internal sealed class Turn
 
     /// <summary>
     /// Searches the knowledge sources configured before the turn with its work, once, and keeps what each found as a
-    /// labelled fact of the volatile context (CTX-04). When none covers the work, the turn can end in a handoff for a
+    /// labelled fact of the volatile context (CTX-04), and its passages as citations in the run record. When none covers the work, the turn can end in a handoff for a
     /// policy gap (CTX-05).
     /// </summary>
     private async Task<AgentResult?> RetrieveAsync(CancellationToken ct)
@@ -234,6 +234,7 @@ internal sealed class Turn
         {
             var retrieval = await source.RetrieveAsync(new RetrievalQuery(work, context.Caller, KnowledgeTool.MaxPassages), ct).ConfigureAwait(false);
             covered |= retrieval.Coverage != Coverage.NotCovered;
+            await KnowledgeTool.CiteAsync(record, name, retrieval, mask, ct).ConfigureAwait(false);
             var passages = KnowledgeTool.Format(retrieval);
             retrieved.Add(Labels.Data($"knowledge:{name}", mask ? Mask(passages) : passages));
         }

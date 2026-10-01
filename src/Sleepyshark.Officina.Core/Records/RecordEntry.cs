@@ -50,7 +50,7 @@ public sealed record Finding(string Text) : RecordItem;
 public sealed record Decision(string Subject, string Choice, string Reason, long? Replaces) : RecordItem;
 
 /// <summary>A source that answers and other entries cite as <c>[cite:id]</c>. Its date is its entry's time.</summary>
-/// <param name="Id">The short id it is cited by, unique in the record.</param>
+/// <param name="Id">The short id it is cited by, unique in the record; any text without <c>]</c>, such as a retrieved passage's citation.</param>
 /// <param name="Document">The document.</param>
 /// <param name="Location">Where in the document, such as a section or a line.</param>
 /// <param name="Quote">The words cited.</param>

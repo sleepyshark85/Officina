@@ -122,7 +122,7 @@ internal sealed class ToolCatalog
         if (tool.KnowledgeSource() is { } source)
         {
             // An unregistered source is reported once, for its entry in knowledge.
-            return knowledge.TryGetValue(options.Knowledge[source].ExtensionId()!, out var found) ? new KnowledgeTool(source, found) : null;
+            return knowledge.TryGetValue(options.Knowledge[source].ExtensionId()!, out var found) ? new KnowledgeTool(source, found, options.Knowledge[source].Mask) : null;
         }
 
         if ((tool.ExtensionId() ?? tool.McpTool()) is not { } id)

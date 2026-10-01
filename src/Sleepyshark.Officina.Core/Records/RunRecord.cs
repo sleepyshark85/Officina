@@ -14,6 +14,7 @@ public sealed partial class RunRecord
     private readonly string? tenant;
     private readonly string agent;
     private readonly TimeProvider time;
+    private readonly Masker? masker;
 
     /// <param name="store">Where the record is kept.</param>
     /// <param name="context">The run, and the agent its updates are attributed to.</param>
@@ -25,9 +26,13 @@ public sealed partial class RunRecord
         RunId = context.RunId;
         agent = context.Agent;
         this.time = time;
+        masker = context.Masker;
     }
 
     public string RunId { get; }
+
+    /// <summary>Masks text with the run's masking, if it is on, before it reaches the record (ING-02).</summary>
+    internal string Mask(string text) => masker?.Mask(text) ?? text;
 
     /// <summary>The record as it is now, in revision order.</summary>
     public ValueTask<IReadOnlyList<RecordEntry>> ReadAsync(CancellationToken ct) => store.ReadAsync(tenant, RunId, ct);
@@ -126,6 +131,6 @@ public sealed partial class RunRecord
     private static bool Current(RecordEntry decision, IReadOnlyList<RecordEntry> record) =>
         !record.Any(entry => entry.Item is Decision { Replaces: { } replaced } && replaced == decision.Revision);
 
-    [GeneratedRegex(@"\[cite:([^\]\s]+)\]")]
+    [GeneratedRegex(@"\[cite:([^\]]+)\]")]
     private static partial Regex CitePattern();
 }

@@ -96,7 +96,8 @@ public class RunRecordTests
         Assert.Contains("r4 decision on db: Postgres, because scale (by dev)\n", Context(kit.Model.Requests[5]));
     }
 
-    // CTX-07, CTX-01: facts first, each with its as-of time, in revision order; the rest after the retrieved passages.
+    // CTX-07, CTX-01: facts first, each with its as-of time, in revision order; the rest, including the retrieved
+    // passages' citations, after the passages.
     [Fact]
     public async Task The_records_entries_join_the_volatile_context_in_a_consistent_order()
     {
@@ -115,15 +116,16 @@ public class RunRecordTests
             """
             <context>
             <data source="record">
-            r1 fact b = 2 (source: s; as of 2000-01-01 00:00:00Z)
-            r3 fact a = 1 (source: s; as of 2000-01-01 00:00:00Z)
+            r2 fact b = 2 (source: s; as of 2000-01-01 00:00:00Z)
+            r4 fact a = 1 (source: s; as of 2000-01-01 00:00:00Z)
             </data>
             <data source="knowledge:handbook">
             coverage: covered
             hb-1: Refunds take 5 days.
             </data>
             <data source="record">
-            r2 finding: found
+            r1 citation [cite:hb-1]: knowledge:handbook, hb-1: "Refunds take 5 days."
+            r3 finding: found
             </data>
             Today is 2000-01-01.
             </context>

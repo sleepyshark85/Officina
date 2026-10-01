@@ -202,7 +202,7 @@ It lists the settings the code has today. Settings that later slices add are spe
 |---|---|---|---|---|
 | `finished` | boolean | `true` | The turn completes when the model finishes its reply. When this is `false` and the model finishes, the turn ends in a handoff. | `false` |
 | `finishTool` | text |  | A tool, by name in `tools`, that completes the turn when a call of it succeeds. The call's arguments are the output. | `"submit_report"` |
-| `checksPass` | boolean | `false` | The turn completes as soon as its output passes the checks in `output.checks`, which then run after every model reply. | `true` |
+| `checksPass` | boolean | `false` | The turn completes as soon as its output passes the checks in `output.checks`, which then run after every model reply. A reply that only calls tools is checked with empty output. | `true` |
 | `maxIterations` | whole number, ≥ 1 |  | The turn completes after this many model calls, with the model's last text as the output. | `1` |
 
 ## `agents.<name>.budget`

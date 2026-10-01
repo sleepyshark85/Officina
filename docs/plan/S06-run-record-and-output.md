@@ -25,12 +25,14 @@ The shared run record, and checked output.
 
 - Agents propose through the built-in tools `builtin:record.propose_fact`, `propose_finding`, `propose_decision` and
   `cite`. The core validates each proposal against the record and appends it with the next revision; the store refuses
-  a taken revision, and the core then validates again (REC-04). Answers and entries cite as `[cite:<id>]`.
+  a taken revision, and the core then validates again (REC-04). Answers and entries cite as `[cite:<id>]`, where the id
+  is any text without `]`. Retrieved passages join the record as citations by their source's id, before the turn and
+  through `knowledge:` tools, so the default `resolve` rule accepts answers that cite them (OUT-04).
 - A trimmed tool result is kept in full as an artifact, which `builtin:artifact.page` reads (TOOL-09, SBX-04). Gates get
   the run record (TOOL-06). The `officina.checks` metric gives check pass rates (OBS-02).
 - An accepted proposal is a new call, and an identical proposal is not added again, so the stall rule needs nothing more
   (LOOP-07). The result carries the record and the artifacts (EGR-01, EGR-02).
-- The storage format version stays 1: nothing stored by an earlier core is read yet (the CLI opens storage from S16).
+- The record and artifact tables share SQLite format version 2 with S07's conversations.
 
 Left to later slices:
 - S13: the check-failure outcome "revise", where the pattern supports it (OUT-03); until then a failure hands off.
