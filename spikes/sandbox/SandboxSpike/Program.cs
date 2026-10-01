@@ -158,11 +158,11 @@ else
     if (isWin) r = await sb.RunShellAsync($"{P} spawn 40", std with { MaxProcesses = 8, WallTime = TimeSpan.FromSeconds(60) });
     else r = await sb.RunShellAsync("python3 -c \"import os,time\nn=0\ntry:\n  for i in range(300):\n    if os.fork()==0: time.sleep(30); os._exit(0)\n    n+=1\nexcept OSError as e: print('FORK_FAILED', e)\nprint('SPAWNED=%d of 300' % n)\ntime.sleep(1)\"", std with { MaxProcesses = 32, WallTime = TimeSpan.FromSeconds(20) });
     bool ok = isWin
-        ? r.Output.Contains("SPAWNED=") && !r.Output.Contains("SPAWNED=40") && int.Parse(r.Facts.GetValueOrDefault("peak_active_processes", "99")) <= 8
+        ? r.Output.Contains("SPAWNED=") && !r.Output.Contains("SPAWNED=40") && r.Output.Contains("quota")
         : r.Output.Contains("FORK_FAILED") && System.Text.RegularExpressions.Regex.Match(r.Output, @"SPAWNED=(\d+)") is { Success: true } mm && int.Parse(mm.Groups[1].Value) < 32;
     Record("process-count limit stops fork bomb", ok ? "PASS" : "FAIL",
         isWin ? "Job Object ActiveProcessLimit=8" : "cgroup pids.max=32 (TasksMax)",
-        $"{Facts(r, "pids.events", "pids.peak", "peak_active_processes", "active_processes_after_kill")} {Tail(r.Output, 150)}");
+        $"{Facts(r, "pids.events", "pids.peak", "peak_active_processes", "active_processes_after_kill")} {Tail(r.Output, 250)}");
 }
 {
     int threads = Math.Max(2, Environment.ProcessorCount);

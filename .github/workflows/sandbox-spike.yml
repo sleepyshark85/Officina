@@ -72,21 +72,25 @@ jobs:
         run: dotnet build spikes/sandbox/SandboxSpike -nologo -v:q
       - name: Run checks (runner is elevated admin)
         run: dotnet spikes/sandbox/SandboxSpike/bin/Debug/net10.0/SandboxSpike.dll --report windows-report.md
-      - name: Does the loopback exemption need admin? (try as a standard user)
+      - name: Run all checks again as a standard (non-admin) user
         if: always()
         shell: pwsh
         continue-on-error: true
         run: |
-          $pw = "Sp1ke-" + [guid]::NewGuid().ToString("N").Substring(0, 12) + "!"
-          net user spikeuser $pw /add | Out-Null
+          # net user prompts if the password is longer than 14 characters.
+          $pw = "Sp!" + [guid]::NewGuid().ToString("N").Substring(0, 10)
+          net user spikeuser $pw /add
           $cred = New-Object System.Management.Automation.PSCredential("spikeuser", (ConvertTo-SecureString $pw -AsPlainText -Force))
-          $out = "C:\officina-spike\nonadmin.txt"
           New-Item -ItemType Directory -Force C:\officina-spike | Out-Null
-          icacls C:\officina-spike /grant "spikeuser:(OI)(CI)F" | Out-Null
-          $cmd = "whoami /groups | findstr /i Administrators > $out 2>&1 & (CheckNetIsolation.exe LoopbackExempt -a -n=officina.spike.nonadmin >> $out 2>&1 && echo EXEMPT_EXIT_OK >> $out || echo EXEMPT_EXIT_FAILED >> $out)"
+          Copy-Item -Recurse -Force spikes\sandbox C:\officina-spike\sandbox
+          icacls C:\officina-spike /grant "spikeuser:(OI)(CI)F" /T | Out-Null
+          $dll = "C:\officina-spike\sandbox\SandboxSpike\bin\Debug\net10.0\SandboxSpike.dll"
+          $log = "C:\officina-spike\nonadmin.log"
+          $cmd = "whoami /groups > $log 2>&1 & `"C:\Program Files\dotnet\dotnet.exe`" $dll --report C:\officina-spike\nonadmin-report.md >> $log 2>&1"
           Start-Process -FilePath cmd.exe -ArgumentList "/c", $cmd -Credential $cred -Wait -WorkingDirectory C:\officina-spike -LoadUserProfile
-          Get-Content $out
-          "### Loopback exemption as a standard (non-admin) user`n``````n$(Get-Content $out -Raw)`n``````" | Out-File -Append $env:GITHUB_STEP_SUMMARY
+          Get-Content $log
+          "### Same checks as a standard user (spikeuser, not in Administrators)`n" | Out-File -Append $env:GITHUB_STEP_SUMMARY
+          if (Test-Path C:\officina-spike\nonadmin-report.md) { Get-Content C:\officina-spike\nonadmin-report.md | Out-File -Append $env:GITHUB_STEP_SUMMARY }
       - name: Summary
         if: always()
         shell: pwsh
