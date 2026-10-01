@@ -119,17 +119,18 @@ public sealed class WindowsSandboxTests : IDisposable
         await using var process = await real.StartAsync(
             "(for /l %i in (1,1,30) do @start \"\" /b cmd /d /c \"for /l %j in (0,0,1) do @rem\" || echo refused) & echo done", limits: Small);
 
+        // The children run until the command is stopped, so reading stops at the first refusal, or at the end of the loop.
         var lines = new List<string>();
         await foreach (var line in process.Output.ReadAllAsync(Ct))
         {
             lines.Add(line.Trim());
-            if (line.Trim() == "done")
+            if (line.Trim() is "refused" or "done")
             {
                 break;
             }
         }
 
-        Assert.Contains("refused", lines);
+        Assert.Equal("refused", lines[^1]);
     }
 
     [Fact(Skip = WindowsOnly, SkipUnless = nameof(OnWindows))]
