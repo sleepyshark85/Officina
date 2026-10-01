@@ -608,7 +608,8 @@ object with `"enabled"` plus its own settings. `true` is shorthand for `{ "enabl
     "protectedPaths": [
       { "path": ".git/**",    "access": "hidden" },
       { "path": "**/.env*",   "access": "hidden" },                 // INV-06 note
-      { "path": "sof*.json", "access": "readOnly" }             // INV-10
+      { "path": "sof.json",   "access": "readOnly" },           // INV-10
+      { "path": "sof.*.json", "access": "readOnly" }
     ],
     "keepWorkingCopies": false                                      // WS-08
   },

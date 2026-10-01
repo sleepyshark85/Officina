@@ -22,7 +22,8 @@ public sealed class GitWorkspace : IDisposable
         new() { Path = ".git/**" },
         new() { Path = "**/.env*" },
         new() { Path = $"{StateFolder}/**" },
-        new() { Path = "sof*.json", Access = PathAccess.ReadOnly },
+        new() { Path = "sof.json", Access = PathAccess.ReadOnly },
+        new() { Path = "sof.*.json", Access = PathAccess.ReadOnly },
     ];
 
     private readonly string root;
@@ -72,7 +73,18 @@ public sealed class GitWorkspace : IDisposable
         }
         catch (IOException)
         {
-            throw new WorkspaceException($"Run {File.ReadAllText(activeRun)} is already active on this workspace. Start this run when it ends.");
+            string active;
+            try
+            {
+                active = $"Run {File.ReadAllText(activeRun)}";
+            }
+            catch (IOException)
+            {
+                // The other run holds the lock but has not written its name yet.
+                active = "Another run";
+            }
+
+            throw new WorkspaceException($"{active} is already active on this workspace. Start this run when it ends.");
         }
 
         try

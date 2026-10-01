@@ -14,7 +14,7 @@ public sealed class WorkingCopyTests : IAsyncLifetime
     {
         repository = await CreateAsync(
             ("src/a.txt", "one\ntwo\nthree\nfour\n"), (".env", "KEY=secret\n"), ("src/.env.local", "KEY=secret\n"),
-            ("secrets/key.txt", "secret\n"), ("sof.json", "{}\n"), ("docs/guide.md", "secret-free\n"));
+            ("secrets/key.txt", "secret\n"), ("sof.json", "{}\n"), ("sof.local.json", "{}\n"), ("software.json", "{}\n"), ("docs/guide.md", "secret-free\n"));
         var protectedPaths = new ProtectedPath[] { new() { Path = "secrets/**" }, new() { Path = "docs/**", Access = PathAccess.ReadOnly } };
         workspace = await repository.OpenAsync(new WorkspaceOptions { ProtectedPaths = protectedPaths });
         copy = await workspace.OpenWorkingCopyAsync("t1", "alice", Ct);
@@ -81,6 +81,7 @@ public sealed class WorkingCopyTests : IAsyncLifetime
 
     [Theory]
     [InlineData("sof.json")]
+    [InlineData("sof.local.json")]
     [InlineData("docs/guide.md")]
     public async Task A_read_only_path_can_be_read_but_not_changed(string path)
     {
@@ -89,6 +90,15 @@ public sealed class WorkingCopyTests : IAsyncLifetime
         var write = await Assert.ThrowsAsync<WorkspaceException>(() => copy.WriteAsync(path, "x", Ct));
         await Assert.ThrowsAsync<WorkspaceException>(() => copy.EditAsync(path, text, "x", Ct));
         Assert.Equal($"{path} is read-only.", write.Message);
+    }
+
+    [Fact]
+    public async Task Only_the_configuration_files_are_read_only_not_others_that_start_alike()
+    {
+        await copy.ReadAsync("software.json", ct: Ct);
+        await copy.WriteAsync("software.json", "[]", Ct);
+
+        Assert.Equal("[]", await copy.ReadAsync("software.json", ct: Ct));
     }
 
     [Theory]

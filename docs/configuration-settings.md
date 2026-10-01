@@ -145,7 +145,7 @@ It lists the settings the code has today. Settings that later slices add are spe
 
 | Setting | Allowed values | Default | Description | Example |
 |---|---|---|---|---|
-| `protectedPaths` | list | `[]` | Paths agents cannot see or change, in addition to the fixed ones: `.git`, `**/.env*` and `.sof/**` are hidden, and `sof*.json` is read-only. | `[{"path":"secrets/**","access":"hidden"}]` |
+| `protectedPaths` | list | `[]` | Paths agents cannot see or change, in addition to the fixed ones: `.git`, `**/.env*` and `.sof/**` are hidden, and `sof.json` and `sof.*.json` are read-only. | `[{"path":"secrets/**","access":"hidden"}]` |
 | `keepWorkingCopies` | boolean | `false` | Whether an agent's working copy is kept when its task ends, so the owner can look at it. | `true` |
 
 ## `capabilities.workspace.protectedPaths[]`

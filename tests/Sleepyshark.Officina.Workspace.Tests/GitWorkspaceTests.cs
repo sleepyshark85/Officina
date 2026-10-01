@@ -144,6 +144,30 @@ public class GitWorkspaceTests
         Assert.Equal("Run run-1 is already active on this workspace. Start this run when it ends.", refused.Message);
     }
 
+    [Fact]
+    public async Task A_run_holding_the_lock_before_writing_its_name_is_still_refused()
+    {
+        using var repository = await CreateAsync();
+        using var held = new FileStream(Path.Combine(Directory.CreateDirectory(Path.Combine(repository.Root, ".sof")).FullName, "run.lock"), FileMode.Create, FileAccess.ReadWrite, FileShare.None);
+
+        var refused = await Assert.ThrowsAsync<WorkspaceException>(() => repository.OpenAsync());
+
+        Assert.Equal("Another run is already active on this workspace. Start this run when it ends.", refused.Message);
+    }
+
+    [Fact]
+    public async Task A_cancelled_integration_leaves_the_working_copy_untouched()
+    {
+        using var repository = await CreateAsync();
+        using var workspace = await repository.OpenAsync();
+        var copy = await workspace.OpenWorkingCopyAsync("t1", "alice", Ct);
+        await copy.WriteAsync("new.txt", "new", Ct);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => workspace.IntegrateAsync(copy, new CancellationToken(canceled: true)));
+
+        Assert.Equal("?? new.txt", (await Git.RunAsync(copy.Directory, Ct, "status", "--porcelain")).Trim());
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

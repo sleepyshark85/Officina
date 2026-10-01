@@ -50,6 +50,8 @@ internal sealed class IntegrationQueue(string root, string baseline, string runI
 
     private async Task<IntegrationResult> IntegrateAsync(WorkingCopy copy, CancellationToken ct)
     {
+        // A change cancelled while it waited is dropped before git touches it.
+        ct.ThrowIfCancellationRequested();
         await CommitAsync(copy, ct).ConfigureAwait(false);
         var scratch = Path.Combine(root, GitWorkspace.StateFolder, "integration");
         await Git.RunAsync(root, ct, "worktree", "add", "--detach", scratch, copy.Branch).ConfigureAwait(false);

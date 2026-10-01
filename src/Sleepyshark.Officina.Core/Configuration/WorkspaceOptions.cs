@@ -5,7 +5,7 @@ namespace Sleepyshark.Officina.Core.Configuration;
 /// <summary>The git workspace (WS).</summary>
 public sealed record WorkspaceOptions
 {
-    [Setting("Paths agents cannot see or change, in addition to the fixed ones: `.git`, `**/.env*` and `.sof/**` are hidden, and `sof*.json` is read-only.",
+    [Setting("Paths agents cannot see or change, in addition to the fixed ones: `.git`, `**/.env*` and `.sof/**` are hidden, and `sof.json` and `sof.*.json` are read-only.",
         Example = """[{ "path": "secrets/**", "access": "hidden" }]""")]
     public IReadOnlyList<ProtectedPath> ProtectedPaths { get; init; } = [];
 

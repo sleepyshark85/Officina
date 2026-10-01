@@ -4,7 +4,7 @@ Status: draft · 2026-10-01 · slices `REQUIREMENTS.md` (revision 2) into delive
 
 ## Status
 
-Last updated 2026-10-01.
+Last updated 2026-10-02.
 
 - **Done:** M0 spikes S00a and S00b; M1 slices S01 (walking skeleton) and S02 (configuration); S03 (tool pipeline); S14 (git workspace).
 - **Waiting:** the M0 design review sign-off on `REQUIREMENTS.md`, `CONFIGURATION.md` and `DESIGN.md`.
