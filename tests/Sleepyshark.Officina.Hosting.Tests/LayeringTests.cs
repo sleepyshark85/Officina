@@ -228,7 +228,7 @@ public sealed class LayeringTests : IDisposable
         await kit.RunAsync("dev", "go", TestContext.Current.CancellationToken);
 
         using var replay = new ConfigurationFolder();
-        var stored = Assert.Single(kit.Runner.Runs).Configuration;
+        var stored = Assert.Single(kit.Runs.Runs).Configuration;
         replay.Write("sof.json", stored);
 
         Assert.Equal(stored, OfficinaJson.Write(replay.Load().ValidOptions()));

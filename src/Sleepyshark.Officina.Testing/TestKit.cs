@@ -11,10 +11,13 @@ public sealed class TestKit
     public TestKit(OfficinaOptions? options = null)
     {
         options ??= new OfficinaOptions();
-        Runner = new AgentRunner(options, options.Providers.Keys.ToDictionary(name => name, IModelProvider (_) => Model));
+        Runner = new AgentRunner(options, options.Providers.Keys.ToDictionary(name => name, IModelProvider (_) => Model), Runs);
     }
 
     public ScriptedModelProvider Model { get; } = new();
+
+    /// <summary>The runs started so far, with their configuration.</summary>
+    public InMemoryRunStore Runs { get; } = new();
 
     public AgentRunner Runner { get; }
 

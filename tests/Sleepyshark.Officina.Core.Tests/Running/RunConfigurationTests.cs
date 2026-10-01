@@ -24,7 +24,7 @@ public class RunConfigurationTests
         await kit.RunAsync("extractor", "a", ct);
         await kit.RunAsync("extractor", "b", ct);
 
-        var runs = kit.Runner.Runs;
+        var runs = kit.Runs.Runs;
         Assert.Equal(2, runs.Count);
         Assert.NotEqual(runs[0].RunId, runs[1].RunId);
         Assert.Equal(("extractor", CoreVersion.Value, OfficinaJson.Write(Options)), (runs[0].Agent, runs[0].CoreVersion, runs[0].Configuration));
@@ -40,7 +40,7 @@ public class RunConfigurationTests
 
         await kit.RunAsync(new AgentDefinition { Instructions = "Be brief." }, "hi", TestContext.Current.CancellationToken);
 
-        var run = Assert.Single(kit.Runner.Runs);
+        var run = Assert.Single(kit.Runs.Runs);
         Assert.Equal(AgentRunner.InlineAgentName, run.Agent);
         Assert.Contains("Be brief.", run.Configuration, StringComparison.Ordinal);
     }
@@ -57,7 +57,7 @@ public class RunConfigurationTests
             },
         };
 
-        var error = Assert.Throws<ConfigurationException>(() => new AgentRunner(invalid, new Dictionary<string, IModelProvider>()));
+        var error = Assert.Throws<ConfigurationException>(() => new AgentRunner(invalid, new Dictionary<string, IModelProvider>(), new InMemoryRunStore()));
 
         Assert.Equal(["agents.a.instructions", "agents.a.model", "agents.b.instructions"], error.Errors.Select(item => item.Path));
         Assert.Contains("agents.b.instructions: placeholder {{now:date}} is not allowed in the stable prefix.", error.Message, StringComparison.Ordinal);

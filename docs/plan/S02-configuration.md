@@ -6,7 +6,7 @@
 
 Build the configuration machinery: Options classes, loading, layers, validation, and showing where each value came from.
 
-**Closes:** CFG-01, CFG-02, CFG-04, CFG-05, CFG-06, CFG-07, CFG-08, CFG-09, CFG-10, CFG-14, CFG-15, CFG-16, CFG-17, MDL-02, MDL-03, DOC-01, TEST-04, TEST-05
+**Closes:** CFG-01, CFG-02, CFG-04, CFG-05, CFG-06, CFG-07, CFG-08, CFG-09, CFG-10, CFG-14, CFG-15, CFG-16, CFG-17, MDL-02, MDL-03, DOC-01, TEST-05
 
 ## Acceptance criteria
 
@@ -19,3 +19,4 @@ Build the configuration machinery: Options classes, loading, layers, validation,
 ## Notes
 
 This slice delivers the machinery. Each later slice adds its own Options and validation rules.
+It starts TEST-04's cases (unknown settings, missing references, invariant-weakening attempts); TEST-04 closes in S07, when its last part (missing capabilities, unmet dependencies) exists.

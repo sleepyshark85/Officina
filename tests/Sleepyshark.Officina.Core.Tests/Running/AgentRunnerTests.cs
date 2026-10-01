@@ -49,7 +49,7 @@ public class AgentRunnerTests
                 ["strong"] = new() { Provider = "second", Model = "large" },
             },
         };
-        var runner = new AgentRunner(options, new Dictionary<string, IModelProvider> { ["first"] = first, ["second"] = second });
+        var runner = new AgentRunner(options, new Dictionary<string, IModelProvider> { ["first"] = first, ["second"] = second }, new InMemoryRunStore());
         var ct = TestContext.Current.CancellationToken;
 
         var cheap = await runner.RunAsync(new AgentDefinition { Instructions = "Classify.", Model = "cheap" }, "input", ct);

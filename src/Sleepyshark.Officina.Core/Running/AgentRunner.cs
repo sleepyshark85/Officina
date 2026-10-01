@@ -13,35 +13,25 @@ public sealed class AgentRunner
     public const string InlineAgentName = "agent";
 
     private readonly IReadOnlyDictionary<string, IModelProvider> providers;
-    private readonly Lock gate = new();
-    private readonly List<RunStarted> runs = [];
+    private readonly IRunStore runs;
 
     /// <summary>Validates the configuration in full; nothing runs if it has errors (CFG-06).</summary>
     /// <param name="options">The configuration, fixed for the runner's lifetime. A changed configuration needs a new runner (CFG-08).</param>
     /// <param name="providers">The provider implementations, by their name in <c>providers</c>.</param>
+    /// <param name="runs">Where each run is recorded with the configuration it used (CFG-07).</param>
     /// <exception cref="ConfigurationException">The configuration has errors.</exception>
-    public AgentRunner(OfficinaOptions options, IReadOnlyDictionary<string, IModelProvider> providers)
+    public AgentRunner(OfficinaOptions options, IReadOnlyDictionary<string, IModelProvider> providers, IRunStore runs)
     {
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(providers);
+        ArgumentNullException.ThrowIfNull(runs);
         ThrowIfInvalid(options);
         Options = options;
         this.providers = providers;
+        this.runs = runs;
     }
 
     public OfficinaOptions Options { get; }
-
-    /// <summary>Every run started so far, with the configuration it used (CFG-07). Storage (S08) persists them.</summary>
-    public IReadOnlyList<RunStarted> Runs
-    {
-        get
-        {
-            lock (gate)
-            {
-                return [.. runs];
-            }
-        }
-    }
 
     public Task<AgentResult> RunAsync(string agentName, string input, CancellationToken ct = default)
     {
@@ -69,10 +59,7 @@ public sealed class AgentRunner
             ? registered
             : throw new InvalidOperationException($"Agent \"{name}\" uses provider \"{profile.Provider}\", which has no implementation registered.");
 
-        lock (gate)
-        {
-            runs.Add(new RunStarted(Guid.CreateVersion7().ToString(), name, CoreVersion.Value, OfficinaJson.Write(resolved)));
-        }
+        await runs.RecordStartAsync(new RunStarted(Guid.CreateVersion7().ToString(), name, CoreVersion.Value, OfficinaJson.Write(resolved)), ct).ConfigureAwait(false);
 
         var instructions = Placeholder.Fill(agent.Instructions, resolved.Project, name, agent);
         var request = new ModelRequest(profile, instructions, [Message.User(input)]);
