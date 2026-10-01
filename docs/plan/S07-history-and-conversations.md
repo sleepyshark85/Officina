@@ -28,8 +28,10 @@ Long conversations: shortening history, and conversations that survive restarts.
 - `provider` shortening uses a model provider that implements `IHistoryShortener`; `extension:<id>` one the
   application registers with the runner. A shortener may clear old tool results to a note (HIST-05).
 - Capabilities are an `enabled` flag per section, with a fixed dependency table in `CapabilitiesOptions`. The
-  settings of a capability that is off are not checked. An agent's `capabilities` narrows the enabled ones.
-- The SQLite format version stays 1: no released file holds data yet.
+  settings of a capability that is off are not checked. There is no per-agent narrowing: an agent's own settings
+  already say which capabilities it uses.
+- Anonymous callers share one conversation per agent and tenant.
+- The SQLite format version is now 2, so a file written before the `conversations` table existed is refused.
 
 Left to later slices:
 - S06: the run record joins the shortening test (HIST-03, TEST-15). S17 and S18 add memory and tasks.

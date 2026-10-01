@@ -197,23 +197,6 @@ public class ValidationTests
             options.Validate().Select(error => (error.Path, error.Problem, error.Fix)));
     }
 
-    // CAP-01, CAP-03, TEST-04.
-    [Fact]
-    public void An_agent_uses_only_the_capabilities_it_lists_and_each_must_be_on_with_what_it_requires()
-    {
-        var agent = Extractor with { Capabilities = ["knowledge", "sandbox", "teleport"], Context = new() { History = new() { Strategy = HistoryStrategy.Full } } };
-        var options = WithAgent(agent) with { Capabilities = new() { ConversationStore = new() { Enabled = true }, Knowledge = new() { Enabled = true } } };
-
-        Assert.Equal(
-            [
-                ("agents.extractor.capabilities", "\"teleport\" is not a capability.", "Use one of: conversationStore, knowledge, sandbox, workspace."),
-                ("agents.extractor.capabilities", "capability \"sandbox\" is off.", "Set capabilities.sandbox.enabled to true."),
-                ("agents.extractor.capabilities", "sandbox needs the workspace capability, which is off.", "Set capabilities.workspace.enabled to true."),
-                ("agents.extractor.context.history.strategy", "needs the conversationStore capability, which is off.", "Add conversationStore to agents.extractor.capabilities."),
-            ],
-            options.Validate().Select(error => (error.Path, error.Problem, error.Fix)));
-    }
-
     // CAP-03, TEST-04.
     [Fact]
     public void A_capability_that_is_on_needs_the_ones_it_requires()

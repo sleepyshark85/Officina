@@ -16,12 +16,12 @@ namespace is its name.
 
 | Project | Box in the diagram | What it contains | Depends on | Loaded when |
 |---|---|---|---|---|
-| `Sleepyshark.Officina.Core` | Core | Options classes and validation; turn engine; built-in loop patterns; context builder; tool pipeline; run record; budgets; events; audit; extension interfaces (§4); built-in `record.*`, `control.*` and `artifact.*` tools; knowledge retrieval and its tools | .NET base library and a JSON Schema validator only | Always |
+| `Sleepyshark.Officina.Core` | Core | Options classes and validation; turn engine; built-in loop patterns; context builder; conversation history and its shortening, kept through `IStorage.Conversations`; tool pipeline; run record; budgets; events; audit; extension interfaces (§4); built-in `record.*`, `control.*` and `artifact.*` tools; knowledge retrieval and its tools | .NET base library and a JSON Schema validator only | Always |
 | `Sleepyshark.Officina.Team` | Capabilities | Team pattern, lead role support, task board, helper agents; `tasks.*` and `team.*` tools | Core | `team` or `taskBoard` is on |
 | `Sleepyshark.Officina.Workspace` | Capabilities | Git-backed workspace: baseline, working copies, integration queue, edit safety; `workspace.*` tools | Core; the git CLI at run time | `workspace` is on |
 | `Sleepyshark.Officina.Sandbox` | Capabilities | Linux sandbox (bubblewrap, cgroups v2) and Windows sandbox (AppContainer, Job Objects); filtering network proxy; `sandbox.*` tools | Core | `sandbox` is on |
-| `Sleepyshark.Officina.Capabilities` | Capabilities | Conversation store, human interaction, project memory, checkpoints; `human.*` and `memory.*` tools | Core | Each part when its capability is on |
-| `Sleepyshark.Officina.Storage.Sqlite` | Storage.Sqlite | Default storage: one SQLite file in WAL mode, plus artifact files on disk | Core, `Microsoft.Data.Sqlite` | Configured as storage (the CLI's default) |
+| `Sleepyshark.Officina.Capabilities` | Capabilities | Human interaction, project memory, checkpoints; `human.*` and `memory.*` tools | Core | Each part when its capability is on |
+| `Sleepyshark.Officina.Storage.Sqlite` | Storage.Sqlite | Default storage, conversations included: one SQLite file in WAL mode, plus artifact files on disk | Core, `Microsoft.Data.Sqlite` | Configured as storage (the CLI's default) |
 | `Sleepyshark.Officina.Mcp` | Mcp | Own MCP client for stdio and Streamable HTTP. Turns each server tool into a core tool. | Core | `toolServers` are configured |
 | `Sleepyshark.Officina.Providers.Claude` | Providers.Claude | The Claude provider: maps requests (§9), places cache markers, streams, classifies errors, ships the price table | Core, Anthropic C# SDK | A `claude` provider is configured (the default) |
 | `Sleepyshark.Officina.Testing` | Testing | Test kit: scripted models, controllable clock, fake tools, in-memory workspace, sandbox and storage, record and replay (TEST-01, TEST-02) | Core | In tests, and by `sof config dry-run` (CFG-12) |

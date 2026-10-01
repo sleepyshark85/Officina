@@ -10,7 +10,7 @@ public sealed record CapabilitiesOptions
     /// <summary>What each capability needs on as well, checked at validation (CAP-03).</summary>
     public static IReadOnlyList<(string Capability, string Requires)> Dependencies { get; } = [("sandbox", "workspace")];
 
-    [Setting("The conversation store: each agent's conversation with each caller is kept, so a history strategy other than `none` continues it across requests and restarts.",
+    [Setting("The conversation store: each agent's conversation with each caller is kept, anonymous callers sharing one, so a history strategy other than `none` continues it across requests and restarts.",
         Example = """{ "enabled": true }""")]
     public CapabilityOptions ConversationStore { get; init; } = new();
 

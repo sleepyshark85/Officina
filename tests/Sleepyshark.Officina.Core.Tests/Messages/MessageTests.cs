@@ -19,6 +19,17 @@ public class MessageTests
         Assert.Equal([new TextContent("hello")], message.Content);
     }
 
+    // HIST-02: a shortener that rebuilds the current turn from other JSON leaves it unchanged.
+    [Fact]
+    public void Tool_calls_and_provider_content_compare_by_their_JSON_value()
+    {
+        static JsonElement Parse(string text) => JsonDocument.Parse(text).RootElement;
+        Message Rebuilt() => new(Role.Assistant, [new ToolUseContent("call-1", "read", Parse("""{ "path": "a.cs" }""")), new ProviderContent(Parse("""{ "type": "x" }"""))]);
+
+        Assert.Equal(Rebuilt(), Rebuilt());
+        Assert.NotEqual(Rebuilt(), new Message(Role.Assistant, [new ToolUseContent("call-1", "read", Parse("""{ "path": "b.cs" }""")), new ProviderContent(Parse("""{ "type": "x" }"""))]));
+    }
+
     [Fact]
     public void A_message_needs_at_least_one_piece_of_content()
     {

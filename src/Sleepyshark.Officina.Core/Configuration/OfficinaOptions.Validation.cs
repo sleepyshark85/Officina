@@ -101,54 +101,30 @@ public sealed partial record OfficinaOptions : IValidatableObject
         return errors.Concat(ToolSettings()).Concat(CapabilitySettings()).Concat(InstructionPlaceholders.Check(this));
     }
 
-    /// <summary>
-    /// CAP-03: every capability in use is on, and every capability on has the ones it requires. An agent uses the
-    /// capabilities it lists, or every one that is on.
-    /// </summary>
+    /// <summary>CAP-03: every capability in use is on, and every capability on has the ones it requires.</summary>
     private IEnumerable<ConfigurationError> CapabilitySettings()
     {
-        var switches = Capabilities.Switches();
-        var on = switches.Where(capability => capability.Value).Select(capability => capability.Key).ToHashSet();
-        var errors = Unmet(on, capability => $"capabilities.{capability}.enabled", capability => $"Set capabilities.{capability}.enabled to true.");
+        var on = Capabilities.Switches().Where(capability => capability.Value).Select(capability => capability.Key).ToHashSet();
+        var errors = CapabilitiesOptions.Dependencies.Where(dependency => on.Contains(dependency.Capability) && !on.Contains(dependency.Requires))
+            .Select(dependency => new ConfigurationError(ValidationPhase.Capabilities, $"capabilities.{dependency.Capability}.enabled",
+                $"{dependency.Capability} needs the {dependency.Requires} capability, which is off.", $"Set capabilities.{dependency.Requires}.enabled to true."));
         if (Knowledge.Count > 0 && !on.Contains("knowledge"))
         {
-            errors = errors.Append(Off("knowledge", "knowledge", "Set capabilities.knowledge.enabled to true."));
+            errors = errors.Append(Off("knowledge", "knowledge"));
         }
 
         foreach (var (name, agent) in Agents)
         {
-            var path = $"agents.{name}";
-            var listed = agent.Capabilities?.ToHashSet() ?? on;
-            var fix = (string capability) => on.Contains(capability) ? $"Add {capability} to {path}.capabilities." : $"Set capabilities.{capability}.enabled to true.";
-            errors = errors
-                .Concat(listed.Where(capability => !switches.ContainsKey(capability)).Select(capability => new ConfigurationError(
-                    ValidationPhase.Capabilities, $"{path}.capabilities", $"\"{capability}\" is not a capability.",
-                    $"Use one of: {string.Join(", ", switches.Keys.Order(StringComparer.Ordinal))}.")))
-                .Concat(listed.Where(capability => switches.ContainsKey(capability) && !on.Contains(capability)).Select(capability => new ConfigurationError(
-                    ValidationPhase.Capabilities, $"{path}.capabilities", $"capability \"{capability}\" is off.", fix(capability))))
-                .Concat(agent.Capabilities is null ? [] : Unmet(listed, _ => $"{path}.capabilities", fix));
-            if (agent.Context?.History is { Strategy: not HistoryStrategy.None } && !listed.Contains("conversationStore"))
+            if (agent.Context?.History is { Strategy: not HistoryStrategy.None } && !on.Contains("conversationStore"))
             {
-                errors = errors.Append(Off($"{path}.context.history.strategy", "conversationStore", fix("conversationStore")));
-            }
-
-            var searches = agent.Context?.Retrieval?.BeforeTurn.Count > 0
-                || agent.Tools.Where(ToolSets.ContainsKey).SelectMany(set => ToolSets[set]).Any(tool => Tools.GetValueOrDefault(tool)?.KnowledgeSource() is not null);
-            if (searches && !listed.Contains("knowledge"))
-            {
-                errors = errors.Append(Off(path, "knowledge", fix("knowledge")));
+                errors = errors.Append(Off($"agents.{name}.context.history.strategy", "conversationStore"));
             }
         }
 
         return errors;
 
-        static IEnumerable<ConfigurationError> Unmet(IReadOnlySet<string> on, Func<string, string> path, Func<string, string> fix) =>
-            CapabilitiesOptions.Dependencies.Where(dependency => on.Contains(dependency.Capability) && !on.Contains(dependency.Requires))
-                .Select(dependency => new ConfigurationError(ValidationPhase.Capabilities, path(dependency.Capability),
-                    $"{dependency.Capability} needs the {dependency.Requires} capability, which is off.", fix(dependency.Requires)));
-
-        static ConfigurationError Off(string path, string capability, string fix) =>
-            new(ValidationPhase.Capabilities, path, $"needs the {capability} capability, which is off.", fix);
+        static ConfigurationError Off(string path, string capability) =>
+            new(ValidationPhase.Capabilities, path, $"needs the {capability} capability, which is off.", $"Set capabilities.{capability}.enabled to true.");
     }
 
     /// <summary>

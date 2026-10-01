@@ -18,7 +18,7 @@ namespace Sleepyshark.Officina.Storage.Sqlite;
 public sealed class SqliteStorage : IStorage, IRunStore, IConversationStore, IEventLog, IAuditLog
 {
     /// <summary>The only format version this storage reads and writes.</summary>
-    public const int FormatVersion = 1;
+    public const int FormatVersion = 2;
 
     private const string Schema = """
         CREATE TABLE runs (

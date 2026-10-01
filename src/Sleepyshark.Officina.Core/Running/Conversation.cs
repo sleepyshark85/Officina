@@ -86,7 +86,8 @@ internal sealed class Conversation
     /// <exception cref="InvalidOperationException">The request would change content already sent (CTX-10).</exception>
     public ModelRequest Next(IReadOnlyList<string> facts)
     {
-        if (facts.Count > 0 && history[^1].Role != Role.Assistant)
+        // A call made again after "input too long" has no reply, so its context may be the last message already.
+        if (facts.Count > 0 && history[^1] is { Role: not Role.Assistant, TurnScoped: false })
         {
             AddVolatile(facts);
         }

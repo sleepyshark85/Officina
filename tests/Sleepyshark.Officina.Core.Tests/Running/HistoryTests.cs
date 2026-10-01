@@ -51,26 +51,30 @@ public class HistoryTests
         Assert.Equal(["2"], kit.Model.Requests[1].History.Select(Text));
     }
 
-    // CAP-02, TEST-08.
+    // CAP-02, TEST-08: the capability tools arrive with S16, which shows them absent when off.
     [Fact]
-    public async Task A_capability_that_is_off_adds_no_tools_or_storage()
+    public async Task A_capability_that_is_off_adds_no_storage()
     {
         var kit = new TestKit(new OfficinaOptions { Agents = new Dictionary<string, AgentDefinition> { [Agent] = new() { Instructions = "Work." } } });
         kit.Model.Reply("Done.");
 
         await kit.RunAsync(Agent, "work", Ct);
 
-        Assert.Empty(kit.Model.Requests[0].Tools);
         Assert.Empty(kit.Storage.Conversations.Turns);
     }
 
-    // HIST-01, HIST-04, LOOP-03.
-    [Fact]
-    public async Task Input_too_long_shortens_the_history_through_the_provider_and_the_call_is_made_again()
+    // HIST-01, HIST-04, LOOP-03: by the provider's own mechanism, or by an application's shortener, which calls a model too.
+    [Theory]
+    [InlineData(HistoryOptions.Provider)]
+    [InlineData("extension:Summarizer")]
+    public async Task Input_too_long_shortens_the_history_and_the_call_is_made_again(string shortening)
     {
-        var kit = Kit(new() { Strategy = HistoryStrategy.Shortened });
+        var summarizer = new ScriptedModelProvider();
+        var kit = new TestKit(
+            Configure(new() { Strategy = HistoryStrategy.Shortened, Shortening = shortening }), Tools(),
+            shorteners: new Dictionary<string, IHistoryShortener> { ["Summarizer"] = summarizer });
         kit.Model.Reply("one").Reply("two").Reply(TooLong).Reply("three").Reply("four");
-        kit.Model.Shorten(history => [Message.User("Summary: 1 and 2 are done."), history[^1]]);
+        (shortening == HistoryOptions.Provider ? kit.Model : summarizer).Shorten(history => [Message.User("Summary: 1 and 2 are done."), history[^1]]);
 
         await kit.RunAsync(Agent, "1", Ct);
         await kit.RunAsync(Agent, "2", Ct);
@@ -81,6 +85,20 @@ public class HistoryTests
         Assert.Equal(["1", "one", "2", "two", "3"], kit.Model.Requests[2].History.Select(Text));
         Assert.Equal(["Summary: 1 and 2 are done.", "3"], kit.Model.Requests[3].History.Select(Text));
         Assert.Equal(["Summary: 1 and 2 are done.", "3", "three", "4"], kit.Model.Requests[4].History.Select(Text));
+    }
+
+    // CTX-10: the call made again has no new reply, so a turn-scoped context is not sent twice.
+    [Fact]
+    public async Task The_call_made_again_after_shortening_keeps_one_copy_of_a_turn_scoped_context()
+    {
+        var options = Configure(new() { Strategy = HistoryStrategy.Shortened });
+        options = options with { Agents = new Dictionary<string, AgentDefinition> { [Agent] = options.Agents[Agent] with { Context = options.Agents[Agent].Context with { OperatingFacts = ["Be brief."] } } } };
+        var kit = new TestKit(options, Tools(), capabilities: new() { TurnScopedMessages = true });
+        kit.Model.Reply(TooLong).Reply("Done.").Shorten(history => history);
+
+        await kit.RunAsync(Agent, "work", Ct);
+
+        Assert.Equal(kit.Model.Requests[0].History, kit.Model.Requests[1].History);
     }
 
     // HIST-05: every tool request keeps a result, which may become a short note of what it held.

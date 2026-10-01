@@ -61,7 +61,6 @@ It lists the settings the code has today. Settings that later slices add are spe
 | `tools` | list | `[]` | The tool sets, by name in `toolSets`, whose tools the agent is offered. The same tools are offered whoever the caller is. | `["files","issues"]` |
 | `toolDescriptionsOnDemand` | boolean | `false` | Whether the model is offered only the tools' names, and reads a tool's description and arguments with `describe_tool` when it needs them. For agents with many tools. | `true` |
 | `permissions` | list |  | Narrows the caller's permissions for this agent's tool calls: a permission counts only if the caller holds it and it is listed here. Unset keeps the caller's. | `["issues:write"]` |
-| `capabilities` | list |  | The capabilities, by name in `capabilities`, this agent uses; each must be enabled. Unset uses every enabled capability. | `["conversationStore","knowledge"]` |
 | `maxParallelToolCalls` | whole number, ≥ 1 | `4` | The most tool calls from one reply that run at the same time, when every tool called is safe to run in parallel. | `4` |
 | `context` | section | `{"operatingFacts":[],"historyCacheLifetime":"00:05:00","retrieval":{"beforeTurn":[],"handOffWhenNotCovered":false},"history":{"strategy":"none","shortening":"provider","lastTurns":10}}` | How the agent's model input is built. Required. | `{"operatingFacts":["Today is {{now:date}}."]}` |
 | `stopWhen` | section | `{"finished":true}` | When a turn is complete. They combine: the first that holds completes the turn. Required. | `{"finished":false,"finishTool":"submit_report"}` |
@@ -142,7 +141,7 @@ It lists the settings the code has today. Settings that later slices add are spe
 
 | Setting | Allowed values | Default | Description | Example |
 |---|---|---|---|---|
-| `conversationStore` | section | `{"enabled":false}` | The conversation store: each agent's conversation with each caller is kept, so a history strategy other than `none` continues it across requests and restarts. | `{"enabled":true}` |
+| `conversationStore` | section | `{"enabled":false}` | The conversation store: each agent's conversation with each caller is kept, anonymous callers sharing one, so a history strategy other than `none` continues it across requests and restarts. | `{"enabled":true}` |
 | `knowledge` | section | `{"enabled":false}` | Knowledge retrieval: the sources in `knowledge`, searched before a turn or through `knowledge:` tools. | `{"enabled":true}` |
 | `workspace` | section | `{"enabled":false,"protectedPaths":[],"keepWorkingCopies":false}` | The git workspace: a working copy per agent, and an integration queue into the baseline. | `{"enabled":true,"protectedPaths":[{"path":"secrets/**","access":"hidden"}]}` |
 | `sandbox` | section | `{"enabled":false,"allowedHosts":[],"commandRules":[],"secrets":{}}` | The sandbox that commands run in: no network unless allowed, and command rules. It needs the workspace. | `{"enabled":true,"allowedHosts":["api.nuget.org"]}` |

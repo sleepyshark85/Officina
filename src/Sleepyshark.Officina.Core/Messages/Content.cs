@@ -56,6 +56,12 @@ public sealed record ToolUseContent : Content
     public string Name { get; }
 
     public JsonElement Arguments { get; }
+
+    // JSON compares by value, so a call read back or rebuilt from other JSON is the same call.
+    public bool Equals(ToolUseContent? other) =>
+        other is not null && Id == other.Id && Name == other.Name && JsonElement.DeepEquals(Arguments, other.Arguments);
+
+    public override int GetHashCode() => HashCode.Combine(Id, Name);
 }
 
 /// <summary>The result of the tool call with the id <see cref="ToolUseId"/>.</summary>
@@ -83,4 +89,8 @@ public sealed record ProviderContent : Content
     public ProviderContent(JsonElement data) => Data = data.Clone();
 
     public JsonElement Data { get; }
+
+    public bool Equals(ProviderContent? other) => other is not null && JsonElement.DeepEquals(Data, other.Data);
+
+    public override int GetHashCode() => Data.ValueKind.GetHashCode();
 }

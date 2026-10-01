@@ -18,7 +18,7 @@ public interface IConversationStore
 
 /// <summary>One turn of a conversation, as it was sent to the model.</summary>
 /// <param name="Agent">The agent.</param>
-/// <param name="Owner">The caller the conversation is with, or null for an anonymous caller.</param>
+/// <param name="Owner">The caller the conversation is with, or null for anonymous callers, who share one conversation per agent and tenant.</param>
 /// <param name="Time">When the turn ended.</param>
 /// <param name="Messages">The turn's messages, in which every tool request has its result.</param>
 /// <param name="Shortened">Whether the history was shortened in this turn, so it holds the whole conversation.</param>

@@ -16,12 +16,14 @@ public sealed class TestKit
     /// <param name="gates">The application's gates, by extension id.</param>
     /// <param name="knowledge">The application's knowledge sources, by extension id.</param>
     /// <param name="capabilities">What the scripted model claims to support; nothing when omitted.</param>
+    /// <param name="shorteners">The application's history shorteners, by extension id.</param>
     public TestKit(
         OfficinaOptions? options = null,
         IReadOnlyDictionary<string, ITool>? tools = null,
         IReadOnlyDictionary<string, IGate>? gates = null,
         IReadOnlyDictionary<string, IKnowledgeSource>? knowledge = null,
-        ProviderCapabilities? capabilities = null)
+        ProviderCapabilities? capabilities = null,
+        IReadOnlyDictionary<string, IHistoryShortener>? shorteners = null)
     {
         options ??= new OfficinaOptions();
         Model = new() { Capabilities = capabilities ?? ProviderCapabilities.None };
@@ -34,7 +36,8 @@ public sealed class TestKit
             knowledge ?? new Dictionary<string, IKnowledgeSource>(),
             Human,
             new InMemorySecretSource(Secrets),
-            Time);
+            Time,
+            shorteners);
     }
 
     public ScriptedModelProvider Model { get; }

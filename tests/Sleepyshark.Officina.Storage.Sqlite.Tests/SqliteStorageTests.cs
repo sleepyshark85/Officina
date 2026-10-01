@@ -37,13 +37,13 @@ public sealed class SqliteStorageTests : StorageContract, IDisposable
         {
             await connection.OpenAsync(Ct);
             await using var command = connection.CreateCommand();
-            command.CommandText = "PRAGMA user_version = 2";
+            command.CommandText = "PRAGMA user_version = 3";
             await command.ExecuteNonQueryAsync(Ct);
         }
 
         var error = await Assert.ThrowsAsync<InvalidDataException>(() => CreateAsync());
 
-        Assert.Equal($"{File} holds data in format version 2, and this core reads format version 1 only.", error.Message);
+        Assert.Equal($"{File} holds data in format version 3, and this core reads format version 2 only.", error.Message);
     }
 
     // CFG-07, STO-01.
