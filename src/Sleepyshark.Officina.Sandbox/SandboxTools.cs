@@ -139,6 +139,7 @@ public sealed class SandboxTools : IAsyncDisposable
     /// <summary>Finds the protected paths in a folder of the working copy as it is now. Links are skipped; they lead nowhere inside the sandbox.</summary>
     private void Protect(string folder, List<string> hiddenPaths, List<string> readOnlyPaths)
     {
+        // The default also skips hidden entries, which on Linux are the dot files, such as .env, that matter most here.
         foreach (var entry in new DirectoryInfo(folder).EnumerateFileSystemInfos("*", new EnumerationOptions { AttributesToSkip = FileAttributes.ReparsePoint }))
         {
             var relative = Path.GetRelativePath(directory, entry.FullName).Replace('\\', '/');

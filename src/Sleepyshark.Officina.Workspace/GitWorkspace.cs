@@ -11,9 +11,6 @@ namespace Sleepyshark.Officina.Workspace;
 /// </summary>
 public sealed class GitWorkspace : IDisposable
 {
-    /// <summary>The folder at the root where the workspace keeps its lock and worktrees.</summary>
-    internal const string StateFolder = ".sof";
-
     private readonly string root;
     private readonly WorkspaceOptions options;
     private readonly FileStream runLock;
@@ -51,7 +48,7 @@ public sealed class GitWorkspace : IDisposable
         ArgumentNullException.ThrowIfNull(baselineChecks);
         ArgumentNullException.ThrowIfNull(time);
         root = Path.GetFullPath(root);
-        var state = Directory.CreateDirectory(Path.Combine(root, StateFolder)).FullName;
+        var state = Directory.CreateDirectory(Path.Combine(root, WorkspaceOptions.StateFolder)).FullName;
         var activeRun = Path.Combine(state, "run");
         FileStream runLock;
         try
@@ -93,7 +90,7 @@ public sealed class GitWorkspace : IDisposable
     /// <summary>Creates the working copy where an agent does a task, from the baseline as it is now (WS-01).</summary>
     public async Task<WorkingCopy> OpenWorkingCopyAsync(string taskId, string agent, CancellationToken ct = default)
     {
-        var copy = new WorkingCopy(taskId, agent, Path.Combine(root, StateFolder, "worktrees", taskId), hidden, readOnly);
+        var copy = new WorkingCopy(taskId, agent, Path.Combine(root, WorkspaceOptions.StateFolder, "worktrees", taskId), hidden, readOnly);
         await Git.RunAsync(root, ct, "worktree", "add", "-b", copy.Branch, copy.Directory, "HEAD").ConfigureAwait(false);
         return copy;
     }

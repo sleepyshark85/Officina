@@ -1,3 +1,4 @@
+using Sleepyshark.Officina.Core.Configuration;
 using Sleepyshark.Officina.Core.Extensibility;
 
 namespace Sleepyshark.Officina.Workspace;
@@ -53,7 +54,7 @@ internal sealed class IntegrationQueue(string root, string baseline, string runI
         // A change cancelled while it waited is dropped before git touches it.
         ct.ThrowIfCancellationRequested();
         await CommitAsync(copy, ct).ConfigureAwait(false);
-        var scratch = Path.Combine(root, GitWorkspace.StateFolder, "integration");
+        var scratch = Path.Combine(root, WorkspaceOptions.StateFolder, "integration");
         await Git.RunAsync(root, ct, "worktree", "add", "--detach", scratch, copy.Branch).ConfigureAwait(false);
         try
         {
