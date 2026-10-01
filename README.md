@@ -7,3 +7,8 @@ first application. Status: specification and design, ready for the M0 design rev
 - [Configuration](CONFIGURATION.md) and the [full reference](docs/configuration-reference.md)
 - [Design](DESIGN.md), with diagrams in [`docs/diagrams/`](docs/diagrams/)
 - [Master plan](docs/plan/README.md) and its slices
+
+## Build
+
+Needs the .NET 10 SDK. `dotnet build` and `dotnet test` at the repository root build and test
+everything offline; no API key is needed.

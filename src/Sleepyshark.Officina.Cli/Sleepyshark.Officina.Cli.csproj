@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>sof</ToolCommandName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Sleepyshark.Officina.Core\Sleepyshark.Officina.Core.csproj" />
+    <ProjectReference Include="..\Sleepyshark.Officina.Hosting\Sleepyshark.Officina.Hosting.csproj" />
+    <ProjectReference Include="..\Sleepyshark.Officina.Team\Sleepyshark.Officina.Team.csproj" />
+    <ProjectReference Include="..\Sleepyshark.Officina.Workspace\Sleepyshark.Officina.Workspace.csproj" />
+    <ProjectReference Include="..\Sleepyshark.Officina.Sandbox\Sleepyshark.Officina.Sandbox.csproj" />
+    <ProjectReference Include="..\Sleepyshark.Officina.Capabilities\Sleepyshark.Officina.Capabilities.csproj" />
+    <ProjectReference Include="..\Sleepyshark.Officina.Storage.Sqlite\Sleepyshark.Officina.Storage.Sqlite.csproj" />
+    <ProjectReference Include="..\Sleepyshark.Officina.Mcp\Sleepyshark.Officina.Mcp.csproj" />
+    <ProjectReference Include="..\Sleepyshark.Officina.Providers.Claude\Sleepyshark.Officina.Providers.Claude.csproj" />
+  </ItemGroup>
+
+</Project>

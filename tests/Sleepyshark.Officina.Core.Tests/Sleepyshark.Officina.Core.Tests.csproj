@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Sleepyshark.Officina.Core\Sleepyshark.Officina.Core.csproj" />
+    <ProjectReference Include="..\..\src\Sleepyshark.Officina.Testing\Sleepyshark.Officina.Testing.csproj" />
+  </ItemGroup>
+
+</Project>
