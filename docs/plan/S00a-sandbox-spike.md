@@ -1,6 +1,6 @@
 # S00a — Sandbox spike
 
-**Milestone:** M0 · **Size:** S · **Depends on:** none · **Issue:** [#1](https://github.com/sleepyshark85/Officina/issues/1) · **Status:** todo
+**Milestone:** M0 · **Size:** S · **Depends on:** none · **Issue:** [#1](https://github.com/sleepyshark85/Officina/issues/1) · **Status:** done
 
 ## Goal
 
