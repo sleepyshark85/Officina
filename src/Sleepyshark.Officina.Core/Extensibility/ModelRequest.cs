@@ -25,6 +25,12 @@ public sealed record ModelRequest(
     ImmutableArray<CacheBoundary> CacheBoundaries)
 {
     /// <summary>
+    /// Whether the work needs no immediate answer, as in a batch, so the provider may use its lower-cost batch processing
+    /// when it offers one (MDL-10).
+    /// </summary>
+    public bool Batch { get; init; }
+
+    /// <summary>
     /// Whether this request starts with exactly the content of <paramref name="previous"/>: the same prefix, and its
     /// history followed only by new messages (CTX-10). Cache boundaries may move.
     /// </summary>

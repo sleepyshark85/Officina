@@ -208,7 +208,7 @@ public class ConversationTests
         var options = Options(("read", Extension("read")));
         var context = new ContextOptions
         {
-            OperatingFacts = ["{{now}} {{now:date}} {{project.name}}", "{{caller.id}}", "{{now:time}}", "{{secret.KEY}}"],
+            OperatingFacts = ["{{now}} {{now:date}} {{project.name}} {{caller.id}}", "{{caller.role}}", "{{now:time}}", "{{secret.KEY}}"],
             HistoryCacheLifetime = TimeSpan.FromHours(2),
         };
         options = options with

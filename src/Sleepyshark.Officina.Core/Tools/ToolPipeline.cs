@@ -14,7 +14,7 @@ namespace Sleepyshark.Officina.Core.Tools;
 /// <summary>
 /// The one path every tool call takes (TOOL-07, DESIGN.md §5): argument validation, permission rules, the gates for all
 /// tools and then the tool's own, human approval, the idempotency lookup, the audit intent, the call itself with its
-/// time limit and retries, and finally trimming and the audit outcome. The first step that does not allow a call
+/// time limit and retries, and finally masking, trimming and the audit outcome. The first step that does not allow a call
 /// decides it. Every write-tool attempt is audited, whichever step it stops at (TOOL-11). Each call is published
 /// as it starts and ends, and traced (EVT-01, OBS-01).
 /// </summary>
@@ -96,6 +96,11 @@ public sealed class ToolPipeline
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(request);
+        if (catalog.TryGet(context.Agent, request.Name, out var tool) && tool.Options.Untrusted)
+        {
+            context.ReadUntrusted = true; // SEC-04
+        }
+
         var entry = Entry(context, request.Name, request.Arguments, "provider", AuditOutcome.Completed) with { Detail = secrets.Remove(result) };
         return audit.AppendAsync(context.Caller.Tenant, entry, ct);
     }
@@ -165,7 +170,17 @@ public sealed class ToolPipeline
         }
 
         await AuditAsync(context, tool, arguments, approved ? "human" : null, AuditOutcome.Intent, ct).ConfigureAwait(false);
-        var (result, detail) = await InvokeAsync(tool, new ToolCall(arguments, context.Caller, key, secrets), ct).ConfigureAwait(false);
+        // ING-06: only a tool configured for real values gets them, and what it returns is masked again.
+        var real = tool.Options.ReceivesMaskedValues && context.Masker is not null;
+        var masker = real || tool.Options.MaskResults || (tool.Options.KnowledgeSource() is { } source && options.Knowledge[source].Mask) ? context.Masker : null;
+        var (result, detail) = await InvokeAsync(tool, new ToolCall(real ? context.Masker!.Restore(arguments) : arguments, context.Caller, key, secrets), ct)
+            .ConfigureAwait(false);
+        detail = detail is null || masker is null ? detail : masker.Mask(detail);
+        if (tool.Options.Untrusted && result.Error is null)
+        {
+            context.ReadUntrusted = true; // only ever set, as parallel calls share the context
+        }
+
         var outcome = result.Error is null ? AuditOutcome.Completed : AuditOutcome.Failed;
         if (detail is not null)
         {
@@ -175,8 +190,9 @@ public sealed class ToolPipeline
 
         await AuditAsync(context, tool, arguments, null, outcome, ct, detail).ConfigureAwait(false);
 
-        // Secrets are removed before trimming, so a secret cut in half cannot leave its start behind (INV-06).
+        // Secrets are removed and values masked before trimming, so a value cut in half cannot leave its start behind (INV-06).
         var content = secrets.Remove(result.Content);
+        content = masker?.Mask(content) ?? content;
         var max = tool.Options.MaxResultLength;
         return result with
         {
@@ -223,8 +239,8 @@ public sealed class ToolPipeline
         {
             var gate = options.Gates[name];
             var decision = gate.ExtensionId() is { } id
-                ? await gates[id].EvaluateAsync(new GateContext(context.Agent, tool.Name, arguments, context.Caller), ct).ConfigureAwait(false)
-                : gate.When?.Holds(arguments) == false ? GateDecision.Allow
+                ? await gates[id].EvaluateAsync(new GateContext(context.Agent, tool.Name, arguments, context.Caller, context.ReadUntrusted), ct).ConfigureAwait(false)
+                : gate.When?.Holds(arguments) == false || (gate.Use == GateOptions.UntrustedContentApproval && !context.ReadUntrusted) ? GateDecision.Allow
                 : gate.Use == GateOptions.Deny ? GateDecision.Deny($"gate {name}")
                 : GateDecision.Ask($"gate {name}");
             if (decision.Action != PolicyAction.Allow)

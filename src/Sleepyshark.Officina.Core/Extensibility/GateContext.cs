@@ -7,4 +7,5 @@ namespace Sleepyshark.Officina.Core.Extensibility;
 /// <param name="Tool">The tool, by its configured name.</param>
 /// <param name="Arguments">The validated arguments.</param>
 /// <param name="Caller">Who the call acts for.</param>
-public sealed record GateContext(string Agent, string Tool, JsonElement Arguments, Caller Caller);
+/// <param name="ReadUntrusted">Whether the agent has read untrusted content, such as a fetched web page (SEC-04).</param>
+public sealed record GateContext(string Agent, string Tool, JsonElement Arguments, Caller Caller, bool ReadUntrusted);

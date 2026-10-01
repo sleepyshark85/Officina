@@ -40,7 +40,7 @@ public sealed partial record OfficinaOptions
     [Setting("Gates, by name. Tools and policies refer to them by name.", Example = """{ "issue-dedupe": { "use": "extension:Acme.IssueDedupeGate" } }""")]
     public IReadOnlyDictionary<string, GateOptions> Gates { get; init; } = new Dictionary<string, GateOptions>();
 
-    [Setting("Permission rules, gates for all tools, and anonymous callers' permissions.", Example = """{ "gates": ["no-main-branch"] }""")]
+    [Setting("Permission rules, gates for all tools, anonymous callers' permissions, masking and rate limits.", Example = """{ "gates": ["no-main-branch"] }""")]
     public PolicyOptions Policies { get; init; } = new();
 
     [Setting("Knowledge sources, by name.", Example = """{ "handbook": { "use": "extension:Acme.HandbookIndex" } }""")]

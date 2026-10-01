@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Sleepyshark.Officina.Core.Events;
 
 namespace Sleepyshark.Officina.Core.Configuration;
@@ -52,6 +53,15 @@ public sealed partial record OfficinaOptions : IValidatableObject
                 errors = errors.Append(new(ValidationPhase.Tools, $"agents.{name}.toolDescriptionsOnDemand", $"needs the tool name {DescribeTool}, which the agent is offered already.",
                     $"Rename the tool {DescribeTool}."));
             }
+
+            // ING-06: masking tokens are numbered per run, so a token in kept history could be restored to a later run's value.
+            if (Policies.Masking?.Enabled == true && agent.Context?.History is { Strategy: not HistoryStrategy.None }
+                && agent.Tools.Where(ToolSets.ContainsKey).SelectMany(set => ToolSets[set]).Any(tool => Tools.GetValueOrDefault(tool)?.ReceivesMaskedValues == true))
+            {
+                errors = errors.Append(new(ValidationPhase.Tools, $"agents.{name}.context.history.strategy",
+                    "cannot keep history while masking is on and the agent has a tool that receives masked values.",
+                    "Set the strategy to none, turn policies.masking.enabled off, or remove receivesMaskedValues from the agent's tools."));
+            }
         }
 
         foreach (var (name, server) in ToolServers)
@@ -93,8 +103,8 @@ public sealed partial record OfficinaOptions : IValidatableObject
             errors = errors.Concat(References("capabilities.sandbox.secrets", "agent", sandbox.Secrets.Keys, "agents", Agents.Keys));
         }
 
-        errors = errors.Concat(Annotations(Storage.Retention, "storage.retention"))
-            .Concat(Storage.UnstoredEvents.Where(kind => !EventPayload.Kinds.Contains(kind)).Select(kind => new ConfigurationError(
+        errors = errors.Concat(AdmissionSettings()).Concat(Annotations(Storage.Retention, "storage.retention"))
+            .Concat(Storage.Unstored.Where(kind => !EventPayload.Kinds.Contains(kind)).Select(kind => new ConfigurationError(
                 ValidationPhase.Shape, "storage.unstoredEvents", $"\"{kind}\" is not a kind of event.",
                 $"Use one of: {string.Join(", ", EventPayload.Kinds.Order(StringComparer.Ordinal))}.")));
 
@@ -159,6 +169,13 @@ public sealed partial record OfficinaOptions : IValidatableObject
                 errors = errors.Append(new(ValidationPhase.Tools, $"tools.{name}.reason", "is required for a provider tool.",
                     "Say why the agents need it; the provider runs it without gates or approval."));
             }
+
+            if (tool.ProviderTool() is not null && (tool.MaskResults || tool.ReceivesMaskedValues))
+            {
+                // ING-02, ING-06: the provider runs the call and gives the model its result, so the core never sees either.
+                errors = errors.Append(new(ValidationPhase.Tools, $"tools.{name}.{(tool.MaskResults ? "maskResults" : "receivesMaskedValues")}",
+                    "has no effect on a provider tool.", "Remove it; the provider runs the call, so the core cannot mask or restore its values."));
+            }
         }
 
         foreach (var (name, tools) in ToolSets)
@@ -169,10 +186,10 @@ public sealed partial record OfficinaOptions : IValidatableObject
         foreach (var (name, gate) in Gates)
         {
             errors = errors.Concat(Annotations(gate, $"gates.{name}"));
-            if (gate.Use is not null and not GateOptions.RequireApproval and not GateOptions.Deny && gate.ExtensionId() is null)
+            if (gate.Use is not null and not GateOptions.RequireApproval and not GateOptions.Deny and not GateOptions.UntrustedContentApproval && gate.ExtensionId() is null)
             {
                 errors = errors.Append(new(ValidationPhase.Shape, $"gates.{name}.use", $"\"{gate.Use}\" is not a gate.",
-                    $"Use {GateOptions.RequireApproval}, {GateOptions.Deny}, or extension:<id> for a gate the application registers."));
+                    $"Use {GateOptions.RequireApproval}, {GateOptions.Deny}, {GateOptions.UntrustedContentApproval}, or extension:<id> for a gate the application registers."));
             }
         }
 
@@ -185,6 +202,31 @@ public sealed partial record OfficinaOptions : IValidatableObject
                 errors = errors.Concat(rule.To is null
                     ? [new(ValidationPhase.Shape, $"{path}.to", "is required to route.", "Name the agent the turn is handed to.")]
                     : References($"{path}.to", "agent", [rule.To], "agents", Agents.Keys));
+            }
+        }
+
+        return errors;
+    }
+
+    /// <summary>The admission settings (ING-02, ING-03): masking patterns that are valid expressions, and real rate limits.</summary>
+    private IEnumerable<ConfigurationError> AdmissionSettings()
+    {
+        var errors = Annotations(Policies, "policies");
+        foreach (var (name, limit) in new[] { ("perOwner", Policies.RateLimits?.PerOwner), ("perTenant", Policies.RateLimits?.PerTenant) })
+        {
+            errors = errors.Concat(limit is null ? [] : Annotations(limit, $"policies.rateLimits.{name}"));
+        }
+
+        foreach (var (name, pattern) in Policies.Masking?.Patterns ?? new Dictionary<string, string>())
+        {
+            try
+            {
+                _ = new Regex($"(?<{name}>{pattern})");
+            }
+            catch (ArgumentException exception)
+            {
+                errors = errors.Append(new(ValidationPhase.Shape, $"policies.masking.patterns.{name}", $"is not a valid pattern: {exception.Message}",
+                    "Name the pattern with letters, digits and underscores, and write a .NET regular expression."));
             }
         }
 

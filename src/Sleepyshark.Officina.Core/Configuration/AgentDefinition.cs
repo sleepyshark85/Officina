@@ -20,6 +20,10 @@ public sealed record AgentDefinition
     [Required(ErrorMessage = Messages.Required)]
     public string Model { get; init; } = ModelProfile.DefaultName;
 
+    [Setting("How work may reach the agent: `conversation`, `request`, `batch`, `schedule`, `event` or `longRunning`. Work that arrives any other way is rejected. Unset accepts every way.",
+        Example = """["request", "batch"]""")]
+    public IReadOnlyList<Trigger>? Triggers { get; init; }
+
     [Setting("The tool sets, by name in `toolSets`, whose tools the agent is offered. The same tools are offered whoever the caller is.",
         Example = """["files", "issues"]""")]
     public IReadOnlyList<string> Tools { get; init; } = [];

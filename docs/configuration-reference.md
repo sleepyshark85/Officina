@@ -90,7 +90,6 @@ paths use.
   "run":          { },   // run defaults: entry agent, budget, permission mode           §8
   "capabilities": { },   // optional capabilities and their settings                     §9
   "policies":     { },   // permission rules, global gates, masking, rate limits         §10
-  "admission":    { },   // admission checks                                             §10
   "operations":   { },   // storage, retention, events, telemetry, secrets               §12
   "extensions":   { }    // where extension assemblies are loaded from                   §11
 }
@@ -260,6 +259,7 @@ example, a tool that declares itself `write` cannot be configured as `read`.
     "maxAttempts": 1,
     "receivesMaskedValues": true                                   // ING-06
   },
+  "fetch_page":  { "source": "mcp:web/fetch", "kind": "read", "untrusted": true, "maskResults": true },   // SEC-04, ING-02
   "create_pr":   { "source": "mcp:github/create_pull_request", "gates": ["github-writes"] },
   "get_issue":   { "source": "mcp:github/get_issue", "kind": "read" },
   "search_handbook": { "source": "knowledge:handbook" },           // CTX-04, as a tool
@@ -284,7 +284,9 @@ example, a tool that declares itself `write` cannot be configured as `read`.
 | `maxResultLength` | `32000` | Characters of a result that enter the conversation; the rest is cut off. The full result is kept as an artifact the agent can page through (S06). |
 | `parallelSafe` | the tool's declaration; `false` for MCP tools | LOOP-08. |
 | `irreversible` | `false` | Carried out at most once, with an idempotency key (TOOL-10). |
-| `receivesMaskedValues` | `false` | Masked values are restored in this tool's arguments (ING-06). |
+| `receivesMaskedValues` | `false` | Masked values are restored in this tool's arguments (ING-06). Its results are masked again. |
+| `maskResults` | `false` | Personal data in the results is masked when masking is on (ING-02). |
+| `untrusted` | `false` | The results are untrusted content; an agent that read them is marked for gates (SEC-04). |
 | `description` | the tool's own | An override; it becomes part of the stable prefix. |
 
 Built-in tool packs (TOOL-01) are only offered when their capability is on (CAP-02):
@@ -334,7 +336,7 @@ The built-in gates are:
 - `deny` (with `when`).
 - `route-to` (to an agent or a human).
 - `rate-limit`.
-- `untrusted-content-approval` (SEC-04).
+- `untrusted-content-approval` (with `when`): asks a human once the agent has read untrusted content (SEC-04).
 
 ### 5.7 Checks
 
@@ -355,7 +357,8 @@ signal (INV-01). The reviewer is never the author (TASK-06).
 
 ```jsonc
 "knowledge": {
-  "handbook": { "use": "extension:Acme.HandbookIndex", "settings": { "index": "prod" } }
+  "handbook": { "use": "extension:Acme.HandbookIndex", "settings": { "index": "prod" } },
+  "tickets":  { "use": "extension:Acme.TicketIndex", "mask": true }   // ING-02: mask personal data in passages
 }
 ```
 
@@ -423,7 +426,7 @@ missing makes every other test false.
     "policies": { "gates": ["tests-first"] },            // gates for all this agent's tools
     "capabilities": ["workspace", "sandbox", "projectMemory", "taskBoard"],
     "helpers": { "allowed": false },           // TEAM-07
-    "trigger": { "type": "longRunning" }       // TRG-01
+    "triggers": ["longRunning"]                // TRG-01: unset accepts work that arrives any way
   }
 }
 ```
@@ -657,18 +660,18 @@ Dependencies checked at validation (CAP-03):
   "gates": ["rate-limit"],                          // gates for all tools (TOOL-05 step 3)
   "masking": {                                       // ING-02, ING-06
     "enabled": true,
-    "patterns": ["email", "phone", "paymentCard"],
-    "custom": [ { "name": "employeeId", "regex": "EMP-[0-9]{6}" } ],
-    "applyTo": { "work": true, "toolResults": ["create_issue"], "knowledge": ["handbook"] }
+    "patterns": { "email": "...", "employeeId": "EMP-[0-9]{6}" }   // replace the built-in email, phone and card patterns
   },
-  "rateLimits": { "perOwner": { "runsPerHour": 10 }, "perTenant": { "costPerDay": 200 } },   // ING-03
-  "untrustedSources": ["provider:web_search", "mcp:tracker/*"],    // SEC-04
+  "rateLimits": { "perOwner": { "permits": 10, "window": "01:00:00" }, "perTenant": { "permits": 200, "window": "1.00:00:00" } },   // ING-03
   "anonymousPermissions": []                                       // ING-05
-},
-"admission": {
-  "checks": ["extension:Acme.WorkingHoursCheck"]                   // ING-01, in order
 }
 ```
+
+Work from outside passes admission before it reaches an agent (ING-01): masking, then the checks in order, where the
+first rejection wins: the agent's `triggers`, then the owner's and the tenant's rate limits. A rejection is a result
+with its reason (ING-04). Masking applies to the work and to messages sent to agents; tools and knowledge sources
+opt in with `maskResults` and `mask`. A per-run rate limit arrives with long-running runs (S19), and application
+admission checks when an application needs one.
 
 Permission rule actions are `allow`, `deny` (the default), `ask` and `route` (to the agent named in `to`).
 A rule's `when` reads the tool's arguments only. A caller must also hold every permission the tool lists, and an

@@ -6,10 +6,10 @@ Status: draft · 2026-10-01 · slices `REQUIREMENTS.md` (revision 2) into delive
 
 Last updated 2026-10-02.
 
-- **Done:** M0 spikes S00a and S00b; M1 slices S01 (walking skeleton) and S02 (configuration); S03 (tool pipeline); S04 (turn loop); S05 (context and caching); S07 (history and conversation store); S08 (events, storage and observability); S10 (MCP and knowledge); S14 (git workspace).
+- **Done:** M0 spikes S00a and S00b; M1 slices S01 (walking skeleton) and S02 (configuration); S03 (tool pipeline); S04 (turn loop); S05 (context and caching); S07 (history and conversation store); S08 (events, storage and observability); S09 (triggers and admission); S10 (MCP and knowledge); S14 (git workspace).
 - **Doing:** S15 (sandbox). The Linux piece is in review; the Windows piece follows.
 - **Waiting:** the M0 design review sign-off on `REQUIREMENTS.md`, `CONFIGURATION.md` and `DESIGN.md`.
-- **Next:** S06, S09 and S16. The Windows piece of S15 can run alongside them.
+- **Next:** S06 and S16. The Windows piece of S15 can run alongside them.
 - **Open follow-ups:**
   - S02 kept a `formatVersion` check, though only version 1 exists. Consider removing the setting
     until a version 2 exists (principle 13).
@@ -52,7 +52,17 @@ Last updated 2026-10-02.
   - S11 maps cache boundaries to `cache_control`, putting boundary ③ on the last cacheable block before a
     turn-scoped message; maps `Role.System` to mid-conversation system messages and `TurnScoped` to `clear_at`; and
     reports `CacheBoundaries` and `TurnScopedMessages` in its capabilities.
-  - S09 takes the caller from admission; `AgentRunner.RunAsync` already accepts one from the host.
+  - S09 left parts of its requirements to the slices that add the state they need; its Notes list them
+    (S06, S11, S19, S20).
+  - REQUIREMENTS.md §4.3 lists masking as replaceable, but DESIGN.md §4 keeps it in Core and not replaceable in v1.
+    The owner decides at revision 3.
+  - Masking tokens are numbered per run, but S07 keeps history across runs, so a token in earlier history could
+    name a different value in a later run. Until the token table is kept with the conversation, validation refuses
+    a history strategy other than `none` for an agent with a `receivesMaskedValues` tool while masking is on.
+    Keeping the table with the conversation lifts that restriction.
+  - The configuration binder appends a configured list to a non-empty default list, so list settings default to
+    unset and code supplies the default (S09 fixed `storage.unstoredEvents`). Dictionaries merge into their defaults on
+    purpose: `providers.claude` and `models.default` rely on it.
 
 ## How slices work
 
@@ -97,7 +107,7 @@ A slice is **done** when:
 | [S06](S06-run-record-and-output.md) | Run record and output | M2 | M | S04, S05 | [#8](https://github.com/sleepyshark85/Officina/issues/8) | todo |
 | [S07](S07-history-and-conversations.md) | History and conversation store | M2 | S | S05 | [#9](https://github.com/sleepyshark85/Officina/issues/9) | done |
 | [S08](S08-events-storage-observability.md) | Events, storage and observability | M2 | M | S04 | [#10](https://github.com/sleepyshark85/Officina/issues/10) | done |
-| [S09](S09-triggers-and-admission.md) | Triggers and admission | M2 | M | S04, S08 | [#11](https://github.com/sleepyshark85/Officina/issues/11) | todo |
+| [S09](S09-triggers-and-admission.md) | Triggers and admission | M2 | M | S04, S08 | [#11](https://github.com/sleepyshark85/Officina/issues/11) | done |
 | [S10](S10-mcp-and-knowledge.md) | MCP and knowledge sources | M2 | M | S03 | [#12](https://github.com/sleepyshark85/Officina/issues/12) | done |
 | [S11](S11-claude-provider.md) | Claude provider | M3 | M | S00b, S05 | [#13](https://github.com/sleepyshark85/Officina/issues/13) | todo |
 | [S12](S12-model-gateway.md) | Model gateway | M3 | S | S11 | [#14](https://github.com/sleepyshark85/Officina/issues/14) | todo |
