@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Sleepyshark.Officina.Core;
 using Sleepyshark.Officina.Core.Configuration;
 using Sleepyshark.Officina.Hosting.Configuration;
@@ -16,8 +15,8 @@ public sealed class LayeringTests : IDisposable
     [Fact]
     public void Each_layer_overrides_the_ones_below_it()
     {
-        folder.Write("sof.json", """{ "run": { "budget": { "cost": 10, "time": "1h" }, "permissionMode": "readOnly" }, "project": { "name": "app" } }""")
-            .Write("sof.prod.json", """{ "run": { "budget": { "cost": 20, "time": "2h" } } }""");
+        folder.Write("sof.json", """{ "run": { "budget": { "cost": 10, "time": "01:00:00" }, "permissionMode": "readOnly" }, "project": { "name": "app" } }""")
+            .Write("sof.prod.json", """{ "run": { "budget": { "cost": 20, "time": "02:00:00" } } }""");
         var variables = new Dictionary<string, string> { ["SOF__run__budget__cost"] = "30", ["PATH"] = "/bin" };
 
         var configuration = folder.Load("prod", variables, new RunOption("run.budget.cost", "40", "--budget"));
@@ -27,8 +26,8 @@ public sealed class LayeringTests : IDisposable
         Assert.Equal(TimeSpan.FromHours(2), configuration.Options.Run.Budget.Time);
         Assert.Equal(PermissionMode.ReadOnly, configuration.Options.Run.PermissionMode);
         Assert.Equal("run option --budget", configuration.OriginOf("run.budget.cost").ToString());
-        Assert.Equal("environment file sof.prod.json:1:44", configuration.OriginOf("run.budget.time").ToString());
-        Assert.Equal("application file sof.json:1:70", configuration.OriginOf("run.permissionMode").ToString());
+        Assert.Equal("environment file sof.prod.json", configuration.OriginOf("run.budget.time").ToString());
+        Assert.Equal("application file sof.json", configuration.OriginOf("run.permissionMode").ToString());
         Assert.Equal($"code default, core {CoreVersion.Value}", configuration.OriginOf("models.default.model").ToString());
         Assert.Equal(["application file sof.json", "environment file sof.prod.json", "environment variables", "run options"], configuration.Layers);
     }
@@ -41,15 +40,13 @@ public sealed class LayeringTests : IDisposable
         var configuration = folder.Load(variables: new()
         {
             ["SOF__run__budget__cost"] = "30",
-            ["SOF__run__permissionMode"] = "auto",
-            ["SOF__models__default__settings"] = """{ "stop": ["END"] }""",
+            ["SOF__RUN__PERMISSIONMODE"] = "auto",
             ["SOF__models__fast__model"] = "claude-haiku-4-5",
         });
 
         Assert.True(configuration.IsValid, string.Join('\n', configuration.Errors));
         Assert.Equal(30m, configuration.Options.Run.Budget.Cost);
         Assert.Equal(PermissionMode.Auto, configuration.Options.Run.PermissionMode);
-        Assert.Equal("""["END"]""", JsonSerializer.Serialize(configuration.Options.Models["default"].Settings["stop"]));
         Assert.Equal("claude-haiku-4-5", configuration.Options.Models["fast"].Model);
         Assert.Equal("environment variable SOF__run__budget__cost", configuration.OriginOf("run.budget.cost").ToString());
     }
@@ -79,49 +76,15 @@ public sealed class LayeringTests : IDisposable
     }
 
     [Fact]
-    public void Lists_are_replaced_as_a_whole()
+    public void Null_unsets_a_setting_that_may_be_unset()
     {
-        folder.Write("sof.json", """{ "models": { "a": { "settings": { "stop": ["x", "y"] } } } }""")
-            .Write("sof.ci.json", """{ "models": { "a": { "settings": { "stop": ["z"] } } } }""");
-
-        var configuration = folder.Load("ci");
-
-        Assert.Equal("""["z"]""", JsonSerializer.Serialize(configuration.Options.Models["a"].Settings["stop"]));
-        Assert.Equal("environment file sof.ci.json:1:44", configuration.OriginOf("models.a.settings.stop").ToString());
-    }
-
-    [Fact]
-    public void Null_removes_a_value_so_the_code_default_applies()
-    {
-        folder.Write("sof.json", """{ "run": { "permissionMode": "auto" }, "models": { "default": { "effort": "high", "model": "other" } }, "agents": { "a": { "instructions": "x" }, "b": { "instructions": "y" } } }""")
-            .Write("sof.ci.json", """{ "run": { "permissionMode": null }, "models": { "default": { "effort": null, "model": null } }, "agents": { "b": null } }""");
+        folder.Write("sof.json", """{ "agents": { "a": { "instructions": "x", "description": "Writes." } } }""")
+            .Write("sof.ci.json", """{ "agents": { "a": { "description": null } } }""");
 
         var configuration = folder.Load("ci");
 
         Assert.True(configuration.IsValid, string.Join('\n', configuration.Errors));
-        Assert.Equal(PermissionMode.Ask, configuration.Options.Run.PermissionMode);
-        Assert.Equal((null, "claude-opus-5-5"), (configuration.Options.Models["default"].Effort, configuration.Options.Models["default"].Model));
-        Assert.Equal(["a"], configuration.Options.Agents.Keys);
-        Assert.Equal(LayerKind.CodeDefault, configuration.OriginOf("run.permissionMode").Layer);
-        Assert.Equal(LayerKind.CodeDefault, configuration.OriginOf("models.default.model").Layer);
-    }
-
-    [Fact]
-    public void A_file_builds_on_the_files_it_extends_and_later_entries_win()
-    {
-        folder.Write("base/one.json", """{ "project": { "name": "one", "values": { "a": "1" } } }""")
-            .Write("base/two.json", """{ "extends": ["one.json"], "project": { "name": "two" } }""")
-            .Write("sof.json", """{ "extends": ["base/one.json", "base/two.json"], "project": { "values": { "b": "2" } } }""");
-
-        var configuration = folder.Load();
-
-        Assert.True(configuration.IsValid, string.Join('\n', configuration.Errors));
-        Assert.Equal("two", configuration.Options.Project.Name);
-        Assert.Equal(new Dictionary<string, string> { ["a"] = "1", ["b"] = "2" }, configuration.Options.Project.Values);
-        Assert.Equal("extended file base/two.json:1:49", configuration.OriginOf("project.name").ToString());
-        Assert.Equal(
-            ["extended file base/one.json", "extended file base/one.json", "extended file base/two.json", "application file sof.json"],
-            configuration.Layers);
+        Assert.Null(configuration.Options.Agents["a"].Description);
     }
 
     [Fact]
@@ -133,7 +96,7 @@ public sealed class LayeringTests : IDisposable
               "agents": {
                 "base": { "description": "Writes code.", "instructions": "Be careful.", "model": "strong" },
                 "developer": { "extends": "base", "instructions": "Implement the task." },
-                "junior": { "extends": "developer", "description": null }
+                "junior": { "extends": "developer" }
               }
             }
             """);
@@ -141,12 +104,11 @@ public sealed class LayeringTests : IDisposable
         var configuration = folder.Load();
 
         Assert.True(configuration.IsValid, string.Join('\n', configuration.Errors));
-        Assert.Equal(new AgentDefinition { Instructions = "Implement the task.", Model = "strong" }, configuration.Options.Agents["junior"]);
-        Assert.Equal("Writes code.", configuration.Options.Agents["developer"].Description);
-        Assert.Equal(
-            "application file sof.json:5:55, through extends from agents.developer",
-            configuration.OriginOf("agents.junior.instructions").ToString());
-        Assert.Equal("application file sof.json:4:86, through extends from agents.base", configuration.OriginOf("agents.junior.model").ToString());
+        var junior = configuration.Options.Agents["junior"];
+        Assert.Equal(("Implement the task.", "strong", "Writes code."), (junior.Instructions, junior.Model, junior.Description));
+        Assert.Equal("application file sof.json, through extends from agents.developer", configuration.OriginOf("agents.junior.instructions").ToString());
+        Assert.Equal("application file sof.json, through extends from agents.base", configuration.OriginOf("agents.junior.model").ToString());
+        Assert.Equal("application file sof.json", configuration.OriginOf("agents.developer.instructions").ToString());
     }
 
     [Fact]
@@ -193,7 +155,7 @@ public sealed class LayeringTests : IDisposable
               "project": { "name": "app" },
               "models": { "strong": { "effort": "high", "toolChoice": "none" } },
               "agents": { "dev": { "instructions": "Implement.", "model": "strong" } },
-              "run": { "budget": { "cost": 40, "time": "2h" } }
+              "run": { "budget": { "cost": 40, "time": "02:00:00" } }
             }
             """);
 
@@ -234,9 +196,9 @@ public sealed class LayeringTests : IDisposable
         folder.Write("sof.json", """
             {
               "project": { "name": "app", "values": { "test": "dotnet test" } },
-              "models": { "strong": { "effort": "high", "settings": { "temperature": 0.2, "nested": { "a": [1, "b"] } } } },
+              "models": { "strong": { "effort": "high", "settings": { "temperature": "0.2" } } },
               "agents": { "dev": { "instructions": "Run {{project.values.test}}.", "model": "strong", "description": "Dev." } },
-              "run": { "budget": { "time": "90m" }, "permissionMode": "auto" }
+              "run": { "budget": { "time": "01:30:00" }, "permissionMode": "auto" }
             }
             """);
         var options = folder.Load().ValidOptions();

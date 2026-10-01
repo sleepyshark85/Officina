@@ -1,58 +1,36 @@
-using System.Collections;
 using System.Reflection;
 using System.Text.Json;
 
 namespace Sleepyshark.Officina.Core.Configuration;
 
 /// <summary>
-/// Visits every setting of bound Options with its path. It descends into every object whose type declares
-/// <see cref="SettingAttribute"/> properties, wherever that type is defined, and into named entries and lists.
+/// The paths of the settings the Options classes declare. It descends into every type that declares
+/// <see cref="SettingAttribute"/> properties, wherever that type is defined, and into named entries.
 /// </summary>
-internal static class SettingWalker
+public static class SettingWalker
 {
-    public static IEnumerable<SettingVisit> Walk(OfficinaOptions options)
+    /// <summary>
+    /// The path of every setting, with <c>*</c> for the name of a named entry, such as <c>agents.*.model</c>.
+    /// Configuration may set exactly these.
+    /// </summary>
+    public static IEnumerable<string> KnownPaths() => Paths(typeof(OfficinaOptions), "");
+
+    private static IEnumerable<string> Paths(Type type, string path) =>
+        type.GetProperties(BindingFlags.Public | BindingFlags.Instance)
+            .Where(property => property.GetCustomAttribute<SettingAttribute>() is not null)
+            .SelectMany(property => TypePaths(property.PropertyType, Join(path, JsonNamingPolicy.CamelCase.ConvertName(property.Name))));
+
+    private static IEnumerable<string> TypePaths(Type type, string path)
     {
-        ArgumentNullException.ThrowIfNull(options);
-        return Settings(options, "");
-    }
-
-    /// <summary>Whether values of the type are a section of settings.</summary>
-    public static bool IsSection(Type type) => type.GetProperties().Any(property => property.GetCustomAttribute<SettingAttribute>() is not null);
-
-    private static IEnumerable<SettingVisit> Settings(object owner, string path) =>
-        owner.GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance)
-            .Select(property => (Property: property, Setting: property.GetCustomAttribute<SettingAttribute>()))
-            .Where(entry => entry.Setting is not null)
-            .SelectMany(entry =>
-            {
-                var childPath = Join(path, JsonNamingPolicy.CamelCase.ConvertName(entry.Property.Name));
-                var value = entry.Property.GetValue(owner);
-                return Children(value, childPath).Prepend(new SettingVisit(childPath, entry.Setting, null, value));
-            });
-
-    private static IEnumerable<SettingVisit> Children(object? value, string path) => value switch
-    {
-        null or string => [],
-        IDictionary map => Entries(map).SelectMany(entry =>
+        if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(IReadOnlyDictionary<,>))
         {
-            var name = (string)entry.Key;
-            var entryPath = Join(path, name);
-            return Children(entry.Value, entryPath).Prepend(new SettingVisit(entryPath, null, name, entry.Value));
-        }),
-        IEnumerable items => items.Cast<object?>().SelectMany((item, index) =>
-            Children(item, $"{path}[{index}]").Prepend(new SettingVisit($"{path}[{index}]", null, null, item))),
-        _ when IsSection(value.GetType()) => Settings(value, path),
-        _ => [],
-    };
-
-    private static IEnumerable<DictionaryEntry> Entries(IDictionary map)
-    {
-        var entries = map.GetEnumerator();
-        while (entries.MoveNext())
-        {
-            yield return entries.Entry;
+            return TypePaths(type.GetGenericArguments()[1], Join(path, "*"));
         }
+
+        return IsSection(type) ? Paths(type, path) : [path];
     }
+
+    private static bool IsSection(Type type) => type.GetProperties().Any(property => property.GetCustomAttribute<SettingAttribute>() is not null);
 
     private static string Join(string path, string name) => path.Length == 0 ? name : $"{path}.{name}";
 }

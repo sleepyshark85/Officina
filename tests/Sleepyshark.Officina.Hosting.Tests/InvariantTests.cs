@@ -23,28 +23,33 @@ public sealed class InvariantTests : IDisposable
     }
 
     [Theory]
-    [InlineData("""{ "run": { "budget": null } }""", ValidationPhase.Shape, "run.budget", "cannot be removed with null.")]
-    [InlineData("""{ "run": { "budget": { "cost": null } } }""", ValidationPhase.Shape, "run.budget.cost", "cannot be removed with null.")]
-    [InlineData("""{ "run": { "budget": { "cost": 0 } } }""", ValidationPhase.Invariants, "run.budget.cost", "is 0, but must be greater than 0.")]
-    [InlineData(
-        """{ "run": { "budget": { "time": "0s" } } }""",
-        ValidationPhase.Invariants,
-        "run.budget.time",
-        "is 0s, but must be greater than 0s.")]
-    public void INV_07_a_budget_cannot_be_removed_or_zero(string text, ValidationPhase phase, string path, string problem)
+    [InlineData("""{ "run": { "budget": { "cost": 0 } } }""", "run.budget.cost", "must be greater than zero. A limit can be high, but never zero, negative or unlimited.")]
+    [InlineData("""{ "run": { "budget": { "time": "00:00:00" } } }""", "run.budget.time", "must be greater than zero. A limit can be high, but never zero, negative or unlimited.")]
+    public void INV_07_a_budget_cannot_be_zero(string text, string path, string problem)
     {
         folder.Write("sof.json", text);
 
         var error = Assert.Single(folder.Load().Errors);
 
-        Assert.Equal((phase, path, problem), (error.Phase, error.Path, error.Problem));
+        Assert.Equal((ValidationPhase.Invariants, path, problem), (error.Phase, error.Path, error.Problem));
+    }
+
+    [Fact]
+    public void INV_07_null_does_not_remove_a_budget()
+    {
+        folder.Write("sof.json", """{ "run": { "budget": null } }""");
+
+        var configuration = folder.Load();
+
+        Assert.True(configuration.IsValid, string.Join('\n', configuration.Errors));
+        Assert.Equal(new RunBudget(), configuration.Options.Run.Budget);
     }
 
     [Fact]
     public void INV_07_an_unlimited_budget_is_not_a_value()
     {
-        folder.Write("sof.json", """{ "run": { "budget": { "cost": "unlimited", "time": "forever" } } }""");
+        folder.Write("sof.json", """{ "run": { "budget": { "cost": "unlimited" } } }""");
 
-        Assert.Equal(["run.budget.cost", "run.budget.time"], folder.Load().Errors.Select(error => error.Path).Order());
+        Assert.Equal(ValidationPhase.Shape, Assert.Single(folder.Load().Errors).Phase);
     }
 }

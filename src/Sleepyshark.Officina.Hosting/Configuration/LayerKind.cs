@@ -4,7 +4,6 @@ namespace Sleepyshark.Officina.Hosting.Configuration;
 public enum LayerKind
 {
     CodeDefault,
-    ExtendedFile,
     ApplicationFile,
     EnvironmentFile,
     EnvironmentVariable,

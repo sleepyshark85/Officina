@@ -84,7 +84,7 @@ public sealed class AgentRunner
 
     private static void ThrowIfInvalid(OfficinaOptions candidate)
     {
-        var errors = ConfigurationValidator.Validate(candidate);
+        var errors = candidate.Validate();
         if (errors.Count > 0)
         {
             throw new ConfigurationException(errors);

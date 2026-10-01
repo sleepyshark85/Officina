@@ -37,11 +37,10 @@ public sealed partial class GeneratedDocumentationTests
     [Fact]
     public void The_schema_accepts_a_partial_layer_and_rejects_unknown_settings()
     {
-        AssertValid("""{ "agents": { "a": { "model": "strong" } }, "project": { "name": null }, "extends": ["base.json"] }""");
+        AssertValid("""{ "agents": { "a": { "model": "strong" } }, "project": { "name": null } }""");
         Assert.False(Evaluate("""{ "agents": { "a": { "instruction": "x" } } }""").IsValid);
         Assert.False(Evaluate("""{ "providers": { "claude": { "apiKey": "sk-ant-literal" } } }""").IsValid);
-        Assert.False(Evaluate("""{ "run": { "budget": { "cost": null } } }""").IsValid);
-        Assert.False(Evaluate("""{ "run": { "budget": { "time": "8 hours" } } }""").IsValid);
+        Assert.False(Evaluate("""{ "extends": ["base.json"] }""").IsValid);
     }
 
     private static void AssertCurrent(string relativePath, string generated)

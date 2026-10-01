@@ -66,7 +66,7 @@ public static class SettingsReferenceGenerator
             "object" when property["additionalProperties"] is JsonObject => "named entries",
             "object" => "section",
             "array" => "list",
-            "string" when property["pattern"] is not null => "duration (`ms`, `s`, `m`, `h`, `d`)",
+            "string" when property["pattern"] is not null => "time span (`hh:mm:ss` or `d.hh:mm:ss`)",
             "string" => "text",
             "integer" => "whole number",
             _ => type,

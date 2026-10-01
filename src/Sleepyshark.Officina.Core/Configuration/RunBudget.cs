@@ -1,12 +1,17 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace Sleepyshark.Officina.Core.Configuration;
 
-/// <summary>The limits of one run (RUN-05). Each limit protects INV-07: it can be raised, never removed.</summary>
+/// <summary>The limits of one run (RUN-05). Each limit protects INV-07: it can be raised, never removed or zero.</summary>
 public sealed record RunBudget
 {
-    [Setting("The most the run may spend, in USD.", Example = "25", Minimum = 0, ExclusiveMinimum = true, Invariant = "INV-07", Live = true)]
+    private const string NotZero = "must be greater than zero. A limit can be high, but never zero, negative or unlimited.";
+
+    [Setting("The most the run may spend, in USD.", Example = "25", Live = true)]
+    [Range(typeof(decimal), "0", "79228162514264337593543950335", MinimumIsExclusive = true, ErrorMessage = NotZero)]
     public decimal Cost { get; init; } = 25m;
 
-    [Setting("The longest the run may take: a number with a unit, `ms`, `s`, `m`, `h` or `d`.",
-        Example = "\"8h\"", Minimum = 0, ExclusiveMinimum = true, Invariant = "INV-07", Live = true)]
+    [Setting("The longest the run may take, as `hh:mm:ss` or `d.hh:mm:ss`.", Example = "\"08:00:00\"", Live = true)]
+    [Range(typeof(TimeSpan), "00:00:00", "10675199.02:48:05.4775807", MinimumIsExclusive = true, ErrorMessage = NotZero)]
     public TimeSpan Time { get; init; } = TimeSpan.FromHours(8);
 }

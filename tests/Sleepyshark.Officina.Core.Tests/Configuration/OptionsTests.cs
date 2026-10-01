@@ -50,30 +50,7 @@ public class OptionsTests
         var json = ConfigurationJson.Write(new OfficinaOptions());
 
         Assert.Contains("\"permissionMode\": \"ask\"", json, StringComparison.Ordinal);
-        Assert.Contains("\"time\": \"8h\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"time\": \"08:00:00\"", json, StringComparison.Ordinal);
         Assert.Contains("\"secret\": \"ANTHROPIC_API_KEY\"", json, StringComparison.Ordinal);
     }
-
-    [Theory]
-    [InlineData("30m", 1800)]
-    [InlineData("8h", 28800)]
-    [InlineData("1.5s", 1.5)]
-    [InlineData("250ms", 0.25)]
-    [InlineData("2d", 172800)]
-    public void Durations_are_numbers_with_a_unit(string text, double seconds)
-    {
-        Assert.True(Duration.TryParse(text, out var duration));
-        Assert.Equal(seconds, duration.TotalSeconds);
-        Assert.True(Duration.TryParse(Duration.Format(duration), out var again));
-        Assert.Equal(duration, again);
-    }
-
-    [Theory]
-    [InlineData("30")]
-    [InlineData("1 h")]
-    [InlineData("-1h")]
-    [InlineData("unlimited")]
-    [InlineData("99999999999d")]
-    [InlineData("99999999999999999999999999999999999999999999999999d")]
-    public void A_duration_that_is_not_one_or_too_long_is_rejected(string text) => Assert.False(Duration.TryParse(text, out _));
 }

@@ -1,14 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!--
-    Binds sof.json, environment variables and run options onto the Options classes of Core (CFG-16).
-    Layers are merged as System.Text.Json nodes rather than with Microsoft.Extensions.Configuration, which merges
-    lists by index, cannot remove a value with null, and keeps no file positions (configuration reference §13).
-  -->
-
   <ItemGroup>
-    <!-- Checks configuration files against the schema generated from the Options classes. -->
-    <PackageReference Include="JsonSchema.Net" />
+    <!-- Loads and binds sof.json, environment variables and run options onto the Options classes of Core (CFG-16). -->
+    <PackageReference Include="Microsoft.Extensions.Configuration.Binder" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Json" />
   </ItemGroup>
 
   <ItemGroup>

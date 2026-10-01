@@ -21,7 +21,7 @@ public sealed partial class ConfigCommandTests : IDisposable
     [Fact]
     public void Show_with_origin_names_the_layer_of_every_value()
     {
-        sof.Write("sof.json", Smallest).Write("sof.prod.json", """{ "run": { "budget": { "time": "2h" } } }""");
+        sof.Write("sof.json", Smallest).Write("sof.prod.json", """{ "run": { "budget": { "time": "02:00:00" } } }""");
         sof.Variables["SOF_ENVIRONMENT"] = "prod";
         sof.Variables["SOF__run__permissionMode"] = "auto";
 
@@ -29,9 +29,9 @@ public sealed partial class ConfigCommandTests : IDisposable
 
         Assert.Equal(0, exitCode);
         var lines = output.Split('\n', StringSplitOptions.RemoveEmptyEntries).Select(line => Spaces().Replace(line, " ")).ToArray();
-        Assert.Contains("project.name \"invoice-api\" application file sof.json:2:24", lines);
+        Assert.Contains("project.name \"invoice-api\" application file sof.json", lines);
         Assert.Contains("run.budget.cost 40 run option --budget", lines);
-        Assert.Contains("run.budget.time \"2h\" environment file sof.prod.json:1:32", lines);
+        Assert.Contains("run.budget.time \"02:00:00\" environment file sof.prod.json", lines);
         Assert.Contains("run.permissionMode \"auto\" environment variable SOF__run__permissionMode", lines);
         Assert.Contains("models.default.model \"claude-opus-5-5\" code default, core 0.1.0", lines);
         const string AnyLayer = @" (code default, core \d|application file|environment file|environment variable|run option)";
@@ -74,25 +74,23 @@ public sealed partial class ConfigCommandTests : IDisposable
     }
 
     [Fact]
-    public void Validate_lists_every_error_with_its_position_and_fails()
+    public void Validate_lists_every_error_with_where_it_was_set_and_fails()
     {
         sof.Write("sof.json", """
             {
-              "agents": { "a": { "instructions": "Hi {{caller.id}}", "model": "strong" } },
-              "run": { "budget": { "cost": 0 } }
+              "agents": { "a": { "instructions": "Hi {{caller.id}}", "model": "strong" } }
             }
             """);
 
-        var (exitCode, _, error) = sof.Run("config", "validate", "--permission-mode", "sometimes");
+        var (exitCode, _, error) = sof.Run("config", "validate", "--budget", "0");
 
         Assert.Equal(1, exitCode);
         Assert.Equal(
             """
-            error: --permission-mode: run.permissionMode: is text, but must be one of "ask", "auto", "readOnly". Write one of "ask", "auto", "readOnly".
-            error: sof.json:2:67: agents.a.model: model profile "strong" does not exist. Add it to models, or use one of: default.
-            error: sof.json:2:38: agents.a.instructions: placeholder {{caller.id}} is not allowed in instructions. Instructions are the same for every call, so they cannot use caller, work or time values.
-            error: sof.json:3:32: run.budget.cost: is 0, but must be greater than 0. A limit can be high, but never zero, negative or unlimited.
-            4 errors.
+            error: sof.json: agents.a.model: model profile "strong" does not exist. Add it to models, or use one of: default.
+            error: sof.json: agents.a.instructions: placeholder {{caller.id}} is not allowed in instructions. Instructions are the same for every call, so they cannot use caller, work or time values.
+            error: --budget: run.budget.cost: must be greater than zero. A limit can be high, but never zero, negative or unlimited.
+            3 errors.
 
             """.ReplaceLineEndings("\n"),
             error);

@@ -5,7 +5,7 @@ namespace Sleepyshark.Officina.Core.Configuration;
 /// initial value is its default (CFG-16). Records with collections compare those by reference; to compare two
 /// configurations, compare <see cref="ConfigurationJson.Write"/>.
 /// </summary>
-public sealed record OfficinaOptions
+public sealed partial record OfficinaOptions
 {
     /// <summary>The only format version this core reads.</summary>
     public const int CurrentFormatVersion = 1;

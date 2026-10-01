@@ -15,17 +15,14 @@ public sealed class LoadedConfiguration
         .Where(property => property.PropertyType.IsGenericType && property.PropertyType.GetGenericTypeDefinition() == typeof(IReadOnlyDictionary<,>))
         .Select(property => JsonNamingPolicy.CamelCase.ConvertName(property.Name))];
 
-    private readonly IReadOnlyDictionary<string, ConfigurationOrigin> origins;
+    private readonly Func<string, ConfigurationOrigin> originOf;
 
     internal LoadedConfiguration(
-        OfficinaOptions options,
-        IReadOnlyList<ConfigurationError> errors,
-        IReadOnlyDictionary<string, ConfigurationOrigin> origins,
-        IReadOnlyList<string> layers)
+        OfficinaOptions options, IReadOnlyList<ConfigurationError> errors, Func<string, ConfigurationOrigin> originOf, IReadOnlyList<string> layers)
     {
         Options = options;
         Errors = errors;
-        this.origins = origins;
+        this.originOf = originOf;
         Layers = layers;
     }
 
@@ -42,8 +39,9 @@ public sealed class LoadedConfiguration
     /// <exception cref="ConfigurationException">The configuration has errors.</exception>
     public OfficinaOptions ValidOptions() => IsValid ? Options : throw new ConfigurationException(Errors);
 
-    /// <summary>Where a value came from; a value no layer set is a code default.</summary>
-    public ConfigurationOrigin OriginOf(string path) => origins.GetValueOrDefault(path) ?? ConfigurationOrigin.CodeDefault;
+    /// <summary>Where a value came from: the highest layer that sets it, or the code default.</summary>
+    /// <param name="path">The setting, such as <c>run.budget.cost</c>.</param>
+    public ConfigurationOrigin OriginOf(string path) => originOf(path);
 
     /// <summary>
     /// Every effective setting with its origin. For an agent, the ones that apply to it: everything outside the named

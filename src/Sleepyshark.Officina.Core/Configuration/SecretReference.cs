@@ -1,4 +1,4 @@
-using System.Text.Json.Serialization;
+using System.ComponentModel.DataAnnotations;
 
 namespace Sleepyshark.Officina.Core.Configuration;
 
@@ -8,13 +8,14 @@ namespace Sleepyshark.Officina.Core.Configuration;
 /// </summary>
 public sealed record SecretReference
 {
-    public SecretReference(string name)
+    /// <param name="secret">The secret's name.</param>
+    public SecretReference(string secret)
     {
-        ArgumentNullException.ThrowIfNull(name);
-        Name = name;
+        ArgumentNullException.ThrowIfNull(secret);
+        Secret = secret;
     }
 
-    [JsonPropertyName("secret")]
     [Setting("The name of the secret, such as the environment variable that holds it.", Example = "\"ANTHROPIC_API_KEY\"")]
-    public string Name { get; }
+    [Required(ErrorMessage = Messages.Required)]
+    public string Secret { get; }
 }

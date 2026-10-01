@@ -8,15 +8,14 @@ public class ValidationTests
     private static readonly AgentDefinition Extractor = new() { Instructions = "Extract the invoice number." };
 
     [Fact]
-    public void The_smallest_configuration_is_valid() => Assert.Empty(ConfigurationValidator.Validate(WithAgent(Extractor)));
+    public void The_smallest_configuration_is_valid() => Assert.Empty(WithAgent(Extractor).Validate());
 
     [Fact]
     public void Missing_instructions_are_reported_with_the_path_and_a_fix()
     {
-        var error = Assert.Single(ConfigurationValidator.Validate(WithAgent(Extractor with { Instructions = " " })));
+        var error = Assert.Single(WithAgent(Extractor with { Instructions = " " }).Validate());
 
-        Assert.Equal((ValidationPhase.Shape, "agents.extractor.instructions", "is required but not set."), (error.Phase, error.Path, error.Problem));
-        Assert.Equal("Add it; it has no default.", error.Fix);
+        Assert.Equal((ValidationPhase.Shape, "agents.extractor.instructions", "is required but not set. Add it; it has no default."), (error.Phase, error.Path, error.Problem));
     }
 
     [Fact]
@@ -27,7 +26,7 @@ public class ValidationTests
             Models = new Dictionary<string, ModelProfile> { ["default"] = new(), ["other"] = new() { Provider = "claud" } },
         };
 
-        var errors = ConfigurationValidator.Validate(options);
+        var errors = options.Validate();
 
         Assert.All(errors, error => Assert.Equal(ValidationPhase.References, error.Phase));
         Assert.Equal(
@@ -46,7 +45,7 @@ public class ValidationTests
     {
         var options = new OfficinaOptions { Agents = new Dictionary<string, AgentDefinition> { [name] = Extractor } };
 
-        var error = Assert.Single(ConfigurationValidator.Validate(options));
+        var error = Assert.Single(options.Validate());
 
         Assert.Equal((ValidationPhase.Shape, $"\"{name}\" is not a valid name."), (error.Phase, error.Problem));
     }
@@ -57,16 +56,16 @@ public class ValidationTests
     public void A_budget_of_zero_or_less_weakens_INV_07(int cost)
     {
         var options = new OfficinaOptions { Run = new RunDefaults { Budget = new RunBudget { Cost = cost } } };
-        var error = Assert.Single(ConfigurationValidator.Validate(options));
+        var error = Assert.Single(options.Validate());
 
         Assert.Equal((ValidationPhase.Invariants, "run.budget.cost"), (error.Phase, error.Path));
-        Assert.Equal("A limit can be high, but never zero, negative or unlimited.", error.Fix);
+        Assert.Equal("must be greater than zero. A limit can be high, but never zero, negative or unlimited.", error.Problem);
     }
 
     [Fact]
     public void A_budget_removed_in_code_weakens_INV_07()
     {
-        var error = Assert.Single(ConfigurationValidator.Validate(new OfficinaOptions { Run = new RunDefaults { Budget = null! } }));
+        var error = Assert.Single(new OfficinaOptions { Run = new RunDefaults { Budget = null! } }.Validate());
 
         Assert.Equal((ValidationPhase.Invariants, "run.budget"), (error.Phase, error.Path));
     }
@@ -76,9 +75,9 @@ public class ValidationTests
     {
         var options = new OfficinaOptions { Models = new Dictionary<string, ModelProfile> { ["default"] = new() { MaxOutputTokens = 0 } } };
 
-        var error = Assert.Single(ConfigurationValidator.Validate(options));
+        var error = Assert.Single(options.Validate());
 
-        Assert.Equal(("models.default.maxOutputTokens", "is 0, but must be at least 1."), (error.Path, error.Problem));
+        Assert.Equal(("models.default.maxOutputTokens", "must be at least 1."), (error.Path, error.Problem));
     }
 
     [Fact]
@@ -89,10 +88,10 @@ public class ValidationTests
             Run = new RunDefaults { Budget = new RunBudget { Time = TimeSpan.Zero } },
         };
 
-        var errors = ConfigurationValidator.Validate(options);
+        var errors = options.Validate();
 
         Assert.Equal([ValidationPhase.References, ValidationPhase.Prefix, ValidationPhase.Invariants], errors.Select(error => error.Phase));
-        Assert.Equal("is 0s, but must be greater than 0s.", errors[2].Problem);
+        Assert.Equal("must be greater than zero. A limit can be high, but never zero, negative or unlimited.", errors[2].Problem);
     }
 
     [Fact]

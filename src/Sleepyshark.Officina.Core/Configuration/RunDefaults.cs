@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace Sleepyshark.Officina.Core.Configuration;
 
 /// <summary>Defaults for every run.</summary>
@@ -5,7 +7,8 @@ public sealed record RunDefaults
 {
     // INV-07: a run always has a budget.
     [Setting("The run's budget. It can be high, but it cannot be removed or unlimited.",
-        Example = """{ "cost": 25, "time": "8h" }""", Invariant = "INV-07", Live = true)]
+        Example = """{ "cost": 25, "time": "08:00:00" }""", Live = true)]
+    [Required(ErrorMessage = "cannot be removed. Set a limit; it can be high, but it always exists.")]
     public RunBudget Budget { get; init; } = new();
 
     [Setting("How tool calls that need permission are decided: `ask` the owner, `auto` by the rules, or `readOnly`.",

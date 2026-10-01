@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace Sleepyshark.Officina.Core.Configuration;
 
 /// <summary>
@@ -10,9 +12,11 @@ public sealed record AgentDefinition
     public string? Description { get; init; }
 
     [Setting("The agent's job. Only the application knows it, so it has no default. Placeholders may use the project and the agent only.",
-        Example = "\"Extract the invoice number, date and total. Reply as JSON.\"", Required = true)]
+        Example = "\"Extract the invoice number, date and total. Reply as JSON.\"")]
+    [Required(ErrorMessage = Messages.Required)]
     public required string Instructions { get; init; }
 
     [Setting("The name of the model profile the agent runs on.", Example = "\"strong\"")]
+    [Required(ErrorMessage = Messages.Required)]
     public string Model { get; init; } = ModelProfile.DefaultName;
 }
