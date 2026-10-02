@@ -30,8 +30,9 @@ public class LatencyTests
     }
 
     // LAT-02, TEST-30: for an interactive trigger, the first streamed text reaches the caller as soon as the provider sends it; the
-    // core adds less than 50 ms. The caller reads the run's events as `sof run` does, and the events are stored in SQLite first,
-    // as they are with `sof`.
+    // core adds less than 50 ms. The caller reads the run's events as `sof run` does, on SQLite storage as with `sof`. Streamed text
+    // is not stored by default (storage.unstoredEvents), so no durable write is on its path: this is one interactive agent with
+    // nothing else writing. In a team, a text delta can wait behind the other agents' durable writes (a follow-up in S21).
     [Fact]
     public async Task The_first_streamed_text_reaches_the_caller_within_50_ms_of_the_provider_sending_it()
     {

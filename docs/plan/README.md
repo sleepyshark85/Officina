@@ -11,7 +11,7 @@ Last updated 2026-10-02.
 - **Doing:** S21 (hardening and benchmark, [#23](https://github.com/sleepyshark85/Officina/issues/23)), in five parts. Part 1
   built the TEST-31 benchmark up to the live run: the runner, scoring, report, reference solutions and the suites' validation.
   The live run, on Linux and Windows, is the owner's to start, as it costs money ([`benchmark/`](../../benchmark/README.md)).
-  Part 2 added the load and latency tests (TEST-30), the core's coverage check (TEST-33, 95%) and the MUST verification check
+  Part 2 added the load and latency tests (TEST-30), the core's coverage check (TEST-33: 96.5% measured, 85% required) and the MUST verification check
   ([`check_verification.py`](check_verification.py), [`verification.md`](verification.md)).
 - **Next:** S21 part 3, the Claude provider's feature switches and Message Batches (CLD-06, CLD-11).
 - **Open follow-ups:** every item below that names S21 is triaged in [S21](S21-hardening.md): built in one of its parts, or

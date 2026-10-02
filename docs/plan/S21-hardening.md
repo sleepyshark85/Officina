@@ -88,28 +88,37 @@ Linux and Windows runners where they differ much:
 | Requirement | Test | Target | Measured |
 |---|---|---|---|
 | LAT-01 | 50 turns of 20 model calls, each asking for a tool that reads or one that writes behind a gate, storage in memory; the time inside the model provider taken out of each iteration | p95 < 5 ms | p95 0.15 ms, p99 0.22 ms |
-| LAT-02 | 100 replies whose first text is timed from the provider handing it over to the caller reading the run's events, on SQLite | < 50 ms (p95 and p99 asserted) | p95 0.06 ms |
+| LAT-02 | 100 replies whose first text is timed from the provider handing it over to the caller reading the run's events, on SQLite. Streamed text is not stored by default, so no durable write is on its path: one interactive agent with nothing else writing | < 50 ms (p95 and p99 asserted) | p95 0.06 ms |
 | TEST-30, storage | The LAT-01 turns on SQLite with the conversation store on; each write timed | reported | a write (an event, an audit entry or a conversation turn), p50: 5.7 ms here, 1.4 ms on CI's Linux, 25 ms on CI's Windows; an iteration with its writes, p50: 20 ms, 5.6 ms, 100 ms |
-| SCALE-02 | One team run: the lead plans 500 tasks, 8 developers take them, the first 8 held until all 8 work at once; storage in memory | 8 at once, 500 done | 8 at once, 500 done in 9 s (18 ms a task, 7,031 events). On SQLite: 87 s here, 82 s on CI's Linux, 331 s on CI's Windows |
-| SCALE-03 | The same run keeps its pace: the last 100 tasks take at most half as long again as the second 100 | steady | 1.13 s against 1.11 s; on SQLite the pace varied with the disk by up to 60% on CI, with no trend in the core |
+| SCALE-02 | One team run: the lead plans 500 tasks, 8 developers take them, the first 8 held until all 8 work at once; storage in memory. A second test runs the same 8 at once on SQLite, with 16 tasks | 8 at once, 500 done | 8 at once, 500 done in 9 s (18 ms a task, 7,031 events); on SQLite, 16 tasks in 4.6 s. The first version's 500 tasks on SQLite took 87 s here, 82 s on CI's Linux, 331 s on CI's Windows |
+| SCALE-03 | The same run keeps its pace: the last 100 tasks take at most half as long again as the second 100, plus 0.5 s, so a pause of the machine's of that order does not fail it | steady | 1.13 s against 1.11 s; on SQLite the pace varied with the disk by up to 60% on CI, with no trend in the core |
 | SCALE-01 | 1,000 callers' conversations with one agent, started at once, then each a second turn whose history is restored from the conversation store | all complete, restored | 2,000 turns in 0.7 s, in memory |
 
-- What the numbers say: the core's own time is far below its targets; SQLite's writes dominate a run's time. Each write opens a
+- What the numbers say: the core's own time per iteration is far below LAT-01's target, which leaves out tool time. A team run's
+  time is mostly elsewhere: in memory, a task still costs 14 to 18 ms here and 40 to 65 ms on CI, almost all of it inside the
+  built-in board tools (`tasks.create` p50 6 ms, `tasks.submit_for_review` p50 11 ms and p95 55 to 71 ms, as the #60 review measured;
+  model time was 0.05 s of 8.7 s). On SQLite its durable writes come on top. Each write opens a
   connection of its own (pooling is off, so nothing keeps the file open) and syncs, about 6 ms here, of which about 1 ms is the
   sync: a held connection would cut a write to about a quarter. On Windows a write takes 25 ms, so a run of 500 tasks spends five
   and a half minutes in storage, against hours of model calls. No requirement sets a target for it, so it is reported, not
   changed (principle 13); the owner may set one if `sof`'s overhead on Windows matters. The scale tests use storage in memory, so
   they measure the core, are steady on CI, and take seconds; the first version ran SCALE-02 on SQLite, and on CI its pace check
   failed once on the disk's variance alone.
+- Follow-ups after v1, with no target set: the board tools' cost per call (the board is read and rebuilt from its change log for
+  each change); and `EventBus.PublishAsync`, which holds one runner-wide lock across each durable append, so in a team run on SQLite
+  one agent's event, a streamed text delta included, waits behind the others' writes. At about 21 ms a write on Windows, the first
+  text of an agent in a busy team there could take more than LAT-02's 50 ms, and the lock is why 500 tasks on SQLite took 331 s.
 - SCALE-01 is a SHOULD for the document Q&A application after v1. Turns of one agent run one at a time (LOOP-02), so its
   conversations are served in turn; serving them at once is that application's work. SCALE-03's 48 hours are not run: the test
   measures the pace over a long run's worth of work, 1,000 model calls and 7,000 events, and the heap after it.
 - TEST-33: `dotnet test --collect "Code Coverage;Format=cobertura" --results-directory <folder>`, then `python3
   tests/core_coverage.py <folder>`, counts a line of `src/Sleepyshark.Officina.Core` as covered when any test assembly ran it:
-  95% of 4,770 lines. CI checks it on Linux, at 85% at least.
+  96.5% of 3,758 lines, as CI's Release build measures it. CI checks it on Linux, against a threshold of 85%.
 - v1 acceptance: [`check_verification.py`](check_verification.py) finds each MUST in a test or in the reviews of
-  [`verification.md`](verification.md). 17 MUSTs had tests that did not name them, now named, and the load tests name theirs; four are recorded reviews
-  (CFG-01, CFG-10, EGR-01, TASK-01); three are pending: TEST-31's live run, CLD-06 (part 3) and SBX-01's CPU limit (part 5).
+  [`verification.md`](verification.md). 17 MUSTs had tests that did not name them, now named, and the load tests name theirs; three are
+  recorded reviews (CFG-10, EGR-01, TASK-01). Three are readings for the owner to confirm, not verified: CFG-01 (policies and
+  capabilities are the configuration's, not the agent definition's), CAP-01 (capabilities switch per application only) and TASK-02
+  (the status changes are fixed, not configured). Three are pending: TEST-31's live run, CLD-06 (part 3) and SBX-01's CPU limit (part 5).
 
 ## Notes
 

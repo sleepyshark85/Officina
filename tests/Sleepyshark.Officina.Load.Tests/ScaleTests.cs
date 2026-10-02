@@ -5,11 +5,12 @@ using Sleepyshark.Officina.Core.Events;
 using Sleepyshark.Officina.Core.Extensibility;
 using Sleepyshark.Officina.Core.Running;
 using Sleepyshark.Officina.Core.Tasks;
+using Sleepyshark.Officina.Storage.Sqlite;
 using Sleepyshark.Officina.Testing;
 
 namespace Sleepyshark.Officina.Load.Tests;
 
-/// <summary>How much one run and one process carry (SCALE-01, SCALE-02), on SQLite storage as with <c>sof</c>.</summary>
+/// <summary>How much one run and one process carry (SCALE-01, SCALE-02, SCALE-03): in memory, and SCALE-02 on SQLite too.</summary>
 [Collection(nameof(Load))]
 public class ScaleTests
 {
@@ -18,12 +19,45 @@ public class ScaleTests
     // SCALE-02, TEST-30: one run supports at least 8 agents working at once and 500 tasks on one developer machine. The lead plans
     // 500 tasks; 8 developers take them, the first 8 held until all 8 work at once, and each submits its task, which its checks
     // pass, so it is done. SCALE-03 (a SHOULD): as the run goes on, it keeps its pace; the last 100 tasks take no longer than half
-    // as much again as the second 100. Storage is in memory, so this measures the core: SQLite's writes, which a run of `sof`
-    // adds, are measured on their own (LatencyTests), as TEST-30 asks.
+    // as much again as the second 100, plus half a second, so a pause of the machine's of that order does not fail it. Storage is in
+    // memory, so this measures the core: SQLite's writes, which a run of `sof` adds, are measured on their own (LatencyTests), as
+    // TEST-30 asks, and the SQLite variant below runs the same team on them.
     [Fact]
     public async Task One_run_supports_8_agents_working_at_once_and_500_tasks_at_a_steady_pace()
     {
-        const int Tasks = 500, Agents = 8;
+        var storage = new InMemoryStorage();
+        var (events, seconds) = await RunTeamAsync(storage, 500);
+
+        var done = events.Where(e => e.Payload is TaskStatusChanged { Status: TaskState.Done }).Select(e => e.Time).Order().ToList();
+        var (second, last) = ((done[199] - done[100]).TotalSeconds, (done[^1] - done[^100]).TotalSeconds);
+        Measure.Write(string.Create(CultureInfo.InvariantCulture,
+            $"SCALE-03: the second 100 tasks took {second:0.00} s, the last 100 {last:0.00} s; managed heap {GC.GetTotalMemory(forceFullCollection: true) / 1024 / 1024} MB at the end"));
+        Assert.True(last <= 1.5 * second + 0.5, "The run slowed down as it went on.");
+    }
+
+    // SCALE-02 on SQLite, as with `sof`: the same 8 developers, held until all 8 work at once, on a few tasks, so it stays quick on
+    // Windows, where a write takes about 25 ms.
+    [Fact]
+    public async Task Eight_agents_work_at_once_on_SQLite()
+    {
+        var folder = Directory.CreateTempSubdirectory("officina-load-");
+        try
+        {
+            await RunTeamAsync(await SqliteStorage.OpenAsync(Path.Combine(folder.FullName, "sof.db"), Ct), 16);
+        }
+        finally
+        {
+            folder.Delete(recursive: true);
+        }
+    }
+
+    /// <summary>
+    /// Runs a team of 8 developers on <paramref name="count"/> tasks, checks that all are done and that 8 worked at once, and reports it;
+    /// returns the run's events and how long it took, in seconds.
+    /// </summary>
+    private static async Task<(IReadOnlyList<CoreEvent> Events, double Seconds)> RunTeamAsync(IStorage storage, int count)
+    {
+        const int Agents = 8;
         using var together = new Barrier(Agents);
         var holding = 0;
         var tools = new Dictionary<string, ITool>
@@ -41,20 +75,19 @@ public class ScaleTests
         };
         var model = new ScriptedModelProvider();
         var lead = model.When(request => ScriptedModelProvider.WorkOf(request).StartsWith("You lead a team", StringComparison.Ordinal));
-        foreach (var batch in Enumerable.Range(1, Tasks).Chunk(100))
+        foreach (var batch in Enumerable.Range(1, count).Chunk(100))
         {
             lead.CallTools([.. batch.Select(n => ("create", $$"""{ "id": "t{{n}}", "title": "Task {{n}}", "role": "developer", "reason": "plan" }"""))]);
         }
 
         lead.Reply("Planned.");
         model.When(request => ScriptedModelProvider.WorkOf(request).StartsWith("Every task is done", StringComparison.Ordinal)).Reply("All done.");
-        foreach (var n in Enumerable.Range(1, Tasks))
+        foreach (var n in Enumerable.Range(1, count))
         {
             model.When(request => ScriptedModelProvider.WorkOf(request).Contains($"Do task t{n},", StringComparison.Ordinal))
                 .CallTools(("hold", "{}"), ("submit", $$"""{ "id": "t{{n}}" }""")).Reply("Submitted.");
         }
 
-        var storage = new InMemoryStorage();
         var runner = Measure.Runner(Team(Agents), model, storage, tools);
         var work = new Work("team", "Build it.");
         var started = Stopwatch.GetTimestamp();
@@ -63,17 +96,13 @@ public class ScaleTests
 
         Assert.Equal((AgentOutcome.Completed, "All done."), (result.Outcome, result.Output));
         var tasks = await runner.Board(null, work.RunId).ReadAsync(Ct);
-        Assert.Equal(Tasks, tasks.Count(task => task.State == TaskState.Done));
+        Assert.Equal(count, tasks.Count(task => task.State == TaskState.Done));
         var events = await storage.Events.ReadAsync(null, work.RunId, 0, Ct);
         var peak = Peak(events);
-        var done = events.Where(e => e.Payload is TaskStatusChanged { Status: TaskState.Done }).Select(e => e.Time).Order().ToList();
-        var (second, last) = ((done[199] - done[100]).TotalSeconds, (done[^1] - done[^100]).TotalSeconds);
         Measure.Write(string.Create(CultureInfo.InvariantCulture,
-            $"SCALE-02: {Tasks} tasks done by {Agents} developers, at most {peak} at once, in {seconds:0.0} s ({seconds * 1000 / Tasks:0.0} ms a task), {events.Count} events, {model.Requests.Count} model calls"));
-        Measure.Write(string.Create(CultureInfo.InvariantCulture,
-            $"SCALE-03: the second 100 tasks took {second:0.00} s, the last 100 {last:0.00} s; managed heap {GC.GetTotalMemory(forceFullCollection: true) / 1024 / 1024} MB at the end"));
+            $"SCALE-02 ({storage.GetType().Name}): {count} tasks done by {Agents} developers, at most {peak} at once, in {seconds:0.0} s ({seconds * 1000 / count:0.0} ms a task), {events.Count} events, {model.Requests.Count} model calls"));
         Assert.Equal(Agents, peak);
-        Assert.True(last <= 1.5 * second + 0.5, "The run slowed down as it went on.");
+        return (events, seconds);
     }
 
     // SCALE-01 (a SHOULD, for the document Q&A application after v1), TEST-30: one process holds 1,000 concurrent short
