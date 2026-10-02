@@ -203,9 +203,16 @@ internal static class RunCommand
         // A read from the console blocks its thread and cannot be cancelled, so the command loop runs on a thread of its own
         // and is left to end with the process.
         _ = Task.Run(() => CommandAsync(runner, name, session.RunId, queue, status, host.In, output, stop.Token), CancellationToken.None);
-        var result = await start();
-        await stop.CancelAsync();
-        await watching;
+        AgentResult result;
+        try
+        {
+            result = await start();
+        }
+        finally
+        {
+            await stop.CancelAsync();
+            await watching;
+        }
 
         output.WriteLine();
         output.WriteLine(string.Create(
@@ -243,21 +250,29 @@ internal static class RunCommand
         {
             while (await input.ReadLineAsync(ct) is { } line && !ct.IsCancellationRequested)
             {
-                if (line.Trim() == "checkpoint")
+                try
                 {
-                    output.WriteLine(await CheckpointAsync(runner, runId, ct));
+                    if (line.Trim() == "checkpoint")
+                    {
+                        output.WriteLine(await CheckpointAsync(runner, runId, ct));
+                    }
+                    else if (line.Trim() == "board")
+                    {
+                        output.Write(await BoardAsync(runner, runId, ct));
+                    }
+                    else if (line.Trim().Split(' ', 4, StringSplitOptions.RemoveEmptyEntries) is ["memory", .. var memory])
+                    {
+                        output.Write(await MemoryAsync(runner, memory, ct));
+                    }
+                    else if (Apply(line.Trim(), runner, agent, runId, queue, status) is { } problem)
+                    {
+                        output.WriteLine(problem);
+                    }
                 }
-                else if (line.Trim() == "board")
+                catch (Exception exception) when (exception is not OperationCanceledException)
                 {
-                    output.Write(await BoardAsync(runner, runId, ct));
-                }
-                else if (line.Trim().Split(' ', 4, StringSplitOptions.RemoveEmptyEntries) is ["memory", .. var memory])
-                {
-                    output.Write(await MemoryAsync(runner, memory, ct));
-                }
-                else if (Apply(line.Trim(), runner, agent, runId, queue, status) is { } problem)
-                {
-                    output.WriteLine(problem);
+                    // A command that fails says so, and the owner can go on typing.
+                    output.WriteLine($"error: {exception.Message}");
                 }
             }
         }

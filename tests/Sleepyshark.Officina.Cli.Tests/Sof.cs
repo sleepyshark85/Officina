@@ -125,9 +125,8 @@ internal sealed class Sof : IDisposable
         }
     }
 
-    /// <summary>The owner typing commands, one line at a time, as the test decides.</summary>
     /// <summary>
-    /// Behaves like <c>Console.In</c>: its <c>ReadLineAsync</c> blocks the calling thread until a line is typed, and
+    /// The owner typing commands, one line at a time, as the test decides. Behaves like <c>Console.In</c>: its <c>ReadLineAsync</c> blocks the calling thread until a line is typed, and
     /// ignores cancellation. It returns null once disposed.
     /// </summary>
     internal sealed class Owner : TextReader
