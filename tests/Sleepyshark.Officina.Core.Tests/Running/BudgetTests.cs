@@ -26,17 +26,15 @@ public class BudgetTests
     [InlineData("agent's cost")]
     [InlineData("agent's tool-call")]
     [InlineData("agent's token")]
-    [InlineData("agent's time")]
     public async Task A_used_up_agent_budget_ends_the_turn_in_a_handoff(string limit)
     {
         var total = limit switch
         {
             "agent's cost" => new TotalBudget { Cost = 0.001m },
             "agent's tool-call" => new TotalBudget { ToolCalls = 1 },
-            "agent's token" => new TotalBudget { Tokens = 1000 },
-            _ => new TotalBudget { Time = TimeSpan.FromHours(1) },
+            _ => new TotalBudget { Tokens = 1000 },
         };
-        var kit = Kit(agent => agent with { Budget = agent.Budget with { Total = total } }, readTakes: TimeSpan.FromHours(1));
+        var kit = Kit(agent => agent with { Budget = agent.Budget with { Total = total } });
         kit.Model.Reply(new UsageReported(Thousand), Call(), new Stopped(StopReason.WantsTools));
 
         var result = await kit.RunAsync(Agent, "work", Ct);
@@ -88,20 +86,83 @@ public class BudgetTests
         Assert.Equal((AgentOutcome.Completed, "Again."), Outcome(await third.Runner.ResumeAsync(work.RunId, ct: Ct)));
     }
 
-    [Fact]
-    public async Task The_time_a_run_was_down_is_not_counted_against_its_budget()
+    // INV-07: only the time the turns ran counts, not the days between a crash, a rollback and a resume.
+    [Theory]
+    [InlineData("rollback")]
+    [InlineData("a crash before the first checkpoint")]
+    public async Task The_time_a_run_was_down_is_not_counted_against_its_budget(string how)
     {
-        var first = Kit();
-        first.Model.Reply(new TextDelta("Done."), new Stopped(StopReason.Finished));
+        var arrived = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource();
+        var crash = how != "rollback";
+        var first = Kit(checkpoints: !crash, inRead: async () =>
+        {
+            arrived.SetResult();
+            await release.Task; // the process dies here
+        });
         var work = new Work(Agent, "work");
-        await first.Runner.RunAsync(work, Ct);
-        await first.Runner.RollbackAsync(work.RunId, 0, ct: Ct);
-        first.Time.Advance(TimeSpan.FromDays(3)); // the restart comes much later
+        Task<AgentResult>? dying = null;
+        if (crash)
+        {
+            first.Model.Reply(Call(), new Stopped(StopReason.WantsTools));
+            dying = first.Runner.RunAsync(work, Ct);
+            await arrived.Task.WaitAsync(Ct);
+        }
+        else
+        {
+            first.Model.Reply(new TextDelta("Done."), new Stopped(StopReason.Finished));
+            await first.Runner.RunAsync(work, Ct);
+        }
 
+        // A new process, three days later, with a run budget of an hour.
         var second = Kit(storage: first.Storage, run: new() { Time = TimeSpan.FromHours(1) });
+        second.Time.Advance(TimeSpan.FromDays(3));
+        if (!crash)
+        {
+            await second.Runner.RollbackAsync(work.RunId, 0, ct: Ct);
+            second.Time.Advance(TimeSpan.FromDays(3));
+        }
+
         second.Model.Reply(new TextDelta("Again."), new Stopped(StopReason.Finished));
 
         Assert.Equal((AgentOutcome.Completed, "Again."), Outcome(await second.Runner.ResumeAsync(work.RunId, ct: Ct)));
+        release.TrySetResult();
+        if (dying is not null)
+        {
+            await dying;
+        }
+    }
+
+    // EVT-01: a warning already given is not given again when the run resumes.
+    [Fact]
+    public async Task A_warning_given_before_a_restart_is_not_given_again()
+    {
+        var run = new RunBudget { Cost = 0.00125m };
+        var first = Kit(run: run);
+        first.Model.Reply(new UsageReported(Thousand), Call(), new Stopped(StopReason.WantsTools)).Reply("Done.");
+        var work = new Work(Agent, "work");
+        await first.Runner.RunAsync(work, Ct);
+        await first.Runner.RollbackAsync(work.RunId, 0, ct: Ct);
+        var second = Kit(storage: first.Storage, run: run);
+        second.Model.Reply(new UsageReported(Thousand), Call(), new Stopped(StopReason.WantsTools));
+
+        await second.Runner.ResumeAsync(work.RunId, ct: Ct);
+
+        var warnings = (await second.Storage.Events.ReadAsync(null, work.RunId, 0, Ct)).Select(coreEvent => coreEvent.Payload).OfType<BudgetWarning>();
+        Assert.Single(warnings, warning => warning is { Level: "run's", Limit: "cost" });
+    }
+
+    [Fact]
+    public async Task The_report_keeps_days_in_the_running_time()
+    {
+        var kit = Kit();
+        kit.Model.Reply("Done.");
+        var work = new Work(Agent, "work");
+        await kit.Runner.RunAsync(work, Ct);
+
+        var report = await kit.Runner.ReportAsync(work.RunId, ct: Ct);
+
+        Assert.Contains("running 30:00:00", (report with { Running = TimeSpan.FromHours(30) }).ToText(), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -203,7 +264,7 @@ public class BudgetTests
 
     private static TestKit Kit(
         Func<AgentDefinition, AgentDefinition>? configure = null, InMemoryStorage? storage = null, RunBudget? run = null, PolicyOptions? policies = null,
-        TimeSpan readTakes = default)
+        TimeSpan readTakes = default, bool checkpoints = true, Func<Task>? inRead = null)
     {
         var options = Options(("read", Extension("read")));
         options = options with
@@ -220,15 +281,20 @@ public class BudgetTests
             {
                 [ProviderOptions.ClaudeName] = ProviderOptions.Claude with { Prices = new Dictionary<string, ModelPrice> { ["claude-opus-5-5"] = new() { Input = 1, Output = 5 } } },
             },
-            Capabilities = new() { ConversationStore = new() { Enabled = true }, Checkpoints = new() { Enabled = true } },
+            Capabilities = new() { ConversationStore = new() { Enabled = true }, Checkpoints = new() { Enabled = checkpoints } },
         };
         TestKit? kit = null;
         var tools = new Dictionary<string, ITool>
         {
-            ["read"] = new FakeTool(ToolKind.Read, run: (_, _) =>
+            ["read"] = new FakeTool(ToolKind.Read, run: async (_, _) =>
             {
                 kit!.Time.Advance(readTakes);
-                return ValueTask.FromResult(ToolResult.Success("contents"));
+                if (inRead is not null)
+                {
+                    await inRead();
+                }
+
+                return ToolResult.Success("contents");
             }),
         };
         kit = new TestKit(options, tools, storage: storage, checks: new Dictionary<string, ICheck> { ["style"] = new PassingCheck() });

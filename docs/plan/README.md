@@ -49,7 +49,9 @@ Last updated 2026-10-02.
     agent budget per agent instance. Cost is broken down by agent, task, step and model; "by definition" is the same as by agent
     until the team gives a definition several agents, so S20 adds the instance to the event (RUN-10). S20 also takes
     the run's tokens and tool-call limits (RUN-05), which only the turn and the agent have, and the task has cost only.
-    The per-run rate limit (ING-03) counts a run's first work and each resume; S20 counts the work that joins it.
+    The per-run rate limit (ING-03) counts a run's first work and each resume, in memory: the CLI resumes in a new process, so it never
+    applies there. S20 counts the work that joins a run, and S20 or S21 (whichever owns the host and serve mode) keeps it in a long-lived runner.
+    `budget.total` of a pattern's step agents does not apply (they draw on the entry agent's), and a resume counts only the entry agent's events.
   - S21 runs the Windows sandbox tests once as a standard user in CI (the S00a recipe), tests the CPU
     limit on both systems with limit reporting, and proves HTTPS through the proxy (a CONNECT tunnel).
   - S20 runs the team on the task board: it claims and assigns tasks, gives each a working copy that its checks
@@ -60,7 +62,8 @@ Last updated 2026-10-02.
     already bumped it past the version on main.
   - S19 (follow-up): a resumed pattern runs again from its first step, redoing the steps already done (resume part-way);
     old checkpoint commits are kept only by the reflog after a squash, so `git gc` can break restoring them. The Windows
-    sandbox cleanup (AppContainer profile, home folder, toolchain grants) has not run on Windows yet: CI runs its test. Open, for a case (S19's Notes list them):
+    sandbox cleanup is proved on CI to remove the home folder and the container's grants on the toolchains; the AppContainer profile's
+    removal is not verified. Open, for a case (S19's Notes list them):
     masking tokens from before a crash are not restored; the host passes the `Caller` to `ResumeAsync`, because only its id and
     tenant are stored; a crashed run's branches are kept until it ends, and nothing lists runs yet.
   - S05 moved CTX-06 to S07 and CTX-07 to S06.

@@ -148,7 +148,7 @@ public sealed partial record OfficinaOptions : IValidatableObject
     }
 
     /// <summary>The events a resumed run reads its spent budget from.</summary>
-    private static readonly string[] SpentKinds = ["modelCallEnded", "toolCallEnded", "runResumed"];
+    private static readonly string[] SpentKinds = ["modelCallEnded", "toolCallEnded", "runResumed", "runRolledBack", "turnStarted", "turnEnded", "budgetWarning"];
 
     /// <summary>CAP-03: every capability in use is on, and every capability on has the ones it requires.</summary>
     private IEnumerable<ConfigurationError> CapabilitySettings()

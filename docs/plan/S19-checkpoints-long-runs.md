@@ -57,23 +57,29 @@ Part 1:
   after a squash or a branch's deletion old checkpoint commits live only in the reflog, so `git gc` can break restoring them.
 Part 2:
 - Budgets form a hierarchy: turn, pattern (the agent's turn budget), agent, run, with the task's cost between the turn and the
-  run (S18). `agents.<name>.budget.total` caps the agent's tool calls, tokens, cost and time over all its turns in a run
-  (default $25, 8 hours, 100M tokens, 10,000 tool calls). A level that runs out ends the turn in a handoff that names it, and the
+  run (S18). `agents.<name>.budget.total` is optional (unset: no agent level) and caps the agent's tool calls, tokens and cost over all its turns
+  in a run. It has no defaults, so it never ends a turn before the run budget asks the owner to sign off. A level that runs out ends the turn in a handoff that names it, and the
   work goes to the level above, as before: the task goes back to the lead, a pattern's step to its pattern, and the run
   budget asks the owner, or hands off without one. Each level warns once at 80% of a limit with a `budgetWarning` event
   (EVT-01); `sof run` prints it.
 - A resumed run has spent what it had. `Spent.Of` reads the run's stored events: the cost and tokens of `modelCallEnded`, the
-  `toolCallEnded` count, and the time the run was running, which leaves out the time before a `runResumed` event, so the
-  downtime between a crash and its resume does not count. With checkpoints on, `modelCallEnded`, `toolCallEnded` and
-  `runResumed` cannot be left unstored. The agent's time is the run's. An owner's sign-off to go on past the run budget is not
+  `toolCallEnded` count, and the time the turns ran (`turnStarted` to `turnEnded`; a turn that never ended counts up to its last
+  event; a `runResumed` or `runRolledBack` event ends whatever was open), so downtime between a crash, a rollback and a resume does not
+  count. A crash loses the spending after the last stored event, at most one model call. With checkpoints on, the
+  events it reads (`modelCallEnded`, `toolCallEnded`, `turnStarted`, `turnEnded`, `runResumed`, `runRolledBack`, `budgetWarning`) cannot be
+  left unstored. Warnings already given to the run and the agent are read back, so a resume does not repeat them; the task's warning is
+  given once per turn. An owner's sign-off to go on past the run budget is not
   kept: after a resume the owner is asked again.
 - `ModelCallEnded` names the model that served the call and the task. `CheckRan` is a new event for each check run. `RunReport`
   (`AgentRunner.ReportAsync`, `sof report <run>`) reads what is stored: outcome, time running, cost by agent, task, step and
   model, the tasks, the decisions, the checks, and the open issues (an unfinished run, a handoff, tasks not done, conflicts in
   the record, checks that never passed). `sof run` and `sof resume` print it when they end.
-- `policies.rateLimits.perRun` is a fixed window per run id. Work enters a run only by its first work item and each resume today.
+- `policies.rateLimits.perRun` is a fixed window per run id, kept in memory like the others. Work enters a run only by its first work item and
+  each resume today, and `sof` resumes in a new process, so the CLI never applies it across processes. The host and serve mode (S20 or S21,
+  whichever owns them) keep the limit in a long-lived runner.
 - The conversation store's `TruncateAsync` takes the run and deletes nothing when another run's turns come after the
-  position, as one statement, and the rollback counts the turns after it (a race between the check and the deletion).
+  position, as one statement. The rollback checks every conversation before truncating any, and counts the turns after each
+  truncation (a race between the check and the deletion can still stop it part-way, which the run lock makes unlikely).
   `sof resume`, `rollback` and `report` print an `error:` line for a database in another format version.
 - `sof` holds `.sof/<run>.lock` while it works on a run, so `resume` and `rollback --to` refuse a run that another process
   holds, with the workspace off too.

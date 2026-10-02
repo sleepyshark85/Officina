@@ -84,6 +84,7 @@ public sealed class WindowsSandboxTests : IDisposable
         Assert.False(Directory.Exists(home));
         Assert.Empty(Containers(toolchain));
         real.Sandbox.Release(real.WorkingCopy, [toolchain]); // nothing left to remove is not an error
+        real.Sandbox.Release(Path.Combine(real.Host, "never-ran"), [toolchain]); // nor is a working copy that never ran a command
     }
 
     // AppContainer SIDs all begin S-1-15-2-.

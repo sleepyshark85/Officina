@@ -167,10 +167,24 @@ public sealed class WindowsSandbox : ISandbox
                 Revoke(new DirectoryInfo(toolchain), container);
             }
         });
-        Try(() => Directory.Delete(Path.Combine(Path.GetTempPath(), name), recursive: true));
-
-        // It fails when the profile was never created, which needs nothing more; the result says nothing else that can be acted on.
-        _ = Native.DeleteAppContainerProfile(name);
+        Try(() =>
+        {
+            // Nothing to remove is not an error: a working copy that never ran a command has no home folder.
+            var home = Path.Combine(Path.GetTempPath(), name);
+            if (Directory.Exists(home))
+            {
+                Directory.Delete(home, recursive: true);
+            }
+        });
+        Try(() =>
+        {
+            // A profile that was never created, or is already deleted, is not an error either.
+            var result = Native.DeleteAppContainerProfile(name);
+            if (result is not (0 or NotFound))
+            {
+                throw new Win32Exception(result);
+            }
+        });
         if (failures.Count > 0)
         {
             throw new AggregateException($"The sandbox could not remove everything it left for {directory}.", failures);
@@ -216,6 +230,9 @@ public sealed class WindowsSandbox : ISandbox
             Native.FreeSid(sid);
         }
     }
+
+    // HRESULT_FROM_WIN32(ERROR_NOT_FOUND).
+    private const int NotFound = unchecked((int)0x80070490);
 
     // HRESULT_FROM_WIN32(ERROR_ALREADY_EXISTS).
     private const int AlreadyExists = unchecked((int)0x800700B7);

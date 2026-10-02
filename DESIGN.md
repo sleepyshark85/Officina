@@ -257,7 +257,7 @@ decides the outcome.
   run's budget starts with the cost, tokens and tool calls summed from the stored events, and the time the run was running,
   without the downtime. `sof` holds a lock file for a run while it works on it, so a live run is not resumed from another process.
 - **Budgets and the report (RUN-05, RUN-10, RUN-11).** Each level draws on the one above: turn, pattern, agent, run; a task's cost
-  is checked beside them. Exhausting any ends the turn in a handoff that names the level, and the run level asks the owner. A level
+  is checked beside them. Exhausting any ends the turn in a handoff that names the level, and the run level asks the owner. The agent level exists only when configured. A level
   announces a `budgetWarning` once at 80% of a limit. The report is built from the stored events, record and board, so it can be
   made for a run of another process; cost is summed from `modelCallEnded` events by their agent, task, step and model.
 

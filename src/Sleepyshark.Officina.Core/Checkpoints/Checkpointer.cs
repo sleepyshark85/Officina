@@ -105,6 +105,10 @@ internal sealed class Checkpointer(OfficinaOptions options, IStorage storage, IW
             var (tenant, runId) = (context.Caller.Tenant, context.RunId);
             var audit = await storage.Audit.ReadAsync(tenant, runId, ct).ConfigureAwait(false);
             var notUndone = Outside(Effects(audit.Skip(to.Audit)));
+
+            // Every conversation is checked again before any is truncated, so a refusal leaves them all alone. A turn written between
+            // this check and a truncation is still kept by the store, and found by the count below.
+            await EnsureNoOtherRunsAsync(context, to, ct).ConfigureAwait(false);
             foreach (var (name, count) in to.Conversations)
             {
                 await storage.Conversations.TruncateAsync(tenant, name, context.Caller.Id, count, runId, ct).ConfigureAwait(false);

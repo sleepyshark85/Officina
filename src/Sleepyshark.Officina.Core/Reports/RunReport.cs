@@ -94,7 +94,7 @@ public sealed record RunReport(
         }
 
         issues.AddRange(tasks.Where(task => task.State is not (TaskState.Done or TaskState.Cancelled)).Select(task => $"Task {task.Id} ({task.Title}) is {task.State}."));
-        issues.AddRange(record.Where(entry => RunRecord.Describe(entry, record).Contains("CONFLICTS WITH", StringComparison.Ordinal)).Select(entry => RunRecord.Describe(entry, record)));
+        issues.AddRange(record.Where(entry => record.Any(other => RunRecord.Conflict(entry, other, record))).Select(entry => RunRecord.Describe(entry, record)));
         issues.AddRange(checks.Where(check => check.Failed > 0 && check.Passed == 0).Select(check => $"Check {check.Check}{(check.Task is null ? "" : $" on task {check.Task}")} never passed."));
         return new(
             runId, stored.Started.Agent, stored.Started.Input, stored.Started.Time, stored.Status, outcome, Spent.Of(events, stored.Started.Agent).Run.Time,
@@ -107,7 +107,7 @@ public sealed record RunReport(
     {
         var text = new StringBuilder();
         text.AppendLine(CultureInfo.InvariantCulture, $"Run {RunId}: {Status}, {Outcome}");
-        text.AppendLine(CultureInfo.InvariantCulture, $"Agent {Agent}, started {Started:u}, running {Running:hh\\:mm\\:ss}{(Resumes > 0 ? $", resumed {Resumes} times" : "")}");
+        text.AppendLine(CultureInfo.InvariantCulture, $"Agent {Agent}, started {Started:u}, running {(int)Running.TotalHours}:{Running:mm\\:ss}{(Resumes > 0 ? $", resumed {Resumes} times" : "")}");
         text.AppendLine(CultureInfo.InvariantCulture, $"Work: {Input}");
         text.AppendLine(CultureInfo.InvariantCulture, $"Cost: ${Cost.Total.Cost:0.00} in {Cost.Total.Calls} model calls, {Cost.Total.Tokens} tokens");
         foreach (var (name, by) in new[] { ("agent", Cost.ByAgent), ("task", Cost.ByTask), ("step", Cost.ByStep), ("model", Cost.ByModel) })

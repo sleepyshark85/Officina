@@ -72,7 +72,7 @@ public sealed partial class ResumeCommandTests : IDisposable
         model.CallTools(("write", """{ "path": "hello.txt", "content": "hi again" }""")).Reply("Done again.");
         var (resumeCode, resumed, _) = await sof.RunAsync("resume", runId);
         Assert.Equal(ExitCodes.Success, resumeCode);
-        Assert.Contains("dev: Completed, cost $0.00\nDone again.\n", resumed, StringComparison.Ordinal);
+        Assert.Contains("dev: Completed, cost $0.00\nDone again.\n\nRun ", resumed, StringComparison.Ordinal);
         var (endedCode, _, ended) = await sof.RunAsync("resume", runId);
         Assert.Equal((ExitCodes.Invalid, true), (endedCode, ended.Contains("has ended (Completed)", StringComparison.Ordinal)));
     }

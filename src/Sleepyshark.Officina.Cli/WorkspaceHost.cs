@@ -71,12 +71,13 @@ internal sealed partial class WorkspaceHost : IAsyncDisposable
     /// <param name="time">The clock.</param>
     /// <param name="keepLeftover">Whether a working copy's branch, named by its task, is kept because its run can resume (RUN-04).</param>
     /// <param name="leaveWorkingCopies">Whether the working copies are left in place when the host is disposed, because the run goes on.</param>
+    /// <param name="warnings">Where a failure to clean up after a run that died is reported; it does not stop this run.</param>
     /// <param name="ct">Cancels opening.</param>
     /// <exception cref="InvalidOperationException">The sandbox is on and this machine cannot provide it; nothing runs unsandboxed (SBX-07).</exception>
     /// <exception cref="WorkspaceException">The workspace cannot be opened.</exception>
     public static async Task<WorkspaceHost> OpenAsync(
         OfficinaOptions options, string root, string runId, ISandbox? sandbox, TimeProvider time, Func<string, Task<bool>> keepLeftover, bool leaveWorkingCopies,
-        CancellationToken ct)
+        TextWriter warnings, CancellationToken ct)
     {
         if (sandbox?.Probe() is { } problem)
         {
@@ -86,7 +87,7 @@ internal sealed partial class WorkspaceHost : IAsyncDisposable
         var workspace = await GitWorkspace.OpenAsync(root, runId, options.Capabilities.Workspace, new Dictionary<string, ICheck>(), time, ct).ConfigureAwait(false);
         try
         {
-            await workspace.RemoveLeftoversAsync(keepLeftover, folder => ReleaseLeftover(sandbox, options, folder), ct).ConfigureAwait(false);
+            await workspace.RemoveLeftoversAsync(keepLeftover, folder => ReleaseLeftover(sandbox, options, folder, warnings), ct).ConfigureAwait(false);
             return new WorkspaceHost(workspace, options, sandbox, runId, root, leaveWorkingCopies);
         }
         catch
@@ -97,14 +98,15 @@ internal sealed partial class WorkspaceHost : IAsyncDisposable
     }
 
     /// <summary>What a run that died left outside its working copy goes with the copy. Failing to remove it must not stop the next run.</summary>
-    private static void ReleaseLeftover(ISandbox? sandbox, OfficinaOptions options, string folder)
+    private static void ReleaseLeftover(ISandbox? sandbox, OfficinaOptions options, string folder, TextWriter warnings)
     {
         try
         {
             sandbox?.Release(folder, options.Capabilities.Sandbox.Toolchains);
         }
-        catch (AggregateException)
+        catch (AggregateException exception)
         {
+            warnings.WriteLine($"warning: could not remove what a run that died left outside {folder}: {string.Join("; ", exception.InnerExceptions.Select(inner => inner.Message))}");
         }
     }
 

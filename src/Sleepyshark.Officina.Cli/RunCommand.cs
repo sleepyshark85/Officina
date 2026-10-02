@@ -123,7 +123,7 @@ internal static class RunCommand
             await using var workspace = options.Capabilities.Workspace.Enabled
                 ? await WorkspaceHost.OpenAsync(
                     options, directory, runId, options.Capabilities.Sandbox.Enabled ? host.Sandbox ?? WorkspaceHost.MachineSandbox() : null, host.Time,
-                    async task => task.Length > RunIdLength && await storage.Runs.ReadAsync(null, task[..RunIdLength], ct) is { Status: RunStatus.Running }, leaveWorkingCopies, ct)
+                    async task => task.Length > RunIdLength && await storage.Runs.ReadAsync(null, task[..RunIdLength], ct) is { Status: RunStatus.Running }, leaveWorkingCopies, host.Error, ct)
                 : null;
             foreach (var (id, tool) in workspace?.Tools ?? new Dictionary<string, ITool>())
             {

@@ -76,7 +76,7 @@ Presets arrive with the coding team; until then this is how the team will be set
 | `tools.<name>.approval` | `always` for irreversible tools, otherwise `never` | A tool needs human sign-off |
 | `toolServers` | none | You use MCP tool servers |
 | `run.budget` | $25 and 8 hours (`"08:00:00"`) | Runs are bigger or smaller |
-| `agents.<name>.budget.total` | $25, 8 hours, 100M tokens, 10,000 tool calls | One agent should spend less of the run than the rest |
+| `agents.<name>.budget.total` | none | One agent should spend less of the run than the rest |
 | `run.permissionMode` | `ask` | You trust the rules enough for `auto`, or want `readOnly` |
 | `capabilities.sandbox.allowedHosts` | none (network off) | Builds download packages |
 | `capabilities.sandbox.commandRules` | the preset's rules; anything unmatched is asked about | You want fewer or more prompts. An allow rule for an interpreter, such as `sh*` or `bash*`, allows every command. |

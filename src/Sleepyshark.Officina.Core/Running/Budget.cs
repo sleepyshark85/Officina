@@ -16,7 +16,7 @@ internal sealed class Budget
     private readonly TimeProvider time;
     private readonly long started;
     private readonly TimeSpan timeBefore;
-    private readonly HashSet<string> warned = [];
+    private readonly HashSet<string> warned;
     private int iterations;
     private int toolCalls;
     private long tokens;
@@ -29,6 +29,7 @@ internal sealed class Budget
         tokens = before.Tokens;
         toolCalls = before.ToolCalls;
         timeBefore = before.Time;
+        warned = [.. before.Warned ?? []];
         this.level = level;
         this.limits = limits;
         this.parent = parent;
@@ -47,8 +48,14 @@ internal sealed class Budget
     public Budget Draw(string level, TurnBudget limits, Spent before = default) => new(level, limits, this, time, before);
 
     /// <summary>An agent's budget over all its turns in the run (RUN-05).</summary>
-    public Budget DrawAgent(TotalBudget total, Spent before) =>
-        Draw("agent's", new TurnBudget { Iterations = int.MaxValue, ToolCalls = total.ToolCalls, Tokens = total.Tokens, Cost = total.Cost, Time = total.Time }, before);
+    public Budget DrawAgent(TotalBudget? total, Spent before) =>
+        total is null ? this : Draw(
+            "agent's",
+            new TurnBudget
+            {
+                Iterations = int.MaxValue, ToolCalls = total.ToolCalls ?? int.MaxValue, Tokens = total.Tokens ?? long.MaxValue, Cost = total.Cost ?? decimal.MaxValue, Time = TimeSpan.MaxValue,
+            },
+            before);
 
     public void Spend(int iterations = 0, int toolCalls = 0, long tokens = 0, decimal cost = 0m)
     {
@@ -127,26 +134,40 @@ internal sealed class Budget
 }
 
 /// <summary>What a level had spent before this process took the run up again (INV-07).</summary>
-internal readonly record struct Spent(decimal Cost, long Tokens, int ToolCalls, TimeSpan Time)
+internal readonly record struct Spent(decimal Cost, long Tokens, int ToolCalls, TimeSpan Time, IReadOnlyCollection<string>? Warned = null)
 {
     /// <summary>
     /// What a run and one of its agents spent, from the run's stored events: the cost and tokens of its model calls, its tool calls,
-    /// and the time it was running, which leaves out the time between a process dying and the run resuming.
+    /// the budget warnings given, and the time its turns ran. Time outside turns is not counted, and neither is the time between a
+    /// process dying and the run being rolled back or resumed, so a turn that never ended counts up to its last event only.
     /// </summary>
     public static (Spent Run, Spent Agent) Of(IReadOnlyList<CoreEvent> events, string agent)
     {
         var time = TimeSpan.Zero;
-        for (var i = 1; i < events.Count; i++)
+        var turns = 0;
+        for (var i = 0; i < events.Count; i++)
         {
-            time += events[i].Payload is RunResumed ? TimeSpan.Zero : events[i].Time - events[i - 1].Time;
+            if (events[i].Payload is RunResumed or RunRolledBack)
+            {
+                turns = 0; // a new process: whatever was open when the last one died is over
+                continue;
+            }
+
+            if (i > 0 && turns > 0)
+            {
+                time += events[i].Time - events[i - 1].Time;
+            }
+
+            turns += events[i].Payload switch { TurnStarted => 1, TurnEnded when turns > 0 => -1, _ => 0 };
         }
 
-        return (Of(events) with { Time = time }, Of(events.Where(coreEvent => coreEvent.Agent == agent)) with { Time = time });
+        return (Of(events, "run's") with { Time = time }, Of(events.Where(coreEvent => coreEvent.Agent == agent), "agent's") with { Time = time });
 
-        static Spent Of(IEnumerable<CoreEvent> events) => events.Aggregate(default(Spent), (spent, coreEvent) => coreEvent.Payload switch
+        static Spent Of(IEnumerable<CoreEvent> events, string level) => events.Aggregate(default(Spent), (spent, coreEvent) => coreEvent.Payload switch
         {
             ModelCallEnded call => spent with { Cost = spent.Cost + call.Cost, Tokens = spent.Tokens + call.Usage.Total },
             ToolCallEnded => spent with { ToolCalls = spent.ToolCalls + 1 },
+            BudgetWarning warning when warning.Level == level => spent with { Warned = [.. spent.Warned ?? [], warning.Limit] },
             _ => spent,
         });
     }

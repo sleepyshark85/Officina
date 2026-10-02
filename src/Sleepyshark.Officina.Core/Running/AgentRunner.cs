@@ -534,17 +534,18 @@ public sealed class AgentRunner
         var interrupted = await checkpointer.InterruptedAsync(context, ct).ConfigureAwait(false);
         var saved = await storage.Checkpoints.ReadAsync(context.Caller.Tenant, context.RunId, ct).ConfigureAwait(false);
         var last = saved.Count == 0 ? null : saved[^1];
-        if (last is null)
-        {
-            // It died before its first checkpoint, so nothing was saved and nothing is restored.
-            last = await checkpointer.TakeAsync(context, CheckpointPoint.Start, ct).ConfigureAwait(false);
-        }
-        else
+        if (last is not null)
         {
             await checkpointer.RestoreAsync(context, last, ct).ConfigureAwait(false);
         }
 
-        await Events.PublishAsync(context, new RunResumed(last!.Number, interrupted), ct).ConfigureAwait(false);
+        // Published before the checkpoint below, so every event after the restart follows this one (INV-07: the budget's time).
+        await Events.PublishAsync(context, new RunResumed(last?.Number ?? 0, interrupted), ct).ConfigureAwait(false);
+        if (last is null)
+        {
+            // It died before its first checkpoint, so nothing was saved and nothing is restored.
+            await checkpointer.TakeAsync(context, CheckpointPoint.Start, ct).ConfigureAwait(false);
+        }
     }
 
     /// <summary>A run that ends in a handoff waits for a human (RUN-01).</summary>
