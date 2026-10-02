@@ -71,6 +71,7 @@ sof config show --origin                # every setting, its value and where it 
 sof config dry-run --input "Hi" --reply "Hello."   # prints the configuration, then runs a scripted model: no API call
 export ANTHROPIC_API_KEY=...            # Windows: $env:ANTHROPIC_API_KEY = "..."
 sof run --input "What is a git worktree?"
+sof                                     # a chat session: type messages, /quit to end (section 6)
 ```
 
 `sof run` prints the run id first, streams what the agent does, and ends with the run report. The run is stored in
@@ -123,7 +124,55 @@ default) to stop, is recorded as cancelled, and its report prints. A second Ctrl
 Exit codes: 0 done; 1 configuration errors, or a failure while starting; 2 usage error; 3 the run ended without
 completing (handed off, rejected or failed).
 
-## 6. The coding team
+## 6. Chatting with an agent
+
+```
+sof [--agent <name>] [--new]            # sof chat is the same
+```
+
+Plain `sof` opens a session that stays open. With several agents and no `--agent`, it asks which one. Each line you type
+is a message, and the reply streams as the model writes it. The agent remembers the conversation: from message to
+message, and from one session to the next. `--new` (or `/new` in the session) starts a fresh conversation.
+
+Lines that start with `/` are commands, so they're never taken for a message:
+
+| Command | What it does |
+|---|---|
+| `/status` … `/memory` | The commands of section 5, with a `/`: `/approve 1`, `/tell lead focus on the parser`, `/mode auto`… |
+| `/report [run]` | The report of the last message's run, or of any run |
+| `/resume <run>`, `/rollback <run> [--to <n>]`, `/run --input <text>` | As on the command line; they wait until no reply runs |
+| `/config validate`, `/config show [--origin]`, `/config dry-run …` | As on the command line |
+| `/new` | The next message starts a new conversation |
+| `/help [command]` | Everything, or one command's options |
+| `/quit` | End the session. So does Ctrl+D, once the messages you sent have their replies |
+
+How it behaves:
+
+- **Each message is a run of its own**, with its own run id, report, checkpoints and budget: `run.budget` applies to each
+  message, as it does to each `sof run`. Every reply ends with its cost and the session's cost so far, and `/status` shows
+  the session's cost too. There is no limit for the session as a whole: messages that wait for a reply, or a script piped
+  in, can spend `run.budget` once for each message without asking you.
+- **The conversation is kept in the conversation store**, which the session turns on, with full history for the agent
+  you chat with, unless `sof.json` sets its `context.history.strategy`: then that strategy is kept, and with `none` each
+  message starts afresh. If `sof.json` turns the conversation store off, `sof` refuses to chat; so does an agent whose
+  `triggers` leave out `conversation`. `config validate` notes both.
+- **The coding team** (`--agent team`): each message is new work for the team. The lead plans it, with the earlier
+  messages in mind, as the lead keeps the conversation; the developers and the reviewer start each task afresh. To speak
+  to the lead or a developer while the team works, use `/tell`.
+- **While a reply runs**, commands work at once. A message you type waits, and is sent when the reply ends. `/resume` or
+  `/resume <agent>` then resumes what `/pause` paused; `/resume <run>`, `/rollback` and `/run` wait until no reply runs.
+- **Ctrl+C** cancels the reply (or a command such as `/resume <run>`) and drops the messages that waited for it; the
+  session goes on. A second Ctrl+C before your next message ends the session.
+- **Rollback and resume:** every message's run is rolled back and resumed on its own. A rollback that would remove a later
+  message's part of the conversation is refused, so roll back the latest message first. A resumed message runs with the
+  conversation, as the session ran it.
+- **Working copies:** each message's run gets its own working copies, fresh from your branch, as each `sof run` does.
+  The coding team integrates its changes into your branch, so its next message builds on them. **A single agent with the
+  workspace on does not:** its edits from one message are removed when the reply ends, unless
+  `capabilities.workspace.keepWorkingCopies` is on, which keeps them in that message's copy under `.sof/worktrees`, where
+  the next message does not see them. The session warns about this at its start, and `config validate` notes it.
+
+## 7. The coding team
 
 Set up a throwaway repository first:
 
@@ -170,7 +219,7 @@ Agents can't change `sof.json`, `sof.*.json` or any file they extend, and such c
 `git push` and `git remote` are denied for convenience; the real boundary is the network-less sandbox plus asking you
 about unmatched commands.
 
-## 7. Long runs: checkpoints, resume, rollback, report
+## 8. Long runs: checkpoints, resume, rollback, report
 
 | Command | What it does |
 |---|---|
@@ -189,7 +238,7 @@ What they don't do:
   conversation since the checkpoint.
 - A resumed run's time budget counts only time spent inside work, not the time between the crash and the resume.
 
-## 8. Manual test checklist
+## 9. Manual test checklist
 
 Do these in order; each costs more than the last. Keep `--budget` low, watch `status`, and use throwaway repositories.
 
@@ -218,6 +267,12 @@ Do these in order; each costs more than the last. Keep `--budget` low, watch `st
 - [ ] Coding team on a tiny repository, such as a calculator with one failing test: plan approval, two tasks, review,
       integration, then a green build on your branch.
 - [ ] Press Ctrl+C during a run. The run stops within `run.cancelWithin`, the report prints, and the exit code is 3.
+- [ ] Chat (section 6): plain `sof`, two messages where the second needs the first ("My name is Ann." then "What is my
+      name?"). Quit, start `sof` again and ask once more; then `sof --new` and check it has forgotten. During a reply, try
+      `/status`, type a message (it waits), and press Ctrl+C: the reply stops and the session goes on. Try `/report`,
+      `/config validate`, then Ctrl+C twice.
+- [ ] Chat with the coding team (`sof --agent team`): two small goals in a row; the lead's second plan should know the
+      first.
 - [ ] Kill `sof` mid-run (`kill -9`, or close the terminal), then `sof resume <run>`. The run continues from its last
       checkpoint.
 - [ ] `sof rollback <run>`, then `--to <n>`, then `sof resume <run>`; check the working copies and the report.
@@ -227,7 +282,7 @@ Do these in order; each costs more than the last. Keep `--budget` low, watch `st
 
 Write down anything surprising, with the run id; `sof report <run>` and `.sof/sof.db` hold the details.
 
-## 9. Known limitations
+## 10. Known limitations
 
 - `sof init` isn't built: write `sof.json` by hand.
 - `sof.json` must sit in the git repository's top folder.
@@ -237,9 +292,10 @@ Write down anything surprising, with the run id; `sof report <run>` and `.sof/so
 - Fan-out branches of one agent share a working copy. Command checks time out after 20 minutes by default
   (`checks.<name>.timeout`).
 - `board` only shows the task board; the console can't add, edit, reprioritise, reassign or cancel tasks.
+- The chat session reads whole lines: no Tab completion or command history yet.
 - The items left out of v1 are listed in [`docs/plan/S21-hardening.md`](plan/S21-hardening.md).
 
-## 10. The benchmark (later)
+## 11. The benchmark (later)
 
 The benchmark scores 10 coding goals with hidden tests (TEST-31). Scoring runs code the model wrote **outside the
 sandbox**, so use a throwaway VM or account.

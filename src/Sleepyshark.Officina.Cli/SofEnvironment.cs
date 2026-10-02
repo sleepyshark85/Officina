@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using Sleepyshark.Officina.Core.Extensibility;
 
 namespace Sleepyshark.Officina.Cli;
@@ -19,4 +20,26 @@ public sealed record SofEnvironment(TextWriter Out, TextWriter Error, string Wor
     public ISandbox? Sandbox { get; init; }
 
     public TimeProvider Time { get; init; } = TimeProvider.System;
+
+    /// <summary>
+    /// Takes Ctrl+C (SIGINT) and SIGTERM over from the command line until the registration it returns is disposed: in <c>sof chat</c>,
+    /// Ctrl+C cancels the reply and keeps the session. Null leaves both to the command line, which cancels the command.
+    /// </summary>
+    public Func<Action<PosixSignal>, IDisposable>? Signals { get; init; }
+
+    /// <summary>Whether the command runs inside a chat session, typed after a <c>/</c>: the session handles the signals, and holds the console.</summary>
+    internal bool InSession { get; init; }
+
+    /// <summary>The process's own signals, for <see cref="Signals"/>.</summary>
+    public static IDisposable ProcessSignals(Action<PosixSignal> handler) => new Registrations(
+        [.. new[] { PosixSignal.SIGINT, PosixSignal.SIGTERM }.Select(signal => PosixSignalRegistration.Create(signal, context =>
+        {
+            context.Cancel = true;
+            handler(context.Signal);
+        }))]);
+
+    private sealed class Registrations(List<PosixSignalRegistration> registrations) : IDisposable
+    {
+        public void Dispose() => registrations.ForEach(registration => registration.Dispose());
+    }
 }

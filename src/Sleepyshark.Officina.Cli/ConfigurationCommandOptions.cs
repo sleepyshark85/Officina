@@ -38,12 +38,11 @@ internal sealed class ConfigurationCommandOptions
             options.Add(("run.permissionMode", mode, "--permission-mode"));
         }
 
-        return SofConfiguration.Load(
-            Directory(parse, host),
-            parse.GetValue(environment) ?? host.Variables.GetValueOrDefault("SOF_ENVIRONMENT"),
-            host.Variables,
-            options);
+        return SofConfiguration.Load(Directory(parse, host), Environment(parse, host), host.Variables, options);
     }
+
+    /// <summary>The environment whose <c>sof.&lt;name&gt;.json</c> is merged, if any.</summary>
+    public string? Environment(ParseResult parse, SofEnvironment host) => parse.GetValue(environment) ?? host.Variables.GetValueOrDefault("SOF_ENVIRONMENT");
 
     /// <summary>The directory with <c>sof.json</c>.</summary>
     public string Directory(ParseResult parse, SofEnvironment host) => Path.GetFullPath(parse.GetValue(directory) ?? ".", host.WorkingDirectory);

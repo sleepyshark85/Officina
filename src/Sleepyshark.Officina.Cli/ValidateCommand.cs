@@ -38,6 +38,17 @@ internal static class ValidateCommand
                 }
             }
 
+            // What sof chat refuses as it starts: not an error, as the other commands run with it.
+            foreach (var refusal in ChatCommand.Refusals(configuration))
+            {
+                host.Out.WriteLine($"note: sof chat refuses this: {refusal}");
+            }
+
+            foreach (var warning in ChatCommand.WorkspaceWarnings(configuration.Options))
+            {
+                host.Out.WriteLine($"note: in sof chat, {warning}");
+            }
+
             host.Out.WriteLine("The configuration is valid.");
             return ExitCodes.Success;
         });

@@ -22,10 +22,11 @@ namespace Sleepyshark.Officina.Cli;
 /// </summary>
 internal static class RunCommand
 {
-    private const string Help = """
-        Commands: status | approve <n> | deny <n> | change <n> <json> | answer <n> <text> | tell <agent> <text>
-                  | mode <ask|auto|readOnly> | pause [agent] | resume [agent] | cancel [agent] | checkpoint | board
-                  | memory | memory approve <n> [reason] | memory reject <n> <reason>
+    /// <summary>The console's commands, each written after <paramref name="prefix"/>; <c>sof chat</c>'s start with a slash.</summary>
+    internal static string Help(string prefix = "") => $"""
+        Commands: {prefix}status | {prefix}approve <n> | {prefix}deny <n> | {prefix}change <n> <json> | {prefix}answer <n> <text> | {prefix}tell <agent> <text>
+                  | {prefix}mode <ask|auto|readOnly> | {prefix}pause [agent] | {prefix}resume [agent] | {prefix}cancel [agent] | {prefix}checkpoint | {prefix}board
+                  | {prefix}memory | {prefix}memory approve <n> [reason] | {prefix}memory reject <n> <reason>
         """;
 
     public static Command Create(ConfigurationCommandOptions shared, SofEnvironment host)
@@ -52,12 +53,15 @@ internal static class RunCommand
     /// <summary>
     /// Loads the configuration, opens what a run uses (the tool servers, the workspace, the storage in <c>.sof/sof.db</c>, the
     /// runner), and does what <paramref name="body"/> says with it. An <paramref name="existing"/> run is one that is already
-    /// stored: its agent is the stored one. Everything is closed afterwards, the working copies too unless
-    /// <paramref name="leaveWorkingCopies"/> keeps them for a run that goes on.
+    /// stored: its agent and trigger are the stored ones. Everything is closed afterwards, the working copies too unless
+    /// <paramref name="leaveWorkingCopies"/> keeps them for a run that goes on. <paramref name="trigger"/> is how a new run's work
+    /// arrives: a run of a conversation, new or stored, runs with the conversation <c>sof chat</c> keeps
+    /// (<see cref="ChatCommand.Conversing"/>), so a chat message's run resumes as it ran. <paramref name="owner"/> is the owner's
+    /// console when it outlives the run, as in <c>sof chat</c>; there is a new one otherwise.
     /// </summary>
     internal static async Task<int> ExecuteAsync(
         ParseResult parse, ConfigurationCommandOptions shared, SofEnvironment host, string runId, string? agentName, bool existing, bool leaveWorkingCopies,
-        Func<Session, CancellationToken, Task<int>> body, CancellationToken ct)
+        Func<Session, CancellationToken, Task<int>> body, CancellationToken ct, Trigger trigger = Trigger.Request, OwnerQueue? owner = null)
     {
         var configuration = shared.Load(parse, host);
         if (ConfigurationCommandOptions.ReportErrors(configuration, host) is var code && code != ExitCodes.Success)
@@ -91,11 +95,23 @@ internal static class RunCommand
             }
 
             agentName = stored.Started.Agent;
+            trigger = stored.Started.Trigger;
         }
 
         if (ConfigurationCommandOptions.Agent(agentName, options, host) is not { } name)
         {
             return ExitCodes.Usage;
+        }
+
+        if (trigger == Trigger.Conversation)
+        {
+            if (ChatCommand.Refusal(configuration, name) is { } refusal)
+            {
+                host.Error.WriteLine($"error: {refusal}");
+                return ExitCodes.Invalid;
+            }
+
+            options = ChatCommand.Conversing(configuration, name);
         }
 
         // INV-06: the API key and the tool servers' secrets are read through the secrets the runner removes from what tools return.
@@ -109,8 +125,8 @@ internal static class RunCommand
             return ExitCodes.Usage;
         }
 
-        var output = TextWriter.Synchronized(host.Out);
-        var queue = new OwnerQueue(output);
+        var queue = owner ?? new OwnerQueue(TextWriter.Synchronized(host.Out));
+        var output = queue.Output;
         var starting = true;
         int? exitCode = null;
         try
@@ -201,28 +217,18 @@ internal static class RunCommand
     /// <summary>Shows a run's events and takes the owner's commands while it runs, then prints how it ended.</summary>
     internal static async Task<int> RunAsync(Session session, Func<Task<AgentResult>> start, SofEnvironment host, CancellationToken ct)
     {
-        var (runner, name, queue, output) = (session.Runner, session.Agent, session.Queue, session.Output);
+        var (name, output) = (session.Agent, session.Output);
         var status = new StatusView(output, session.Workspace is null ? null : () => session.Workspace.Queue);
-        using var stop = new CancellationTokenSource();
-        output.WriteLine($"run {session.RunId}");
-        var watching = WatchAsync(runner, session.RunId, status, stop.Token);
-        // A read from the console blocks its thread and cannot be cancelled, so the command loop runs on a thread of its own
-        // and is left to end with the process.
-        _ = Task.Run(() => CommandAsync(runner, name, session.RunId, queue, status, host.In, output, stop.Token), CancellationToken.None);
-        AgentResult result;
-        try
+        var result = await WatchAsync(session, status, start, stop =>
         {
-            result = await start();
-        }
-        finally
-        {
-            await stop.CancelAsync();
-            await watching;
-        }
+            // A read from the console blocks its thread and cannot be cancelled, so the command loop runs on a thread of its own
+            // and is left to end with the process.
+            _ = Task.Run(() => CommandAsync(session, status, host.In, stop), CancellationToken.None);
+            return Task.CompletedTask;
+        });
 
         output.WriteLine();
-        output.WriteLine(string.Create(
-            CultureInfo.InvariantCulture, $"{name}: {result.Outcome}{(result.Handoff is { } handoff ? $" ({handoff.Reason}: {handoff.Detail})" : "")}, cost ${result.Statistics.Cost:0.00}"));
+        output.WriteLine(string.Create(CultureInfo.InvariantCulture, $"{name}: {result.Outcome}{Handoff(result)}, cost ${result.Statistics.Cost:0.00}"));
         output.WriteLine(result.Output);
         if (await RunReport.BuildAsync(session.Storage, null, session.RunId, CancellationToken.None) is { } report)
         {
@@ -232,6 +238,31 @@ internal static class RunCommand
 
         return result.Outcome == AgentOutcome.Completed ? ExitCodes.Success : ExitCodes.NotCompleted;
     }
+
+    /// <summary>
+    /// Runs the work <paramref name="start"/> starts, and shows its events on <paramref name="status"/> as they happen (UX-01) while
+    /// <paramref name="commands"/> takes the owner's commands. Their token is cancelled when the run ends, and they are awaited.
+    /// </summary>
+    internal static async Task<AgentResult> WatchAsync(Session session, StatusView status, Func<Task<AgentResult>> start, Func<CancellationToken, Task> commands)
+    {
+        using var stop = new CancellationTokenSource();
+        session.Output.WriteLine($"run {session.RunId}");
+        var watching = WatchAsync(session.Runner, session.RunId, status, stop.Token);
+        var commanding = commands(stop.Token);
+        try
+        {
+            return await start();
+        }
+        finally
+        {
+            await stop.CancelAsync();
+            await watching;
+            await commanding;
+        }
+    }
+
+    /// <summary>Why a run was handed off, for the line that says how it ended.</summary>
+    internal static string Handoff(AgentResult result) => result.Handoff is { } handoff ? $" ({handoff.Reason}: {handoff.Detail})" : "";
 
     /// <summary>Shows the run's events until the run ends.</summary>
     private static async Task WatchAsync(AgentRunner runner, string runId, StatusView status, CancellationToken ct)
@@ -249,41 +280,49 @@ internal static class RunCommand
     }
 
     /// <summary>Carries out the owner's commands, one per line, until the run ends or the input does.</summary>
-    private static async Task CommandAsync(
-        AgentRunner runner, string agent, string runId, OwnerQueue queue, StatusView status, TextReader input, TextWriter output, CancellationToken ct)
+    private static async Task CommandAsync(Session session, StatusView status, TextReader input, CancellationToken ct)
     {
         try
         {
-            while (await input.ReadLineAsync(ct) is { } line && !ct.IsCancellationRequested)
+            // A line read is the run's even if the run ends meanwhile: a console that is shared, as in a chat session, keeps
+            // a line taken after the run stopped reading (ChatSession.SessionReader).
+            while (await input.ReadLineAsync(ct) is { } line)
             {
-                try
-                {
-                    if (line.Trim() == "checkpoint")
-                    {
-                        output.WriteLine(await CheckpointAsync(runner, runId, ct));
-                    }
-                    else if (line.Trim() == "board")
-                    {
-                        output.Write(await BoardAsync(runner, runId, ct));
-                    }
-                    else if (line.Trim().Split(' ', 4, StringSplitOptions.RemoveEmptyEntries) is ["memory", .. var memory])
-                    {
-                        output.Write(await MemoryAsync(runner, memory, ct));
-                    }
-                    else if (Apply(line.Trim(), runner, agent, runId, queue, status) is { } problem)
-                    {
-                        output.WriteLine(problem);
-                    }
-                }
-                catch (Exception exception) when (exception is not OperationCanceledException)
-                {
-                    // A command that fails says so, and the owner can go on typing.
-                    output.WriteLine($"error: {exception.Message}");
-                }
+                await CarryOutAsync(line, session, status, Help(), ct);
             }
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
+        }
+    }
+
+    /// <summary>Carries out one of the owner's commands on the run; <paramref name="help"/> is shown for one it does not know.</summary>
+    internal static async Task CarryOutAsync(string line, Session session, StatusView status, string help, CancellationToken ct)
+    {
+        var (runner, output) = (session.Runner, session.Output);
+        try
+        {
+            if (line.Trim() == "checkpoint")
+            {
+                output.WriteLine(await CheckpointAsync(runner, session.RunId, ct));
+            }
+            else if (line.Trim() == "board")
+            {
+                output.Write(await BoardAsync(runner, session.RunId, ct));
+            }
+            else if (line.Trim().Split(' ', 4, StringSplitOptions.RemoveEmptyEntries) is ["memory", .. var memory])
+            {
+                output.Write(await MemoryAsync(runner, memory, ct));
+            }
+            else if (Apply(line.Trim(), session, status, help) is { } problem)
+            {
+                output.WriteLine(problem);
+            }
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            // A command that fails says so, and the owner can go on typing.
+            output.WriteLine($"error: {exception.Message}");
         }
     }
 
@@ -347,8 +386,9 @@ internal static class RunCommand
     }
 
     /// <summary>Carries out one command; returns what was wrong with it, if anything.</summary>
-    private static string? Apply(string line, AgentRunner runner, string agent, string runId, OwnerQueue queue, StatusView status)
+    private static string? Apply(string line, Session session, StatusView status, string help)
     {
+        var (runner, agent, runId, queue) = (session.Runner, session.Agent, session.RunId, session.Queue);
         var words = line.Split(' ', 3, StringSplitOptions.RemoveEmptyEntries);
         var target = words.Length > 1 ? words[1] : null;
         var team = runner.Options.Agents[agent].Pattern.Type == PatternOptions.Team;
@@ -403,7 +443,7 @@ internal static class RunCommand
                     runner.Cancel(target ?? agent);
                     return null;
                 default:
-                    return Help;
+                    return help;
             }
         }
         catch (Exception exception) when (exception is ConfigurationException or JsonException or ArgumentException)
