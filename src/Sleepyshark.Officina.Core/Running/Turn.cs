@@ -307,7 +307,7 @@ internal sealed class Turn
 
     /// <summary>Which limit of the turn's, its pattern's, its task's or the run's budget is used up, if any (LOOP-06, COST-02).</summary>
     private (string Limit, bool OfRun)? Exhausted() =>
-        budget.Exhausted() ?? (task is not null && task.Spent + cost >= task.Budget ? ("task's cost", false) : null);
+        task is not null && task.Spent + cost >= task.Budget ? ("task's cost", false) : budget.Exhausted();
 
     /// <summary>
     /// RUN-05, HITL-04: with the sign-off on, the owner may let the run go on past its budget, by another budget of the
