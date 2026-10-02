@@ -322,6 +322,8 @@ It lists the settings the code has today. Settings that later slices add are spe
 |---|---|---|---|---|
 | `cost` | number, > 0 | `25` | The most the run may spend, in USD. Live: the owner may change it during a run. | `25` |
 | `time` | time span (`hh:mm:ss` or `d.hh:mm:ss`) | `"08:00:00"` | The longest the run may take, as `hh:mm:ss` or `d.hh:mm:ss`. Live: the owner may change it during a run. | `"08:00:00"` |
+| `tokens` | whole number, ≥ 1 |  | The most tokens the run may use: input, output, cache reads and cache writes together. Unset: only cost and time limit the run. Live: the owner may change it during a run. | `500000000` |
+| `toolCalls` | whole number, ≥ 1 |  | The most tool calls the run may make, including tools the provider runs itself. Unset: only cost and time limit the run. Live: the owner may change it during a run. | `20000` |
 
 ## `operations.telemetry`
 

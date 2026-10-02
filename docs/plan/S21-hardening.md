@@ -33,3 +33,4 @@ From S20 (part 1):
   are its own work, so nothing joins a live run from outside.
 - `budget.total` of a pattern's step agents, which still draw on the entry agent's level (a team's agents have their own).
 - The condition roots `checks.<name>`, `outcome` and `stopReason` (configuration reference §6), for a case that needs them.
+- RUN-05: a task's tokens, time and tool calls; its budget caps its cost only. (S20 built the run's tokens and tool calls.)

@@ -37,9 +37,9 @@ internal sealed class Budget
         started = time.GetTimestamp();
     }
 
-    /// <summary>The run's budget, which limits only its cost and time. A run that resumes has spent some already (INV-07).</summary>
+    /// <summary>The run's budget: its cost and time, and its tokens and tool calls when set. A run that resumes has spent some already (INV-07).</summary>
     public static Budget ForRun(RunBudget run, TimeProvider time, Spent before = default) =>
-        new("run's", new TurnBudget { Iterations = int.MaxValue, ToolCalls = int.MaxValue, Tokens = long.MaxValue, Cost = run.Cost, Time = run.Time }, null, time, before);
+        new("run's", new TurnBudget { Iterations = int.MaxValue, ToolCalls = run.ToolCalls ?? int.MaxValue, Tokens = run.Tokens ?? long.MaxValue, Cost = run.Cost, Time = run.Time }, null, time, before);
 
     /// <summary>A budget drawn from this one, starting now.</summary>
     /// <param name="level">Its name in a handoff's detail, such as <c>turn's</c>.</param>
@@ -70,28 +70,11 @@ internal sealed class Budget
         parent?.Spend(iterations, toolCalls, tokens, cost);
     }
 
-    /// <summary>How many times the owner has let the run go on past its budget.</summary>
-    public int RunExtensions
-    {
-        get
-        {
-            if (parent is not null)
-            {
-                return parent.RunExtensions;
-            }
-
-            lock (gate)
-            {
-                return allowances - 1;
-            }
-        }
-    }
-
     /// <summary>
     /// The owner lets the run go on past its budget: it may spend as much again (RUN-05, HITL-04). Only once for the extensions
     /// seen when the owner was asked, so several agents asked at once extend it once.
     /// </summary>
-    /// <param name="seen">The run's <see cref="RunExtensions"/> when the owner was asked.</param>
+    /// <param name="seen">The run's extensions when it was found used up, from <see cref="Exhausted"/>.</param>
     public void ExtendRun(int seen)
     {
         if (parent is not null)
@@ -110,21 +93,27 @@ internal sealed class Budget
         }
     }
 
-    /// <summary>The limit used up, here or above, such as <c>turn's iteration</c>, and whether it is the run's; null when none is.</summary>
-    public (string Limit, bool OfRun)? Exhausted()
+    /// <summary>
+    /// The limit used up, here or above, such as <c>turn's iteration</c>, whether it is the run's, and how many times the owner had
+    /// let the run go on when it was checked; null when none is.
+    /// </summary>
+    public (string Limit, bool OfRun, int Extensions)? Exhausted()
     {
         string? limit;
+        int extensions;
         lock (gate)
         {
+            // Allowances multiply the limits of the run only: every other level has one.
             limit = iterations >= limits.Iterations ? "iteration"
-                : toolCalls >= limits.ToolCalls ? "tool-call"
-                : tokens >= limits.Tokens ? "token"
+                : toolCalls >= (decimal)limits.ToolCalls * allowances ? "tool-call"
+                : tokens >= (decimal)limits.Tokens * allowances ? "token"
                 : cost >= limits.Cost * allowances ? "cost"
                 : timeBefore + time.GetElapsedTime(started) >= limits.Time * allowances ? "time"
                 : null;
+            extensions = allowances - 1;
         }
 
-        return limit is null ? parent?.Exhausted() : ($"{level} {limit}", parent is null);
+        return limit is null ? parent?.Exhausted() : ($"{level} {limit}", parent is null, extensions);
     }
 
     /// <summary>
@@ -138,7 +127,7 @@ internal sealed class Budget
         {
             foreach (var (limit, used) in new[]
             {
-                ("iteration", (double)iterations / limits.Iterations), ("tool-call", (double)toolCalls / limits.ToolCalls), ("token", (double)tokens / limits.Tokens),
+                ("iteration", (double)iterations / limits.Iterations), ("tool-call", toolCalls / ((double)limits.ToolCalls * allowances)), ("token", tokens / ((double)limits.Tokens * allowances)),
                 ("cost", (double)(cost / (limits.Cost * allowances))), ("time", (timeBefore + time.GetElapsedTime(started)) / (limits.Time * allowances)),
             })
             {

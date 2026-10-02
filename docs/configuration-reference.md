@@ -569,7 +569,7 @@ but it always exists. The stop condition "the output passes its checks" arrives 
 ```jsonc
 "run": {
   "entry": "team",                                 // the agent definition a run starts with
-  "budget": { "cost": 25, "time": "08:00:00" },          // RUN-05
+  "budget": { "cost": 25, "time": "08:00:00" },          // RUN-05; also "tokens" and "toolCalls", unset by default
   "permissionMode": "ask",                         // HITL-01: ask | auto | readOnly   (live)
   "approvalTimeout": "00:30:00",                   // HITL-02: then deny
   "cancelWithin": "00:00:10"                            // RUN-06

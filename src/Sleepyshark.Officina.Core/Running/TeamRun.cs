@@ -52,7 +52,6 @@ internal sealed class TeamRun
     private readonly HashSet<long> told = [];
     private IReadOnlyList<CoreEvent>? stored;
     private long stuckAt = -1;
-    private bool reported;
 
     public TeamRun(Steps steps, TeamServices services, OfficinaOptions options, ToolContext team, PatternOptions pattern, string goal, Budget budget)
     {
@@ -88,8 +87,9 @@ internal sealed class TeamRun
 
             while (true)
             {
+                // One read, so the tasks and their history agree.
                 var history = await board.HistoryAsync(stop.Token).ConfigureAwait(false);
-                var tasks = await board.ReadAsync(stop.Token).ConfigureAwait(false);
+                var tasks = TaskBoard.Current(history);
                 if (await CompleteVerifiedAsync(board, tasks, stop.Token).ConfigureAwait(false))
                 {
                     continue; // the board changed, so it is read again
@@ -152,7 +152,7 @@ internal sealed class TeamRun
     private async Task DispatchAsync(IReadOnlyList<BoardTask> tasks, IReadOnlyList<TaskChange> history, CancellationToken ct)
     {
         var failed = tasks.Where(task => task.State == Failed && !told.Contains(LastChange(history, task.Id).Revision)).ToList();
-        if (failed.Count > 0 && Free(lead) && running.Count < pattern.MaxParallel)
+        if (failed.Count > 0 && Free(lead) && SlotFree)
         {
             foreach (var task in failed)
             {
@@ -173,7 +173,7 @@ internal sealed class TeamRun
                     await StartAsync(worker, $"task:{task.Id}", task.Id, WorkInput(worker, task with { State = InProgress, Assignee = worker }, null), ct).ConfigureAwait(false);
                 }
             }
-            else if (task is { State: InProgress, Assignee: { } assignee } && members.ContainsKey(assignee) && Free(assignee)
+            else if (task is { State: InProgress, Assignee: { } assignee } && SlotFree && members.ContainsKey(assignee) && Free(assignee)
                 && !running.Any(job => job.Task == task.Id))
             {
                 // Back with its agent: changes were asked, or the run resumed while it was being done.
@@ -196,12 +196,7 @@ internal sealed class TeamRun
         var revision = history.Count == 0 ? 0 : history[^1].Revision;
         if (tasks.All(task => task.State is Done or Cancelled))
         {
-            if (reported)
-            {
-                return new(StepOutcome.Completed, "");
-            }
-
-            reported = true;
+            // The report's end ends the team (EndedAsync).
             await StartAsync(lead, ReportStep, null, ReportInput(tasks), ct).ConfigureAwait(false);
             return null;
         }
@@ -335,10 +330,13 @@ internal sealed class TeamRun
 
     private bool Free(string member) => running.All(job => job.Member != member);
 
+    /// <summary>Whether another agent may start: every start checks it, so at most <c>maxParallel</c> work at once (TEAM-03).</summary>
+    private bool SlotFree => running.Count < pattern.MaxParallel;
+
     /// <summary>Who does a ready task: the agent the lead assigned it to, or a free agent of its role, or of any role when it names none.</summary>
     private string? Worker(BoardTask task)
     {
-        if (running.Count >= pattern.MaxParallel)
+        if (!SlotFree)
         {
             return null;
         }
@@ -354,7 +352,7 @@ internal sealed class TeamRun
     /// <summary>A free agent, other than the author, whose tools can review a task: one of a role, or else the lead (TASK-06).</summary>
     private string? Reviewer(BoardTask task)
     {
-        if (running.Count >= pattern.MaxParallel)
+        if (!SlotFree)
         {
             return null;
         }

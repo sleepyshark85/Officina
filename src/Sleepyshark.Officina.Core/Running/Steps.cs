@@ -13,7 +13,7 @@ namespace Sleepyshark.Officina.Core.Running;
 /// The steps of one run. The agent does its work in a turn, or in a pattern whose steps are turns or nested patterns
 /// (PAT-01, PAT-02), all built from the one turn primitive. Each step draws on its pattern's budget, and reports its
 /// outcome in an event, a span and a log entry (PAT-06, PAT-08). The run's result gathers what all its turns used and
-/// produced. Content flows between steps, so once a step has read untrusted content, every later step is marked too.
+/// produced. Content flows between steps, so once a step has read untrusted content, every step of the run is marked too.
 /// </summary>
 /// <param name="options">The configuration the run uses.</param>
 /// <param name="patterns">The application's patterns, by extension id.</param>
@@ -77,7 +77,7 @@ internal sealed class Steps(
     public async Task<StepResult> RunStepAsync(ToolContext context, StepOptions step, string input, Budget budget, CancellationToken ct)
     {
         var agent = step.Agent is { } named ? options.Agents[named] : null;
-        context = context with { Agent = step.Agent ?? context.Agent, ReadUntrusted = run.ReadUntrusted };
+        context = context with { Agent = step.Agent ?? context.Agent };
         using var activity = Telemetry.StartStep(context);
         StepResult result;
         try
@@ -165,7 +165,6 @@ internal sealed class Steps(
             result = turn.Fail(exception);
         }
 
-        run.ReadUntrusted |= context.ReadUntrusted;
         turns.Enqueue(result);
         if (!ct.IsCancellationRequested)
         {

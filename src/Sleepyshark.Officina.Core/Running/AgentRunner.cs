@@ -39,12 +39,9 @@ public sealed class AgentRunner
     private readonly ConcurrentDictionary<string, TaskCompletionSource> paused = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, CancellationTokenSource> cancels = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, TaskCompletionSource> pausedRuns = new(StringComparer.Ordinal);
-    private readonly ConcurrentDictionary<string, IReadOnlySet<string>> teams = new(StringComparer.Ordinal);
 
     // An agent of a team is its run's: its id, such as developer[2], names another agent in another run of the same team.
-    private readonly ConcurrentDictionary<(string Run, string Agent), ConcurrentQueue<(Sender From, string Text)>> memberInboxes = new();
-    private readonly ConcurrentDictionary<(string Run, string Agent), TaskCompletionSource> memberPaused = new();
-    private readonly ConcurrentDictionary<(string Run, string Agent), CancellationTokenSource> memberCancels = new();
+    private readonly ConcurrentDictionary<string, TeamState> teams = new(StringComparer.Ordinal);
 
     /// <summary>Validates the configuration in full, with the application's tools, gates and checks; nothing runs if it has errors (CFG-06).</summary>
     /// <param name="options">The configuration, fixed for the runner's lifetime. A changed configuration needs a new runner (CFG-08).</param>
@@ -322,8 +319,7 @@ public sealed class AgentRunner
     {
         ArgumentNullException.ThrowIfNull(from);
         ArgumentNullException.ThrowIfNull(text);
-        Member(runId, agentId);
-        Inbox(runId, agentId).Enqueue((from, text));
+        Team(runId, agentId).Inboxes.GetOrAdd(agentId, _ => new()).Enqueue((from, text));
     }
 
     /// <summary>Pauses the agent's turns before their next model call, until it is resumed (RUN-06). Other agents go on.</summary>
@@ -348,27 +344,29 @@ public sealed class AgentRunner
     /// <param name="agentId">The agent, by its id in the team, such as <c>developer[2]</c>, or the lead's name.</param>
     /// <exception cref="ArgumentException">The run has no team at work, or the team no such agent.</exception>
     public void Pause(string runId, string agentId) =>
-        memberPaused.TryAdd(Member(runId, agentId), new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously));
+        Team(runId, agentId).Paused.TryAdd(agentId, new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously));
 
     /// <inheritdoc cref="Pause(string, string)"/>
     public void Resume(string runId, string agentId)
     {
-        if (memberPaused.TryRemove(Member(runId, agentId), out var gate))
+        if (Team(runId, agentId).Paused.TryRemove(agentId, out var gate))
         {
             gate.SetResult();
         }
     }
 
     /// <summary>
-    /// Stops one agent of a run's team (RUN-06): its turn ends in a handoff within <c>run.cancelWithin</c>, and its task goes
-    /// back to the lead (TEAM-09). The team goes on, and may give the agent other work.
+    /// Stops one agent of a run's team (RUN-06): its turn ends in a handoff within <c>run.cancelWithin</c>. An agent's task goes
+    /// back to the lead (TEAM-09), and the team goes on and may give the agent other work; stopping the lead ends the team, in
+    /// a handoff, as any lead turn that does not complete does.
     /// </summary>
     /// <inheritdoc cref="Pause(string, string)"/>
     public void Cancel(string runId, string agentId)
     {
-        if (memberCancels.TryRemove(Member(runId, agentId), out var cancel))
+        if (Team(runId, agentId).Cancels.TryRemove(agentId, out var cancel))
         {
             cancel.Cancel();
+            cancel.Dispose();
         }
     }
 
@@ -493,49 +491,42 @@ public sealed class AgentRunner
 
     private ConcurrentQueue<(Sender From, string Text)> Inbox(string agentName) => inboxes.GetOrAdd(agentName, _ => new());
 
-    /// <summary>The messages of an agent of a run's team: its own, so a message never reaches another run's agent of the same id.</summary>
-    private ConcurrentQueue<(Sender From, string Text)> Inbox(string runId, string agentId) => memberInboxes.GetOrAdd((runId, agentId), _ => new());
-
     /// <summary>The owner's cancellation of an agent of a run's team (RUN-06).</summary>
-    private CancellationToken CancelOf(string runId, string agentId) => memberCancels.GetOrAdd((runId, agentId), _ => new CancellationTokenSource()).Token;
+    private CancellationToken CancelOf(string runId, string agentId) => Team(runId, agentId).Cancels.GetOrAdd(agentId, _ => new CancellationTokenSource()).Token;
 
-    /// <summary>An agent of a run's team, as the key of what belongs to it.</summary>
+    /// <summary>The team at work in a run, which has the agent.</summary>
     /// <exception cref="ArgumentException">The run has no team at work, or the team no such agent.</exception>
-    private (string Run, string Agent) Member(string runId, string agentId)
+    private TeamState Team(string runId, string agentId)
     {
         ArgumentNullException.ThrowIfNull(runId);
         ArgumentNullException.ThrowIfNull(agentId);
-        return teams.TryGetValue(runId, out var members) && members.Contains(agentId)
-            ? (runId, agentId)
+        return teams.TryGetValue(runId, out var team) && team.Members.Contains(agentId)
+            ? team
             : throw new ArgumentException($"Run {runId} has no team at work with an agent {agentId}.", nameof(agentId));
     }
 
     /// <summary>
-    /// Registers who is in a run's team, or, with null, forgets the team: the messages left for its agents, and the owner's
-    /// pauses and cancellations of them, which end with it.
+    /// Registers who is in a run's team, or, with null, forgets the team, and with it the messages left for its agents and the
+    /// owner's pauses and cancellations of them. What a late caller adds to a forgotten team reaches nobody.
     /// </summary>
     private void Members(string runId, IReadOnlySet<string>? members)
     {
         if (members is not null)
         {
-            teams[runId] = members;
+            teams[runId] = new TeamState(members);
             return;
         }
 
         if (teams.TryRemove(runId, out var ended))
         {
-            foreach (var agentId in ended)
+            foreach (var gate in ended.Paused.Values)
             {
-                memberInboxes.TryRemove((runId, agentId), out _);
-                if (memberPaused.TryRemove((runId, agentId), out var gate))
-                {
-                    gate.SetResult();
-                }
+                gate.TrySetResult();
+            }
 
-                if (memberCancels.TryRemove((runId, agentId), out var cancel))
-                {
-                    cancel.Dispose();
-                }
+            foreach (var cancel in ended.Cancels.Values)
+            {
+                cancel.Dispose();
             }
         }
     }
@@ -546,25 +537,26 @@ public sealed class AgentRunner
     /// </summary>
     private async ValueTask<string?> DeliverAsync(ToolContext from, string to, string text, CancellationToken ct)
     {
-        if (from.Instance is null || !teams.TryGetValue(from.RunId, out var members))
+        if (from.Instance is null || !teams.TryGetValue(from.RunId, out var team))
         {
             return "only the agents of a team send each other messages.";
         }
 
-        if (to == from.AgentId || !members.Contains(to))
+        if (to == from.AgentId || !team.Members.Contains(to))
         {
-            return $"{to} is not another agent of your team. Send to one of: {string.Join(", ", members.Where(member => member != from.AgentId))}.";
+            return $"{to} is not another agent of your team. Send to one of: {string.Join(", ", team.Members.Where(member => member != from.AgentId))}.";
         }
 
         await Events.PublishAsync(from, new MessageSent(to, text), ct).ConfigureAwait(false);
-        Inbox(from.RunId, to).Enqueue((new Sender(SenderKind.Agent, from.AgentId), text));
+        team.Inboxes.GetOrAdd(to, _ => new()).Enqueue((new Sender(SenderKind.Agent, from.AgentId), text));
         return null;
     }
 
     /// <summary>Waits while the owner has paused the agent, its definition or its run (RUN-06).</summary>
     private async Task WhilePausedAsync(ToolContext context, CancellationToken ct)
     {
-        while ((paused.GetValueOrDefault(context.Agent) ?? (context.Instance is { } instance ? memberPaused.GetValueOrDefault((context.RunId, instance)) : null)
+        while ((paused.GetValueOrDefault(context.Agent)
+            ?? (context.Instance is { } instance && teams.TryGetValue(context.RunId, out var team) ? team.Paused.GetValueOrDefault(instance) : null)
             ?? pausedRuns.GetValueOrDefault(context.RunId)) is { } gate)
         {
             await gate.Task.WaitAsync(ct).ConfigureAwait(false);
@@ -600,7 +592,7 @@ public sealed class AgentRunner
             return new AgentResult(AgentOutcome.Rejected, rejection, new TurnStatistics(0, 0, Usage.None, 0m, TimeSpan.Zero), [], [], [], []);
         }
 
-        var context = new ToolContext(work.RunId, name, work.Caller) { Masker = masker, TaskId = work.TaskId };
+        var context = new ToolContext(work.RunId, name, work.Caller) { Masker = masker, TaskId = work.TaskId, Run = new() };
         var steps = new Steps(Options, patterns, checks, Events, NewTurn, context, admitted, time, checkpointer.TakeAsync, new(pipeline, storage.Events, agentId => CancelOf(context.RunId, agentId), Members));
         var oneAtATime = turns.GetOrAdd(name, _ => new SemaphoreSlim(1, 1));
         using var stop = CancellationTokenSource.CreateLinkedTokenSource(ct, cancels.GetOrAdd(name, _ => new CancellationTokenSource()).Token);
@@ -744,7 +736,7 @@ public sealed class AgentRunner
         var name = context.Agent;
         return new Turn(
             context, Options, gateway, pipeline, new RunRecord(storage.Records, context, time), pipeline.Board(context), pipeline.Memory(context), checks, knowledge, storage.Conversations,
-            shortening.GetValueOrDefault(name), Events, instructions, work, context.Instance is { } instance ? Inbox(context.RunId, instance) : Inbox(name),
+            shortening.GetValueOrDefault(name), Events, instructions, work, context.Instance is { } instance ? teams[context.RunId].Inboxes.GetOrAdd(instance, _ => new()) : Inbox(name),
             token => WhilePausedAsync(context, token), budget, time);
     }
 
@@ -758,4 +750,14 @@ public sealed class AgentRunner
 
     /// <summary>Ends the run after an exception outside its turns (REL-02).</summary>
     private static StepResult Failed(Exception exception) => new(StepOutcome.Failed, $"the turn failed: {exception.GetType().Name}");
+}
+
+/// <summary>A team at work in a run: who is in it, and each agent's messages, the owner's pause and the owner's cancellation.</summary>
+internal sealed record TeamState(IReadOnlySet<string> Members)
+{
+    public ConcurrentDictionary<string, ConcurrentQueue<(Sender From, string Text)>> Inboxes { get; } = new(StringComparer.Ordinal);
+
+    public ConcurrentDictionary<string, TaskCompletionSource> Paused { get; } = new(StringComparer.Ordinal);
+
+    public ConcurrentDictionary<string, CancellationTokenSource> Cancels { get; } = new(StringComparer.Ordinal);
 }

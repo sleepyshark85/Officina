@@ -69,8 +69,11 @@ public sealed class TaskBoard
     internal static JsonSerializerOptions Json { get; } = new(JsonSerializerDefaults.Web) { Converters = { new JsonStringEnumConverter() } };
 
     /// <summary>The tasks as they are now, the highest priority first.</summary>
-    public async ValueTask<IReadOnlyList<BoardTask>> ReadAsync(CancellationToken ct) =>
-        [.. Tasks(await HistoryAsync(ct).ConfigureAwait(false)).Values.OrderByDescending(task => task.Priority).ThenBy(task => task.Id, StringComparer.Ordinal)];
+    public async ValueTask<IReadOnlyList<BoardTask>> ReadAsync(CancellationToken ct) => Current(await HistoryAsync(ct).ConfigureAwait(false));
+
+    /// <summary>The tasks as the changes left them, the highest priority first.</summary>
+    internal static IReadOnlyList<BoardTask> Current(IReadOnlyList<TaskChange> history) =>
+        [.. Tasks(history).Values.OrderByDescending(task => task.Priority).ThenBy(task => task.Id, StringComparer.Ordinal)];
 
     /// <summary>Every change of the board in revision order: who made it, when, what changed and why (TASK-07).</summary>
     public ValueTask<IReadOnlyList<TaskChange>> HistoryAsync(CancellationToken ct) => store.ReadAsync(context.Caller.Tenant, RunId, ct);

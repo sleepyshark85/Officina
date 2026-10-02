@@ -147,7 +147,7 @@ public sealed class ToolPipeline
         ArgumentNullException.ThrowIfNull(request);
         if (catalog.TryGet(context.Agent, request.Name, out var tool) && tool.Options.Untrusted)
         {
-            context.ReadUntrusted = true; // SEC-04
+            context.MarkUntrusted(); // SEC-04
         }
 
         // EVT-01: published like any other call, once the provider has run it.
@@ -253,7 +253,7 @@ public sealed class ToolPipeline
         detail = detail is null || masker is null ? detail : masker.Mask(detail);
         if (tool.Options.Untrusted && result.Error is null)
         {
-            context.ReadUntrusted = true; // only ever set, as parallel calls share the context
+            context.MarkUntrusted(); // only ever set, as parallel calls share the mark
         }
 
         var outcome = result.Error is null ? AuditOutcome.Completed : AuditOutcome.Failed;

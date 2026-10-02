@@ -49,7 +49,8 @@ Last updated 2026-10-02.
   - S20 part 1 (from S19): a team's agents share the run's budget in one process, each with its own agent level from its
     definition's `budget.total`; the run's time is still its elapsed time inside work items, which is what RUN-05 means. Events
     carry the agent's id, so cost is broken down by agent and by definition (RUN-10). A resumed run's agent level counts all its
-    events. The run's tokens and tool-call limits (RUN-05) stay with the turn and the agent, and the task has cost only.
+    events. The run's budget also caps tokens and tool calls when `run.budget.tokens` and `toolCalls` are set (RUN-05); S21 takes
+    a task's tokens, time and tool calls, since a task's budget caps its cost only.
     S21 (from S19 and S20): the per-run rate limit (ING-03) counts a run's first work and each resume, in memory, and a team's
     tasks are its own work, so nothing joins a live run from outside; the CLI resumes in a new process, so the limit never applies
     there, and the host and serve mode keep it in a long-lived runner. `budget.total` of a pattern's step agents does not apply

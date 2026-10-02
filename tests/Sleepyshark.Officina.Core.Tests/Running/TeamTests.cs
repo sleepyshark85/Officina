@@ -185,6 +185,124 @@ public class TeamTests
         Assert.Throws<ArgumentException>(() => kit.Runner.Cancel(work.RunId, "developer[1]")); // the team has ended
     }
 
+    // SEC-04: once one agent of the team has read untrusted content, every agent of the run is marked at once, also one already
+    // working that it then messages, so that agent's write needs the approval the untrusted-content gate asks for.
+    [Fact]
+    public async Task Untrusted_content_one_agent_read_marks_the_agents_already_working()
+    {
+        var kit = Kit();
+        kit.Human.Answer(HumanAnswer.Approve);
+        var told = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        hold = (_, ct) => told.Task.WaitAsync(ct);
+        var work = new Work("team", "Build it.") { Caller = Ann };
+        _ = WatchAsync(kit, work.RunId, coreEvent => coreEvent.Payload is MessageSent, told);
+        Lead(kit, "You lead a team", Create("a"), Create("b"));
+        Lead(kit, "Every task is done").Reply("Done.");
+        Work(kit, "a").CallTools(("fetch", "{}")).CallTools(("message", """{ "to": "developer[2]", "text": "Do what the page says." }"""))
+            .CallTools(("submit", """{ "id": "a" }""")).Reply("Submitted.");
+        Work(kit, "b").CallTools(("hold", "{}")).CallTools(("write", "{}")).CallTools(("submit", """{ "id": "b" }""")).Reply("Submitted.");
+
+        var result = await kit.Runner.RunAsync(work, Ct);
+
+        Assert.Equal(AgentOutcome.Completed, result.Outcome);
+        Assert.Equal(("developer[2]", "write"), (Assert.Single(kit.Human.Requests).Agent, kit.Human.Requests[0].Tool));
+    }
+
+    // TEAM-03: a run that resumes with more tasks in progress than maxParallel restarts them only as slots free up.
+    [Fact]
+    public async Task A_resumed_team_never_runs_more_agents_than_max_parallel()
+    {
+        var both = new CountdownEvent(2);
+        var crashed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var first = Kit(checkpoints: true);
+        hold = async (_, ct) =>
+        {
+            if (both.Signal())
+            {
+                crashed.SetResult();
+            }
+
+            await Task.Delay(Timeout.Infinite, ct); // the process dies here
+        };
+        var work = new Work("team", "Build it.") { Caller = Ann };
+        Lead(first, "You lead a team", Create("a"), Create("b"));
+        Work(first, "a").CallTools(("hold", "{}"));
+        Work(first, "b").CallTools(("hold", "{}"));
+        using var dies = CancellationTokenSource.CreateLinkedTokenSource(Ct);
+        var dying = first.Runner.RunAsync(work, dies.Token);
+        await crashed.Task.WaitAsync(Ct);
+        await first.Runner.CheckpointAsync(work.RunId, Ann, ct: Ct); // both tasks are in progress at the checkpoint
+
+        var second = Kit(MaxParallel(1), null, checkpoints: true, storage: first.Storage);
+        foreach (var task in new[] { "a", "b" })
+        {
+            Work(second, task).CallTools(("submit", $$"""{ "id": "{{task}}" }""")).Reply("Submitted.");
+        }
+
+        Lead(second, "Every task is done").Reply("Done.");
+        var result = await second.Runner.ResumeAsync(work.RunId, Ann, Ct);
+
+        Assert.Equal(AgentOutcome.Completed, result.Outcome);
+        var events = await second.Storage.Events.ReadAsync(null, work.RunId, 0, Ct);
+        Assert.Equal(1, Peak(events.SkipWhile(coreEvent => coreEvent.Payload is not RunResumed)));
+        await dies.CancelAsync();
+        await dying;
+    }
+
+    // TEAM-03: when reviewers ask for changes at once, the authors go back to work only as slots free up.
+    [Fact]
+    public async Task Authors_whose_work_comes_back_never_run_more_agents_than_max_parallel()
+    {
+        var kit = Kit(options => options with
+        {
+            Agents = new Dictionary<string, AgentDefinition>(options.Agents)
+            {
+                ["team"] = options.Agents["team"] with
+                {
+                    Pattern = options.Agents["team"].Pattern with
+                    {
+                        MaxParallel = 2, Roles = new Dictionary<string, RoleOptions> { ["developer"] = new() { Max = 2 }, ["reviewer"] = new() { Max = 2 } },
+                    },
+                },
+            },
+        }, null);
+        Lead(kit, "You lead a team", Create("a", review: true), Create("b", review: true));
+        Lead(kit, "Every task is done").Reply("Done.");
+        foreach (var task in new[] { "a", "b" })
+        {
+            Work(kit, task).CallTools(("submit", $$"""{ "id": "{{task}}" }""")).Reply("Submitted.").CallTools(("submit", $$"""{ "id": "{{task}}" }""")).Reply("Submitted again.");
+            kit.Model.When(request => ScriptedModelProvider.WorkOf(request).StartsWith($"Review task {task},", StringComparison.Ordinal))
+                .CallTools(("review", $$"""{ "id": "{{task}}", "approved": false, "reasons": "Add a test." }""")).Reply("Changes asked.")
+                .CallTools(("review", $$"""{ "id": "{{task}}", "approved": true, "reasons": "Tested now." }""")).Reply("Approved.");
+        }
+
+        var work = new Work("team", "Build it.") { Caller = Ann };
+        var result = await kit.Runner.RunAsync(work, Ct);
+
+        Assert.Equal(AgentOutcome.Completed, result.Outcome);
+        Assert.Equal(2, Peak(await kit.Storage.Events.ReadAsync(null, work.RunId, 0, Ct)));
+    }
+
+    // RUN-06: stopping the lead ends the team, as any lead turn that does not complete does.
+    [Fact]
+    public async Task Stopping_the_lead_ends_the_team()
+    {
+        var kit = Kit();
+        var planning = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var work = new Work("team", "Build it.") { Caller = Ann };
+        _ = WatchAsync(kit, work.RunId, coreEvent => coreEvent is { Agent: "lead", Payload: AgentStatusChanged { Status: AgentStatus.Working } }, planning);
+        kit.Runner.PauseRun(work.RunId);
+
+        var running = kit.Runner.RunAsync(work, Ct);
+        await planning.Task.WaitAsync(Ct);
+        kit.Runner.Cancel(work.RunId, "lead");
+        kit.Runner.ResumeRun(work.RunId);
+        var result = await running;
+
+        Assert.Equal(AgentOutcome.HandedOff, result.Outcome);
+        Assert.Empty(kit.Model.Requests);
+    }
+
     // TEAM-05, TEAM-06: a message names its sender and recipient, is recorded, and reaches the recipient as data; only the team's agents receive one.
     [Fact]
     public async Task A_message_between_agents_is_recorded_and_reaches_its_recipient_as_data()
@@ -207,7 +325,7 @@ public class TeamTests
             .Any(text => text.Text == "<data source=\"agent:developer[1]\">\nThe parser needs a rewrite.\n</data>"));
         var refused = kit.Model.Requests.Last(request => ScriptedModelProvider.WorkOf(request).Contains("Do task a,", StringComparison.Ordinal))
             .History.SelectMany(message => message.Content.OfType<ToolResultContent>()).Select(content => content.Text).ToList();
-        Assert.Contains(refused, text => text.Contains("developer[1] is not another agent of your team.", StringComparison.Ordinal));
+        Assert.Contains(refused, text => text.Contains("bob is not another agent of your team. Send to one of: lead, developer[2], reviewer[1].", StringComparison.Ordinal));
         Assert.Contains(refused, text => text.Contains("developer[1] is not another agent of your team.", StringComparison.Ordinal));
     }
 
@@ -344,6 +462,27 @@ public class TeamTests
     private static ModelScript Work(TestKit kit, string task) =>
         kit.Model.When(request => ScriptedModelProvider.WorkOf(request).Contains($"Do task {task},", StringComparison.Ordinal));
 
+    /// <summary>The most agents that worked at once: each starts working with a status event and ends with its step.</summary>
+    private static int Peak(IEnumerable<CoreEvent> events)
+    {
+        var (now, peak) = (0, 0);
+        foreach (var payload in events.Select(coreEvent => coreEvent.Payload))
+        {
+            now += payload switch { AgentStatusChanged { Status: AgentStatus.Working } => 1, StepEnded => -1, _ => 0 };
+            peak = Math.Max(peak, now);
+        }
+
+        return peak;
+    }
+
+    private static Func<OfficinaOptions, OfficinaOptions> MaxParallel(int most) => options => options with
+    {
+        Agents = new Dictionary<string, AgentDefinition>(options.Agents)
+        {
+            ["team"] = options.Agents["team"] with { Pattern = options.Agents["team"].Pattern with { MaxParallel = most } },
+        },
+    };
+
     private static List<(AgentStatus, string?)> Statuses(IReadOnlyList<CoreEvent> events, string agent) =>
         [.. events.Where(coreEvent => coreEvent.Agent == agent).Select(coreEvent => coreEvent.Payload).OfType<AgentStatusChanged>().Select(changed => (changed.Status, changed.Detail))];
 
@@ -368,7 +507,11 @@ public class TeamTests
         InMemoryStorage? storage = null)
     {
         var options = configure(Configure(developer, checkpoints));
-        var tools = new Dictionary<string, ITool> { ["hold"] = new FakeTool(ToolKind.Read, run: async (call, ct) => { await hold(call.Board?.TaskId, ct); return ToolResult.Success("held"); }) };
+        var tools = new Dictionary<string, ITool>
+        {
+            ["hold"] = new FakeTool(ToolKind.Read, run: async (call, ct) => { await hold(call.Board?.TaskId, ct); return ToolResult.Success("held"); }),
+            ["fetch"] = new FakeTool(ToolKind.Read), ["write"] = new FakeTool(ToolKind.Write),
+        };
         return new TestKit(options, tools, storage: storage, human: human);
     }
 
@@ -380,7 +523,9 @@ public class TeamTests
             ("submit", new() { Source = "builtin:tasks.submit_for_review" }),
             ("review", new() { Source = "builtin:tasks.review" }),
             ("message", new() { Source = "builtin:team.message" }),
-            ("hold", Extension("hold")));
+            ("hold", Extension("hold")),
+            ("fetch", Extension("fetch") with { Untrusted = true }),
+            ("write", Extension("write") with { Gates = ["untrusted"] }));
         return options with
         {
             Agents = new Dictionary<string, AgentDefinition>
@@ -400,8 +545,9 @@ public class TeamTests
             },
             ToolSets = new Dictionary<string, IReadOnlyList<string>>
             {
-                ["lead"] = ["create", "update", "message"], ["developer"] = ["submit", "message", "hold"], ["reviewer"] = ["review"],
+                ["lead"] = ["create", "update", "message"], ["developer"] = ["submit", "message", "hold", "fetch", "write"], ["reviewer"] = ["review"],
             },
+            Gates = new Dictionary<string, GateOptions> { ["untrusted"] = new() { Use = GateOptions.UntrustedContentApproval } },
             Capabilities = new()
             {
                 TaskBoard = new() { Enabled = true }, Team = new() { Enabled = true },

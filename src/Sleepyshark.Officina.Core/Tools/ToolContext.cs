@@ -32,13 +32,47 @@ public sealed record ToolContext(string RunId, string Agent, Caller Caller)
     /// <summary>The step of the agent's pattern, as a path such as <c>fix/review</c>; null for the agent's own turn (EVT-02).</summary>
     internal string? Step { get; init; }
 
-    /// <summary>Whether the agent has read untrusted content (SEC-04). Once set, it stays set.</summary>
-    internal bool ReadUntrusted { get; set; }
+    /// <summary>
+    /// Whether the agent has read untrusted content (SEC-04). Once set, it stays set. Within a run it is the run's: content flows
+    /// between the run's steps and agents, through their outputs, the board and messages, so once any of them has read untrusted
+    /// content, every one of them is marked at once, also those already working.
+    /// </summary>
+    internal bool ReadUntrusted => Run?.Set ?? own;
+
+    /// <summary>The run's mark, which every context made from the run's shares; null outside a run, where the context has its own.</summary>
+    internal UntrustedMark? Run { get; init; }
+
+    private volatile bool own;
+
+    /// <summary>Marks the agent, and so its run, as having read untrusted content (SEC-04).</summary>
+    internal void MarkUntrusted()
+    {
+        if (Run is { } run)
+        {
+            run.Set = true;
+        }
+        else
+        {
+            own = true;
+        }
+    }
 
     /// <summary>The definition an agent's id names: an instance's, such as <c>developer</c> for <c>developer[2]</c>, or the id itself.</summary>
     public static string DefinitionOf(string agentId)
     {
         ArgumentNullException.ThrowIfNull(agentId);
         return agentId.IndexOf('[', StringComparison.Ordinal) is > 0 and var at ? agentId[..at] : agentId;
+    }
+}
+
+/// <summary>Whether untrusted content has been read (SEC-04): only ever set, and read by every gate check as it is now.</summary>
+internal sealed class UntrustedMark
+{
+    private volatile bool set;
+
+    public bool Set
+    {
+        get => set;
+        set => this.set |= value;
     }
 }

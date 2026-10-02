@@ -26,7 +26,7 @@ The lead, roles, parallel agents and the coding team preset.
   need only the team: refusing turns on ended tasks, restricting agents' task edits, tying `memory.review` to the lead, the
   lead's retries, budgets per agent, and cost by definition.
 - **Part 2: integration and the simulation** (TEST-29, and WS-02, WS-03, WS-09 and TASK-05 in the team): a working copy per
-  task, integration through the queue with the command checks and `capabilities.workspace.baselineChecks`, a checkpoint after
+  task, a working copy of their own for fan-out branches of one agent that change files, integration through the queue with the command checks and `capabilities.workspace.baselineChecks`, a checkpoint after
   each integration, the CLI's board view and memory commands, and the scripted team simulation on real git and SQLite.
 - **Part 3: definitions, presets, helpers and sign-offs** (CFG-05, CFG-11, TEAM-07, TEAM-10, TEST-26): `extends`, the three
   presets, helper agents, the plan-approval sign-off, the hand-off tools (EGR-04), and the TEST-31 benchmark goals.
@@ -82,7 +82,12 @@ Part 1:
 - Budgets (from S19): each agent of a team has its own agent level from its definition's `budget.total`, with what it spent
   before a restart; the run's budget is shared by the team, in one process, so its time is the run's elapsed time inside its
   work items, as RUN-05 means. A resumed run's agent level now counts all the run's events, its steps' and team's included.
-  When several agents run out of the run's budget at once, each asks the owner, and the yes extends the budget once.
+  When several agents run out of the run's budget at once, each asks the owner, and the yes extends the budget once: the
+  extensions are read with the check that found the budget used up. `run.budget.tokens` and `run.budget.toolCalls` (unset by
+  default, so cost and time stay the run's only limits) cap the run's tokens and tool calls, as RUN-05 asks of every level.
+- SEC-04: a run's mark for untrusted content is one flag that every step and agent of the run shares and every gate check reads
+  as it is, so an agent that reads untrusted content marks at once the agents already working, which its messages and the board
+  can reach.
 - The scripted model answers agents that run at once from scripts of their own (`ScriptedModelProvider.When`), matched by
   their work (`WorkOf`), so a parallel team is scripted deterministically.
 - Until part 2, the team cannot be on with the workspace: its changes would never reach the baseline.
@@ -95,3 +100,4 @@ Moved to S21:
 - `budget.total` of a pattern's step agents (a workflow's, a router's): they still draw on the entry agent's level. A team's
   agents have their own.
 - The condition roots `checks.<name>`, `outcome` and `stopReason` (configuration reference §6): the team needs none of them.
+- A task's tokens, time and tool calls (RUN-05): a task's budget caps its cost only.

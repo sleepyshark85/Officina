@@ -43,6 +43,21 @@ public class BudgetTests
         Assert.Single(kit.Model.Requests);
     }
 
+    // RUN-05: the run, like every level, can cap its tokens and tool calls; a run that reaches one ends the turn in a handoff.
+    [Theory]
+    [InlineData("run's tool-call")]
+    [InlineData("run's token")]
+    public async Task A_used_up_run_token_or_tool_call_budget_ends_the_turn_in_a_handoff(string limit)
+    {
+        var kit = Kit(run: limit == "run's token" ? new RunBudget { Tokens = 1000 } : new RunBudget { ToolCalls = 1 });
+        kit.Model.Reply(new UsageReported(Thousand), Call(), new Stopped(StopReason.WantsTools));
+
+        var result = await kit.RunAsync(Agent, "work", Ct);
+
+        Assert.Equal((AgentOutcome.HandedOff, HandoffReason.BudgetExhausted, $"the {limit} budget is used up"), (result.Outcome, result.Handoff!.Reason, result.Handoff.Detail));
+        Assert.Single(kit.Model.Requests);
+    }
+
     // EVT-01: a limit that is nearly used up is announced once, before it ends the turn.
     [Fact]
     public async Task A_budget_that_is_nearly_used_up_publishes_one_warning()
