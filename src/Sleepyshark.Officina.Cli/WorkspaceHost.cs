@@ -86,13 +86,25 @@ internal sealed partial class WorkspaceHost : IAsyncDisposable
         var workspace = await GitWorkspace.OpenAsync(root, runId, options.Capabilities.Workspace, new Dictionary<string, ICheck>(), time, ct).ConfigureAwait(false);
         try
         {
-            await workspace.RemoveLeftoversAsync(keepLeftover, ct).ConfigureAwait(false);
+            await workspace.RemoveLeftoversAsync(keepLeftover, folder => ReleaseLeftover(sandbox, options, folder), ct).ConfigureAwait(false);
             return new WorkspaceHost(workspace, options, sandbox, runId, root, leaveWorkingCopies);
         }
         catch
         {
             workspace.Dispose();
             throw;
+        }
+    }
+
+    /// <summary>What a run that died left outside its working copy goes with the copy. Failing to remove it must not stop the next run.</summary>
+    private static void ReleaseLeftover(ISandbox? sandbox, OfficinaOptions options, string folder)
+    {
+        try
+        {
+            sandbox?.Release(folder, options.Capabilities.Sandbox.Toolchains);
+        }
+        catch (AggregateException)
+        {
         }
     }
 

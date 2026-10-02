@@ -1,6 +1,6 @@
 # S19 — Checkpoints and long runs
 
-**Milestone:** M6 · **Size:** M ×2 · **Depends on:** S08, S14 · **Issue:** [#21](https://github.com/sleepyshark85/Officina/issues/21) · **Status:** doing (part 1 done)
+**Milestone:** M6 · **Size:** M ×2 · **Depends on:** S08, S14 · **Issue:** [#21](https://github.com/sleepyshark85/Officina/issues/21) · **Status:** done
 
 ## Goal
 
@@ -12,8 +12,8 @@ Runs that survive crashes, roll back, and last for days.
 
 - [x] A run killed at random points resumes with no lost checkpointed work and no repeated irreversible effect.
 - [x] Rollback restores state and worktrees together, and lists the external effects it could not undo.
-- [ ] The budget hierarchy escalates level by level: turn, task, agent, run.
-- [ ] Cost is broken down by agent, definition, task, step and model, and a run report is produced at the end.
+- [x] The budget hierarchy escalates level by level: turn, task, agent, run.
+- [x] Cost is broken down by agent, definition, task, step and model, and a run report is produced at the end. *(By agent, task, step and model; "definition" is the agent until S20.)*
 
 ## Pieces
 
@@ -52,14 +52,38 @@ Part 1:
 - SQLite format version 5: `checkpoints` table, and the status and work columns of `runs`.
 - `sof resume <run>`, `sof rollback <run> [--to <n>]` (lists the checkpoints without `--to`), and `sof run` prints its run id.
   Opening the git workspace removes what a dead run left (its worktrees, and the branches of runs that cannot resume).
-- Left for part 2 (besides the list below): a resumed pattern runs again from its first step, redoing the steps already done,
-  so `at: step` buys little until a pattern resumes part-way; with the workspace off nothing checks that a run is dead (the
-  workspace's lock does), so the owner must not resume a live run, and a lock in `.sof` would close that; after a squash or
-  a branch's deletion old checkpoint commits live only in the reflog, so `git gc` can break restoring them; the budget restarts
-  from zero when a run resumes.
-- Left for part 2, or open: the budget already spent is not restored when a run resumes; the Windows sandbox leftovers
-  (the AppContainer profile, the `%TEMP%\officina-<hash>` home folder, the read-and-execute grants on `toolchains` folders);
-  budget warnings (S08); the per-run rate limit (ING-03, S09).
+- Left after part 2: a resumed pattern runs again from its first step, redoing the steps already done, so `at: step` buys
+  little until a pattern resumes part-way (it needs each step's output kept, and the patterns to skip steps that finished);
+  after a squash or a branch's deletion old checkpoint commits live only in the reflog, so `git gc` can break restoring them.
+Part 2:
+- Budgets form a hierarchy: turn, pattern (the agent's turn budget), agent, run, with the task's cost between the turn and the
+  run (S18). `agents.<name>.budget.total` caps the agent's tool calls, tokens, cost and time over all its turns in a run
+  (default $25, 8 hours, 100M tokens, 10,000 tool calls). A level that runs out ends the turn in a handoff that names it, and the
+  work goes to the level above, as before: the task goes back to the lead, a pattern's step to its pattern, and the run
+  budget asks the owner, or hands off without one. Each level warns once at 80% of a limit with a `budgetWarning` event
+  (EVT-01); `sof run` prints it.
+- A resumed run has spent what it had. `Spent.Of` reads the run's stored events: the cost and tokens of `modelCallEnded`, the
+  `toolCallEnded` count, and the time the run was running, which leaves out the time before a `runResumed` event, so the
+  downtime between a crash and its resume does not count. With checkpoints on, `modelCallEnded`, `toolCallEnded` and
+  `runResumed` cannot be left unstored. The agent's time is the run's. An owner's sign-off to go on past the run budget is not
+  kept: after a resume the owner is asked again.
+- `ModelCallEnded` names the model that served the call and the task. `CheckRan` is a new event for each check run. `RunReport`
+  (`AgentRunner.ReportAsync`, `sof report <run>`) reads what is stored: outcome, time running, cost by agent, task, step and
+  model, the tasks, the decisions, the checks, and the open issues (an unfinished run, a handoff, tasks not done, conflicts in
+  the record, checks that never passed). `sof run` and `sof resume` print it when they end.
+- `policies.rateLimits.perRun` is a fixed window per run id. Work enters a run only by its first work item and each resume today.
+- The conversation store's `TruncateAsync` takes the run and deletes nothing when another run's turns come after the
+  position, as one statement, and the rollback counts the turns after it (a race between the check and the deletion).
+  `sof resume`, `rollback` and `report` print an `error:` line for a database in another format version.
+- `sof` holds `.sof/<run>.lock` while it works on a run, so `resume` and `rollback --to` refuse a run that another process
+  holds, with the workspace off too.
+- `ISandbox.Release(directory, toolchains)` is called when a working copy's sandbox tools are disposed, and for each leftover
+  working copy removed when the workspace opens. The Windows sandbox removes the container's grants on the toolchains, its
+  home folder and its AppContainer profile; Linux has nothing outside the copy. The probe's fixed profile and folder stay (one per
+  machine).
+- Not done, and on purpose: the event-log read that seeds an event sequence reads the whole log (it is also what the budget
+  reads, once per resume).
+
 - Open, for a case: masking tokens from before the crash are not restored,
   so a masked input is run as stored; only the caller's id and tenant are stored, so the host passes the `Caller` when it
   resumes; resume uses the runner's configuration, not the run's stored one; a rollback needs no turn running in the runner;

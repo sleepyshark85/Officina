@@ -141,10 +141,61 @@ public sealed class WindowsSandbox : ISandbox
         }
     }
 
+    /// <summary>
+    /// Removes what the working copy's commands left outside it: the container's rights on the toolchains, its home folder and its
+    /// AppContainer profile. Each is tried even when another fails, and the failures are thrown together.
+    /// </summary>
+    public void Release(string directory, IReadOnlyList<string> toolchains)
+    {
+        ArgumentNullException.ThrowIfNull(directory);
+        ArgumentNullException.ThrowIfNull(toolchains);
+        var name = ContainerName(directory);
+        var failures = new List<Exception>();
+        Try(() =>
+        {
+            // The rights stay on the folders when the profile goes, as entries for a container that no longer exists.
+            var result = Native.DeriveAppContainerSidFromAppContainerName(name, out var sid);
+            if (result != 0)
+            {
+                throw new Win32Exception(result);
+            }
+
+            var container = new SecurityIdentifier(sid);
+            Native.FreeSid(sid);
+            foreach (var toolchain in toolchains.Where(Directory.Exists))
+            {
+                Revoke(new DirectoryInfo(toolchain), container);
+            }
+        });
+        Try(() => Directory.Delete(Path.Combine(Path.GetTempPath(), name), recursive: true));
+
+        // It fails when the profile was never created, which needs nothing more; the result says nothing else that can be acted on.
+        _ = Native.DeleteAppContainerProfile(name);
+        if (failures.Count > 0)
+        {
+            throw new AggregateException($"The sandbox could not remove everything it left for {directory}.", failures);
+        }
+
+        void Try(Action step)
+        {
+            try
+            {
+                step();
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or Win32Exception)
+            {
+                failures.Add(exception);
+            }
+        }
+    }
+
+    private static string ContainerName(string directory) =>
+        $"officina-{Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(Path.GetFullPath(directory))))[..16]}";
+
     /// <summary>The working copy's AppContainer, created the first time; its name comes from the folder, so each agent has its own (SBX-06).</summary>
     private static (string Name, SecurityIdentifier Sid) Container(string directory)
     {
-        var name = $"officina-{Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(Path.GetFullPath(directory))))[..16]}";
+        var name = ContainerName(directory);
         var result = Native.CreateAppContainerProfile(name, name, "Officina sandbox", IntPtr.Zero, 0, out var sid);
         if (result == AlreadyExists)
         {
@@ -179,6 +230,17 @@ public sealed class WindowsSandbox : ISandbox
         if (!security.GetAccessRules(true, false, typeof(SecurityIdentifier)).Cast<FileSystemAccessRule>().Any(rule => rule.IdentityReference == container))
         {
             security.AddAccessRule(new FileSystemAccessRule(container, rights, Everything, PropagationFlags.None, AccessControlType.Allow));
+            folder.SetAccessControl(security);
+        }
+    }
+
+    /// <summary>Removes the container's rights from a folder and everything in it, if it has any.</summary>
+    private static void Revoke(DirectoryInfo folder, SecurityIdentifier container)
+    {
+        var security = folder.GetAccessControl();
+        if (security.GetAccessRules(true, false, typeof(SecurityIdentifier)).Cast<FileSystemAccessRule>().Any(rule => rule.IdentityReference == container))
+        {
+            security.PurgeAccessRules(container);
             folder.SetAccessControl(security);
         }
     }
@@ -466,6 +528,9 @@ public sealed class WindowsSandbox : ISandbox
 
         [DllImport("userenv.dll", CharSet = CharSet.Unicode)]
         public static extern int DeriveAppContainerSidFromAppContainerName(string name, out IntPtr sid);
+
+        [DllImport("userenv.dll", CharSet = CharSet.Unicode)]
+        public static extern int DeleteAppContainerProfile(string name);
 
         [DllImport("advapi32.dll")]
         public static extern IntPtr FreeSid(IntPtr sid);

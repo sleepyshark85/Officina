@@ -20,6 +20,11 @@ public sealed class LinuxSandbox : ISandbox
     private static readonly string[] ReadOnly = ["/usr", "/bin", "/lib", "/lib64", "/sbin", "/etc/ssl", "/etc/ca-certificates", "/etc/alternatives",
         "/etc/nsswitch.conf", "/etc/localtime"];
 
+    /// <summary>Commands here leave nothing outside the working copy: everything they use is a mount that ends with the command.</summary>
+    public void Release(string directory, IReadOnlyList<string> toolchains)
+    {
+    }
+
     public string? Probe()
     {
         if (Fails("bwrap", "--unshare-all", "--die-with-parent", "--ro-bind", "/", "/", "true") is { } bwrap)

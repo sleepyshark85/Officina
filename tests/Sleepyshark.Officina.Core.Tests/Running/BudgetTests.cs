@@ -158,6 +158,27 @@ public class BudgetTests
         Assert.Null(await RunReport.BuildAsync(kit.Storage, null, "nobody", Ct));
     }
 
+    // RUN-10.
+    [Fact]
+    public void Cost_is_broken_down_by_agent_task_step_and_model()
+    {
+        var time = DateTimeOffset.UnixEpoch;
+        CoreEvent Call(string agent, string? step, decimal cost, string model, string? task) =>
+            new("run", agent, step, 1, time, new ModelCallEnded(StopReason.Finished, Thousand, cost, model, task));
+
+        var breakdown = CostBreakdown.Of(
+        [
+            Call("lead", "plan", 0.5m, "big", null), Call("dev", "fix/build", 1m, "big", "t1"), Call("dev", "fix/build", 0.25m, "small", "t1"), Call("dev", null, 2m, "big", "t2"),
+            new("run", "dev", null, 5, time, new TurnEnded(AgentOutcome.Completed, null)),
+        ]);
+
+        Assert.Equal(new Spend(3.75m, 4000, 4), breakdown.Total);
+        Assert.Equal([("dev", 3.25m), ("lead", 0.5m)], breakdown.ByAgent.Select(line => (line.Key, line.Value.Cost)));
+        Assert.Equal([("(none)", 0.5m), ("t1", 1.25m), ("t2", 2m)], breakdown.ByTask.Select(line => (line.Key, line.Value.Cost)));
+        Assert.Equal([("(none)", 2m), ("fix/build", 1.25m), ("plan", 0.5m)], breakdown.ByStep.Select(line => (line.Key, line.Value.Cost)));
+        Assert.Equal([("big", 3.5m), ("small", 0.25m)], breakdown.ByModel.Select(line => (line.Key, line.Value.Cost)));
+    }
+
     [Fact]
     public async Task A_run_that_did_not_end_reports_it_as_open()
     {

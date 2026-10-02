@@ -13,6 +13,15 @@ public interface ISandbox
 
     /// <summary>Starts a command. It runs until it exits or the process is disposed, which stops it and everything it started.</summary>
     ValueTask<ISandboxProcess> StartAsync(SandboxCommand command, CancellationToken ct);
+
+    /// <summary>
+    /// Removes what the sandbox set up outside a working copy for the commands that ran there, such as a profile, a home folder and
+    /// rights on the toolchains. It is called when the working copy's commands have ended and the copy is removed, and
+    /// does nothing for a working copy that never ran a command.
+    /// </summary>
+    /// <param name="directory">The working copy, as given to <see cref="StartAsync"/>.</param>
+    /// <param name="toolchains">The toolchains given with its commands.</param>
+    void Release(string directory, IReadOnlyList<string> toolchains);
 }
 
 /// <summary>A command running in a sandbox. Disposing it stops the command and every process it started.</summary>

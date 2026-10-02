@@ -12,6 +12,7 @@ public sealed class FakeSandbox : ISandbox
 {
     private readonly ConcurrentQueue<(string Output, int? ExitCode)> replies = new();
     private readonly ConcurrentQueue<FakeSandboxProcess> processes = new();
+    private readonly ConcurrentQueue<string> released = new();
     private readonly TaskCompletionSource<FakeSandboxProcess> firstStarted = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
     /// <summary>What <see cref="Probe"/> reports: null when the machine can isolate commands.</summary>
@@ -33,7 +34,12 @@ public sealed class FakeSandbox : ISandbox
         return this;
     }
 
+    /// <summary>The working copies released so far, in order.</summary>
+    public IReadOnlyList<string> Released => [.. released];
+
     public string? Probe() => Problem;
+
+    public void Release(string directory, IReadOnlyList<string> toolchains) => released.Enqueue(directory);
 
     public ValueTask<ISandboxProcess> StartAsync(SandboxCommand command, CancellationToken ct)
     {

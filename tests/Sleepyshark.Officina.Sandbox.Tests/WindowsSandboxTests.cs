@@ -68,6 +68,29 @@ public sealed class WindowsSandboxTests : IDisposable
         Assert.Equal("@echo tool ran", await File.ReadAllTextAsync(tool, Ct));
     }
 
+    // S19: what the container leaves outside the working copy goes when the working copy does.
+    [Fact(Skip = WindowsOnly, SkipUnless = nameof(OnWindows))]
+    public async Task Releasing_a_working_copy_removes_its_home_folder_and_its_rights_on_the_toolchains()
+    {
+        var toolchain = Directory.CreateDirectory(Path.Combine(real.Host, "sdk")).FullName;
+        await File.WriteAllTextAsync(Path.Combine(toolchain, "sdk-tool.cmd"), "@echo tool ran", Ct);
+        var (output, _) = await real.RunAsync("sdk-tool & echo %USERPROFILE%", toolchains: [toolchain]);
+        var home = output.Split('\n', StringSplitOptions.RemoveEmptyEntries)[^1].Trim();
+        Assert.True(Directory.Exists(home));
+        Assert.NotEmpty(Containers(toolchain));
+
+        real.Sandbox.Release(real.WorkingCopy, [toolchain]);
+
+        Assert.False(Directory.Exists(home));
+        Assert.Empty(Containers(toolchain));
+        real.Sandbox.Release(real.WorkingCopy, [toolchain]); // nothing left to remove is not an error
+    }
+
+    // AppContainer SIDs all begin S-1-15-2-.
+    private static List<System.Security.AccessControl.AuthorizationRule> Containers(string folder) =>
+        [.. new DirectoryInfo(folder).GetAccessControl().GetAccessRules(true, false, typeof(System.Security.Principal.SecurityIdentifier))
+            .Cast<System.Security.AccessControl.AuthorizationRule>().Where(rule => rule.IdentityReference.Value.StartsWith("S-1-15-2-", StringComparison.Ordinal))];
+
     [Fact(Skip = WindowsOnly, SkipUnless = nameof(OnWindows))]
     public async Task Commands_see_only_the_environment_they_are_given()
     {
