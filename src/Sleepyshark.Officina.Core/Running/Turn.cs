@@ -38,8 +38,8 @@ internal sealed class Turn
     private readonly double cacheHitWarning;
     private readonly Conversation conversation;
     private readonly ConcurrentQueue<(Sender From, string Text)> inbox;
-    private readonly IModelProvider provider;
-    private readonly ModelPrice? price;
+    private readonly ModelGateway gateway;
+    private readonly OfficinaOptions options;
     private readonly ToolPipeline tools;
     private readonly RunRecord record;
     private readonly TaskBoard? board;
@@ -77,7 +77,7 @@ internal sealed class Turn
 
     /// <param name="context">Who the turn's tool calls are made by.</param>
     /// <param name="options">The configuration the run uses.</param>
-    /// <param name="provider">The provider of the agent's model profile.</param>
+    /// <param name="gateway">Where model calls go (MDL-04, MDL-05, MDL-08).</param>
     /// <param name="tools">The tool pipeline built from <paramref name="options"/>.</param>
     /// <param name="record">The run record, which the volatile context and the citation rule read.</param>
     /// <param name="board">The task board, which holds the work's task; null when it is off.</param>
@@ -96,7 +96,7 @@ internal sealed class Turn
     public Turn(
         ToolContext context,
         OfficinaOptions options,
-        IModelProvider provider,
+        ModelGateway gateway,
         ToolPipeline tools,
         RunRecord record,
         TaskBoard? board,
@@ -120,10 +120,10 @@ internal sealed class Turn
         runBudget = options.Run.Budget;
         cacheHitWarning = options.Operations.Telemetry.CacheHitWarning;
         var profile = options.Models[agent.Model];
-        price = options.Providers[profile.Provider].Prices.GetValueOrDefault(profile.Model);
-        conversation = new Conversation(profile, [.. tools.Offered(context.Agent)], instructions, agent.Context, provider.Capabilities);
+        conversation = new Conversation(profile, [.. tools.Offered(context.Agent)], instructions, agent.Context, gateway.CapabilitiesOf(profile));
         this.inbox = inbox;
-        this.provider = provider;
+        this.gateway = gateway;
+        this.options = options;
         this.tools = tools;
         this.record = record;
         this.board = board;
@@ -494,6 +494,8 @@ internal sealed class Turn
         }
     }
 
+    private ModelPrice? Price(ModelProfile profile) => options.Providers[profile.Provider].Prices.GetValueOrDefault(profile.Model);
+
     /// <summary>Masks text from outside the core when masking is on (ING-02).</summary>
     private string Mask(string text) => context.Masker?.Mask(text) ?? text;
 
@@ -504,13 +506,15 @@ internal sealed class Turn
     private async Task<StopReason> CallModelAsync(ModelRequest request, CancellationToken ct)
     {
         using var activity = Telemetry.StartModelCall(context, request.Profile.Provider, request.Profile.Model);
+        var served = request.Profile;
+        var price = Price(served);
         var callStarted = time.GetTimestamp();
         var callUsage = Usage.None;
         var callCost = 0m;
         var stop = StopReason.Unknown;
         var reply = new List<Content>();
         var text = new StringBuilder();
-        await foreach (var modelEvent in provider.StreamAsync(request, ct).WithCancellation(ct).ConfigureAwait(false))
+        await foreach (var modelEvent in gateway.StreamAsync(context.Agent, request, ct).WithCancellation(ct).ConfigureAwait(false))
         {
             switch (modelEvent)
             {
@@ -528,6 +532,18 @@ internal sealed class Turn
                     budget.Spend(toolCalls: 1);
                     await tools.AuditProviderToolAsync(context, used.Request, used.Result, ct).ConfigureAwait(false);
                     break;
+                case ReplyRestarted:
+                    // REL-01: the gateway is trying again, so what came before is void.
+                    reply.Clear();
+                    text.Clear();
+                    break;
+                case FallbackUsed fallback:
+                    // MDL-04: later events, and so the cost, are the fallback's.
+                    served = fallback.Profile;
+                    price = Price(served);
+                    Telemetry.FallbackUsed(activity, context, served.Provider, served.Model, fallback.Failure.ToString());
+                    await events.PublishAsync(context, new ModelFallback(fallback.Name, served.Provider, served.Model, fallback.Failure), ct).ConfigureAwait(false);
+                    break;
                 case UsageReported reported:
                     var spent = price?.Cost(reported.Usage) ?? 0m;
                     (callUsage, callCost) = (callUsage + reported.Usage, callCost + spent);
@@ -540,7 +556,7 @@ internal sealed class Turn
             }
         }
 
-        Telemetry.ModelCallEnded(activity, context, request.Profile.Provider, request.Profile.Model, stop, callUsage, callCost, time.GetElapsedTime(callStarted));
+        Telemetry.ModelCallEnded(activity, context, served.Provider, served.Model, stop, callUsage, callCost, time.GetElapsedTime(callStarted));
         await events.PublishAsync(context, new ModelCallEnded(stop, callUsage, callCost), ct).ConfigureAwait(false);
         AddText();
         if (CheckCacheHits(callUsage) is { } warning)

@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -7,8 +8,8 @@ namespace Sleepyshark.Officina.Testing;
 
 /// <summary>
 /// Real model exchanges, recorded and replayed offline (TEST-02). A recording is a JSON file: an array of exchanges, each
-/// with the request body, the status, and the response, which is the array of streamed events or the error body. Only
-/// bodies are kept, never headers, so the API key is never recorded.
+/// with the request body, the status, and the response, which is the array of streamed events or the error body, and
+/// optionally the seconds of a <c>Retry-After</c> header. Only bodies are kept, never headers, so the API key is never recorded.
 /// </summary>
 public static class HttpRecording
 {
@@ -18,13 +19,13 @@ public static class HttpRecording
     /// Sends requests on and records each exchange to <paramref name="path"/>. The response is read whole before it is
     /// passed on, so it is recorded as it arrived.
     /// </summary>
-    public static HttpClient Record(string path) => new(new Recorder(path) { InnerHandler = new HttpClientHandler() }) { Timeout = Timeout.InfiniteTimeSpan };
+    public static HttpMessageHandler Record(string path) => new Recorder(path) { InnerHandler = new HttpClientHandler() };
 
     /// <summary>
     /// Answers each request with the next recorded response. A request that differs from the recorded one fails with
     /// both, so a replay checks the requests as well as reading the responses; an exchange without a request answers any.
     /// </summary>
-    public static HttpClient Replay(string path) => new(new Replayer(JsonNode.Parse(File.ReadAllText(path))!.AsArray()));
+    public static HttpMessageHandler Replay(string path) => new Replayer(JsonNode.Parse(File.ReadAllText(path))!.AsArray());
 
     private sealed class Recorder(string path) : DelegatingHandler
     {
@@ -69,12 +70,18 @@ public static class HttpRecording
     private static HttpResponseMessage Response(JsonNode exchange)
     {
         var response = exchange["response"]!;
-        return new HttpResponseMessage((HttpStatusCode)exchange["status"]!.GetValue<int>())
+        var message = new HttpResponseMessage((HttpStatusCode)exchange["status"]!.GetValue<int>())
         {
             Content = response is JsonArray events
                 ? new StringContent(
                     string.Concat(events.Select(data => $"event: {data!["type"]}\ndata: {data.ToJsonString()}\n\n")), Encoding.UTF8, "text/event-stream")
                 : new StringContent(response.ToJsonString(), Encoding.UTF8, "application/json"),
         };
+        if (exchange["retryAfter"] is { } seconds)
+        {
+            message.Headers.RetryAfter = new RetryConditionHeaderValue(TimeSpan.FromSeconds(seconds.GetValue<double>()));
+        }
+
+        return message;
     }
 }

@@ -92,7 +92,7 @@ public class TriggerTests
     {
         private readonly ConcurrentQueue<ModelRequest> requests = new();
 
-        public ProviderCapabilities Capabilities => ProviderCapabilities.None;
+        public ProviderCapabilities CapabilitiesOf(string model) => ProviderCapabilities.None;
 
         public IReadOnlyList<ModelRequest> Requests => [.. requests];
 

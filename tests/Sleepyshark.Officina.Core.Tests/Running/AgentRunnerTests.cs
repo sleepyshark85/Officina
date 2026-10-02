@@ -220,7 +220,7 @@ public class AgentRunnerTests
     /// <summary>A provider whose account is over its rate limit.</summary>
     private sealed class FailingProvider : IModelProvider
     {
-        public ProviderCapabilities Capabilities => ProviderCapabilities.None;
+        public ProviderCapabilities CapabilitiesOf(string model) => ProviderCapabilities.None;
 
         public IAsyncEnumerable<ModelEvent> StreamAsync(ModelRequest request, CancellationToken ct) => throw new ModelCallException(ModelFailure.RateLimited);
     }

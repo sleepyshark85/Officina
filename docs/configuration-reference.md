@@ -157,7 +157,8 @@ An unknown placeholder is an error, never an empty string.
     "apiKey": { "secret": "ANTHROPIC_API_KEY" },
     "baseUrl": null,                                   // optional override
     "retry": { "maxAttempts": 5, "initialDelay": "00:00:01", "maxDelay": "00:01:00" },   // REL-01, MDL-05
-    "timeout": "00:10:00",
+    "maxConcurrentCalls": null,                        // MDL-08, CLD-10: calls in flight at once, all agents together
+    "timeout": "00:10:00",                             // longest silence in a call before it is retried as transient
     "features": {                                      // provider features to use, when models support them
       "midConversationSystemMessages": true,           // CLD-03
       "turnScopedSystemMessages": true,                // CLD-03, CTX-10 (beta)
@@ -182,7 +183,11 @@ An unknown placeholder is an error, never an empty string.
   whatever header is current, and it fails validation when a feature is on but the selected model
   or platform does not support it (MDL-06).
 - Rate limits are shared across the process automatically (MDL-08, CLD-10); there is no setting
-  to switch that off.
+  to switch that off. `maxConcurrentCalls` caps the calls in flight to the provider, for all agents together; calls
+  over the cap wait, the team lead's first and the others in the order they came. A wait the provider asks for
+  (`Retry-After`) holds back every agent. `retry` covers transient and rate-limited failures: each retry waits twice
+  as long as the one before, up to `maxDelay`, or the wait the provider asks for if longer, and `maxAttempts` counts
+  the first call. Other failures are not retried.
 
 ### 5.2 Model profiles
 
@@ -208,8 +213,9 @@ An unknown placeholder is an error, never an empty string.
 - `settings` is validated against the settings the provider declares for that model. For example,
   a setting that turns off thinking on a model where thinking cannot be off is a validation error.
 - A fallback must support the tools and output format of every slot that uses its primary
-  (MDL-04). Switching to a fallback mid-conversation is recorded, and its cache and reasoning
-  effects are reported, because provider caches and reasoning are tied to the model.
+  (MDL-04). A fallback is used for a call when its primary is still unavailable after its retries
+  (each fallback gets its own), and the next call tries the primary again. Switching is recorded as a
+  `modelFallback` event and counted in the `officina.fallbacks` metric. A fallback's own fallbacks are not used.
 
 ### 5.3 Tool servers (MCP)
 

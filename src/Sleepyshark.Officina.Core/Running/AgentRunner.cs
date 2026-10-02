@@ -22,6 +22,7 @@ namespace Sleepyshark.Officina.Core.Running;
 public sealed class AgentRunner
 {
     private readonly IReadOnlyDictionary<string, IModelProvider> providers;
+    private readonly ModelGateway gateway;
     private readonly IStorage storage;
     private readonly TimeProvider time;
     private readonly ToolPipeline pipeline;
@@ -93,7 +94,8 @@ public sealed class AgentRunner
 
         this.checks = checks;
         this.knowledge = knowledge;
-        ProviderToolsSupported(options, providers);
+        ModelsSupport(options, providers);
+        gateway = new ModelGateway(options, providers, time);
         shortening = Shortening(options, providers, shorteners ?? new Dictionary<string, IHistoryShortener>());
         admission = new Admission(options.Policies, time);
         Options = options;
@@ -219,19 +221,47 @@ public sealed class AgentRunner
         }
     }
 
-    /// <summary>MDL-06: each agent's provider must run the provider tools the agent is offered (TOOL-13).</summary>
-    /// <exception cref="ConfigurationException">A provider does not run one of them.</exception>
-    private static void ProviderToolsSupported(OfficinaOptions options, IReadOnlyDictionary<string, IModelProvider> providers)
+    /// <summary>
+    /// MDL-06, MDL-04: the model of each agent's profile, and of each fallback of it, must support what the agent uses: the
+    /// provider tools it is offered (TOOL-13), and, for a fallback, turn-scoped messages where the profile's model has them.
+    /// </summary>
+    /// <exception cref="ConfigurationException">A model does not support one of them.</exception>
+    private static void ModelsSupport(OfficinaOptions options, IReadOnlyDictionary<string, IModelProvider> providers)
     {
-        var errors = options.Agents
-            .SelectMany(agent => agent.Value.Tools.SelectMany(set => options.ToolSets[set]).Select(tool => (Tool: tool, options.Models[agent.Value.Model].Provider)))
-            .Distinct()
-            .Where(use => options.Tools[use.Tool].ProviderTool() is { } name
-                && providers.TryGetValue(use.Provider, out var provider) && !provider.Capabilities.ProviderTools.Contains(name))
-            .Select(use => new ConfigurationError(
-                ValidationPhase.Provider, $"tools.{use.Tool}.source", $"provider \"{use.Provider}\" does not run the tool \"{options.Tools[use.Tool].ProviderTool()}\".",
-                $"Use a tool it runs: {string.Join(", ", providers[use.Provider].Capabilities.ProviderTools.Order(StringComparer.Ordinal))}."))
-            .ToList();
+        var errors = new List<ConfigurationError>();
+        foreach (var (agentName, agent) in options.Agents)
+        {
+            var primary = options.Models[agent.Model];
+            var used = agent.Tools.SelectMany(set => options.ToolSets[set]).Distinct().Where(tool => options.Tools[tool].ProviderTool() is not null).ToList();
+            var primaryTurnScoped = providers.TryGetValue(primary.Provider, out var primaryProvider) && primaryProvider.CapabilitiesOf(primary.Model).TurnScopedMessages;
+            foreach (var (name, profile) in primary.Fallbacks.Select(name => (name, options.Models[name])).Prepend((agent.Model, primary)))
+            {
+                var isFallback = name != agent.Model;
+                var at = $"models.{agent.Model}.fallbacks";
+                var who = isFallback ? $"fallback \"{name}\" of agent \"{agentName}\": " : "";
+                if (!providers.TryGetValue(profile.Provider, out var provider))
+                {
+                    if (isFallback)
+                    {
+                        errors.Add(new(ValidationPhase.Provider, at, $"{who}provider \"{profile.Provider}\" has no implementation registered.", ""));
+                    }
+
+                    continue;
+                }
+
+                var capabilities = provider.CapabilitiesOf(profile.Model);
+                errors.AddRange(used.Where(tool => !capabilities.ProviderTools.Contains(options.Tools[tool].ProviderTool()!)).Select(tool => new ConfigurationError(
+                    ValidationPhase.Provider, isFallback ? at : $"tools.{tool}.source",
+                    $"{who}provider \"{profile.Provider}\" does not run the tool \"{options.Tools[tool].ProviderTool()}\"{(isFallback ? $" with model \"{profile.Model}\"" : "")}.",
+                    $"Use a tool it runs: {string.Join(", ", capabilities.ProviderTools.Order(StringComparer.Ordinal))}.")));
+                if (isFallback && primaryTurnScoped && !capabilities.TurnScopedMessages)
+                {
+                    errors.Add(new(ValidationPhase.Provider, at, $"{who}model \"{profile.Model}\" does not take turn-scoped system messages, which the agent's model uses.",
+                        "Use a fallback that does."));
+                }
+            }
+        }
+
         if (errors.Count > 0)
         {
             throw new ConfigurationException(errors);
@@ -377,7 +407,7 @@ public sealed class AgentRunner
         var instructions = InstructionPlaceholders.Fill(agent.Instructions, Options.Project, context.Agent, agent);
         var name = context.Agent;
         return new Turn(
-            context, Options, Provider(name), pipeline, new RunRecord(storage.Records, context, time), pipeline.Board(context), pipeline.Memory(context), checks, knowledge, storage.Conversations,
+            context, Options, gateway, pipeline, new RunRecord(storage.Records, context, time), pipeline.Board(context), pipeline.Memory(context), checks, knowledge, storage.Conversations,
             shortening.GetValueOrDefault(name), Events, instructions, work, Inbox(name),
             token => paused.TryGetValue(name, out var gate) ? gate.Task.WaitAsync(token) : Task.CompletedTask, budget, time);
     }

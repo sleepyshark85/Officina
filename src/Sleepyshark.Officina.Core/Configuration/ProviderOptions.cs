@@ -1,6 +1,8 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace Sleepyshark.Officina.Core.Configuration;
 
-/// <summary>A model provider. Later slices add retries, timeouts and features.</summary>
+/// <summary>A model provider. Later slices add features.</summary>
 public sealed record ProviderOptions
 {
     /// <summary>The name of the provider the core configures by default.</summary>
@@ -30,4 +32,16 @@ public sealed record ProviderOptions
     [Setting("Prices per million tokens, by model id, for reporting cost and enforcing cost budgets. Every model a profile uses needs one; the `claude` provider ships the prices of current models, and a configured price overrides the shipped values it sets.",
         Example = """{ "claude-opus-5-5": { "input": 4, "output": 20, "cacheRead": 0.2, "cacheWrite5m": 5, "cacheWrite1h": 8 } }""")]
     public IReadOnlyDictionary<string, ModelPrice> Prices { get; init; } = new Dictionary<string, ModelPrice>();
+
+    [Setting("How long to wait for the provider to answer a call, and then for each next piece of its streamed reply, as `hh:mm:ss`. A call that goes quiet for longer is given up on as a transient failure and retried.", Example = "\"00:10:00\"")]
+    [Range(typeof(TimeSpan), "00:00:00", "10675199.02:48:05.4775807", MinimumIsExclusive = true, ErrorMessage = "must be greater than zero.")]
+    public TimeSpan Timeout { get; init; } = TimeSpan.FromMinutes(10);
+
+    [Setting("How failed calls are retried, for every agent that calls this provider.", Example = """{ "maxAttempts": 5, "initialDelay": "00:00:01" }""")]
+    public RetryOptions Retry { get; init; } = new();
+
+    [Setting("The most calls to this provider in flight at once, across all agents: the account's share of the provider's rate limit. Calls over it wait their turn, the team lead's first. Unset means no limit.",
+        Example = "8")]
+    [Range(1, int.MaxValue, ErrorMessage = "must be at least 1.")]
+    public int? MaxConcurrentCalls { get; init; }
 }

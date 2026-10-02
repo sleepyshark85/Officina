@@ -6,9 +6,9 @@ Status: draft · 2026-10-01 · slices `REQUIREMENTS.md` (revision 2) into delive
 
 Last updated 2026-10-02.
 
-- **Done:** M0 spikes S00a and S00b; M1 slices S01 (walking skeleton) and S02 (configuration); S03 (tool pipeline); S04 (turn loop); S05 (context and caching); S06 (run record and output); S07 (history and conversation store); S08 (events, storage and observability); S09 (triggers and admission); S10 (MCP and knowledge); S11 (Claude provider); S13 (loop patterns); S14 (git workspace); S15 (sandbox); S16 (human interaction and CLI); S17 (project memory); S18 (task board).
+- **Done:** M0 spikes S00a and S00b; M1 slices S01 (walking skeleton) and S02 (configuration); S03 (tool pipeline); S04 (turn loop); S05 (context and caching); S06 (run record and output); S07 (history and conversation store); S08 (events, storage and observability); S09 (triggers and admission); S10 (MCP and knowledge); S11 (Claude provider); S12 (model gateway); S13 (loop patterns); S14 (git workspace); S15 (sandbox); S16 (human interaction and CLI); S17 (project memory); S18 (task board).
 - **Waiting:** the M0 design review sign-off on `REQUIREMENTS.md`, `CONFIGURATION.md` and `DESIGN.md`.
-- **Next:** S12 (model gateway).
+- **Next:** S19 (checkpoints and long runs).
 - **Open follow-ups:**
   - S02 kept a `formatVersion` check, though only version 1 exists. Consider removing the setting
     until a version 2 exists (principle 13). S06 keeps `output.schema` as JSON text, and S13 too; if a later slice wants the
@@ -24,9 +24,13 @@ Last updated 2026-10-02.
   - S04 left parts of its requirements to the slices that add the state they need; its Notes list them
     (S06, S07, S09, S14, S16, S19).
   - S08 left parts of its requirements to the slices that add the state they need; its Notes list them
-    (S06, S07, S09, S12, S16, S19, S20); S13 added steps.
-  - S11 moved MDL-05 to S12, which retries classified failures, and CLD-06 and CLD-11 (the Claude provider's feature
-    switches and Message Batches) to S21. Its Notes list the rest.
+    (S06, S07, S09, S16, S19, S20); S13 added steps.
+  - S11 moved CLD-06 and CLD-11 (the Claude provider's feature switches and Message Batches) to S21. Its Notes list the rest.
+  - S21 (from S12): an operator's message sent during a turn, and the project-memory change message (S17, sent
+    automatically whenever memory changes), is a mid-conversation system message, which every Claude model outside the
+    allow list (such as Haiku 4.5 and Sonnet 5) rejects (`InvalidRequest`); the provider should send it as a user message for them. A reply the model
+    gateway starts over after a mid-stream failure leaves its first text in the stored `textGenerated` events, and retries
+    are not events of their own. The `baseUrl` provider setting of the reference is not built.
   - S20 also adds pausing the whole run (RUN-06); S16 pauses one agent at a time.
   - S20 (from S16): `sof run` gives each agent one working copy, named `<run>-<agent>`, opened when the agent first
     calls a `workspace.*` or `sandbox.*` tool and disposed when the run ends. S20 gives each task its own and disposes it
@@ -112,7 +116,7 @@ A slice is **done** when:
 | [S09](S09-triggers-and-admission.md) | Triggers and admission | M2 | M | S04, S08 | [#11](https://github.com/sleepyshark85/Officina/issues/11) | done |
 | [S10](S10-mcp-and-knowledge.md) | MCP and knowledge sources | M2 | M | S03 | [#12](https://github.com/sleepyshark85/Officina/issues/12) | done |
 | [S11](S11-claude-provider.md) | Claude provider | M3 | M | S00b, S05 | [#13](https://github.com/sleepyshark85/Officina/issues/13) | done |
-| [S12](S12-model-gateway.md) | Model gateway | M3 | S | S11 | [#14](https://github.com/sleepyshark85/Officina/issues/14) | todo |
+| [S12](S12-model-gateway.md) | Model gateway | M3 | S | S11 | [#14](https://github.com/sleepyshark85/Officina/issues/14) | done |
 | [S13](S13-loop-patterns.md) | Loop patterns | M4 | M | S04, S06 | [#15](https://github.com/sleepyshark85/Officina/issues/15) | done |
 | [S14](S14-git-workspace.md) | Git workspace | M5 | M | S03 | [#16](https://github.com/sleepyshark85/Officina/issues/16) | done |
 | [S15](S15-sandbox.md) | Sandbox | M5 | M ×2 | S00a, S14 | [#17](https://github.com/sleepyshark85/Officina/issues/17) | done |
