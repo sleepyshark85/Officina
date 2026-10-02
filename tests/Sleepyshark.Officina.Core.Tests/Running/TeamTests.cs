@@ -300,7 +300,8 @@ public class TeamTests
         var result = await running;
 
         Assert.Equal(AgentOutcome.HandedOff, result.Outcome);
-        Assert.Empty(kit.Model.Requests);
+        Assert.Contains((AgentStatus.Failed, "lead was stopped"), Statuses(await kit.Storage.Events.ReadAsync(null, work.RunId, 0, Ct), "lead"));
+        Assert.Empty(await kit.Runner.Board(null, work.RunId).ReadAsync(Ct));
     }
 
     // TEAM-05, TEAM-06: a message names its sender and recipient, is recorded, and reaches the recipient as data; only the team's agents receive one.
