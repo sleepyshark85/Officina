@@ -46,6 +46,8 @@ internal sealed class ChatSession
     private readonly CancellationTokenSource ending = new();
     private readonly Lock gate = new();
     private readonly TextWriter output;
+    private readonly TextWriter error;
+    private readonly TextReader input;
     private readonly OwnerQueue owner;
     private readonly StatusView status;
 
@@ -62,15 +64,29 @@ internal sealed class ChatSession
     private string agent = "";
     private bool keepsHistory;
     private PermissionMode? mode;
+
+    /// <summary>The runs of the session's messages, in order; read by the line editor's thread too, so under its lock.</summary>
     private readonly List<string> runs = [];
 
-    private string? LastRun => runs.LastOrDefault();
+    private string? LastRun
+    {
+        get
+        {
+            lock (runs)
+            {
+                return runs.LastOrDefault();
+            }
+        }
+    }
     private RunCommand.Session? current;
 
     public ChatSession(ParseResult parse, ConfigurationCommandOptions shared, SofEnvironment host, string? named, bool fresh)
     {
         (this.parse, this.shared, this.host, this.named, this.fresh) = (parse, shared, host, named, fresh);
-        output = TextWriter.Synchronized(host.Out);
+        // At a terminal, lines are read with the line editor, and what the session prints shares the screen with it.
+        output = TextWriter.Synchronized(host.Terminal?.Writer(host.Out) ?? host.Out);
+        error = TextWriter.Synchronized(host.Terminal?.Writer(host.Error) ?? host.Error);
+        input = host.Terminal?.Reader() ?? host.In;
         owner = new OwnerQueue(output, "/");
         status = new StatusView(output, () => current?.Workspace?.Queue, stream: true);
     }
@@ -99,7 +115,7 @@ internal sealed class ChatSession
         }
 
         // As the command line does for sof run: what has not stopped this long after the session was ended is left to end with the process.
-        host.Error.WriteLine("error: the session did not end in time, so it is left to end with the process.");
+        error.WriteLine("error: the session did not end in time, so it is left to end with the process.");
         return ExitCodes.NotCompleted;
     }
 
@@ -116,16 +132,17 @@ internal sealed class ChatSession
 
             if (ChatCommand.Refusal(configuration, name) is { } refusal)
             {
-                host.Error.WriteLine($"error: {refusal}");
+                error.WriteLine($"error: {refusal}");
                 return ExitCodes.Invalid;
             }
 
             agent = name;
-            if (host.In is TerminalReader terminal)
+            if (input is TerminalReader terminal)
             {
-                var completion = new ChatCompletion(SofCommandLine.Create(new ConfigurationCommandOptions(), host), () => Agents(options, name), () => Enumerable.Reverse(runs));
+                var completion = new ChatCompletion(SofCommandLine.Create(new ConfigurationCommandOptions(), host), () => Agents(options, name), RunsLatestFirst);
                 terminal.Complete = completion.Complete;
             }
+
             var conversing = ChatCommand.Conversing(configuration, name);
             var keeps = ChatCommand.KeepsHistory(conversing, name);
             keepsHistory = conversing.Agents[keeps].Context.History.Strategy != HistoryStrategy.None;
@@ -158,7 +175,7 @@ internal sealed class ChatSession
         catch (Exception exception) when (exception is not OperationCanceledException || !ending.IsCancellationRequested)
         {
             // Never a failure that ends the session without a word.
-            host.Error.WriteLine($"error: the session failed: {exception.Message}");
+            error.WriteLine($"error: the session failed: {exception.Message}");
             return ExitCodes.NotCompleted;
         }
     }
@@ -190,7 +207,7 @@ internal sealed class ChatSession
             status.WriteLine($"Type a number from 1 to {agents.Count}, or an agent's name.");
         }
 
-        host.Error.WriteLine("error: no agent was picked.");
+        error.WriteLine("error: no agent was picked.");
         return null;
     }
 
@@ -237,7 +254,7 @@ internal sealed class ChatSession
     {
         try
         {
-            while (await host.In.ReadLineAsync(CancellationToken.None) is { } line)
+            while (await input.ReadLineAsync(CancellationToken.None) is { } line)
             {
                 lines.Writer.TryWrite(line);
             }
@@ -316,7 +333,11 @@ internal sealed class ChatSession
             fresh = false;
         }
 
-        runs.Add(session.RunId);
+        lock (runs)
+        {
+            runs.Add(session.RunId);
+        }
+
         current = session;
         AgentResult result;
         try
@@ -454,7 +475,7 @@ internal sealed class ChatSession
 
         var nested = host with
         {
-            Out = output, WorkingDirectory = shared.Directory(parse, host), Variables = variables, In = new SessionReader(lines.Reader), Signals = null, InSession = true,
+            Out = output, Error = error, Terminal = null, WorkingDirectory = shared.Directory(parse, host), Variables = variables, In = new SessionReader(lines.Reader), Signals = null, InSession = true,
         };
         return session is null
             ? GuardedAsync(token => SofCommandLine.RunAsync(args, nested, token))
@@ -481,6 +502,15 @@ internal sealed class ChatSession
     internal static IEnumerable<string> Agents(OfficinaOptions options, string agent) =>
         options.Agents.Keys.Concat(options.Agents[agent].Pattern.Roles.SelectMany(role => Enumerable.Range(1, role.Value.Max).Select(number => $"{role.Key}[{number}]")))
             .Order(StringComparer.Ordinal);
+
+    /// <summary>A snapshot of the session's runs, the latest first, for completion.</summary>
+    private List<string> RunsLatestFirst()
+    {
+        lock (runs)
+        {
+            return Enumerable.Reverse(runs).ToList();
+        }
+    }
 
     private static PermissionMode? ModeOf(List<string> words) =>
         words is ["mode", var name] && Enum.TryParse<PermissionMode>(name, ignoreCase: true, out var chosen) ? chosen : null;

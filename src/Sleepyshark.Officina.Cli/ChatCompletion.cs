@@ -90,5 +90,5 @@ internal sealed class ChatCompletion(RootCommand root, Func<IEnumerable<string>>
         SessionCommands.Concat(root.Subcommands.Select(command => command.Name)).Distinct().Order(StringComparer.Ordinal);
 
     private static List<string> Matching(IEnumerable<string> candidates, string word) =>
-        [.. candidates.Distinct().Where(candidate => candidate.StartsWith(word, StringComparison.OrdinalIgnoreCase))];
+        [.. candidates.Distinct().Where(candidate => candidate.StartsWith(word, StringComparison.Ordinal))];
 }

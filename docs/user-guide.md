@@ -148,8 +148,10 @@ Lines that start with `/` are commands, so they're never taken for a message:
 
 At a terminal, lines are edited with a line editor: **Tab** completes a `/` command, a command's subcommands and
 options, agents' names and the run ids of this session's messages, **Up** and **Down** go through
-the lines you typed, and **Ctrl+D** on an empty line ends the session. A reply's output clears the prompt line, which
-comes back at your next key; what you had typed is kept. With piped input (`sof < script.txt`), plain lines are read.
+the lines you typed, and **Ctrl+D** on an empty line ends the session. You can type while a reply streams: the reply
+never loses text. A line it is writing is ended before your prompt is drawn below it, and output clears the prompt line,
+which comes back, with what you had typed, at your next key. With piped input (`sof < script.txt`), plain lines are read.
+Only the chat session uses the line editor; `sof run`'s console reads plain lines.
 
 How it behaves:
 
