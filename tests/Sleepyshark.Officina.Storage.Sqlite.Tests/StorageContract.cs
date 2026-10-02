@@ -8,6 +8,7 @@ using Sleepyshark.Officina.Core.Extensibility;
 using Sleepyshark.Officina.Core.Messages;
 using Sleepyshark.Officina.Core.Records;
 using Sleepyshark.Officina.Core.Running;
+using Sleepyshark.Officina.Core.Memory;
 using Sleepyshark.Officina.Core.Tasks;
 using Sleepyshark.Officina.Core.Tools;
 using Sleepyshark.Officina.Testing;
@@ -72,7 +73,7 @@ public abstract class StorageContract
         ConversationTurn[] turns =
         [
             Turn("ann", Message.User("1")),
-            Turn("ann", Message.User("Summary of 1."), Message.User("2")) with { Shortened = true },
+            Turn("ann", Message.User("Summary of 1."), Message.User("2")) with { Shortened = true, PrefixMemory = 2, SeenMemory = 3 },
             Turn("ann", Message.User("3"), new Message(Role.Assistant, [new ReasoningContent("Look first.", "sig"), new ToolUseContent("call-1", "read", Args)]),
                 new Message(Role.User, [new ToolResultContent("call-1", "text", isError: false)]), new Message(Role.System, [new TextContent("<context />")], turnScoped: true),
                 new Message(Role.Assistant, [new ProviderContent(Args)])),
@@ -90,6 +91,7 @@ public abstract class StorageContract
         // Arguments and provider content are JSON, which compares by its text.
         Assert.Equal(JsonSerializer.Serialize(turns[1..].SelectMany(turn => turn.Messages)), JsonSerializer.Serialize(read.SelectMany(turn => turn.Messages)));
         Assert.Equal([(true, Start), (false, Start)], read.Select(turn => (turn.Shortened, turn.Time)));
+        Assert.Equal([(2L, 3L), (0L, 0L)], read.Select(turn => (turn.PrefixMemory, turn.SeenMemory)));
     }
 
     // REC-01, REC-04.
@@ -118,6 +120,25 @@ public abstract class StorageContract
         Assert.False(await storage.Tasks.TryAppendAsync("acme", Change("run-1", 2) with { By = "reviewer" }, Ct));
 
         Assert.Equal(Json(Change("run-1", 1), Change("run-1", 2)), Json([.. await storage.Tasks.ReadAsync("acme", "run-1", Ct)]));
+    }
+
+    // MEM-03, MEM-04, CONC-01: a scope's log is its own, within the tenant, and a taken revision is refused.
+    [Fact]
+    public async Task Project_memory_is_read_in_revision_order_and_a_taken_revision_is_refused()
+    {
+        var storage = await CreateAsync();
+        foreach (var tenant in new[] { "acme", null })
+        {
+            Assert.True(await storage.Memory.TryAppendAsync(tenant, Proposed("project:app", 1), Ct));
+            Assert.True(await storage.Memory.TryAppendAsync(tenant, Approved("project:app", 2), Ct));
+            Assert.True(await storage.Memory.TryAppendAsync(tenant, Proposed("owner:ann", 1), Ct));
+
+            Assert.False(await storage.Memory.TryAppendAsync(tenant, Approved("project:app", 1), Ct));
+
+            Assert.Equal(Json(Proposed("project:app", 1), Approved("project:app", 2)), Json([.. await storage.Memory.ReadAsync(tenant, "project:app", Ct)]));
+        }
+
+        Assert.Empty(await storage.Memory.ReadAsync("globex", "project:app", Ct));
     }
 
     // TOOL-09, OUT-05.
@@ -250,6 +271,7 @@ public abstract class StorageContract
         var export = await storage.ExportAsync("acme", "ann", Ct);
 
         Assert.Equal(["run-1"], export.Runs.Select(run => run.RunId));
+        Assert.Equal(["owner:ann"], export.Memory.Select(change => change.Scope));
         Assert.Equal([Event("run-1", 1)], export.Events);
         Assert.Equal([Entry("run-1", AuditOutcome.Intent)], export.Audit);
         Assert.Equal(["ann"], export.Conversations.Select(turn => turn.Owner));
@@ -275,6 +297,10 @@ public abstract class StorageContract
         Assert.Empty(await storage.Tasks.ReadAsync("acme", "run-1", Ct));
         Assert.Equal([Entry("run-1", AuditOutcome.Intent)], await storage.Audit.ReadAsync("acme", "run-1", Ct));
         Assert.Single((await storage.ExportAsync("acme", "bob", Ct)).Runs);
+
+        // PRIV-02: an owner's own memory goes with the owner's data; the project's and others' stay.
+        Assert.Empty(await storage.Memory.ReadAsync("acme", "owner:ann", Ct));
+        Assert.Single(await storage.Memory.ReadAsync("acme", "owner:bob", Ct));
     }
 
     // PRIV-01, EVT-05, TEST-18; REC-05: a record is deleted whole, never trimmed.
@@ -319,6 +345,11 @@ public abstract class StorageContract
     protected static RecordEntry Fact(string runId, long revision, DateTimeOffset? time = null) =>
         new(runId, revision, "extractor", time ?? Start, new Fact("invoice.total", "42", "invoice.pdf", null));
 
+    protected static MemoryChange Proposed(string scope, long revision) =>
+        new(scope, revision, "dev", Start, MemoryAction.Proposed, 1, new MemoryProposal(MemoryKind.Decision, "build", "Use MSBuild.", "It is what we have.", [3]), null);
+
+    protected static MemoryChange Approved(string scope, long revision) => new(scope, revision, "lead", Start, MemoryAction.Approved, 1, null, "Agreed.");
+
     protected static TaskChange Change(string runId, long revision, DateTimeOffset? time = null) =>
         new(runId, revision, "lead", time ?? Start, "t1 added as Ready", "planned",
             [new BoardTask { Id = "t1", Title = "Fix the parser", Checks = ["tests"], DependsOn = ["t0"], Budget = 8, State = TaskState.Ready }]);
@@ -336,13 +367,14 @@ public abstract class StorageContract
         await storage.Records.TryAppendAsync(tenant, Fact(runId, 1, time), Ct);
         await storage.Artifacts.SaveAsync(tenant, runId, new($"{runId} result", "full text"), time ?? Start, Ct);
         await storage.Tasks.TryAppendAsync(tenant, Change(runId, 1, time), Ct);
+        await storage.Memory.TryAppendAsync(tenant, Proposed($"owner:{owner}", 1), Ct);
     }
 
     /// <summary>How many items an export of the owner's data holds.</summary>
     private static async Task<int> CountAsync(IStorage storage, string? tenant, string owner)
     {
         var data = await storage.ExportAsync(tenant, owner, Ct);
-        return data.Runs.Count + data.Events.Count + data.Audit.Count + data.Conversations.Count + data.Records.Count + data.Artifacts.Count + data.Tasks.Count;
+        return data.Runs.Count + data.Events.Count + data.Audit.Count + data.Conversations.Count + data.Records.Count + data.Artifacts.Count + data.Tasks.Count + data.Memory.Count;
     }
 
     private static JsonElement Args => JsonDocument.Parse("""{ "path": "a.cs" }""").RootElement;
@@ -351,6 +383,8 @@ public abstract class StorageContract
 
     /// <summary>Changes compare by their JSON: their lists of tasks are new on every read.</summary>
     private static string Json(params TaskChange[] changes) => JsonSerializer.Serialize(changes);
+
+    private static string Json(params MemoryChange[] changes) => JsonSerializer.Serialize(changes);
 }
 
 public sealed class InMemoryStorageTests : StorageContract

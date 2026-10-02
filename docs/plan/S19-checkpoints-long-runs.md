@@ -14,3 +14,8 @@ Runs that survive crashes, roll back, and last for days.
 - [ ] Rollback restores state and worktrees together, and lists the external effects it could not undo.
 - [ ] The budget hierarchy escalates level by level: turn, task, agent, run.
 - [ ] Cost is broken down by agent, definition, task, step and model, and a run report is produced at the end.
+
+## Notes
+
+From S17: a checkpoint records memory's revision (DESIGN.md §8), and a rollback resets it, so a conversation's prefix
+revision and the revision it was told of stay valid.

@@ -14,7 +14,7 @@ Long conversations: shortening history, and conversations that survive restarts.
 - [x] Shortening is the only operation that changes sent history, and its result is validated before use.
 - [x] "Input too long" leads to one shortening attempt, then a handoff.
 - [x] A conversation reloaded after a restart continues with its full history.
-- [x] Records survive shortening. Tasks and memory are added to this test in S18 and S17.
+- [x] Records survive shortening. Tasks and memory joined this test in S18 and S17.
 - [x] Capabilities switch on and off, with their dependencies checked; the conversation store is the first. A capability that is off adds no tools, storage or settings.
 - [x] A missing capability and an unmet dependency are rejected with a message naming the setting (completes TEST-04).
 
@@ -34,7 +34,7 @@ Long conversations: shortening history, and conversations that survive restarts.
 - The SQLite format version is now 2, so a file written before the `conversations` table existed is refused.
 
 Left to later slices:
-- S06: the run record joins the shortening test (HIST-03, TEST-15). S17 and S18 add memory and tasks.
+- S06, S17, S18: the run record, memory and tasks joined the shortening test (HIST-03, TEST-15).
 - S21: the Claude provider implements `IHistoryShortener` with Claude's own mechanism (CLD-06, moved from S11).
 - S16, S17, S18, S19, S20: their capabilities add their switches and dependencies (checkpoints need the
   conversation store, the team needs the task board), and S16 offers the workspace and sandbox tools only when

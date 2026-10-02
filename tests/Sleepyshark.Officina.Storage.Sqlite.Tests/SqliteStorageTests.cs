@@ -28,7 +28,7 @@ public sealed class SqliteStorageTests : StorageContract, IDisposable
         Assert.Equal([Event("run-1", 1)], await (await CreateAsync()).Events.ReadAsync("acme", "run-1", 0, Ct));
     }
 
-    // REL-04: a version-2 file has no task board table, so it is refused rather than failing at the first change.
+    // REL-04: a version-3 file has no memory table, so it is refused rather than failing at the first change.
     [Fact]
     public async Task A_file_in_another_format_version_is_refused()
     {
@@ -37,13 +37,13 @@ public sealed class SqliteStorageTests : StorageContract, IDisposable
         {
             await connection.OpenAsync(Ct);
             await using var command = connection.CreateCommand();
-            command.CommandText = "PRAGMA user_version = 2";
+            command.CommandText = "PRAGMA user_version = 3";
             await command.ExecuteNonQueryAsync(Ct);
         }
 
         var error = await Assert.ThrowsAsync<InvalidDataException>(() => CreateAsync());
 
-        Assert.Equal($"{File} holds data in format version 2, and this core reads format version 3 only.", error.Message);
+        Assert.Equal($"{File} holds data in format version 3, and this core reads format version 4 only.", error.Message);
     }
 
     // CFG-07, STO-01.

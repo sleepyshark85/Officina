@@ -297,7 +297,7 @@ Built-in tool packs (TOOL-01) are only offered when their capability is on (CAP-
 - **`record.*`:** `propose_fact`, `propose_finding`, `propose_decision`, `cite` (REC-02).
 - **`tasks.*`:** `create`, `update`, `claim`, `submit_for_review`, `review` (TASK).
 - **`team.*`:** `message`, `start_helper`, `handoff`.
-- **`memory.*`:** `propose_change`.
+- **`memory.*`:** `propose_change`, and `review`, for the lead to approve or reject a proposal (MEM-03). Both are write tools, so each needs `gates` or a `gateExemption`.
 - **`human.*`:** `ask_owner`, `request_handoff` (HITL-06, EGR-04).
 - **`artifact.*`:** `page` (TOOL-09).
 - **`control.*`:** `finish`, the designated finish tool (LOOP-05).
@@ -424,7 +424,7 @@ missing makes every other test false.
     "budget": { },                             // §7.5
     "permissions": ["workspace:write", "sandbox:run"],   // narrows the owner's (INV-02)
     "policies": { "gates": ["tests-first"] },            // gates for all this agent's tools
-    "capabilities": ["workspace", "sandbox", "projectMemory", "taskBoard"],
+    "capabilities": ["workspace", "sandbox", "projectMemory", "taskBoard"],   // not built: agents use every capability that is on
     "helpers": { "allowed": false },           // TEAM-07
     "triggers": ["longRunning"]                // TRG-01: unset accepts work that arrives any way
   }
@@ -436,7 +436,7 @@ every model slot. A step inside a pattern that calls a model is its own slot: it
 `model` and `tools`, and it inherits whatever it does not set. The tools offered in a slot depend
 only on that slot's configuration and the enabled capabilities, never on the caller.
 
-**Capabilities per agent.** `capabilities` lists which of the application's enabled capabilities
+**Capabilities per agent (not built).** `capabilities` lists which of the application's enabled capabilities
 this agent uses; when it is not set, the agent uses all of them. Listing a capability the
 application has not enabled is a validation error (CAP-03).
 

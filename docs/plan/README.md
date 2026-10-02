@@ -6,9 +6,9 @@ Status: draft · 2026-10-01 · slices `REQUIREMENTS.md` (revision 2) into delive
 
 Last updated 2026-10-02.
 
-- **Done:** M0 spikes S00a and S00b; M1 slices S01 (walking skeleton) and S02 (configuration); S03 (tool pipeline); S04 (turn loop); S05 (context and caching); S06 (run record and output); S07 (history and conversation store); S08 (events, storage and observability); S09 (triggers and admission); S10 (MCP and knowledge); S11 (Claude provider); S13 (loop patterns); S14 (git workspace); S15 (sandbox); S16 (human interaction and CLI); S18 (task board).
+- **Done:** M0 spikes S00a and S00b; M1 slices S01 (walking skeleton) and S02 (configuration); S03 (tool pipeline); S04 (turn loop); S05 (context and caching); S06 (run record and output); S07 (history and conversation store); S08 (events, storage and observability); S09 (triggers and admission); S10 (MCP and knowledge); S11 (Claude provider); S13 (loop patterns); S14 (git workspace); S15 (sandbox); S16 (human interaction and CLI); S17 (project memory); S18 (task board).
 - **Waiting:** the M0 design review sign-off on `REQUIREMENTS.md`, `CONFIGURATION.md` and `DESIGN.md`.
-- **Next:** S12 (model gateway) and S17 (project memory).
+- **Next:** S12 (model gateway).
 - **Open follow-ups:**
   - S02 kept a `formatVersion` check, though only version 1 exists. Consider removing the setting
     until a version 2 exists (principle 13). S06 keeps `output.schema` as JSON text, and S13 too; if a later slice wants the
@@ -19,13 +19,12 @@ Last updated 2026-10-02.
     `checks.<name>`, `outcome` and `stopReason` (configuration reference §6, marked not built) wait for a case that needs them.
   - The configuration binder adds a file's items to a list setting's default instead of replacing it, so
     `storage.unstoredEvents` set in a file keeps `textGenerated`. S06 made `context.record` unset by default to avoid it.
-  - S07 left the run record (S06), memory (S17) and tasks (S18) to join the shortening test (HIST-03, TEST-15);
-    S21 makes the Claude provider an `IHistoryShortener` (CLD-06); the capability slices (S16–S20) add their switches and
-    dependencies to `CapabilitiesOptions`. Its Notes list the rest.
+  - S21 makes the Claude provider an `IHistoryShortener` (CLD-06); the capability slices (S19, S20) add their switches and
+    dependencies to `CapabilitiesOptions`. S07's Notes list the rest.
   - S04 left parts of its requirements to the slices that add the state they need; its Notes list them
     (S06, S07, S09, S14, S16, S19).
   - S08 left parts of its requirements to the slices that add the state they need; its Notes list them
-    (S06, S07, S09, S12, S16, S17, S19, S20); S13 added steps.
+    (S06, S07, S09, S12, S16, S19, S20); S13 added steps.
   - S11 moved MDL-05 to S12, which retries classified failures, and CLD-06 and CLD-11 (the Claude provider's feature
     switches and Message Batches) to S21. Its Notes list the rest.
   - S20 also adds pausing the whole run (RUN-06); S16 pauses one agent at a time.
@@ -52,7 +51,9 @@ Last updated 2026-10-02.
   - S18 moved the SQLite format version to 3. A slice that adds a table bumps it again, unless an unmerged PR has
     already bumped it past the version on main.
   - S19 snapshots and restores the workspace, and cleans up worktrees left by a crash.
-  - S05 moved CTX-06 to S07 and CTX-07 to S06, and left boundary ② and the memory-change case of TEST-09 to S17.
+  - S05 moved CTX-06 to S07 and CTX-07 to S06.
+  - S17 left the owner's CLI commands for memory proposals and tying `memory.review` to the lead (S20), unmasking
+    proposed text (S21) and the checkpoint's memory revision (S19); their slice files say so.
   - S09 left parts of its requirements to the slices that add the state they need; its Notes list them
     (S06, S19, S20, and S21 for Message Batches).
   - REQUIREMENTS.md §4.3 lists masking as replaceable, but DESIGN.md §4 keeps it in Core and not replaceable in v1.
@@ -116,7 +117,7 @@ A slice is **done** when:
 | [S14](S14-git-workspace.md) | Git workspace | M5 | M | S03 | [#16](https://github.com/sleepyshark85/Officina/issues/16) | done |
 | [S15](S15-sandbox.md) | Sandbox | M5 | M ×2 | S00a, S14 | [#17](https://github.com/sleepyshark85/Officina/issues/17) | done |
 | [S16](S16-human-interaction-cli.md) | Human interaction and CLI | M5 | M | S04, S08 | [#18](https://github.com/sleepyshark85/Officina/issues/18) | done |
-| [S17](S17-project-memory.md) | Project memory | M5 | S | S05, S16 | [#19](https://github.com/sleepyshark85/Officina/issues/19) | todo |
+| [S17](S17-project-memory.md) | Project memory | M5 | S | S05, S16 | [#19](https://github.com/sleepyshark85/Officina/issues/19) | done |
 | [S18](S18-task-board.md) | Task board | M6 | M | S06, S08 | [#20](https://github.com/sleepyshark85/Officina/issues/20) | done |
 | [S19](S19-checkpoints-long-runs.md) | Checkpoints and long runs | M6 | M | S08, S14 | [#21](https://github.com/sleepyshark85/Officina/issues/21) | todo |
 | [S20](S20-team.md) | Team | M6 | M | S13, S18, S19 | [#22](https://github.com/sleepyshark85/Officina/issues/22) | todo |

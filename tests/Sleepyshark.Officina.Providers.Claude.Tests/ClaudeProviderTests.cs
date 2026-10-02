@@ -21,8 +21,9 @@ public sealed class ClaudeProviderTests : IDisposable
 
     public void Dispose() => File.Delete(temporary);
 
-    // CLD-01, CLD-03, CLD-05, CLD-07, CLD-09, TOOL-13: the prefix, cache markers with their lifetimes, a turn-scoped
-    // volatile context, an operator's system message, reasoning sent back unchanged, provider limits, and the streamed reply.
+    // CLD-01, CLD-03, CLD-05, CLD-07, CLD-09, TOOL-13: the prefix with project memory after the instructions, cache markers with
+    // their lifetimes, a turn-scoped volatile context, an operator's system message, reasoning sent back unchanged, provider
+    // limits, and the streamed reply.
     [Fact]
     public async Task A_request_and_its_streamed_reply_map_as_recorded()
     {
@@ -41,7 +42,10 @@ public sealed class ClaudeProviderTests : IDisposable
                 Message.System("Keep it short."),
                 new(Role.System, [new TextContent("Today is 2026-10-02.")], turnScoped: true),
             ],
-            [new(CachePoint.Instructions, TimeSpan.FromHours(1)), new(CachePoint.History, TimeSpan.FromMinutes(5))]);
+            [new(CachePoint.Instructions, TimeSpan.FromHours(1)), new(CachePoint.Memory, TimeSpan.FromHours(1)), new(CachePoint.History, TimeSpan.FromMinutes(5))])
+        {
+            Memory = "<project-memory>\n- note #1 build: Run dotnet test.\n</project-memory>",
+        };
         using var provider = Replay(Named("mapping.json"));
 
         var events = await StreamAsync(provider, request);

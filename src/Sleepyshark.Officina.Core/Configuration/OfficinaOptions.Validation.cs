@@ -130,6 +130,11 @@ public sealed partial record OfficinaOptions : IValidatableObject
             errors = errors.Concat(Annotations(board, "capabilities.taskBoard", ValidationPhase.Invariants));
         }
 
+        if (Capabilities.ProjectMemory is { Enabled: true } memory)
+        {
+            errors = errors.Concat(Annotations(memory, "capabilities.projectMemory"));
+        }
+
         errors = errors.Concat(AdmissionSettings()).Concat(Annotations(Storage.Retention, "storage.retention"))
             .Concat(Storage.Unstored.Where(kind => !EventPayload.Kinds.Contains(kind)).Select(kind => new ConfigurationError(
                 ValidationPhase.Shape, "storage.unstoredEvents", $"\"{kind}\" is not a kind of event.",
@@ -153,6 +158,16 @@ public sealed partial record OfficinaOptions : IValidatableObject
         foreach (var name in Tools.Where(tool => tool.Value.BuiltinTool()?.StartsWith("tasks.", StringComparison.Ordinal) == true).Select(tool => tool.Key))
         {
             errors = on.Contains("taskBoard") ? errors : errors.Append(Off($"tools.{name}.source", "taskBoard"));
+        }
+
+        foreach (var name in Tools.Where(tool => tool.Value.BuiltinTool()?.StartsWith("memory.", StringComparison.Ordinal) == true).Select(tool => tool.Key))
+        {
+            errors = on.Contains("projectMemory") ? errors : errors.Append(Off($"tools.{name}.source", "projectMemory"));
+        }
+
+        if (Capabilities.ProjectMemory is { Enabled: true, ApproveBy: MemoryApprover.Owner } && !on.Contains("humanInteraction"))
+        {
+            errors = errors.Append(Off("capabilities.projectMemory.approveBy", "humanInteraction"));
         }
 
         foreach (var (name, _) in Tools.Where(tool => tool.Value.BuiltinTool() == AskOwnerTool.Name && !on.Contains("humanInteraction")))

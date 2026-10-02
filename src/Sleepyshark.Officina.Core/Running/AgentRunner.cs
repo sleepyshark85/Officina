@@ -4,6 +4,7 @@ using Sleepyshark.Officina.Core.Configuration;
 using Sleepyshark.Officina.Core.Events;
 using Sleepyshark.Officina.Core.Extensibility;
 using Sleepyshark.Officina.Core.Messages;
+using Sleepyshark.Officina.Core.Memory;
 using Sleepyshark.Officina.Core.Observability;
 using Sleepyshark.Officina.Core.Records;
 using Sleepyshark.Officina.Core.Tasks;
@@ -108,6 +109,14 @@ public sealed class AgentRunner
     /// <param name="runId">The run.</param>
     /// <exception cref="InvalidOperationException">The task board is off.</exception>
     public TaskBoard Board(string? tenant, string runId) => pipeline.Board(tenant, runId);
+
+    /// <summary>
+    /// The project memory of a caller's agents, as the owner changes it: adds an entry, and approves or rejects proposals,
+    /// including the condensing only the owner approves (MEM-03, MEM-05).
+    /// </summary>
+    /// <param name="caller">Whose memory: the project's, this caller's or the tenant's, as configured (MEM-04).</param>
+    /// <exception cref="InvalidOperationException">Project memory is off.</exception>
+    public ProjectMemory Memory(Caller caller) => pipeline.Memory(caller);
 
     /// <summary>How write tool calls are decided (HITL-01). The owner may change it during a run; each agent's next call uses it.</summary>
     public PermissionMode PermissionMode
@@ -368,7 +377,7 @@ public sealed class AgentRunner
         var instructions = InstructionPlaceholders.Fill(agent.Instructions, Options.Project, context.Agent, agent);
         var name = context.Agent;
         return new Turn(
-            context, Options, Provider(name), pipeline, new RunRecord(storage.Records, context, time), pipeline.Board(context), checks, knowledge, storage.Conversations,
+            context, Options, Provider(name), pipeline, new RunRecord(storage.Records, context, time), pipeline.Board(context), pipeline.Memory(context), checks, knowledge, storage.Conversations,
             shortening.GetValueOrDefault(name), Events, instructions, work, Inbox(name),
             token => paused.TryGetValue(name, out var gate) ? gate.Task.WaitAsync(token) : Task.CompletedTask, budget, time);
     }

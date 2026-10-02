@@ -1,6 +1,7 @@
 using Json.Schema;
 using Sleepyshark.Officina.Core.Configuration;
 using Sleepyshark.Officina.Core.Extensibility;
+using Sleepyshark.Officina.Core.Memory;
 using Sleepyshark.Officina.Core.Records;
 using Sleepyshark.Officina.Core.Tasks;
 
@@ -39,7 +40,7 @@ internal sealed record CatalogTool(string Name, ToolOptions Options, ITool? Impl
 internal sealed class ToolCatalog
 {
     /// <summary>The built-in tools, by the name <c>builtin:</c> sources use.</summary>
-    public static readonly IReadOnlyList<string> Builtins = [.. RecordTool.All.Keys, ArtifactTool.Name, AskOwnerTool.Name, .. TaskTool.Names];
+    public static readonly IReadOnlyList<string> Builtins = [.. RecordTool.All.Keys, ArtifactTool.Name, AskOwnerTool.Name, .. TaskTool.Names, .. MemoryTool.All.Keys];
 
     private readonly Dictionary<string, Dictionary<string, CatalogTool>> byAgent;
 
@@ -124,7 +125,7 @@ internal sealed class ToolCatalog
             {
                 ArtifactTool.Name => new ArtifactTool(artifacts),
                 AskOwnerTool.Name => AskOwnerTool.Instance,
-                _ => RecordTool.All.GetValueOrDefault(builtin) ?? TaskTool.Create(builtin, checks),
+                _ => RecordTool.All.GetValueOrDefault(builtin) ?? MemoryTool.All.GetValueOrDefault(builtin) ?? (ITool)TaskTool.Create(builtin, checks),
             };
         }
 

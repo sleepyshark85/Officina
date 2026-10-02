@@ -7,6 +7,7 @@ using Json.Schema;
 using Sleepyshark.Officina.Core.Configuration;
 using Sleepyshark.Officina.Core.Events;
 using Sleepyshark.Officina.Core.Extensibility;
+using Sleepyshark.Officina.Core.Memory;
 using Sleepyshark.Officina.Core.Observability;
 using Sleepyshark.Officina.Core.Records;
 using Sleepyshark.Officina.Core.Tasks;
@@ -100,6 +101,16 @@ public sealed class ToolPipeline
     public TaskBoard Board(string? tenant, string runId) =>
         Board(new ToolContext(runId, TaskBoard.Owner, Caller.Anonymous with { Tenant = tenant }), owner: true)
         ?? throw new InvalidOperationException("The task board is off. Set capabilities.taskBoard.enabled to true.");
+
+    /// <summary>The project memory of a caller, as the owner changes it (MEM-03).</summary>
+    /// <exception cref="InvalidOperationException">Project memory is off.</exception>
+    public ProjectMemory Memory(Caller caller) =>
+        Memory(new ToolContext("", ProjectMemory.Owner, caller), owner: true) ?? throw new InvalidOperationException("Project memory is off. Set capabilities.projectMemory.enabled to true.");
+
+    /// <summary>The project memory the agent of <paramref name="context"/> acts on; null when project memory is off.</summary>
+    internal ProjectMemory? Memory(ToolContext context, bool owner = false) => options.Capabilities.ProjectMemory is { Enabled: true } memory
+        ? new ProjectMemory(storage.Memory, context.Caller.Tenant, ProjectMemory.ScopeOf(memory, options.Project, context.Caller), memory, time, context.Agent, owner)
+        : null;
 
     /// <summary>The run's task board as the agent of <paramref name="context"/> acts on it; null when the task board is off.</summary>
     internal TaskBoard? Board(ToolContext context, bool owner = false) =>
@@ -233,7 +244,7 @@ public sealed class ToolPipeline
         var (result, detail) = tool.Implementation is AskOwnerTool
             ? (await AskQuestionAsync(context, arguments, ct).ConfigureAwait(false), null)
             : await InvokeAsync(
-                tool, new ToolCall(real ? context.Masker!.Restore(arguments) : arguments, context.Caller, key, secrets, record, board, PublishAsync) { Agent = context.Agent }, ct).ConfigureAwait(false);
+                tool, new ToolCall(real ? context.Masker!.Restore(arguments) : arguments, context.Caller, key, secrets, record, board, PublishAsync) { Agent = context.Agent, Memory = Memory(context) }, ct).ConfigureAwait(false);
         detail = detail is null || masker is null ? detail : masker.Mask(detail);
         if (tool.Options.Untrusted && result.Error is null)
         {
@@ -345,6 +356,10 @@ public sealed class ToolPipeline
         if (tool.Approval == Approval.Always)
         {
             yield return new(PolicyAction.Ask, ToolErrorCategory.PolicyViolation, "the tool needs approval", "approval");
+        }
+        else if (tool.Options.BuiltinTool() == MemoryTool.Propose && options.Capabilities.ProjectMemory.ApproveBy == MemoryApprover.Owner)
+        {
+            yield return new(PolicyAction.Ask, ToolErrorCategory.PolicyViolation, "the owner approves changes to project memory", "projectMemory");
         }
         else if (tool.Options.Irreversible && options.Capabilities.HumanInteraction.SignsOff(SignOff.IrreversibleAction))
         {

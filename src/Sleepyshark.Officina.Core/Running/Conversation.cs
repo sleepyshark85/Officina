@@ -16,7 +16,9 @@ internal sealed class Conversation
     /// <summary>Agents of one definition start throughout a run, often minutes apart, so the shared prefix is kept longer.</summary>
     private static readonly TimeSpan PrefixCacheLifetime = TimeSpan.FromHours(1);
 
-    private readonly ModelRequest prefix;
+    private readonly TimeSpan historyLifetime;
+    private readonly int boundaryLimit;
+    private ModelRequest prefix;
     private readonly bool turnScoped;
     private List<Message> history = [];
     private int turnStart;
@@ -30,10 +32,35 @@ internal sealed class Conversation
     /// <param name="capabilities">What the provider supports.</param>
     public Conversation(ModelProfile profile, ImmutableArray<ToolDefinition> tools, string instructions, ContextOptions context, ProviderCapabilities capabilities)
     {
-        // CTX-11: longest lifetime first, and no more boundaries than the provider allows; the history's is kept first.
-        CacheBoundary[] boundaries = [new(CachePoint.Instructions, PrefixCacheLifetime), new(CachePoint.History, context.HistoryCacheLifetime)];
-        prefix = new ModelRequest(profile, tools, $"{instructions}\n\n{Labels.Policy}", [], [.. boundaries.TakeLast(capabilities.CacheBoundaries)]);
+        historyLifetime = context.HistoryCacheLifetime;
+        boundaryLimit = capabilities.CacheBoundaries;
+        prefix = new ModelRequest(profile, tools, $"{instructions}\n\n{Labels.Policy}", [], Boundaries(memory: false));
         turnScoped = capabilities.TurnScopedMessages;
+    }
+
+    /// <summary>
+    /// Puts project memory after the instructions, with boundary ② after it, before the first call (MEM-01). The prefix is
+    /// not changed afterwards, whatever memory does.
+    /// </summary>
+    public void UseMemory(string memory)
+    {
+        if (memory.Length > 0)
+        {
+            prefix = prefix with { Memory = memory, CacheBoundaries = Boundaries(memory: true) };
+        }
+    }
+
+    /// <summary>CTX-11: longest lifetime first, and no more boundaries than the provider allows; the history's is kept first.</summary>
+    private ImmutableArray<CacheBoundary> Boundaries(bool memory)
+    {
+        List<CacheBoundary> boundaries = [new(CachePoint.Instructions, PrefixCacheLifetime)];
+        if (memory)
+        {
+            boundaries.Add(new(CachePoint.Memory, PrefixCacheLifetime));
+        }
+
+        boundaries.Add(new(CachePoint.History, historyLifetime));
+        return [.. boundaries.TakeLast(boundaryLimit)];
     }
 
     public ImmutableArray<Message> History => [.. history];

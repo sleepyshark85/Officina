@@ -15,7 +15,8 @@
       ],
       "tool_choice": { "type": "auto" },
       "system": [
-        { "type": "text", "text": "Fix bugs.", "cache_control": { "type": "ephemeral", "ttl": "1h" } }
+        { "type": "text", "text": "Fix bugs.", "cache_control": { "type": "ephemeral", "ttl": "1h" } },
+        { "type": "text", "text": "<project-memory>\n- note #1 build: Run dotnet test.\n</project-memory>", "cache_control": { "type": "ephemeral", "ttl": "1h" } }
       ],
       "messages": [
         { "role": "user", "content": [{ "type": "text", "text": "Fix a.cs." }] },
