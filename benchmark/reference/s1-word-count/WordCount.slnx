@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="src/WordCount/WordCount.csproj" />
+  <Project Path="tests/WordCount.Tests/WordCount.Tests.csproj" />
+</Solution>

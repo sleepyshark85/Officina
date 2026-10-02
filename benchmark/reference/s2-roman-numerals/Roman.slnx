@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="src/Roman.Core/Roman.Core.csproj" />
+  <Project Path="src/Roman/Roman.csproj" />
+  <Project Path="tests/Roman.Tests/Roman.Tests.csproj" />
+</Solution>

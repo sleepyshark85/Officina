@@ -18,14 +18,44 @@ S21 runs the benchmark against the live model and measures it; this folder is th
 
 ## A run
 
-1. Start from an empty git repository holding only [`sof.json`](sof.json), the coding team preset on a .NET project.
-2. Run `sof run --input "<the goal paragraph>"` in it. Answer only the configured sign-offs: the lead's plan, the run budget
-   and irreversible actions. Stop the run once, at a random point, and resume it (`sof resume <run>`).
-3. When the run ends, run the hidden tests against its baseline: `BENCH_WORKSPACE=<the repository> python3 -m unittest discover
-   -s benchmark/goals/<goal>/hidden`.
+[`bench.py`](bench.py) runs the benchmark against the live model. Each run:
 
-A run succeeds when the baseline passes its own checks (the build and the tests) and every hidden test, with human input only
-at the sign-offs. Each goal runs at least 3 times; a run records its success, cost, time and the human inputs it needed.
+1. Starts from a new git repository outside this one, holding only [`sof.json`](sof.json), the coding team preset on a .NET
+   project, so the team never sees the hidden tests or the reference solutions.
+2. Runs `sof run --input "<the goal paragraph>"` in it. Each configured sign-off (the lead's plan, the run budget, an
+   irreversible action) is approved and counted as a human input. Any other request (a command no rule allows, a question) is
+   declined at once, as nobody answering would be by `run.approvalTimeout`, and counted as declined.
+3. Kills `sof` after a random model call, as a crash would, and resumes the run with `sof resume <run>`.
+4. When the run ends, reads its cost and time with `sof report <run>`, clones its baseline and scores it
+   ([`scoring.py`](scoring.py)): the project's own build and tests, then the hidden tests.
+
+A run succeeds when it was restarted once and its baseline passes its own checks and every hidden test; its only human inputs
+are the sign-offs. Each goal runs at least 3 times, on Linux and on Windows. [`report.py`](report.py) sums the results by goal,
+tier and system, and checks the 90% target (M7).
+
+**Run it in a throwaway VM or user account.** The team's commands run in `sof`'s sandbox, but scoring builds and runs the
+team's code outside any sandbox, as you: its build, its tests and the hidden suites, with access to your home folder. So
+`bench.py` asks for `--i-understand-unsandboxed-scoring`.
+
+```sh
+export ANTHROPIC_API_KEY=...         # the runs call the live model and cost money
+python3 benchmark/bench.py --i-understand-unsandboxed-scoring --goals s1-word-count --runs 1    # a pilot run
+python3 benchmark/bench.py --i-understand-unsandboxed-scoring                                  # every goal, 3 runs each
+python3 benchmark/report.py benchmark/results/<linux run> benchmark/results/<windows run>
+```
+
+The report meets the target only with every goal run at least 3 times on both Linux and Windows. A run whose cost passes
+`--max-cost` (60 dollars), or that takes longer than `--timeout` (8 hours), is stopped and fails. A failed run's workspace is kept, its path in the run's
+JSON; a successful run's is removed.
+
+## The reference solutions
+
+[`reference/`](reference) holds a solution for each goal, written from its paragraph alone. [`validate.py`](validate.py)
+copies each to an empty folder and scores it as a run's baseline would be: each suite can be passed. It also checks that each
+suite fails against an empty workspace, which shows only that a suite needs a project, not that it tells a wrong solution from a
+right one. CI runs it on Linux and Windows when `benchmark/` changes, with the runner's own
+tests ([`tests/`](tests), against a stand-in for `sof`). Validating found that text sent to a program's standard input became
+CRLF on Windows, which the goals do not allow; the harness now sends it as bytes.
 
 ## The hidden tests
 

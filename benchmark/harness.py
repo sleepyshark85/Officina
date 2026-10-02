@@ -43,9 +43,17 @@ def command(path):
 
 
 def run(path, *args, stdin="", cwd=None, timeout=60):
-    """Runs the console program with the arguments; returns (exit code, stdout, stderr)."""
-    result = subprocess.run([*command(path), *args], input=stdin, capture_output=True, text=True, cwd=cwd, timeout=timeout)
-    return result.returncode, result.stdout, result.stderr
+    """
+    Runs the console program with the arguments; returns (exit code, stdout, stderr). Standard input is sent as UTF-8 bytes,
+    exactly as given: in text mode Python would turn each newline into CRLF on Windows, changing what the program reads.
+    """
+    result = subprocess.run([*command(path), *args], input=stdin.encode(), capture_output=True, cwd=cwd, timeout=timeout)
+    return result.returncode, text(result.stdout), text(result.stderr)
+
+
+def text(raw):
+    """A program's output as text, with CRLF read as LF, as text mode reads it."""
+    return raw.decode("utf-8", errors="replace").replace("\r\n", "\n")
 
 
 def folder(prefix="bench-"):

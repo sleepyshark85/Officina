@@ -1,0 +1,45 @@
+name: Benchmark suites
+
+# TEST-31: every hidden suite passes against its reference solution, and the benchmark runner works against a stand-in for sof.
+# It needs nothing outside benchmark/, so it runs only when that changes. The live benchmark (benchmark/bench.py) is run by hand:
+# it calls the model.
+on:
+  push:
+    paths: ["benchmark/**", ".github/workflows/benchmark.yml"]
+  pull_request:
+    paths: ["benchmark/**", ".github/workflows/benchmark.yml"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: benchmark-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  benchmark-suites:
+    name: benchmark suites (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    env:
+      DOTNET_NOLOGO: true
+      DOTNET_CLI_TELEMETRY_OPTOUT: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Validate the hidden suites against the reference solutions
+        run: python benchmark/validate.py
+
+      - name: Test the benchmark runner
+        run: python -m unittest discover -s benchmark/tests -v
