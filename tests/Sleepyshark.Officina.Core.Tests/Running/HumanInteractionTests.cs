@@ -281,8 +281,10 @@ public class HumanInteractionTests
         kit.Runner.Cancel(Agent);
         var result = await dev;
 
-        Assert.Equal((HandoffReason.RequestedByHuman, "the turn was cancelled"), (result.Handoff!.Reason, result.Handoff.Detail));
-        Assert.Equal(ToolErrorCategory.Cancelled, Assert.Single(result.Handoff.ToolCalls).Result.Error);
+        // It failed once under load in 150 runs; this says how, the next time it does.
+        var seen = $"outcome {result.Outcome}, output \"{result.Output}\", handoff {result.Handoff?.Reason}: {result.Handoff?.Detail}, tool calls: "
+            + string.Join("; ", result.Handoff?.ToolCalls.Select(call => $"{call.Request.Name} {call.Result.Error} {call.Result.Content}") ?? []);
+        Assert.True(result.Handoff is { Reason: HandoffReason.RequestedByHuman, Detail: "the turn was cancelled", ToolCalls: [{ Result.Error: ToolErrorCategory.Cancelled }] }, seen);
     }
 
     // RUN-06, TEST-27: a model call that ignores cancellation is left behind once the configured time has passed.

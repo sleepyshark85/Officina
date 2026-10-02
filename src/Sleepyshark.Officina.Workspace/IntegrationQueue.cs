@@ -1,3 +1,4 @@
+using Microsoft.Extensions.FileSystemGlobbing;
 using Sleepyshark.Officina.Core.Configuration;
 using Sleepyshark.Officina.Core.Extensibility;
 
@@ -16,7 +17,9 @@ namespace Sleepyshark.Officina.Workspace;
 /// <param name="checks">The baseline checks, by name, in order (WS-02).</param>
 /// <param name="time">The clock for the waiting time.</param>
 /// <param name="released">Called with the scratch worktree's folder before it is removed, such as to release what a sandbox set up for its checks.</param>
-internal sealed class IntegrationQueue(string root, string baseline, string runId, IReadOnlyDictionary<string, ICheck> checks, TimeProvider time, Action<string>? released)
+/// <param name="protectedPaths">The hidden and read-only paths, which no change may add, change or remove (INV-10).</param>
+internal sealed class IntegrationQueue(
+    string root, string baseline, string runId, IReadOnlyDictionary<string, ICheck> checks, TimeProvider time, Action<string>? released, Matcher protectedPaths)
 {
     private readonly Lock gate = new();
     private readonly Queue<DateTimeOffset> waiting = new();
@@ -65,6 +68,13 @@ internal sealed class IntegrationQueue(string root, string baseline, string runI
         {
             // WS-03: a conflict is never resolved silently, so markers left in the change are a conflict still.
             return new(IntegrationOutcome.Conflict, unresolved);
+        }
+
+        // INV-10: the sandbox protects only the files that exist when a command starts, so a command can create one, such as a
+        // sof.<environment>.json, that the configuration would load once it is on the baseline.
+        if (await ProtectedAsync(copy, branchPoint, ct).ConfigureAwait(false) is { Count: > 0 } touched)
+        {
+            return new(IntegrationOutcome.Protected, touched);
         }
 
         var scratch = Path.Combine(root, WorkspaceOptions.StateFolder, "integration");
@@ -146,6 +156,11 @@ internal sealed class IntegrationQueue(string root, string baseline, string runI
         return marked;
     }
 
+    /// <summary>The protected paths the change adds, changes or removes.</summary>
+    private async Task<List<string>> ProtectedAsync(WorkingCopy copy, string branchPoint, CancellationToken ct) =>
+        [.. Lines(await Git.RunAsync(copy.Directory, ct, "diff", "--name-only", "--no-renames", "-z", branchPoint, "HEAD").ConfigureAwait(false), '\0')
+            .Where(path => protectedPaths.Match(path).HasMatches)];
+
     /// <summary>
     /// WS-03: brings the baseline into the working copy, which its change no longer applies to. Git marks the conflicts in the files,
     /// and the merge is committed with them, so the author sees and resolves them; the next integration squashes from the baseline
@@ -180,7 +195,7 @@ internal sealed class IntegrationQueue(string root, string baseline, string runI
         return branchPoint;
     }
 
-    private static string[] Lines(string text) => text.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+    private static string[] Lines(string text, char separator = '\n') => text.Split(separator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 }
 
 /// <summary>How long the integration queue is, for the owner and the lead (WS-09).</summary>

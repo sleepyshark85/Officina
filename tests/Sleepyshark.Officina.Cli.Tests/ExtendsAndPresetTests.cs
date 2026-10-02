@@ -86,6 +86,21 @@ public sealed class ExtendsAndPresetTests : IDisposable
         Assert.EndsWith("shared.json", configuration.SourceOf("run.budget.cost"), StringComparison.Ordinal);
     }
 
+    // INV-10: a file sof.json extends is read-only to agents, as sof.json is, whatever its name, such as one starting with "..".
+    [Fact]
+    public void The_files_sof_json_extends_are_read_only_to_agents()
+    {
+        Directory.CreateDirectory(Path.Combine(folder.Directory, "team"));
+        folder.Write("..base.json", "{}").Write(Path.Combine("team", "roles.json"), "{}");
+        folder.Write("sof.json", """{ "extends": ["..base.json", "team/roles.json", "preset:single-call-extractor"] }""");
+
+        var paths = folder.Load().Options.Capabilities.Workspace.ProtectedPaths;
+
+        Assert.Equal(
+            [("..base.json", PathAccess.ReadOnly), ("team/roles.json", PathAccess.ReadOnly)],
+            paths.Select(path => (path.Path, path.Access)).Order());
+    }
+
     [Theory]
     [InlineData("""{ "extends": ["preset:nothing"] }""", "preset \"preset:nothing\" does not exist.")]
     [InlineData("""{ "extends": ["other.json"] }""", "other.json builds on itself through sof.json.")]

@@ -106,6 +106,41 @@ public class GitWorkspaceTests
         Assert.Equal(["Task t1", "Start"], (await repository.GitAsync("log", "--format=%s", "main")).Trim().Split('\n'));
     }
 
+    // INV-10, WS-05: a command protects only the files there when it starts, so it can create a new protected file, such as a
+    // sof.<environment>.json that sof would load; a change that adds, changes or removes a protected path never reaches the
+    // baseline, and goes back to its author. The file the command writes stands in for the sandbox's command.
+    [Theory]
+    [InlineData("sof.prod.json")]
+    [InlineData("config/team.json")]
+    public async Task A_change_to_a_protected_file_is_refused_and_the_baseline_stays_clean(string path)
+    {
+        using var repository = await CreateAsync(("a.txt", "one\n"));
+        using var workspace = await repository.OpenAsync(new() { ProtectedPaths = [new() { Path = "config/team.json", Access = PathAccess.ReadOnly }] });
+        var copy = await workspace.OpenWorkingCopyAsync("t1", "alice", Ct);
+        await EditAsync(copy, "a.txt", "one", "alice's");
+        Directory.CreateDirectory(Path.GetDirectoryName(Path.Combine(copy.Directory, path))!);
+        await File.WriteAllTextAsync(Path.Combine(copy.Directory, path), """{ "run": { "permissionMode": "auto" } }""", Ct);
+
+        var result = await workspace.IntegrateAsync(copy, "t1", "alice", Ct);
+
+        Assert.Equal((IntegrationOutcome.Protected, path), (result.Outcome, Assert.Single(result.Details)));
+        Assert.False(File.Exists(Path.Combine(repository.Root, path)));
+        Assert.Equal("one\n", repository.Baseline("a.txt"));
+        Assert.Equal(["Start"], (await repository.GitAsync("log", "--format=%s", "main")).Trim().Split('\n'));
+    }
+
+    // INV-10: the workspace is the repository's top folder, which protected paths are relative to; a subfolder is refused.
+    [Fact]
+    public async Task A_workspace_in_a_subfolder_of_the_repository_is_refused()
+    {
+        using var repository = await CreateAsync(("app/a.txt", "one\n"));
+
+        var refused = await Assert.ThrowsAsync<WorkspaceException>(() =>
+            GitWorkspace.OpenAsync(Path.Combine(repository.Root, "app"), "run-1", new(), new Dictionary<string, ICheck>(), repository.Time, null, Ct));
+
+        Assert.EndsWith("is the subfolder app/ of a git repository. Put sof.json in the repository's top folder.", refused.Message, StringComparison.Ordinal);
+    }
+
     // WS-09: a scratch folder that could not be removed after an integration loses nothing: the result stands, with a warning, and
     // the next integration removes the folder first.
     [Fact]
