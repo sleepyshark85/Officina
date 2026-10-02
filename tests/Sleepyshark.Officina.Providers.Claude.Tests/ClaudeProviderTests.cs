@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Microsoft.Extensions.Time.Testing;
 using Sleepyshark.Officina.Core.Configuration;
 using Sleepyshark.Officina.Core.Extensibility;
 using Sleepyshark.Officina.Core.Messages;
@@ -154,17 +155,66 @@ public sealed class ClaudeProviderTests : IDisposable
         Assert.Equal((ModelFailure.RateLimited, TimeSpan.FromSeconds(7)), (failure.Failure, failure.RetryAfter));
     }
 
-    // MDL-06: Haiku 4.5 and Sonnet 5 take no system message in the middle of a conversation.
+    // MDL-06: only some models take a system message in the middle of a conversation.
     [Theory]
     [InlineData("claude-opus-5-5", true)]
+    [InlineData("claude-opus-4-8", true)]
     [InlineData("claude-fable-5-1", true)]
-    [InlineData("claude-sonnet-5-5", false)]
+    [InlineData("claude-mythos-5-1", true)]
+    [InlineData("claude-sonnet-5-5", true)]
+    [InlineData("claude-sonnet-5", false)]
+    [InlineData("claude-opus-4-7", false)]
     [InlineData("claude-haiku-4-5", false)]
     public void Capabilities_depend_on_the_model(string model, bool turnScoped)
     {
         using var provider = new ClaudeProvider(ProviderOptions.Claude, new InMemorySecretSource(new Dictionary<string, string>()));
 
         Assert.Equal((4, turnScoped), (provider.CapabilitiesOf(model).CacheBoundaries, provider.CapabilitiesOf(model).TurnScopedMessages));
+    }
+
+    // REL-01: a connection dropped mid-stream may pass if tried again.
+    [Fact]
+    public async Task A_connection_dropped_mid_stream_is_transient()
+    {
+        using var provider = Hanging(new HttpIOException(HttpRequestError.ResponseEnded), out _);
+
+        var failure = await Assert.ThrowsAsync<ModelCallException>(() => StreamAsync(provider, Hi));
+
+        Assert.Equal(ModelFailure.Transient, failure.Failure);
+    }
+
+    // REL-01: a call that goes quiet is given up on after the timeout, so it does not hold its place for ever.
+    [Fact]
+    public async Task A_call_that_goes_quiet_for_the_timeout_is_transient()
+    {
+        var time = new FakeTimeProvider();
+        using var provider = Hanging(null, out var waiting, time);
+        var call = StreamAsync(provider, Hi);
+
+        await waiting.Task.WaitAsync(TestContext.Current.CancellationToken);
+        time.Advance(ProviderOptions.Claude.Timeout);
+
+        var failure = await Assert.ThrowsAsync<ModelCallException>(() => call);
+        Assert.Equal(ModelFailure.Transient, failure.Failure);
+    }
+
+    // The caller's own cancellation is not a failure to retry.
+    [Fact]
+    public async Task A_cancelled_call_stays_cancelled()
+    {
+        using var provider = Hanging(null, out var waiting);
+        using var cancel = new CancellationTokenSource();
+        var call = Task.Run(async () =>
+        {
+            await foreach (var _ in provider.StreamAsync(Hi, cancel.Token))
+            {
+            }
+        }, TestContext.Current.CancellationToken);
+
+        await waiting.Task.WaitAsync(TestContext.Current.CancellationToken);
+        await cancel.CancelAsync();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => call);
     }
 
     // CLD-08, HIST-04: so the turn shortens the history.
@@ -180,6 +230,85 @@ public sealed class ClaudeProviderTests : IDisposable
         { "type": "message_start", "message": { "id": "msg", "type": "message", "role": "assistant", "model": "claude-opus-5-5", "content": [],
           "stop_reason": null, "stop_sequence": null, "usage": { "input_tokens": 1, "output_tokens": 1 } } }
         """;
+
+    private static readonly ModelRequest Hi = new(Profile, [], "Answer.", [Message.User("Hi.")], []);
+
+    /// <summary>A provider whose reply starts, then stalls until it fails with this exception, or until the call is cancelled.</summary>
+    private static ClaudeProvider Hanging(Exception? fail, out TaskCompletionSource waiting, TimeProvider? time = null)
+    {
+        var stalled = waiting = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        return new ClaudeProvider(
+            ProviderOptions.Claude, new InMemorySecretSource(new Dictionary<string, string> { ["ANTHROPIC_API_KEY"] = "test-key" }),
+            new StallingHandler(async ct =>
+            {
+                stalled.TrySetResult();
+                if (fail is not null)
+                {
+                    throw fail;
+                }
+
+                await Task.Delay(Timeout.Infinite, ct);
+            }),
+            time);
+    }
+
+    /// <summary>Answers with the start of a streamed reply, then runs this when the rest is read.</summary>
+    private sealed class StallingHandler(Func<CancellationToken, Task> stall) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var start = System.Text.Encoding.UTF8.GetBytes($"event: message_start\ndata: {System.Text.RegularExpressions.Regex.Replace(Start, @"\s+", " ")}\n\n");
+            return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+            {
+                Content = new StreamContent(new StalledStream(start, stall)) { Headers = { ContentType = new("text/event-stream") } },
+            });
+        }
+    }
+
+    private sealed class StalledStream(byte[] start, Func<CancellationToken, Task> stall) : Stream
+    {
+        private int read;
+
+        public override bool CanRead => true;
+
+        public override bool CanSeek => false;
+
+        public override bool CanWrite => false;
+
+        public override long Length => throw new NotSupportedException();
+
+        public override long Position
+        {
+            get => throw new NotSupportedException();
+            set => throw new NotSupportedException();
+        }
+
+        public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            if (read < start.Length)
+            {
+                var count = Math.Min(buffer.Length, start.Length - read);
+                start.AsMemory(read, count).CopyTo(buffer);
+                read += count;
+                return count;
+            }
+
+            await stall(cancellationToken);
+            return 0;
+        }
+
+        public override int Read(byte[] buffer, int offset, int count) => ReadAsync(buffer.AsMemory(offset, count)).AsTask().GetAwaiter().GetResult();
+
+        public override void Flush()
+        {
+        }
+
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+
+        public override void SetLength(long value) => throw new NotSupportedException();
+
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+    }
 
     private static string Error(string type, string message) => $$"""{ "type": "error", "error": { "type": "{{type}}", "message": "{{message}}" } }""";
 

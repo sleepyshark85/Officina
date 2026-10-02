@@ -19,9 +19,6 @@ namespace Sleepyshark.Officina.Core.Tests.Running;
 /// </summary>
 public class ModelGatewayTests
 {
-    /// <summary>How long the real clock gives the run to reach its next wait after the fake one moves.</summary>
-    private static readonly TimeSpan Settle = TimeSpan.FromMilliseconds(30);
-
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     // MDL-05, REL-01.
@@ -259,15 +256,16 @@ public class ModelGatewayTests
     [Fact]
     public async Task A_wait_the_provider_asks_for_holds_back_all_agents()
     {
-        var time = new FakeTimeProvider();
+        var time = new RecordingTimeProvider();
         var provider = new HeldProvider { FirstFailure = new ModelCallException(ModelFailure.RateLimited, retryAfter: TimeSpan.FromSeconds(30)) };
         provider.Release.SetResult();
         var gateway = Gateway(provider, maxConcurrentCalls: null, time);
 
-        var first = Call(gateway, "worker-1"); // told to wait 30 seconds, and retries after 2
+        var first = Call(gateway, "worker-1"); // told to wait 30 seconds; it would retry after 1, but the wait holds it back
         var second = Call(gateway, "worker-2");
+        await Eventually(() => time.Pending.Count == 2);
         time.Advance(TimeSpan.FromSeconds(29));
-        await Task.Delay(50, Ct);
+        await Eventually(() => time.Pending.Count(wait => wait == TimeSpan.FromSeconds(1)) == 2); // both now wait for the last second
         Assert.Equal(["worker-1"], provider.Started);
 
         time.Advance(TimeSpan.FromSeconds(1));
@@ -287,7 +285,7 @@ public class ModelGatewayTests
     /// <summary>The instructions say who calls, so the provider can tell.</summary>
     private static ModelRequest Request(string agent) => new(new ModelProfile(), [], agent, [Message.User("Go.")], []);
 
-    private static ModelGateway Gateway(IModelProvider provider, int? maxConcurrentCalls, FakeTimeProvider? time = null)
+    private static ModelGateway Gateway(IModelProvider provider, int? maxConcurrentCalls, TimeProvider? time = null)
     {
         var agents = new Dictionary<string, AgentDefinition>
         {
@@ -329,16 +327,20 @@ public class ModelGatewayTests
         return new TestKit(options, new Dictionary<string, ITool> { ["echo"] = new FakeTool(ToolKind.Read) });
     }
 
-    /// <summary>Runs the agent, moving the clock on a second at a time while it waits; says how long it waited.</summary>
+    /// <summary>Runs the agent, moving the clock on to each wait as it starts; says how long it waited.</summary>
     private static async Task<(AgentResult Result, TimeSpan Waited)> RunAsync(TestKit kit)
     {
         var start = kit.Time.GetUtcNow();
         var run = kit.RunAsync(Agent, "work", Ct);
-        await Task.Delay(Settle, Ct); // so the first wait starts before the clock moves
-        while (!run.IsCompleted)
+        while (true)
         {
-            kit.Time.Advance(TimeSpan.FromSeconds(1));
-            await Task.Delay(Settle, Ct);
+            await Eventually(() => run.IsCompleted || kit.Time.Pending.Count > 0);
+            if (run.IsCompleted)
+            {
+                break;
+            }
+
+            kit.Time.Advance(kit.Time.Pending.Min()); // exactly to the next wait
         }
 
         return (await run, kit.Time.GetUtcNow() - start);

@@ -41,7 +41,7 @@ generated from the Options classes with the JSON Schema [`docs/officina.schema.j
 Everything else has a default. The API key is read from the `ANTHROPIC_API_KEY` environment
 variable unless you configure another secret.
 
-Some Claude models (`claude-haiku-4-5`, the Sonnet 5 models) take no system message in the middle of a conversation. The provider knows which, so the volatile context goes into the history for them, but a message from an operator sent during a turn is still a system message, and such a model rejects it with `InvalidRequest`.
+Only some Claude models (Opus 5 and 4.8, Fable 5, Mythos 5 and Sonnet 5.5) take a system message in the middle of a conversation; the others, such as `claude-haiku-4-5` and Sonnet 5, do not. The provider knows which, so the volatile context goes into the history for them, but a message from an operator sent during a turn is still a system message, and such a model rejects it with `InvalidRequest`.
 
 ## Smallest configurations
 

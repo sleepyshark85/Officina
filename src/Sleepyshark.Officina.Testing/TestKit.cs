@@ -58,7 +58,7 @@ public sealed class TestKit
     /// <summary>The secrets tools can read, by name.</summary>
     public Dictionary<string, string> Secrets { get; } = [];
 
-    public FakeTimeProvider Time { get; } = new();
+    public RecordingTimeProvider Time { get; } = new();
 
     public AgentRunner Runner { get; }
 

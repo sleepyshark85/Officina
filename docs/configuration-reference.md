@@ -158,7 +158,7 @@ An unknown placeholder is an error, never an empty string.
     "baseUrl": null,                                   // optional override
     "retry": { "maxAttempts": 5, "initialDelay": "00:00:01", "maxDelay": "00:01:00" },   // REL-01, MDL-05
     "maxConcurrentCalls": null,                        // MDL-08, CLD-10: calls in flight at once, all agents together
-    "timeout": "00:10:00",
+    "timeout": "00:10:00",                             // longest silence in a call before it is retried as transient
     "features": {                                      // provider features to use, when models support them
       "midConversationSystemMessages": true,           // CLD-03
       "turnScopedSystemMessages": true,                // CLD-03, CTX-10 (beta)

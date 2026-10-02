@@ -26,8 +26,8 @@ Last updated 2026-10-02.
   - S08 left parts of its requirements to the slices that add the state they need; its Notes list them
     (S06, S07, S09, S16, S19, S20); S13 added steps.
   - S11 moved CLD-06 and CLD-11 (the Claude provider's feature switches and Message Batches) to S21. Its Notes list the rest.
-  - S21 (from S12): an operator's message sent during a turn is a mid-conversation system message, which Haiku 4.5 and the
-    Sonnet 5 models reject (`InvalidRequest`); the provider should send it as a user message for them. A reply the model
+  - S21 (from S12): an operator's message sent during a turn is a mid-conversation system message, which every Claude model outside the
+    allow list (such as Haiku 4.5 and Sonnet 5) rejects (`InvalidRequest`); the provider should send it as a user message for them. A reply the model
     gateway starts over after a mid-stream failure leaves its first text in the stored `textGenerated` events, and retries
     are not events of their own. The `baseUrl` provider setting of the reference is not built.
   - S20 also adds pausing the whole run (RUN-06); S16 pauses one agent at a time.

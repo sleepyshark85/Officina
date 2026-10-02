@@ -234,16 +234,11 @@ public sealed class ModelGateway
 
         public sealed class Place(Line line) : IDisposable
         {
-            private int disposed;
-
             public void Dispose()
             {
-                if (Interlocked.Exchange(ref disposed, 1) == 0)
+                lock (line.gate)
                 {
-                    lock (line.gate)
-                    {
-                        line.Release();
-                    }
+                    line.Release();
                 }
             }
         }
