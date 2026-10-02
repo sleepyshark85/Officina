@@ -24,6 +24,9 @@ internal static class Labels
     public static string Data(string source, string text) =>
         $"<data source=\"{source}\">\n{text.Replace("</data", "<\\/data", StringComparison.OrdinalIgnoreCase)}\n</data>";
 
+    /// <summary>A step's input put together from several parts, each labelled with its source, such as <c>step:triage</c> (PAT-04).</summary>
+    public static string Parts(params (string Source, string Text)[] parts) => string.Join('\n', parts.Select(part => Data(part.Source, part.Text)));
+
     public static string Context(IEnumerable<string> facts) => $"<context>\n{string.Join('\n', facts)}\n</context>";
 
     /// <summary>A message sent to an agent during a turn (CTX-08). An operator's goes in a system message (CLD-03).</summary>

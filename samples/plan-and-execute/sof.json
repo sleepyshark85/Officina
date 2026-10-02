@@ -1,0 +1,13 @@
+{
+  "agents": {
+    "builder": {
+      "instructions": "Plan the work as a list of steps.",
+      "pattern": { "type": "planAndExecute", "executor": { "agent": "worker" } },
+      "output": {
+        "format": "structured",
+        "schema": "{ \"type\": \"object\", \"properties\": { \"steps\": { \"type\": \"array\", \"items\": { \"type\": \"string\" } } }, \"required\": [\"steps\"] }"
+      }
+    },
+    "worker": { "instructions": "Carry out the step." }
+  }
+}

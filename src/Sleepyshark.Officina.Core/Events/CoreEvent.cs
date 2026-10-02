@@ -10,7 +10,7 @@ namespace Sleepyshark.Officina.Core.Events;
 /// <summary>Something that happened in a run, as it is published live and stored (EVT-01, EVT-02).</summary>
 /// <param name="RunId">The run.</param>
 /// <param name="Agent">The agent.</param>
-/// <param name="Step">The step of the loop pattern; null until loop patterns (S13) add steps.</param>
+/// <param name="Step">The step of the agent's pattern, as a path such as <c>fix/review</c>; null for the agent's own turn.</param>
 /// <param name="Sequence">
 /// The event's place in the stream. Every later event has a higher one, so the events of each agent are in order, and a
 /// reader catches up from the last one it saw (EVT-03).
@@ -32,6 +32,7 @@ public sealed record CoreEvent(string RunId, string Agent, string? Step, long Se
 [JsonDerivedType(typeof(TaskStatusChanged), "taskStatusChanged")]
 [JsonDerivedType(typeof(HumanAsked), "humanAsked")]
 [JsonDerivedType(typeof(HumanAnswered), "humanAnswered")]
+[JsonDerivedType(typeof(StepEnded), "stepEnded")]
 public abstract record EventPayload
 {
     private static readonly Dictionary<Type, string> Names = typeof(EventPayload).GetCustomAttributes<JsonDerivedTypeAttribute>()
@@ -79,3 +80,6 @@ public sealed record TaskStatusChanged(string Task, TaskState Status) : EventPay
 
 /// <summary>The wait ended: approved (or the question answered), denied, or with no answer by the deadline.</summary>
 public sealed record HumanAnswered(HumanRequestKind Request, bool Approved, bool TimedOut, string? Tool = null) : EventPayload;
+
+/// <summary>A step of the agent's pattern ended (PAT-08); the reason is set when it was handed off or cancelled.</summary>
+public sealed record StepEnded(StepOutcome Outcome, HandoffReason? Reason) : EventPayload;

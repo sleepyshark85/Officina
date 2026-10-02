@@ -11,6 +11,9 @@ public sealed record ToolContext(string RunId, string Agent, Caller Caller)
     /// <summary>The run's masking, when it is on (ING-06).</summary>
     internal Masker? Masker { get; init; }
 
+    /// <summary>The step of the agent's pattern, as a path such as <c>fix/review</c>; null for the agent's own turn (EVT-02).</summary>
+    internal string? Step { get; init; }
+
     /// <summary>Whether the agent has read untrusted content (SEC-04). Once set, it stays set.</summary>
     internal bool ReadUntrusted { get; set; }
 }

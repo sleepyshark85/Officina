@@ -7,11 +7,12 @@ namespace Sleepyshark.Officina.Core.Configuration;
 /// <summary>
 /// A condition in the fixed condition language (CFG-13): one test on a field, or <c>all</c>, <c>any</c> or <c>not</c>
 /// of other conditions. It reads structured values only, and has no variables, functions or side effects. The field
-/// root so far is <c>args</c>, the tool's arguments; the slices that add branch rules and the task board add theirs.
+/// roots so far are <c>args</c>, the tool's arguments, and <c>output</c>, a step's structured output; the task board
+/// adds its own.
 /// </summary>
 public sealed partial record Condition
 {
-    [Setting("The field a test reads: a dotted path with optional `[n]` indexes, such as `args.branch`.", Example = "\"args.branch\"")]
+    [Setting("The field a test reads: a dotted path with optional `[n]` indexes, such as `args.branch` in a tool's arguments or `output.kind` in a step's output.", Example = "\"args.branch\"")]
     public string? Field { get; init; }
 
     [Setting("Holds when the field equals this value. Numbers compare by value, and `true` and `false` match booleans.", Example = "\"main\"")]
@@ -44,26 +45,28 @@ public sealed partial record Condition
     [Setting("Holds when this condition does not.", Example = """{ "field": "args.draft", "is": "true" }""")]
     public Condition? Not { get; init; }
 
-    /// <summary>Whether the condition holds for a tool's arguments. A missing field makes every test but <c>exists</c> false.</summary>
-    public bool Holds(JsonElement args)
+    /// <summary>
+    /// Whether the condition holds for the value its fields' root names: a tool's arguments or a step's output. A missing
+    /// field makes every test but <c>exists</c> false.
+    /// </summary>
+    public bool Holds(JsonElement root)
     {
         if (All is not null)
         {
-            return All.All(condition => condition.Holds(args));
+            return All.All(condition => condition.Holds(root));
         }
 
         if (Any is not null)
         {
-            return Any.Any(condition => condition.Holds(args));
+            return Any.Any(condition => condition.Holds(root));
         }
 
         if (Not is not null)
         {
-            return !Not.Holds(args);
+            return !Not.Holds(root);
         }
 
-        var value = Walk(args, Field!, (node, name) => node.ValueKind == JsonValueKind.Object && node.TryGetProperty(name, out var child) ? child : null,
-            (node, index) => node.ValueKind == JsonValueKind.Array && index < node.GetArrayLength() ? node[index] : null);
+        var value = Read(root, Field!);
         var present = value is { ValueKind: not JsonValueKind.Null };
         if (Exists is { } exists)
         {
@@ -85,10 +88,12 @@ public sealed partial record Condition
     }
 
     /// <summary>
-    /// The problems of the condition against the JSON Schema of the arguments it reads: a malformed condition, a field
-    /// the schema does not declare, or a test that can never hold (CFG-13).
+    /// The problems of the condition against the JSON Schema of the value it reads: a malformed condition, a field the
+    /// schema does not declare, or a test that can never hold (CFG-13).
     /// </summary>
-    public IEnumerable<string> Check(JsonElement argumentsSchema)
+    /// <param name="schema">The schema of the value.</param>
+    /// <param name="root">The value's root in field paths: <c>args</c> for a tool's arguments, <c>output</c> for a step's output.</param>
+    public IEnumerable<string> Check(JsonElement schema, string root = "args")
     {
         // The numeric comparisons may be combined into one range test, such as gte with lt; Holds requires all of them.
         var tests = new object?[] { Is, In, Gt ?? Gte ?? Lt ?? Lte, Exists }.Count(test => test is not null);
@@ -100,22 +105,23 @@ public sealed partial record Condition
 
         if (Field is null)
         {
-            return (All ?? Any ?? [Not!]).SelectMany(condition => condition.Check(argumentsSchema));
+            return (All ?? Any ?? [Not!]).SelectMany(condition => condition.Check(schema, root));
         }
 
-        if (!FieldPath().IsMatch(Field))
+        var value = root == "args" ? "the tool's arguments" : "the step's output";
+        if (!IsPath(Field, root))
         {
-            return [$"field {Field} is not a path into the tool's arguments, such as args.branch."];
+            return [$"field {Field} is not a path into {value}, such as {root}.{(root == "args" ? "branch" : "kind")}."];
         }
 
-        var field = Walk(argumentsSchema, Field, (node, name) => Child(node, "properties") is { } properties ? Child(properties, name) : null,
+        var field = Walk(schema, Field, (node, name) => Child(node, "properties") is { } properties ? Child(properties, name) : null,
             (node, _) => Child(node, "items"));
-        if (field is not { } schema)
+        if (field is not { } declared)
         {
-            return [$"field {Field} is not in the tool's arguments."];
+            return [$"field {Field} is not in {value}."];
         }
 
-        var types = Child(schema, "type") switch
+        var types = Child(declared, "type") switch
         {
             { ValueKind: JsonValueKind.String } type => [type.GetString()!],
             { ValueKind: JsonValueKind.Array } list => list.EnumerateArray().Select(type => type.GetString()!).ToArray(),
@@ -127,9 +133,19 @@ public sealed partial record Condition
             problems.Add($"field {Field} is not a number, so gt, gte, lt and lte can never hold.");
         }
 
-        problems.AddRange((In ?? (Is is null ? [] : [Is])).Where(text => !CanBe(schema, types, text)).Select(text => $"field {Field} can never be \"{text}\"."));
+        problems.AddRange((In ?? (Is is null ? [] : [Is])).Where(text => !CanBe(declared, types, text)).Select(text => $"field {Field} can never be \"{text}\"."));
         return problems;
     }
+
+    /// <summary>Whether a field path starts with the root and goes on with names and indexes, such as <c>output.files[0]</c>.</summary>
+    internal static bool IsPath(string path, string root) => path.StartsWith(root, StringComparison.Ordinal) && FieldPath().IsMatch(path[root.Length..]);
+
+    /// <summary>The value at a field path in the value its root names; null when there is none.</summary>
+    internal static JsonElement? Read(JsonElement root, string path) =>
+        Walk(root, path, (node, name) => Child(node, name), (node, index) => node.ValueKind == JsonValueKind.Array && index < node.GetArrayLength() ? node[index] : null);
+
+    /// <summary>A value as text: a string as it is, anything else as JSON.</summary>
+    internal static string Text(JsonElement value) => value.ValueKind == JsonValueKind.String ? value.GetString()! : value.GetRawText();
 
     private static bool CanBe(JsonElement schema, string[] types, string text) =>
         Child(schema, "enum") is { ValueKind: JsonValueKind.Array } choices
@@ -169,7 +185,7 @@ public sealed partial record Condition
     private static JsonElement? Child(JsonElement node, string name) =>
         node.ValueKind == JsonValueKind.Object && node.TryGetProperty(name, out var child) ? child : null;
 
-    [GeneratedRegex(@"^args(\.[A-Za-z0-9_-]+|\[[0-9]{1,9}\])+$")]
+    [GeneratedRegex(@"^(\.[A-Za-z0-9_-]+|\[[0-9]{1,9}\])+$")]
     private static partial Regex FieldPath();
 
     [GeneratedRegex(@"\.(?<name>[A-Za-z0-9_-]+)|\[(?<index>[0-9]+)\]")]

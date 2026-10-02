@@ -1,0 +1,20 @@
+{
+  "agents": {
+    "panel": {
+      "instructions": "Three judges vote on the claim.",
+      "pattern": {
+        "type": "fanOut",
+        "branches": [{ "agent": "judge" }, { "agent": "judge" }, { "agent": "judge" }],
+        "combine": "majority",
+        "on": "output.verdict"
+      }
+    },
+    "judge": {
+      "instructions": "Judge whether the claim is true.",
+      "output": {
+        "format": "structured",
+        "schema": "{ \"type\": \"object\", \"properties\": { \"verdict\": { \"type\": \"boolean\" } }, \"required\": [\"verdict\"] }"
+      }
+    }
+  }
+}

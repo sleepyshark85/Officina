@@ -40,6 +40,11 @@ public sealed record AgentDefinition
     [Range(1, int.MaxValue, ErrorMessage = "must be at least 1.")]
     public int MaxParallelToolCalls { get; init; } = 4;
 
+    [Setting("How the agent does its work: in a turn of its own, or in a pattern of steps. A pattern's steps draw on the agent's turn budget, and the agent's other settings apply to its own turns.",
+        Example = """{ "type": "router", "routes": { "bug": { "agent": "developer" } } }""")]
+    [Required(ErrorMessage = Messages.Required)]
+    public PatternOptions Pattern { get; init; } = new();
+
     [Setting("How the agent's model input is built.", Example = """{ "operatingFacts": ["Today is {{now:date}}."] }""")]
     [Required(ErrorMessage = Messages.Required)]
     public ContextOptions Context { get; init; } = new();

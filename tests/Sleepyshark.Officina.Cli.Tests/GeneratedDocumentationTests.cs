@@ -12,7 +12,7 @@ public sealed partial class GeneratedDocumentationTests
 {
     private const string UpdateVariable = "OFFICINA_UPDATE_GENERATED";
 
-    private static readonly string Root = FindRoot();
+    internal static readonly string Root = FindRoot();
     private static readonly Lazy<JsonSchema> Schema = new(() => JsonSchema.FromText(SchemaGenerator.GenerateText()));
 
     [Fact]

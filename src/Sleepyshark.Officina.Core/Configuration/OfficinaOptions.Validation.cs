@@ -51,7 +51,14 @@ public sealed partial record OfficinaOptions : IValidatableObject
         {
             errors = errors.Concat(Names([name], "agents")).Concat(Annotations(agent, $"agents.{name}")).Concat(ModelExists(name, agent))
                 .Concat(References($"agents.{name}.tools", "tool set", agent.Tools, "toolSets", ToolSets.Keys)).Concat(TurnSettings(name, agent))
-                .Concat(References($"agents.{name}.context.retrieval.beforeTurn", "knowledge source", agent.Context?.Retrieval?.BeforeTurn ?? [], "knowledge", Knowledge.Keys));
+                .Concat(References($"agents.{name}.context.retrieval.beforeTurn", "knowledge source", agent.Context?.Retrieval?.BeforeTurn ?? [], "knowledge", Knowledge.Keys))
+                .Concat(agent.Pattern is null ? [] : PatternSettings($"agents.{name}.pattern", name, agent.Pattern));
+            if (agent.Pattern?.Type == PatternOptions.SingleCall && agent.Tools.Count > 0)
+            {
+                errors = errors.Append(new(ValidationPhase.Shape, $"agents.{name}.tools", "must be empty: a singleCall agent is offered no tools.",
+                    "Remove the tool sets, or use the toolLoop pattern."));
+            }
+
             if (agent.ToolDescriptionsOnDemand && agent.Tools.Where(ToolSets.ContainsKey).Any(set => ToolSets[set].Contains(DescribeTool)))
             {
                 errors = errors.Append(new(ValidationPhase.Tools, $"agents.{name}.toolDescriptionsOnDemand", $"needs the tool name {DescribeTool}, which the agent is offered already.",
@@ -128,7 +135,7 @@ public sealed partial record OfficinaOptions : IValidatableObject
                 ValidationPhase.Shape, "storage.unstoredEvents", $"\"{kind}\" is not a kind of event.",
                 $"Use one of: {string.Join(", ", EventPayload.Kinds.Order(StringComparer.Ordinal))}.")));
 
-        return errors.Concat(ToolSettings()).Concat(CapabilitySettings()).Concat(InstructionPlaceholders.Check(this));
+        return errors.Concat(ToolSettings()).Concat(CapabilitySettings()).Concat(InstructionPlaceholders.Check(this)).Concat(PatternCycles());
     }
 
     /// <summary>CAP-03: every capability in use is on, and every capability on has the ones it requires.</summary>

@@ -19,6 +19,7 @@ public sealed class TestKit
     /// <param name="capabilities">What the scripted model claims to support; nothing when omitted.</param>
     /// <param name="shorteners">The application's history shorteners, by extension id.</param>
     /// <param name="human">The human; <see cref="Human"/>, who answers as scripted, when omitted.</param>
+    /// <param name="patterns">The application's loop patterns, by extension id.</param>
     public TestKit(
         OfficinaOptions? options = null,
         IReadOnlyDictionary<string, ITool>? tools = null,
@@ -27,7 +28,8 @@ public sealed class TestKit
         ProviderCapabilities? capabilities = null,
         IReadOnlyDictionary<string, IHistoryShortener>? shorteners = null,
         IReadOnlyDictionary<string, ICheck>? checks = null,
-        IHumanChannel? human = null)
+        IHumanChannel? human = null,
+        IReadOnlyDictionary<string, ILoopPattern>? patterns = null)
     {
         options ??= new OfficinaOptions();
         Model = new() { Capabilities = capabilities ?? ProviderCapabilities.None };
@@ -42,7 +44,8 @@ public sealed class TestKit
             human ?? Human,
             new InMemorySecretSource(Secrets),
             Time,
-            shorteners);
+            shorteners,
+            patterns);
     }
 
     public ScriptedModelProvider Model { get; }

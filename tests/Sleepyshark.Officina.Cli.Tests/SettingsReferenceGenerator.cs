@@ -41,7 +41,7 @@ internal static class SettingsReferenceGenerator
                 var description = Escape((string?)described["description"] ?? "");
                 text.Append(CultureInfo.InvariantCulture,
                     $"| `{name}` | {Allowed(property)} | {Code(described["default"])} | {description} | {Code(described["examples"]?[0])} |\n");
-                if (described["properties"] is JsonObject)
+                if (property["properties"] is JsonObject)
                 {
                     sections.Enqueue(($"`{prefix}{name}`", property));
                 }
@@ -49,9 +49,9 @@ internal static class SettingsReferenceGenerator
                 {
                     sections.Enqueue(($"`{prefix}{name}.<name>`", entry));
                 }
-                else if (described["items"] is JsonObject { } item && item["properties"] is JsonObject)
+                else if (property["items"] is JsonObject { } item && Resolve(schema, item)["properties"] is JsonObject)
                 {
-                    sections.Enqueue(($"`{prefix}{name}[]`", item));
+                    sections.Enqueue(($"`{prefix}{name}[]`", Resolve(schema, item)));
                 }
             }
         }

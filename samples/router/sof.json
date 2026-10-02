@@ -1,0 +1,18 @@
+{
+  "agents": {
+    "helpdesk": {
+      "instructions": "Say which desk the request is for.",
+      "pattern": {
+        "type": "router",
+        "on": "output.desk",
+        "routes": { "billing": { "agent": "billing" }, "technical": { "agent": "technical" } }
+      },
+      "output": {
+        "format": "structured",
+        "schema": "{ \"type\": \"object\", \"properties\": { \"desk\": { \"type\": \"string\" } }, \"required\": [\"desk\"] }"
+      }
+    },
+    "billing": { "instructions": "Answer the billing question." },
+    "technical": { "instructions": "Answer the technical question." }
+  }
+}

@@ -50,8 +50,9 @@ Dependency rules, enforced by the dependency check, which runs as a test in CI (
 - **Agent actor.** Each agent has a mailbox (`Channel<T>`) and processes one turn at a time
   (LOOP-02). Messages that arrive during a turn are appended at the next iteration (CTX-08).
 - **Turn engine.** This is the only primitive (principle 4). Patterns, including the team, call
-  `RunTurnAsync(slot, input)` and nothing else, so budgets, cancellation, events and handoffs
-  behave the same everywhere.
+  `PatternContext.RunStepAsync(id, step, input)` and nothing else. A step is a turn of an agent, that
+  agent's own pattern, or a nested pattern, so every leaf is a turn, and budgets (each drawn from its
+  parent's), cancellation, events and handoffs behave the same everywhere.
 - **Optimistic revisions.** Shared state is written without a coordinator or lock. A record
   proposal is validated against the record as read, then appended with the next revision; the
   store's key (run, revision) refuses a revision already taken, and the core then reads, validates
@@ -122,7 +123,7 @@ public interface ITool             { ToolDescriptor Descriptor { get; }
 public interface IGate             { ValueTask<GateDecision> EvaluateAsync(GateContext context, CancellationToken ct); }
 public interface ICheck            { ValueTask<CheckResult> RunAsync(CheckContext context, CancellationToken ct); }
 public interface IKnowledgeSource  { ValueTask<Retrieval> RetrieveAsync(RetrievalQuery query, CancellationToken ct); }
-public interface ILoopPattern      { ValueTask<StepOutcome> RunAsync(PatternContext context, CancellationToken ct); }
+public interface ILoopPattern      { ValueTask<StepResult> RunAsync(PatternContext context, CancellationToken ct); }
 public interface IHumanChannel     { ValueTask<HumanAnswer> AskAsync(HumanRequest request, CancellationToken ct); }
 public interface IStorage          { IRunStore Runs { get; }  IConversationStore Conversations { get; }  IRecordStore Records { get; }
                                      ITaskStore Tasks { get; }  IMemoryStore Memory { get; }  ICheckpointStore Checkpoints { get; }
@@ -147,7 +148,7 @@ public interface ISecretSource     { ValueTask<SecretValue> GetAsync(string name
 | `IGate` | Add a rule that needs code | Before each call of a tool it is attached to (TOOL-05) | `GateContext`: tool, arguments, caller, run record, task board when on, and whether the agent has read untrusted content | `GateDecision`: allow, deny with a reason, ask a human, or route | Deterministic: no model calls and no side effects. |
 | `ICheck` | Add an output or verification check | Output is produced (OUT-03), a task is submitted (TASK-05), or a change is integrated (WS-02) | `CheckContext`: output, artifacts, read-only working copy, task | `CheckResult`: passed or failed, with findings | Only the result decides; nothing the agent says can override it (INV-09). Commands run in the sandbox. |
 | `IKnowledgeSource` | Search the application's own data | Before a turn, or when the agent calls a `knowledge:` tool (CTX-04) | `RetrievalQuery`: question, caller, maximum passages | `Retrieval`: passages, citations, and covered, partly covered or not covered (CTX-05) | Results are labelled as data (INV-08). It sees only the caller's tenant (SEC-02). |
-| `ILoopPattern` | Add a loop pattern | A step selects the pattern by name (PAT-07) | `PatternContext`: `RunTurnAsync`, nested-step runner, step outcomes, budget drawn from the parent | `StepOutcome`: completed, handed off, failed or cancelled | It can only call the core's primitives, so budgets, cancellation, events and handoffs apply (PAT-06). |
+| `ILoopPattern` | Add a loop pattern | A step selects the pattern by name (PAT-07) | `PatternContext`: its input and settings; `RunStepAsync` for a step, which draws on the pattern's budget; `HandOff` | `StepResult`: the outcome (completed, handed off, failed or cancelled), output and handoff | It can only call the core's primitives, so budgets, cancellation, events and handoffs apply (PAT-06). |
 | `IHumanChannel` | Change how humans are reached | An approval, question, sign-off or owner message is needed (HITL) | `HumanRequest`: kind, agent, summary, pending action, deadline | `HumanAnswer`: approve, approve a changed version, deny, or text | The core applies timeouts (HITL-02). A changed version goes through the checks again. |
 | `IStorage` | Store state elsewhere | Whenever state is read or written | One store per kind of data: runs, conversations, records, tasks, memory, checkpoints, events, audit, artifacts | — | Conversations and the audit log are append-only. Every row carries its tenant, and every read and write names one (SEC-02). Stored data carries its format version, and data in an unknown version is refused (REL-04). Deleting an owner's data on request leaves audit entries to their retention (PRIV-02). |
 | `IHistoryShortener` | Replace history shortening | The provider reports the input is too long (HIST-04) | The request it reported | Shortened history; it may clear old tool results, keeping a note (HIST-05) | The result is checked (HIST-02). A model provider with its own mechanism implements it too (HIST-01). It cannot change the run record, tasks or memory (HIST-03). |

@@ -86,7 +86,7 @@ public sealed class EventBus
         await order.WaitAsync(ct).ConfigureAwait(false);
         try
         {
-            var coreEvent = new CoreEvent(context.RunId, context.Agent, null, ++sequence, time.GetUtcNow(), payload);
+            var coreEvent = new CoreEvent(context.RunId, context.Agent, context.Step, ++sequence, time.GetUtcNow(), payload);
             if (!unstored.Contains(payload.Kind))
             {
                 await log.AppendAsync(context.Caller.Tenant, coreEvent, ct).ConfigureAwait(false);

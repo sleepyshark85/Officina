@@ -442,37 +442,39 @@ application has not enabled is a validation error (CAP-03).
 
 ### 7.2 Patterns (PAT-01)
 
-Each step is either an inline agent-like block (`model`, `tools`, `instructions`, `output`), a
-reference to another agent definition (`"agent": "reviewer"`), or a nested pattern (`"pattern": {…}`,
-PAT-02). Data moves only through declared `input` and `output` (PAT-04).
+Each step is a turn of another agent definition (`"agent": "reviewer"`), that agent's own pattern when it has
+one, a nested pattern (`"pattern": {…}`, PAT-02), or, with neither, a turn of the agent the pattern belongs
+to. A step that needs another model or tools names an agent defined with them. Data moves only through
+declared inputs and outputs (PAT-04). Branches, routes and votes read only the structured output of a turn
+(PAT-03). Each step's turns draw on the pattern's budget, which is the agent's turn budget (PAT-06). Runnable
+examples of each pattern are in `samples/` (TEST-06).
 
 ```jsonc
-{ "type": "singleCall" }
+{ "type": "singleCall" }            // a turn with no tools
 
 { "type": "toolLoop" }              // ends by the agent's stop conditions (§7.5)
 
 { "type": "workflow",
   "steps": [
-    { "id": "triage",  "model": "fast", "tools": [], "output": { "format": "structured", "schema": { "file": "schemas/triage.json" } } },
-    { "id": "fix",     "agent": "developer", "input": { "from": "triage.output" },
-      "onOutcome": { "failed": { "retry": 1 }, "handedOff": "handoff" } }
+    { "id": "triage", "agent": "triager" },                       // structured output
+    { "id": "fix", "agent": "developer", "input": ["input", "triage"],
+      "onOutcome": { "failed": "retry:1", "handedOff": "handoff" } }
   ],
   "next": [
-    { "from": "triage", "when": { "field": "output.kind", "is": "question" }, "goto": "end" },
-    { "from": "triage", "goto": "fix" }
+    { "from": "triage", "when": { "field": "output.kind", "is": "question" }, "goto": "end" }
   ] }
 
 { "type": "router",
-  "classify": { "model": "cheap", "output": { "format": "structured", "schema": { "file": "schemas/route.json" } } },
+  "classify": { "agent": "classifier" },   // unset: a turn of this agent, whose output is structured
   "on": "output.route",
   "routes": { "bug": { "agent": "developer" }, "docs": { "agent": "writer" } },
-  "otherwise": "handoff" }          // PAT-03; may name a route, never guesses
+  "otherwise": "bug" }              // PAT-03; unset hands off, never guesses
 
 { "type": "fanOut",
-  "over": "input.files",
-  "branch": { "agent": "reviewer" },
+  "over": "input.files",            // or several "branches" on the same input
+  "branches": [{ "agent": "reviewer" }],
   "maxParallel": 4,
-  "combine": "all" }                // all | "firstSuccess" | { "majorityOn": "output.verdict" } | { "step": {…} }
+  "combine": "all" }                // all | firstSuccess | majority (with "on") | step (with "combiner")
 
 { "type": "evaluateAndRevise",
   "generate": { "agent": "developer" },
@@ -480,21 +482,22 @@ PAT-02). Data moves only through declared `input` and `output` (PAT-04).
   "maxRevisions": 3 }
 
 { "type": "planAndExecute",
-  "planner":  { "model": "strong", "output": { "format": "structured", "schema": { "file": "schemas/plan.json" } } },
+  "planner": { "agent": "planner" },   // structured output with a "steps" list
   "executor": { "agent": "developer" },
   "maxReplans": 2 }
 
-{ "type": "team",
+{ "type": "team",                   // runs from S20; validated only until then
   "lead": "lead",
   "roles": { "developer": { "max": 3 }, "reviewer": { "max": 1 } },
   "maxParallel": 4 }                // TEAM-01, TEAM-03
 
-{ "type": "extension:Acme.CanaryPattern", "settings": { } }     // PAT-07
+{ "type": "extension:Acme.CanaryPattern" }     // PAT-07; reads the settings above that it needs
 ```
 
-`onOutcome` maps each outcome (`completed`, `handedOff`, `failed`, `cancelled`) to `"continue"`,
-`{ "retry": n }`, `{ "goto": "<step>" }` or `"handoff"` (PAT-08). The default is `continue` on
-`completed` and `handoff` on everything else.
+A workflow step's `input` lists `input` (the workflow's input) or earlier steps' ids; several are each
+labelled with their source. `onOutcome` maps `completed`, `handedOff` and `failed` to `continue`,
+`retry:<n>`, `goto:<step>` or `handoff`, which ends the workflow with the step's result (PAT-08). The
+default is `continue` on `completed` and `handoff` otherwise. A cancelled step ends the run.
 
 ### 7.3 Context (CTX)
 
@@ -530,7 +533,7 @@ request starts a new conversation with the last turns (CTX-10).
   "schema": { "file": "schemas/verdict.json" },
   "attempts": 2,                                     // OUT-02
   "checks": ["cites"],                               // OUT-03, in order
-  "onCheckFailure": "handoff",                       // handoff | revise (only where the pattern supports it)
+  "onCheckFailure": "handoff",                       // handoff | revise: the findings go back to the model, within attempts
   "citations": "resolve"                             // OUT-04: off | resolve | required
 }
 ```

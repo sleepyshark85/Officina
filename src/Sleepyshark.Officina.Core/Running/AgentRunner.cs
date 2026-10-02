@@ -26,6 +26,7 @@ public sealed class AgentRunner
     private readonly ToolPipeline pipeline;
     private readonly IReadOnlyDictionary<string, ICheck> checks;
     private readonly IReadOnlyDictionary<string, IKnowledgeSource> knowledge;
+    private readonly IReadOnlyDictionary<string, ILoopPattern> patterns;
     private readonly Dictionary<string, IHistoryShortener> shortening;
     private readonly Admission admission;
     private readonly ConcurrentDictionary<string, SemaphoreSlim> turns = new(StringComparer.Ordinal);
@@ -54,6 +55,7 @@ public sealed class AgentRunner
     /// </param>
     /// <param name="time">The clock for budgets, time limits and audit times.</param>
     /// <param name="shorteners">The application's history shorteners, by the id that <c>extension:&lt;id&gt;</c> shortenings name.</param>
+    /// <param name="patterns">The application's loop patterns, by the id that <c>extension:&lt;id&gt;</c> patterns name (PAT-07).</param>
     /// <exception cref="ConfigurationException">The configuration has errors.</exception>
     public AgentRunner(
         OfficinaOptions options,
@@ -66,7 +68,8 @@ public sealed class AgentRunner
         IHumanChannel human,
         ISecretSource secrets,
         TimeProvider time,
-        IReadOnlyDictionary<string, IHistoryShortener>? shorteners = null)
+        IReadOnlyDictionary<string, IHistoryShortener>? shorteners = null,
+        IReadOnlyDictionary<string, ILoopPattern>? patterns = null)
     {
         ArgumentNullException.ThrowIfNull(providers);
         ArgumentNullException.ThrowIfNull(options);
@@ -75,8 +78,18 @@ public sealed class AgentRunner
         this.providers = providers;
         this.storage = storage;
         this.time = time;
+        this.patterns = patterns ?? new Dictionary<string, ILoopPattern>();
         Events = new EventBus(storage.Events, options.Storage, time);
         pipeline = new ToolPipeline(options, tools, gates, knowledge, checks, storage, Events, human, secrets, time);
+        var unregistered = options.Agents.SelectMany(agent => agent.Value.Pattern.Nested($"agents.{agent.Key}.pattern"))
+            .Where(nested => nested.Pattern.ExtensionId() is { } id && !this.patterns.ContainsKey(id))
+            .Select(nested => ToolCatalog.Unregistered($"{nested.Path}.type", "pattern", nested.Pattern.ExtensionId()!))
+            .ToList();
+        if (unregistered.Count > 0)
+        {
+            throw new ConfigurationException(unregistered);
+        }
+
         this.checks = checks;
         this.knowledge = knowledge;
         ProviderToolsSupported(options, providers);
@@ -265,11 +278,7 @@ public sealed class AgentRunner
     {
         var name = work.Agent;
         var agent = Options.Agents[name];
-        var profile = Options.Models[agent.Model];
-        var provider = providers.TryGetValue(profile.Provider, out var registered)
-            ? registered
-            : throw new InvalidOperationException($"Agent \"{name}\" uses provider \"{profile.Provider}\", which has no implementation registered.");
-
+        Provider(name);
         var (admitted, masker, rejection) = admission.Admit(work, agent);
         if (rejection is not null)
         {
@@ -277,17 +286,13 @@ public sealed class AgentRunner
         }
 
         var context = new ToolContext(work.RunId, name, work.Caller) { Masker = masker, TaskId = work.TaskId };
-        var instructions = InstructionPlaceholders.Fill(agent.Instructions, Options.Project, name, agent);
-        var record = new RunRecord(storage.Records, context, time);
-        var turn = new Turn(
-            context, Options, provider, pipeline, record, pipeline.Board(context), checks, knowledge, storage.Conversations, shortening.GetValueOrDefault(name), Events, instructions, admitted,
-            Inbox(name), token => paused.TryGetValue(name, out var gate) ? gate.Task.WaitAsync(token) : Task.CompletedTask, time);
+        var steps = new Steps(Options, patterns, checks, Events, NewTurn, context, admitted, time);
         var oneAtATime = turns.GetOrAdd(name, _ => new SemaphoreSlim(1, 1));
         using var stop = CancellationTokenSource.CreateLinkedTokenSource(ct, cancels.GetOrAdd(name, _ => new CancellationTokenSource()).Token);
         var entered = false;
         Activity? activity = null;
-        Task<AgentResult>? running = null;
-        AgentResult result;
+        Task<StepResult>? running = null;
+        StepResult ended;
         try
         {
             await oneAtATime.WaitAsync(stop.Token).ConfigureAwait(false);
@@ -297,16 +302,16 @@ public sealed class AgentRunner
             var started = new RunStarted(context.RunId, name, context.Caller.Id, time.GetUtcNow(), CoreVersion.Value, Options);
             await storage.Runs.RecordStartAsync(context.Caller.Tenant, started, stop.Token).ConfigureAwait(false);
             await Events.PublishAsync(context, new TurnStarted(), stop.Token).ConfigureAwait(false);
-            running = turn.RunAsync(stop.Token);
-            result = await running.WaitAsync(stop.Token).ConfigureAwait(false);
+            running = steps.RunAsync(Budget.ForRun(Options.Run.Budget, time), stop.Token);
+            ended = await running.WaitAsync(stop.Token).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (stop.IsCancellationRequested)
         {
-            result = await CancelledAsync(turn, running, admitted).ConfigureAwait(false);
+            ended = await CancelledAsync(steps, running).ConfigureAwait(false);
         }
         catch (Exception exception)
         {
-            result = turn.Fail(exception);
+            ended = Failed(exception);
         }
         finally
         {
@@ -316,6 +321,7 @@ public sealed class AgentRunner
             }
         }
 
+        var result = steps.Result(ended);
         try
         {
             // Published even when the turn was cancelled, so readers see every turn end.
@@ -323,7 +329,7 @@ public sealed class AgentRunner
         }
         catch (Exception exception)
         {
-            result = turn.Fail(exception);
+            result = steps.Result(Failed(exception));
         }
 
         var reason = result.Handoff?.Reason.ToString() ?? (result.Outcome == AgentOutcome.Failed ? result.Output : "");
@@ -334,10 +340,10 @@ public sealed class AgentRunner
     }
 
     /// <summary>
-    /// RUN-06: a cancelled turn has <c>run.cancelWithin</c> to stop its model call and its tools, which stop their
+    /// RUN-06: a cancelled run has <c>run.cancelWithin</c> to stop its model call and its tools, which stop their
     /// sandboxed processes, and ends in a handoff. One still running then is left behind, so the owner never waits longer.
     /// </summary>
-    private async Task<AgentResult> CancelledAsync(Turn turn, Task<AgentResult>? running, Work work)
+    private async Task<StepResult> CancelledAsync(Steps steps, Task<StepResult>? running)
     {
         try
         {
@@ -345,15 +351,36 @@ public sealed class AgentRunner
         }
         catch (TimeoutException)
         {
-            var detail = $"the turn was cancelled, and did not stop within {Options.Run.CancelWithin}";
-            return new AgentResult(AgentOutcome.HandedOff, detail, new TurnStatistics(0, 0, Usage.None, 0m, TimeSpan.Zero), [], [], [], [],
-                new Handoff(HandoffReason.RequestedByHuman, null, detail, work.Input, [], null, ""));
+            return steps.Cancelled($"the turn was cancelled, and did not stop within {Options.Run.CancelWithin}");
         }
         catch
         {
-            // The turn stopped, as it should, with its cancellation.
+            // The run stopped, as it should, with its cancellation.
         }
 
-        return turn.HandOff(HandoffReason.RequestedByHuman, "the turn was cancelled");
+        return steps.Cancelled("the turn was cancelled");
     }
+
+    /// <summary>A turn of the context's agent on the work, within the budget given; steps of a pattern are turns too.</summary>
+    private Turn NewTurn(ToolContext context, Work work, Budget budget)
+    {
+        var agent = Options.Agents[context.Agent];
+        var instructions = InstructionPlaceholders.Fill(agent.Instructions, Options.Project, context.Agent, agent);
+        var name = context.Agent;
+        return new Turn(
+            context, Options, Provider(name), pipeline, new RunRecord(storage.Records, context, time), pipeline.Board(context), checks, knowledge, storage.Conversations,
+            shortening.GetValueOrDefault(name), Events, instructions, work, Inbox(name),
+            token => paused.TryGetValue(name, out var gate) ? gate.Task.WaitAsync(token) : Task.CompletedTask, budget, time);
+    }
+
+    private IModelProvider Provider(string agentName)
+    {
+        var profile = Options.Models[Options.Agents[agentName].Model];
+        return providers.TryGetValue(profile.Provider, out var provider)
+            ? provider
+            : throw new InvalidOperationException($"Agent \"{agentName}\" uses provider \"{profile.Provider}\", which has no implementation registered.");
+    }
+
+    /// <summary>Ends the run after an exception outside its turns (REL-02).</summary>
+    private static StepResult Failed(Exception exception) => new(StepOutcome.Failed, $"the turn failed: {exception.GetType().Name}");
 }
