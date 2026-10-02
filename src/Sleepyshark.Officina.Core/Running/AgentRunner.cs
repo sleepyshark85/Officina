@@ -470,6 +470,19 @@ public sealed class AgentRunner
     }
 
     /// <summary>
+    /// INV-04: the write tools with no gate of their own and no exemption, which a run refuses. A host's <c>config validate</c> reports
+    /// them without connecting the tool servers: their tools are writes unless configured as reads.
+    /// </summary>
+    /// <param name="options">The configuration, which has no other errors.</param>
+    /// <param name="tools">The tools the application registers, by id; only their descriptors are read.</param>
+    public static IReadOnlyList<ConfigurationError> GateErrors(OfficinaOptions options, IReadOnlyDictionary<string, ITool> tools)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(tools);
+        return ToolCatalog.MissingGates(options, tools);
+    }
+
+    /// <summary>
     /// What shortens the history of each agent whose strategy is <c>shortened</c> (HIST-01): its model provider, which
     /// must be able to, or a shortener the application registers.
     /// </summary>

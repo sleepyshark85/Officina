@@ -20,7 +20,7 @@ internal static class ValidateCommand
                 return code;
             }
 
-            // What sof run refuses as it starts: extensions sof does not register, and what the models' providers lack. No model is
+            // What sof run refuses as it starts: extensions sof does not register, write tools with no gate, and what the models' providers lack. No model is
             // called and nothing is opened.
             var (providers, claude) = RunCommand.Providers(configuration.Options, host, new EnvironmentSecrets(host.Variables));
             using (claude)
@@ -28,6 +28,7 @@ internal static class ValidateCommand
                 IReadOnlyList<ConfigurationError> errors =
                     [
                         .. WorkspaceHost.RegistrationErrors(configuration.Options),
+                        .. AgentRunner.GateErrors(configuration.Options, WorkspaceHost.RegisteredTools(configuration.Options)),
                         .. Unavailable(configuration.Options, providers),
                         .. AgentRunner.ProviderErrors(configuration.Options, providers, new Dictionary<string, IHistoryShortener>()),
                     ];

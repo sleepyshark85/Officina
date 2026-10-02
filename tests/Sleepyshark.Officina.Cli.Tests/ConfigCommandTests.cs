@@ -38,6 +38,77 @@ public sealed partial class ConfigCommandTests : IDisposable
         Assert.All(lines, line => Assert.Matches(AnyLayer, line));
     }
 
+    // A list has no value of its own in the configuration, only its items, so its source is found through them.
+    [Fact]
+    public async Task Show_with_origin_gives_a_list_the_file_preset_or_variable_that_set_it()
+    {
+        sof.Write("sof.json", """
+            {
+              "extends": ["preset:coding-team"],
+              "project": { "values": { "buildCommand": "dotnet build", "testCommand": "dotnet test" } },
+              "capabilities": { "checkpoints": { "at": ["turn"] } }
+            }
+            """);
+        sof.Variables["SOF__capabilities__humanInteraction__signOffs__0"] = "planApproval";
+
+        var (exitCode, output, _) = await sof.RunAsync("config", "show", "--origin");
+
+        Assert.Equal(0, exitCode);
+        var lines = output.Split('\n', StringSplitOptions.RemoveEmptyEntries).Select(line => Spaces().Replace(line, " ")).ToArray();
+        Assert.Contains("capabilities.checkpoints.at [\"turn\"] sof.json", lines);
+        Assert.Contains("toolSets.reviewing [\"review_task\",\"message\",\"hand_off\"] preset:coding-team", lines);
+        Assert.Contains(lines, line => line.StartsWith("capabilities.sandbox.commandRules [{", StringComparison.Ordinal) && line.EndsWith(" preset:coding-team", StringComparison.Ordinal));
+        Assert.Contains(lines, line => line.StartsWith("capabilities.humanInteraction.signOffs ", StringComparison.Ordinal) && line.EndsWith(" environment variable SOF__capabilities__humanInteraction__signOffs__0", StringComparison.Ordinal));
+        Assert.DoesNotContain(lines, line => line.StartsWith("toolSets.", StringComparison.Ordinal) && line.Contains("code default", StringComparison.Ordinal));
+    }
+
+    // INV-04: sof run refuses a write tool with no gate and no exemption, so validate reports it, with the same message.
+    [Fact]
+    public async Task Validate_reports_a_write_tool_with_no_gate_and_no_exemption()
+    {
+        sof.Write("sof.json", """
+            {
+              "agents": { "a": { "instructions": "Write.", "tools": ["all"] } },
+              "tools": {
+                "save": { "source": "extension:workspace.write_file" },
+                "peek": { "source": "extension:workspace.read_file" },
+                "exempt": { "source": "extension:workspace.edit_file", "gateExemption": "It changes only the working copy." }
+              },
+              "toolSets": { "all": ["save", "peek", "exempt"] },
+              "capabilities": { "workspace": { "enabled": true } }
+            }
+            """);
+
+        var (exitCode, output, error) = await sof.RunAsync("config", "validate");
+
+        Assert.Equal(1, exitCode);
+        Assert.DoesNotContain("valid", output, StringComparison.Ordinal);
+        Assert.Equal(
+            """
+            error: tools.save: write tool has no gate of its own. Add "gates": [...] or "gateExemption": "<reason>".
+            1 error.
+
+            """.ReplaceLineEndings("\n"),
+            error);
+    }
+
+    // The model provider runs its own tools, so sof run does not ask them for a gate; validate agrees.
+    [Fact]
+    public async Task Validate_does_not_ask_a_provider_tool_for_a_gate()
+    {
+        sof.Write("sof.json", """
+            {
+              "agents": { "a": { "instructions": "Search.", "tools": ["all"] } },
+              "tools": { "web": { "source": "provider:web_search", "kind": "write", "reason": "The model searches the web itself." } },
+              "toolSets": { "all": ["web"] }
+            }
+            """);
+
+        var (_, _, error) = await sof.RunAsync("config", "validate");
+
+        Assert.DoesNotContain("no gate", error, StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task Validate_accepts_a_valid_configuration()
     {

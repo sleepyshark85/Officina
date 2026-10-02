@@ -5,6 +5,7 @@ using Sleepyshark.Officina.Core.Extensibility;
 using Sleepyshark.Officina.Core.Running;
 using Sleepyshark.Officina.Core.Tools;
 using Sleepyshark.Officina.Sandbox;
+using Sleepyshark.Officina.Testing;
 using Sleepyshark.Officina.Workspace;
 
 namespace Sleepyshark.Officina.Cli;
@@ -127,6 +128,12 @@ internal sealed class WorkspaceHost : IWorkspace, IAsyncDisposable
 
     /// <summary>The sandbox of this machine (SBX-07).</summary>
     public static ISandbox MachineSandbox() => OperatingSystem.IsWindows() ? new WindowsSandbox() : new LinuxSandbox();
+
+    /// <summary>The tools sof registers, for their descriptors only: no command can run through them, and no machine need be able to sandbox.</summary>
+    public static IReadOnlyDictionary<string, ITool> RegisteredTools(OfficinaOptions options) =>
+        new Dictionary<string, ITool>(new WorkspaceTools(_ => throw new InvalidOperationException("Only the descriptors are read.")).Tools)
+            .Concat(new SandboxTools(new FakeSandbox(), options.Capabilities.Sandbox, options.Capabilities.Workspace, "", "").Tools)
+            .ToDictionary(tool => tool.Key, tool => tool.Value);
 
     /// <summary>
     /// CFG-06: the extensions <c>sof</c> registers are the workspace's and the sandbox's tools, the command rules gate and the command

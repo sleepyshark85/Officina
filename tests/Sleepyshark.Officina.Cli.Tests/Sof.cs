@@ -21,6 +21,9 @@ internal sealed class Sof : IDisposable
 
     public FakeTimeProvider Time { get; } = new();
 
+    /// <summary>Stands in for Ctrl+C: cancels the command as the process termination signal does.</summary>
+    public CancellationToken Cancel { get; set; }
+
     /// <summary>Standard output, which a test can wait on.</summary>
     public Console Out { get; } = new();
 
@@ -38,7 +41,7 @@ internal sealed class Sof : IDisposable
         using var error = new StringWriter();
         var start = Out.ToString().Length;
         var host = new SofEnvironment(Out, error, Directory, Variables) { In = In, Providers = Providers, Sandbox = Sandbox, Time = Time };
-        var exitCode = await SofCommandLine.RunAsync(args, host);
+        var exitCode = await SofCommandLine.RunAsync(args, host, Cancel);
         return (exitCode, Out.ToString()[start..].ReplaceLineEndings("\n"), error.ToString().ReplaceLineEndings("\n"));
     }
 

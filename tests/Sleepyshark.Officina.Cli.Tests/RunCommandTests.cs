@@ -78,6 +78,51 @@ public sealed class RunCommandTests : IDisposable
         Assert.Contains("dev: HandedOff (ApprovalDeniedOrTimedOut:", output, StringComparison.Ordinal);
     }
 
+    // RUN-06: Ctrl+C cancels the run as the owner's cancel command does: the run is recorded as cancelled and its report is printed.
+    // The signal is the only stand-in; sending a real SIGINT to the test process is not reliable across platforms.
+    [Fact]
+    public async Task Ctrl_C_cancels_the_run_and_the_report_is_printed()
+    {
+        using var ctrlC = new CancellationTokenSource();
+        sof.Cancel = ctrlC.Token;
+        model.CallTools(("note", """{ "text": "Uses SQLite." }"""));
+
+        var run = sof.RunAsync("run", "--input", "Pick a database.");
+        await sof.Out.WaitForAsync("#1 dev asks to run note", Ct);
+        await ctrlC.CancelAsync();
+        var (exitCode, output, _) = await run;
+
+        Assert.Equal(ExitCodes.NotCompleted, exitCode);
+        Assert.Contains("dev: HandedOff", output, StringComparison.Ordinal);
+        Assert.Contains("\n\nRun ", output, StringComparison.Ordinal);
+        sof.Cancel = default;
+        var (_, report, _) = await sof.RunAsync("report", output.Split('\n')[0].Split(' ')[1]);
+        Assert.Contains("Cancelled", report, StringComparison.OrdinalIgnoreCase);
+    }
+
+    // Ctrl+C while the run is still starting ends with one line, not a stack trace.
+    [Fact]
+    public async Task Ctrl_C_before_the_run_has_started_says_so_and_exits_as_not_completed()
+    {
+        using var ctrlC = new CancellationTokenSource();
+        await ctrlC.CancelAsync();
+        sof.Cancel = ctrlC.Token;
+
+        var (exitCode, output, error) = await sof.RunAsync("run", "--input", "Pick a database.");
+
+        Assert.Equal(ExitCodes.NotCompleted, exitCode);
+        Assert.Equal("cancelled before the run started.\n", error);
+        Assert.DoesNotContain("Run ", output, StringComparison.Ordinal);
+    }
+
+    // The process ends this long after Ctrl+C, so the run has its whole run.cancelWithin to stop; System.CommandLine's default is 2 seconds.
+    [Fact]
+    public void The_process_waits_for_a_cancelled_run_for_as_long_as_the_run_may_take()
+    {
+        Assert.True(SofCommandLine.TerminationTimeout(new() { Run = new() { CancelWithin = TimeSpan.FromSeconds(30) } }) > TimeSpan.FromSeconds(30));
+        Assert.True(SofCommandLine.TerminationTimeout(new()) > new Sleepyshark.Officina.Core.Configuration.RunDefaults().CancelWithin);
+    }
+
     [Fact]
     public async Task An_answer_of_the_wrong_kind_is_refused_and_the_request_keeps_waiting()
     {

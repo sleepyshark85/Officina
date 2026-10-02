@@ -141,6 +141,12 @@ internal static class RunCommand
             host.Error.WriteLine($"warning: cleanup after the run failed, so some of it is left behind: {string.Join("; ", exception.InnerExceptions.Select(inner => inner.Message))}");
             return ran;
         }
+        catch (OperationCanceledException) when (starting && ct.IsCancellationRequested)
+        {
+            // Ctrl+C while the tool servers, workspace and storage open: nothing ran, and what was opened is released by the usings above.
+            host.Error.WriteLine("cancelled before the run started.");
+            return ExitCodes.NotCompleted;
+        }
         catch (Exception exception) when (starting && exception is ConfigurationException or WorkspaceException or InvalidOperationException or InvalidDataException or KeyNotFoundException or IOException or HttpRequestException)
         {
             // Only what stops the run from starting; a failure during the run is not a configuration error.
