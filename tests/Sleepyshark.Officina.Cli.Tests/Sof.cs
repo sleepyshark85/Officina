@@ -189,9 +189,12 @@ internal sealed class Sof : IDisposable
     /// </summary>
     internal sealed class Owner : TextReader
     {
-        private readonly Channel<string> lines = Channel.CreateUnbounded<string>();
+        private readonly Channel<string?> lines = Channel.CreateUnbounded<string?>();
 
         public void Type(string line) => lines.Writer.TryWrite(line);
+
+        /// <summary>Ends the read that waits with null, as Windows' console does on Ctrl+C, though the input goes on.</summary>
+        public void Interrupt() => lines.Writer.TryWrite(null);
 
         public override string? ReadLine() =>
             lines.Reader.WaitToReadAsync().AsTask().GetAwaiter().GetResult() && lines.Reader.TryRead(out var line) ? line : null;

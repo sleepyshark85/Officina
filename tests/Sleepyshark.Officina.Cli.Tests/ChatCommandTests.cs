@@ -101,7 +101,7 @@ public sealed class ChatCommandTests : IDisposable
     [Fact]
     public async Task While_a_reply_runs_commands_are_carried_out_and_a_message_waits_for_it()
     {
-        model.CallTools(("note", """{ "text": "Uses SQLite." }""")).Reply("Noted.").Reply("Next.");
+        model.CallTools(("note", """{ "text": "Uses SQLite." }""")).Reply("Noted.").Reply("Next.").Reply("A message.");
 
         var chat = sof.RunAsync("chat");
         sof.In.Type("Note the database.");
@@ -114,15 +114,14 @@ public sealed class ChatCommandTests : IDisposable
         await sof.Out.WaitForAsync("waiting for you: #1 dev asks to run note", Ct);
         sof.In.Type("approve 1"); // without the slash it is a message, which waits too
         sof.In.Type("/approve 1");
-        await sof.Out.WaitForAsync("[dev] Next.", Ct);
-        sof.In.Type("/quit");
+        sof.In.Dispose(); // the session ends once the messages that waited have their replies
         var (exitCode, output, _) = await sof.EndedAsync(chat);
 
         Assert.Equal(ExitCodes.Success, exitCode);
         Assert.Contains("dev: Completed, cost $0.00; this session $0.00", output, StringComparison.Ordinal);
         Assert.Contains(Message.User("<message from=\"owner\">\nKeep it short.\n</message>"), model.Requests[1].History);
         Assert.Equal(Message.User("And then the next thing."), model.Requests[2].History[^1]);
-        Assert.Equal(3, model.Requests.Count); // "approve 1" waited behind the first message, and the session ended before it was sent
+        Assert.Equal(Message.User("approve 1"), model.Requests[3].History[^1]); // without the slash it was a message, sent in its turn
     }
 
     // RUN-06: Ctrl+C cancels the reply, drops the messages that waited for it, and the session goes on; a second Ctrl+C ends it.
@@ -150,8 +149,75 @@ public sealed class ChatCommandTests : IDisposable
         Assert.Equal(Message.User("Hello again."), model.Requests[^1].History[^1]);
         var cancelled = output.Split('\n').First(line => line.StartsWith("run ", StringComparison.Ordinal))[4..];
         sof.NewConsole();
-        var (_, report, _) = await sof.RunAsync("report", cancelled);
+        var (_, report, _) = await sof.EndedAsync(sof.RunAsync("report", cancelled));
         Assert.Contains("Cancelled", report, StringComparison.OrdinalIgnoreCase);
+    }
+
+    // On Windows, Ctrl+C ends the console read that waits with null, as the end of the input does: just after a Ctrl+C it is not
+    // taken for one, so the session goes on.
+    [Fact]
+    public async Task A_console_read_that_Ctrl_C_ends_is_not_the_end_of_the_input()
+    {
+        model.CallTools(("note", """{ "text": "Uses SQLite." }""")).Reply("Hi.");
+
+        var chat = sof.RunAsync("chat");
+        sof.In.Type("Note the database.");
+        await sof.Out.WaitForAsync("#1 dev asks to run note", Ct);
+        sof.Press(PosixSignal.SIGINT);
+        sof.In.Interrupt();
+        await sof.Out.WaitForAsync("dev: HandedOff (", Ct);
+        sof.In.Type("Hello again.");
+        await sof.Out.WaitForAsync("dev: Completed", Ct);
+        sof.In.Dispose();
+        var (exitCode, output, _) = await sof.EndedAsync(chat);
+
+        Assert.Equal(ExitCodes.Success, exitCode);
+        Assert.Contains("[dev] Hi.", output, StringComparison.Ordinal);
+    }
+
+    // RUN-04: while a reply runs, /resume with a run waits, as it is sof resume; /resume with an agent resumes what /pause paused.
+    // /report then says the reply's run has not been recorded yet, or reports it.
+    [Fact]
+    public async Task While_a_reply_runs_resume_with_a_run_waits_and_with_an_agent_resumes_it()
+    {
+        model.CallTools(("note", """{ "text": "Uses SQLite." }""")).Reply("Noted.");
+
+        var chat = sof.RunAsync("chat");
+        sof.In.Type("Note the database.");
+        await sof.Out.WaitForAsync("#1 dev asks to run note", Ct);
+        sof.In.Type("/resume 01a0fdcd-0000-0000-0000-000000000000");
+        await sof.Out.WaitForAsync("error: /resume <run> waits until no reply runs", Ct);
+        sof.In.Type("/pause dev");
+        sof.In.Type("/resume dev");
+        sof.In.Type("/approve 1");
+        await sof.Out.WaitForAsync("dev: Completed", Ct);
+        sof.In.Dispose();
+        var (exitCode, _, _) = await sof.EndedAsync(chat);
+
+        Assert.Equal(ExitCodes.Success, exitCode);
+    }
+
+    // A single agent that works in the workspace gets a fresh working copy for each message, so the session and config validate warn.
+    [Fact]
+    public async Task A_single_agent_in_the_workspace_is_warned_that_each_message_has_a_fresh_working_copy()
+    {
+        sof.Write("sof.json", """
+            {
+              "providers": { "claude": { "prices": { "claude-opus-5-5": { "input": 1 } } } },
+              "agents": { "dev": { "instructions": "Work." } },
+              "capabilities": { "workspace": { "enabled": true } }
+            }
+            """).Commit();
+
+        sof.In.Dispose();
+        var (exitCode, output, _) = await sof.EndedAsync(sof.RunAsync("chat"));
+        sof.NewConsole();
+        var (_, notes, _) = await sof.EndedAsync(sof.RunAsync("config", "validate"));
+
+        const string Warning = "agent \"dev\" works in the workspace, and each message works in a fresh working copy of the branch";
+        Assert.Equal(ExitCodes.Success, exitCode);
+        Assert.Contains($"warning: {Warning}", output, StringComparison.Ordinal);
+        Assert.Contains($"note: in sof chat, {Warning}", notes, StringComparison.Ordinal);
     }
 
     // SIGTERM, or the command line's cancellation, ends the session at once, and the reply that runs is cancelled cleanly.
@@ -232,8 +298,8 @@ public sealed class ChatCommandTests : IDisposable
             }
             """);
 
-        var (exitCode, _, error) = await sof.RunAsync("chat", "--agent", "dev");
-        var (valid, notes, _) = await sof.RunAsync("config", "validate");
+        var (exitCode, _, error) = await sof.EndedAsync(sof.RunAsync("chat", "--agent", "dev"));
+        var (valid, notes, _) = await sof.EndedAsync(sof.RunAsync("config", "validate"));
 
         Assert.Equal(ExitCodes.Invalid, exitCode);
         Assert.Equal("error: sof chat keeps the conversation in the conversation store, which capabilities.conversationStore.enabled turns off. Remove that setting, or set it to true.\n", error);
@@ -248,8 +314,8 @@ public sealed class ChatCommandTests : IDisposable
     {
         sof.Write("sof.json", """{ "agents": { "dev": { "instructions": "Work." }, "batch": { "instructions": "Work.", "triggers": ["batch"] } } }""");
 
-        var (exitCode, _, error) = await sof.RunAsync("chat", "--agent", "batch");
-        var (_, notes, _) = await sof.RunAsync("config", "validate");
+        var (exitCode, _, error) = await sof.EndedAsync(sof.RunAsync("chat", "--agent", "batch"));
+        var (_, notes, _) = await sof.EndedAsync(sof.RunAsync("config", "validate"));
 
         Assert.Equal(ExitCodes.Invalid, exitCode);
         Assert.Contains("agent \"batch\" takes no conversations: agents.batch.triggers leaves out conversation.", error, StringComparison.Ordinal);
@@ -341,9 +407,9 @@ public sealed class ChatCommandTests : IDisposable
         var runs = output.Split('\n').Where(line => line.StartsWith("run ", StringComparison.Ordinal)).Select(line => line[4..]).ToList();
 
         sof.NewConsole();
-        var (refused, _, error) = await sof.RunAsync("rollback", runs[0], "--to", "0");
-        var (rolledBack, _, _) = await sof.RunAsync("rollback", runs[1], "--to", "0");
-        var (resumed, _, _) = await sof.RunAsync("resume", runs[1]);
+        var (refused, _, error) = await sof.EndedAsync(sof.RunAsync("rollback", runs[0], "--to", "0"));
+        var (rolledBack, _, _) = await sof.EndedAsync(sof.RunAsync("rollback", runs[1], "--to", "0"));
+        var (resumed, _, _) = await sof.EndedAsync(sof.RunAsync("resume", runs[1]));
 
         Assert.Equal(ExitCodes.Invalid, refused);
         Assert.Contains("Another run has written to dev's conversation", error, StringComparison.Ordinal);

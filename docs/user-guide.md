@@ -157,7 +157,8 @@ How it behaves:
 
 - **Each message is a run of its own**, with its own run id, report, checkpoints and budget: `run.budget` applies to each
   message, as it does to each `sof run`. Every reply ends with its cost and the session's cost so far, and `/status` shows
-  the session's cost too.
+  the session's cost too. There is no limit for the session as a whole: messages that wait for a reply, or a script piped
+  in, can spend `run.budget` once for each message without asking you.
 - **The conversation is kept in the conversation store**, which the session turns on, with full history for the agent
   you chat with, unless `sof.json` sets its `context.history.strategy`: then that strategy is kept, and with `none` each
   message starts afresh. If `sof.json` turns the conversation store off, `sof` refuses to chat; so does an agent whose
@@ -165,16 +166,18 @@ How it behaves:
 - **The coding team** (`--agent team`): each message is new work for the team. The lead plans it, with the earlier
   messages in mind, as the lead keeps the conversation; the developers and the reviewer start each task afresh. To speak
   to the lead or a developer while the team works, use `/tell`.
-- **While a reply runs**, commands work at once. A message you type waits, and is sent when the reply ends. `/resume` then
-  resumes what `/pause` paused; `/resume <run>` and `/rollback` wait until no reply runs.
+- **While a reply runs**, commands work at once. A message you type waits, and is sent when the reply ends. `/resume` or
+  `/resume <agent>` then resumes what `/pause` paused; `/resume <run>`, `/rollback` and `/run` wait until no reply runs.
 - **Ctrl+C** cancels the reply (or a command such as `/resume <run>`) and drops the messages that waited for it; the
   session goes on. A second Ctrl+C before your next message ends the session.
 - **Rollback and resume:** every message's run is rolled back and resumed on its own. A rollback that would remove a later
   message's part of the conversation is refused, so roll back the latest message first. A resumed message runs with the
   conversation, as the session ran it.
-- **Working copies:** each message's run gets its own working copies, as each `sof run` does. A single agent's edits from
-  one message are in the kept working copy (`keepWorkingCopies`), not in the next message's; the coding team integrates
-  its changes into your branch, so its next message builds on them.
+- **Working copies:** each message's run gets its own working copies, fresh from your branch, as each `sof run` does.
+  The coding team integrates its changes into your branch, so its next message builds on them. **A single agent with the
+  workspace on does not:** its edits from one message are removed when the reply ends, unless
+  `capabilities.workspace.keepWorkingCopies` is on, which keeps them in that message's copy under `.sof/worktrees`, where
+  the next message does not see them. The session warns about this at its start, and `config validate` notes it.
 
 ## 7. The coding team
 
