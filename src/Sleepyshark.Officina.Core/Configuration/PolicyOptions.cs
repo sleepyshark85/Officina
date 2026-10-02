@@ -22,7 +22,7 @@ public sealed record PolicyOptions
     [Required(ErrorMessage = Messages.Required)]
     public MaskingOptions Masking { get; init; } = new();
 
-    [Setting("How much work each owner and each tenant may send.", Example = """{ "perOwner": { "permits": 20, "window": "01:00:00" } }""")]
+    [Setting("How much work each owner, each tenant and each run may take in.", Example = """{ "perOwner": { "permits": 20, "window": "01:00:00" } }""")]
     [Required(ErrorMessage = Messages.Required)]
     public RateLimitOptions RateLimits { get; init; } = new();
 }

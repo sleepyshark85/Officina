@@ -14,10 +14,10 @@ Run the thinnest end-to-end path, configuration → turn → scripted model → 
 
 ## Acceptance criteria
 
-- [ ] The solution has every project from DESIGN.md §1 (empty where not needed yet), and it builds and tests on Linux and Windows in GitHub Actions.
-- [ ] A test runs an agent with only `instructions` against a scripted model and gets a completed result with the output.
-- [ ] The dependency check fails the build when a project other than the Claude provider references the Anthropic SDK (shown by a negative test).
-- [ ] Message types are immutable.
+- [x] The solution has every project from DESIGN.md §1 (empty where not needed yet), and it builds and tests on Linux and Windows in GitHub Actions.
+- [x] A test runs an agent with only `instructions` against a scripted model and gets a completed result with the output.
+- [x] The dependency check fails the build when a project other than the Claude provider references the Anthropic SDK (shown by a negative test).
+- [x] Message types are immutable.
 
 ## Notes
 

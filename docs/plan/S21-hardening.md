@@ -119,7 +119,8 @@ Linux and Windows runners where they differ much:
   [`verification.md`](verification.md). 17 MUSTs had tests that did not name them, now named, and the load tests name theirs; three are
   recorded reviews (CFG-10, EGR-01, TASK-01). Three are readings for the owner to confirm, not verified: CFG-01 (policies and
   capabilities are the configuration's, not the agent definition's), CAP-01 (capabilities switch per application only) and TASK-02
-  (the status changes are fixed, not configured). Three are pending: TEST-31's live run, CLD-06 (part 3) and SBX-01's CPU limit (part 5).
+  (the status changes are fixed, not configured). Three were pending: TEST-31's live run, CLD-06 (part 3) and SBX-01's CPU limit (part 5);
+  parts 3 and 5 verified the last two, so only TEST-31 is left.
 
 ## Part 3: the Claude provider's features
 

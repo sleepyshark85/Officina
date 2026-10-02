@@ -43,7 +43,7 @@ It lists the settings the code has today. Settings that later slices add are spe
 | `timeout` | time span (`hh:mm:ss` or `d.hh:mm:ss`) | `"00:10:00"` | How long to wait for the provider to answer a call, and then for each next piece of its streamed reply, as `hh:mm:ss`. A call that goes quiet for longer is given up on as a transient failure and retried. | `"00:10:00"` |
 | `retry` | section | `{"maxAttempts":5,"initialDelay":"00:00:01","maxDelay":"00:01:00"}` | How failed calls are retried, for every agent that calls this provider. | `{"maxAttempts":5,"initialDelay":"00:00:01"}` |
 | `maxConcurrentCalls` | whole number, ≥ 1 |  | The most calls to this provider in flight at once, across all agents: the account's share of the provider's rate limit. Calls over it wait their turn, the team lead's first. Unset means no limit. | `8` |
-| `features` | section | `{"structuredOutput":false,"clearToolResults":false,"refusalFallback":false}` | Features of the provider's own API, each off until switched on. The `claude` provider has them all; a provider without one ignores it. | `{"structuredOutput":true,"refusalFallback":true}` |
+| `features` | section | `{"structuredOutput":false,"clearToolResults":false,"refusalFallback":false}` | Features of the provider's own API, each off until switched on. A feature switched on for a model that does not have it is a configuration error. | `{"structuredOutput":true,"refusalFallback":true}` |
 
 ## `models.<name>`
 
@@ -94,7 +94,7 @@ It lists the settings the code has today. Settings that later slices add are spe
 
 | Setting | Allowed values | Default | Description | Example |
 |---|---|---|---|---|
-| `source` | text |  | Where the tool comes from: `extension:<id>` for a tool the application registers (`sof` registers `workspace.read_file`, `workspace.search`, `workspace.edit_file`, `workspace.write_file`, `workspace.delete_file` and `workspace.move_file` when the workspace is on, and `sandbox.run`, `sandbox.start_process`, `sandbox.read_process_output` and `sandbox.stop_process` when the sandbox is on), `mcp:<server>/<tool>` for a tool of a server in `toolServers`, `knowledge:<name>` to search a source in `knowledge`, `provider:<name>` for a tool the model provider runs itself, or `builtin:<name>` for a built-in tool: `record.propose_fact`, `record.propose_finding`, `record.propose_decision` and `record.cite` propose changes to the run record, and `artifact.page` reads an artifact, such as a trimmed result in full. Required. | `"extension:Acme.CreateIssue"` |
+| `source` | text |  | Where the tool comes from: `extension:<id>` for a tool the application registers (`sof` registers `workspace.read_file`, `workspace.search`, `workspace.edit_file`, `workspace.write_file`, `workspace.delete_file` and `workspace.move_file` when the workspace is on, and `sandbox.run`, `sandbox.start_process`, `sandbox.read_process_output` and `sandbox.stop_process` when the sandbox is on), `mcp:<server>/<tool>` for a tool of a server in `toolServers`, `knowledge:<name>` to search a source in `knowledge`, `provider:<name>` for a tool the model provider runs itself, or `builtin:<name>` for a built-in tool: `record.propose_fact`, `record.propose_finding`, `record.propose_decision` and `record.cite` propose changes to the run record; `artifact.page` reads an artifact, such as a trimmed result in full; `human.ask_owner` and `human.request_handoff` reach the owner; `tasks.create`, `tasks.update`, `tasks.claim`, `tasks.submit_for_review` and `tasks.review` work on the task board; `memory.propose_change` and `memory.review` change project memory; and `team.message` and `team.start_helper` reach other agents of a team. Required. | `"extension:Acme.CreateIssue"` |
 | `kind` | `"read"`, `"write"` |  | `write` for a tool that changes something. Unset uses the tool's declaration, and `write` for a tool server's tools; a tool that declares itself `write` stays `write`. | `"write"` |
 | `permissions` | list | `[]` | Permissions the caller must hold to call the tool. | `["issues:write"]` |
 | `gates` | list | `[]` | The tool's own gates, by name in `gates`. They run after the gates for all tools. | `["issue-dedupe"]` |
@@ -126,7 +126,7 @@ It lists the settings the code has today. Settings that later slices add are spe
 | `gates` | list | `[]` | Gates, by name in `gates`, that run before every tool call, ahead of the tool's own gates. | `["no-main-branch"]` |
 | `anonymousPermissions` | list | `[]` | The permissions a caller without an identity holds. | `["issues:read"]` |
 | `masking` | section | `{"enabled":true}` | Masking of personal data in work from outside, before the model, history or logs see it. On by default. Required. | `{"enabled":false}` |
-| `rateLimits` | section | `{}` | How much work each owner and each tenant may send. Required. | `{"perOwner":{"permits":20,"window":"01:00:00"}}` |
+| `rateLimits` | section | `{}` | How much work each owner, each tenant and each run may take in. Required. | `{"perOwner":{"permits":20,"window":"01:00:00"}}` |
 
 ## `checks.<name>`
 

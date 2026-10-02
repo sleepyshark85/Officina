@@ -1,101 +1,46 @@
 # Officina — Master Plan
 
-Status: draft · 2026-10-01 · slices `REQUIREMENTS.md` (revision 2) into deliverable work
+Slices `REQUIREMENTS.md` (revision 2) into deliverable work.
 
 ## Status
 
 Last updated 2026-10-02.
 
-- **Done:** M0 spikes S00a and S00b; M1 slices S01 (walking skeleton) and S02 (configuration); S03 (tool pipeline); S04 (turn loop); S05 (context and caching); S06 (run record and output); S07 (history and conversation store); S08 (events, storage and observability); S09 (triggers and admission); S10 (MCP and knowledge); S11 (Claude provider); S12 (model gateway); S13 (loop patterns); S14 (git workspace); S15 (sandbox); S16 (human interaction and CLI); S17 (project memory); S18 (task board); S19 (checkpoints and long runs: part 1, checkpoints, resume and rollback; part 2, budgets, report and cleanup); S20 (team: part 1, the team runs; part 2, integration and the scripted team simulation; part 3, `extends`, the three presets, helpers, the plan sign-off, the hand-off tool and the TEST-31 benchmark goals).
-- **Waiting:** the M0 design review sign-off on `REQUIREMENTS.md`, `CONFIGURATION.md` and `DESIGN.md`.
-- **Doing:** S21 (hardening and benchmark, [#23](https://github.com/sleepyshark85/Officina/issues/23)), in five parts. Part 1
-  built the TEST-31 benchmark up to the live run: the runner, scoring, report, reference solutions and the suites' validation.
-  The live run, on Linux and Windows, is the owner's to start, as it costs money ([`benchmark/`](../../benchmark/README.md)).
-  Part 2 added the load and latency tests (TEST-30), the core's coverage check (TEST-33: 96.5% measured, 85% required) and the MUST verification check
-  ([`check_verification.py`](check_verification.py), [`verification.md`](verification.md)).
-  Part 3 added the Claude provider's feature switches and compaction as its history shortening (CLD-06), and the S12 follow-ups;
-  Message Batches (CLD-11) are proposed as not in v1.
-  Part 4 closed the core follow-ups: a task's tokens, tool calls and time (RUN-05), step agents' own budgets, `config validate`
-  reporting what `sof run` refuses, `config dry-run` with the workspace and sandbox, masking tokens refused in memory proposals, and
-  a turn left behind keeping its agent's lock.
-  Part 5 tested the CPU limit on both systems and HTTPS through the proxy, and prepared the Windows tests as a standard user.
-- **Waiting for the owner:** the live TEST-31 benchmark run on Linux and Windows (S21's last acceptance criterion), adding the
-  standard-user Windows tests to CI, and confirming the items S21 proposes as not in v1.
-- **Open follow-ups:** every item below that names S21 is triaged in [S21](S21-hardening.md): built in one of its parts, or
-  proposed as not in v1 for the owner to confirm.
-  - After S20 (fix): integration refuses a change that adds, changes or removes a protected path, since a command can create a
-    configuration file such as `sof.<environment>.json` that the sandbox could not protect; a workspace in a subfolder of its
-    git repository is refused, as protected paths are relative to the top.
-  - S02 kept a `formatVersion` check, though only version 1 exists. Consider removing the setting
-    until a version 2 exists (principle 13). S06 keeps `output.schema` as JSON text, and S13 too; if a later slice wants the
-    reference's `{ "file": … }` form, that is a format change.
-  - S02 rejects a plain-text `apiKey`, because the binder would otherwise skip it silently and
-    fall back to the default secret reference. Kept on purpose.
-  - S21 (from S13 and S20): the condition roots `checks.<name>`, `outcome` and `stopReason` (configuration reference §6, marked
-    not built) wait for a case that needs them; the team needed none.
-  - The configuration binder adds a file's items to a list setting's default instead of replacing it, so
-    `storage.unstoredEvents` set in a file keeps `textGenerated`. S06 made `context.record` unset by default to avoid it.
-  - S21 makes the Claude provider an `IHistoryShortener` (CLD-06); the capability slices (S19, S20) add their switches and
-    dependencies to `CapabilitiesOptions`. S07's Notes list the rest.
-  - S04 left parts of its requirements to the slices that add the state they need; its Notes list them
-    (S06, S07, S09, S14, S16, S19).
-  - S08 left parts of its requirements to the slices that add the state they need; its Notes list them
-    (S06, S07, S09, S16, S19, S20); S13 added steps.
-  - S11 moved CLD-06 and CLD-11 (the Claude provider's feature switches and Message Batches) to S21. Its Notes list the rest.
-  - S21 (from S12): an operator's message sent during a turn, and the project-memory change message (S17, sent
-    automatically whenever memory changes), is a mid-conversation system message, which every Claude model outside the
-    allow list (such as Haiku 4.5 and Sonnet 5) rejects (`InvalidRequest`); the provider should send it as a user message for them. A reply the model
-    gateway starts over after a mid-stream failure leaves its first text in the stored `textGenerated` events, and retries
-    are not events of their own. The `baseUrl` provider setting of the reference is not built.
-  - S20 part 2 (from S16, S18 and S06): each task has its own working copy, which goes when the task ends; work for no task keeps
-    the agent's own, until the run ends. The team integrates through the queue with `capabilities.workspace.baselineChecks`;
-    command checks (`checks.<name>.command`) run in the sandbox; `sof run`'s console shows the board (TASK-08).
-    S21 (from S20): fan-out branches of one agent share that agent's working copy while they run at the same time; a copy of
-    their own when they change files waits for a case. `sof config validate` does not report the `extension:` ids `sof` never
-    registers, which `sof run` refuses.
-  - S21 (from S16): `sof config dry-run` cannot run a configuration that uses the `workspace.*` or `sandbox.*` tools. It
-    should register them over the test kit's `InMemoryWorkspace` and `FakeSandbox` (CFG-12).
-  - S20 part 3 added the plan-approval sign-off and the model's tool to hand off to a human (EGR-04). Part 2 added integration
-    to `IWorkspace`, with a checkpoint at `CheckpointPoint.Integration` after each one. S21 (from S20): a `team.handoff` tool, if a
-    case needs one (a team agent's handoff already goes back to its lead).
-  - S21 (from S16): when a cancelled turn outlives `run.cancelWithin`, the agent's lock is released, so its next turn
-    can overlap with the left-behind one, and the left-behind turn reports zero cost.
-  - S20 part 1 (from S19): a team's agents share the run's budget in one process, each with its own agent level from its
-    definition's `budget.total`; the run's time is still its elapsed time inside work items, which is what RUN-05 means. Events
-    carry the agent's id, so cost is broken down by agent and by definition (RUN-10). A resumed run's agent level counts all its
-    events. The run's budget also caps tokens and tool calls when `run.budget.tokens` and `toolCalls` are set (RUN-05); S21 takes
-    a task's tokens, time and tool calls, since a task's budget caps its cost only.
-    S21 (from S19 and S20): the per-run rate limit (ING-03) counts a run's first work and each resume, in memory, and a team's
-    tasks are its own work, so nothing joins a live run from outside; the CLI resumes in a new process, so the limit never applies
-    there, and the host and serve mode keep it in a long-lived runner. `budget.total` of a pattern's step agents does not apply
-    (they draw on the entry agent's).
-  - S21 runs the Windows sandbox tests once as a standard user in CI (the S00a recipe), tests the CPU
-    limit on both systems with limit reporting, and proves HTTPS through the proxy (a CONNECT tunnel).
-  - S20 runs the team on the task board: it claims and assigns tasks, a failed task goes back to the lead, who retries it, and
-    a task in review once verified and approved is integrated, then done (`CompleteAsync`), or returned to its author on a
-    conflict, with the baseline merged into its copy, or a failed baseline check (`ReturnAsync`, WS-03, TASK-05). S18's Notes list the rest.
-  - S18 moved the SQLite format version to 3. A slice that adds a table bumps it again, unless an unmerged PR has
-    already bumped it past the version on main.
-  - S19 (follow-up): a resumed pattern runs again from its first step, redoing the steps already done (resume part-way);
-    old checkpoint commits are kept only by the reflog after a squash, so `git gc` can break restoring them. The Windows
-    sandbox cleanup is proved on CI to remove the home folder and the container's grants on the toolchains; the AppContainer profile's
-    removal is not verified. Open, for a case (S19's Notes list them):
-    masking tokens from before a crash are not restored; the host passes the `Caller` to `ResumeAsync`, because only its id and
-    tenant are stored; a crashed run's branches are kept until it ends, and nothing lists runs yet.
-  - S05 moved CTX-06 to S07 and CTX-07 to S06.
-  - S17 left the owner's CLI commands for memory proposals (S20 part 2 added them to `sof run`'s console; part 1 tied
-    `memory.review` to the team's lead), and unmasking proposed text (S21); their slice files say so.
-  - S09 left parts of its requirements to the slices that add the state they need; its Notes list them
-    (S06, S19, S20, and S21 for Message Batches).
-  - REQUIREMENTS.md §4.3 lists masking as replaceable, but DESIGN.md §4 keeps it in Core and not replaceable in v1.
-    The owner decides at revision 3.
-  - Masking tokens are numbered per run, but S07 keeps history across runs, so a token in earlier history could
-    name a different value in a later run. Until the token table is kept with the conversation, validation refuses
-    a history strategy other than `none` for an agent with a `receivesMaskedValues` tool while masking is on.
-    Keeping the table with the conversation lifts that restriction.
-  - The configuration binder appends a configured list to a non-empty default list, so list settings default to
-    unset and code supplies the default (S09 fixed `storage.unstoredEvents`). Dictionaries merge into their defaults on
-    purpose: `providers.claude` and `models.default` rely on it.
+- **Done:** every slice, S00a to S20, and S21's five parts. S21 stays `doing` only for the live TEST-31 benchmark run, its
+  last acceptance criterion. `check_coverage.py` passes; `check_verification.py` lists TEST-31 and three MUST gaps
+  (CFG-17, TASK-08, STO-01) as pending, and three readings for the owner.
+- **For the owner, next:**
+  1. Run the live benchmark on Linux and Windows: a pilot first, then the full set, then `report.py` over both
+     ([`benchmark/`](../../benchmark/README.md)). It is estimated at about $1,200 for both systems.
+  2. Before relying on the Claude features (compaction, clearing tool results, task budgets, refusal fallback), record
+     one live exchange of each (S21 part 3).
+  3. Add the standard-user Windows sandbox tests to CI
+     ([`scripts/windows-standard-user-tests.ps1`](../../scripts/windows-standard-user-tests.ps1), S21 part 5).
+  4. Confirm the items [S21](S21-hardening.md) proposes as not in v1, and whether CPU throttling needs a limit-hit
+     result of its own (S21 part 5).
+  5. Confirm the readings of CFG-01, CAP-01 and TASK-02 ([`verification.md`](verification.md)), or change them at
+     revision 3, with the other questions in REQUIREMENTS.md §13.
+  6. Decide the three MUST gaps in [`verification.md`](verification.md): CFG-17 (`sof` does not detect the build and
+     test commands), TASK-08 (`sof`'s console cannot change tasks) and STO-01 (artifacts are SQLite rows, not files).
+     Build each, or change it at revision 3. The configuration reference §17 keeps their spec.
+  7. Sign off the M0 design review of `REQUIREMENTS.md`, `CONFIGURATION.md` and `DESIGN.md`.
+- **Open follow-ups**, each waiting for a case or for the owner:
+  - Flaky test: `ModelGatewayTests.A_fallback_serves_the_call_when_the_primary_stays_unavailable_and_the_switch_is_recorded`
+    listens with a process-wide `MeterListener`, so it can hear the fallbacks of `HistoryTests` running in parallel.
+    Filter on a model only it uses, or run it in a non-parallel collection (a separate PR).
+  - Masking: tokens are numbered per run, but history is kept across runs, so validation refuses a history strategy
+    other than `none` for an agent with a `receivesMaskedValues` tool while masking is on. Keeping the token table with
+    the conversation would lift that. Tokens from before a crash are not restored on resume.
+  - Resume and rollback (S19): a resumed pattern runs again from its first step; integration squashes checkpoint commits,
+    so older ones are kept only by the reflog and `git gc` can break restoring them; the host passes the `Caller` to
+    `ResumeAsync`, as only its id and tenant are stored; a crashed run's branches are kept until it ends; nothing lists
+    runs; the removal of the Windows AppContainer profile is not verified.
+  - Cost and performance (S21): a cancelled turn, or one whose process died, is not charged to its task; server tools'
+    per-use fees are not priced; the board tools read and rebuild the board for each change; `EventBus` holds one lock
+    across each durable append, and each SQLite write opens its own connection (about 25 ms a write on Windows).
+  - Configuration (S02): `formatVersion` is checked though only version 1 exists; `output.schema` is JSON text, not the
+    `{ "file": … }` form; the binder appends a configured list to a non-empty default, so list settings default to unset
+    and code supplies the default. A plain-text `apiKey` is refused on purpose, as the binder would skip it silently.
 
 ## How slices work
 
@@ -156,7 +101,9 @@ A slice is **done** when:
 
 ## Order
 
-- **Now, in parallel:** S00a, S00b and S01.
+As planned:
+
+- **First, in parallel:** S00a, S00b and S01.
 - **Critical path:** S01 → S02 → S03 → S04 → S05 → S11 → S12 → S13 → S20 → S21.
 - **Can run alongside once S04 is done:** S08, S10, S09 and S16 (once S08 is done), and S06 and S07 (once S05 is done).
 - **The coding track can start early:** S14 needs only S03. S15 needs S00a and S14.
@@ -166,3 +113,5 @@ A slice is **done** when:
 - Update a slice's **Status** (todo, doing, done) in its file and in the table above.
 - If a requirement changes, update the slice that closes it, then run the coverage check.
 - Each slice has a GitHub issue under its milestone. Close the issue when the slice is done.
+- The SQLite format version is 5. A slice that adds a table bumps it, unless an unmerged PR has already bumped it past
+  the version on main.

@@ -47,7 +47,7 @@ public sealed record ProviderOptions
     [Range(1, int.MaxValue, ErrorMessage = "must be at least 1.")]
     public int? MaxConcurrentCalls { get; init; }
 
-    [Setting("Features of the provider's own API, each off until switched on. The `claude` provider has them all; a provider without one ignores it.",
+    [Setting("Features of the provider's own API, each off until switched on. A feature switched on for a model that does not have it is a configuration error.",
         Example = """{ "structuredOutput": true, "refusalFallback": true }""")]
     public ProviderFeatures Features { get; init; } = new();
 }

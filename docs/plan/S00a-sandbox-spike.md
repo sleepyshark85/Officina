@@ -15,11 +15,11 @@ Prove that commands can be isolated with filtered networking on Linux and Window
 
 ## Acceptance criteria
 
-- [ ] On Linux and Windows, a prototype runs `dotnet build` inside a working copy.
-- [ ] Reading a file outside the working copy fails.
-- [ ] A host on the allow list is reachable through the filtering proxy; any other host is not.
-- [ ] CPU, memory and time limits stop a runaway process.
-- [ ] `docs/spikes/sandbox.md` records what worked, what needs admin rights, and a go/no-go per OS with a fallback (for example containers).
+- [x] On Linux and Windows, a prototype runs `dotnet build` inside a working copy.
+- [x] Reading a file outside the working copy fails.
+- [x] A host on the allow list is reachable through the filtering proxy; any other host is not.
+- [x] CPU, memory and time limits stop a runaway process.
+- [x] `docs/spikes/sandbox.md` records what worked, what needs admin rights, and a go/no-go per OS with a fallback (for example containers).
 
 ## Notes
 

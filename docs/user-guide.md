@@ -1,7 +1,8 @@
 # sof user guide
 
-How to set up `sof`, the Officina coding team CLI, and use it by hand. For every setting, see
-[`CONFIGURATION.md`](../CONFIGURATION.md) and the [settings reference](configuration-settings.md).
+How to set up `sof`, the Officina coding team CLI, and use it by hand. For the configuration, see
+[`CONFIGURATION.md`](../CONFIGURATION.md), the [configuration reference](configuration-reference.md) and the
+[settings reference](configuration-settings.md).
 
 > **Status.** Every slice passes its tests on Linux and Windows, but the tests use a scripted model. No full live run
 > against Claude has been done yet. Treat your first sessions as a field test: work in throwaway repositories, start
@@ -235,6 +236,7 @@ Write down anything surprising, with the run id; `sof report <run>` and `.sof/so
   first.
 - Fan-out branches of one agent share a working copy. Command checks time out after 20 minutes by default
   (`checks.<name>.timeout`).
+- `board` only shows the task board; the console can't add, edit, reprioritise, reassign or cancel tasks.
 - The items left out of v1 are listed in [`docs/plan/S21-hardening.md`](plan/S21-hardening.md).
 
 ## 10. The benchmark (later)

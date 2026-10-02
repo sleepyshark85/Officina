@@ -188,8 +188,8 @@ def solution():
     svg = s.render("solution-layout", "Solution layout",
                    "Dependency graph of the Officina .NET projects: every project depends on Sleepyshark.Officina.Core, and only Sleepyshark.Officina.Providers.Claude references the Anthropic SDK.", W, H)
     page("solution-layout", "Dependency graph", "Solution layout", svg,
-         "Every project is Sleepyshark.Officina.&lt;name&gt;. Capabilities = Sleepyshark.Officina.Team, Sleepyshark.Officina.Workspace, Sleepyshark.Officina.Sandbox and Sleepyshark.Officina.Capabilities. "
-         "The CLI also references Sleepyshark.Officina.Core and Sleepyshark.Officina.Hosting (configuration binding) directly; neither is drawn. "
+         "Every project is Sleepyshark.Officina.&lt;name&gt;. Capabilities = Sleepyshark.Officina.Team, Sleepyshark.Officina.Workspace, Sleepyshark.Officina.Sandbox and Sleepyshark.Officina.Capabilities; Team and Capabilities are empty, as those capabilities live in Core. "
+         "The CLI also references Sleepyshark.Officina.Core and Sleepyshark.Officina.Testing (for config dry-run) directly; neither is drawn. "
          "The SDK's transitive Microsoft.Extensions.AI.Abstractions never leaves the boundary.")
 
 
@@ -364,7 +364,7 @@ def tasks():
     s.legend(468, [("focal", "Done only when checks pass"), ("optional", "Reachable from any open state"), (("line", MUTED, "5,4", "arrow"), "Rework")])
     svg = s.render("task-states", "Task states", "State machine of a task: proposed, ready, in progress, in review and done, with side states blocked, failed and cancelled.", W, H)
     page("task-states", "State machine", "Task states", svg,
-         "Only configured transitions are allowed (TASK-02). Failing the attempt limit (default 3) or the task budget sends the task back to the lead (TASK-09).")
+         "The transitions are fixed in code (TASK-02). Failing the attempt limit (default 3) or the task budget sends the task back to the lead (TASK-09).")
 
 
 # ---------------------------------------------------------------- 6. resume
