@@ -378,7 +378,7 @@ arguments and task fields. A condition that refers to free-text output fails val
 { "field": "output.severity", "is": "high" }
 { "field": "output.category", "in": ["bug", "regression"] }
 { "field": "output.score", "gte": 0.8 }                 // gt | gte | lt | lte, combinable into a range
-{ "field": "checks.tests.passed", "is": "true" }
+{ "field": "checks.tests.passed", "is": "true" }          // not built yet
 { "field": "output.ticket", "exists": true }
 { "all": [ <condition>, <condition> ] }                 // and
 { "any": [ <condition>, <condition> ] }                 // or
@@ -388,9 +388,9 @@ arguments and task fields. A condition that refers to free-text output fails val
 | Field root | Refers to |
 |---|---|
 | `output` | The step's validated structured output |
-| `checks.<name>` | A check result: `passed`, plus `findings` (count only) |
-| `outcome` | The step outcome: `completed`, `handedOff`, `failed` or `cancelled` |
-| `stopReason` | The last stop reason |
+| `checks.<name>` | A check result: `passed`, plus `findings` (count only). Not built yet. |
+| `outcome` | The step outcome: `completed`, `handedOff`, `failed` or `cancelled`. Not built yet; use `onOutcome`. |
+| `stopReason` | The last stop reason. Not built yet. |
 | `args` | Tool arguments (approval rules and gates only) |
 | `task` | The current task's fields (gates, when the task board is on) |
 
@@ -495,7 +495,7 @@ examples of each pattern are in `samples/` (TEST-06).
 ```
 
 A workflow step's `input` lists `input` (the workflow's input) or earlier steps' ids; several are each
-labelled with their source. `onOutcome` maps `completed`, `handedOff` and `failed` to `continue`,
+labelled with their source; the input from a step that was skipped by a `goto` is empty. `onOutcome` maps `completed`, `handedOff` and `failed` to `continue`,
 `retry:<n>`, `goto:<step>` or `handoff`, which ends the workflow with the step's result (PAT-08). The
 default is `continue` on `completed` and `handoff` otherwise. A cancelled step ends the run.
 

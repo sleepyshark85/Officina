@@ -15,7 +15,6 @@ internal sealed class PlanAndExecute : ILoopPattern
     {
         var pattern = context.Pattern;
         var input = context.Input;
-        var outputs = new List<string>();
         for (var replans = 0; ; replans++)
         {
             var plan = await context.RunStepAsync("planner", pattern.Planner ?? new(), input, ct).ConfigureAwait(false);
@@ -29,13 +28,16 @@ internal sealed class PlanAndExecute : ILoopPattern
                 return context.HandOff(HandoffReason.InvalidStructuredOutput, "the plan has no list of steps", plan.Output);
             }
 
+            var outputs = new List<string>();
             StepResult? stopped = null;
+            var failed = -1;
             foreach (var (index, item) in items.EnumerateArray().Index())
             {
                 var done = await context.RunStepAsync($"executor[{index}]", pattern.Executor!, Condition.Text(item), ct).ConfigureAwait(false);
                 if (done.Outcome != StepOutcome.Completed)
                 {
                     stopped = done;
+                    failed = index;
                     break;
                 }
 
@@ -52,7 +54,8 @@ internal sealed class PlanAndExecute : ILoopPattern
                 return stopped;
             }
 
-            input = Labels.Parts(("input", context.Input), ("step:planner", plan.Output), ("step:executor", stopped.Output));
+            input = Labels.Parts(("input", context.Input), ("step:planner", plan.Output),
+                ("step:failed", $"executor[{failed}] did not complete"), ("step:executor", stopped.Output));
         }
     }
 }

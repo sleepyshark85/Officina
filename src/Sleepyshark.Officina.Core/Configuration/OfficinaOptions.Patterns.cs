@@ -28,6 +28,12 @@ public sealed partial record OfficinaOptions
                 errors.Add(new(ValidationPhase.Shape, at, "names both an agent and a pattern.", "Keep one of them."));
             }
 
+            if (step.Pattern is { IsTurn: true })
+            {
+                errors.Add(new(ValidationPhase.Shape, $"{at}.pattern", $"\"{step.Pattern.Type}\" is a turn, not a nested pattern.",
+                    "A step that is a turn names an agent, or neither."));
+            }
+
             errors.AddRange(Annotations(step, at));
             errors.AddRange(step.Agent is null ? [] : References($"{at}.agent", "agent", [step.Agent], "agents", Agents.Keys));
             errors.AddRange(step.Pattern is null ? [] : PatternSettings($"{at}.pattern", owner, step.Pattern));

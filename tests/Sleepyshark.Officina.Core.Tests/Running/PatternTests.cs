@@ -89,6 +89,60 @@ public class PatternTests
         Assert.Equal((AgentOutcome.Completed, "A", 1), (result.Outcome, result.Output, kit.Model.Requests.Count));
     }
 
+    [Fact]
+    public async Task Fan_out_combines_the_outputs_in_a_step()
+    {
+        var kit = Kit(new() { Type = PatternOptions.FanOut, Branches = [new() { Agent = "worker" }, new() { Agent = "worker" }], Combine = FanOutCombine.Step, Combiner = new() { Agent = "worker" }, MaxParallel = 1 });
+        kit.Model.Reply("A").Reply("B").Reply("A and B");
+
+        var result = await kit.RunAsync("lead", "work", Ct);
+
+        Assert.Equal("A and B", result.Output);
+        Assert.Contains("A", Text(kit.Model.Requests[^1]), StringComparison.Ordinal);
+        Assert.Contains("B", Text(kit.Model.Requests[^1]), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Fan_out_with_no_majority_is_handed_off()
+    {
+        var kit = Kit(new() { Type = PatternOptions.FanOut, Branches = [new() { Agent = "worker" }, new() { Agent = "worker" }], Combine = FanOutCombine.Majority, On = "output.v", MaxParallel = 1 },
+            worker: agent => agent with { Output = new() { Format = OutputFormat.Structured, Schema = """{ "properties": { "v": { "type": "string" } } }""", Checks = [] } });
+        kit.Model.Reply("""{ "v": "a" }""").Reply("""{ "v": "b" }""");
+
+        var result = await kit.RunAsync("lead", "work", Ct);
+
+        Assert.Equal(HandoffReason.NoRouteForValue, result.Handoff!.Reason);
+    }
+
+    // PAT-01: when an item is handed off, the planner is asked again, told which item failed, and only the new plan's outputs count.
+    [Fact]
+    public async Task Plan_and_execute_plans_again_when_an_item_is_handed_off()
+    {
+        var kit = PlanKit(maxReplans: 1);
+        kit.Model.Reply("""{ "steps": ["a", "b"] }""").Reply("done a").Reply(new Stopped(StopReason.Refused)).Reply("""{ "steps": ["c"] }""").Reply("done c");
+
+        var result = await kit.RunAsync("lead", "work", Ct);
+
+        Assert.Equal((AgentOutcome.Completed, """["done c"]"""), (result.Outcome, result.Output));
+        Assert.Contains("executor[1] did not complete", Text(kit.Model.Requests[3]), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Plan_and_execute_stops_planning_again_at_the_limit()
+    {
+        var kit = PlanKit(maxReplans: 1);
+        kit.Model.Reply("""{ "steps": ["a"] }""").Reply(new Stopped(StopReason.Refused)).Reply("""{ "steps": ["b"] }""").Reply(new Stopped(StopReason.Refused));
+
+        var result = await kit.RunAsync("lead", "work", Ct);
+
+        Assert.Equal(AgentOutcome.HandedOff, result.Outcome);
+        Assert.Equal(4, kit.Model.Requests.Count);
+    }
+
+    private TestKit PlanKit(int maxReplans) =>
+        Kit(new() { Type = PatternOptions.PlanAndExecute, Executor = new() { Agent = "worker" }, MaxReplans = maxReplans },
+            lead => lead with { Output = new() { Format = OutputFormat.Structured, Schema = """{ "properties": { "steps": { "type": "array" } } }""" } });
+
     // OUT-03, ING-02: the findings go back to the model masked, though the check saw the artifact as the tool produced it.
     [Theory]
     [InlineData(false)]
@@ -157,6 +211,7 @@ public class PatternTests
     [InlineData("route not in schema", "agents.lead.pattern.on", "field output.desk is not in the step's output.")]
     [InlineData("missing goto", "agents.lead.pattern.next[0].goto", "step \"nowhere\" does not exist.")]
     [InlineData("loop of agents", "agents.lead.pattern", "has the agent as a step of its own pattern.")]
+    [InlineData("nested turn", "agents.lead.pattern.steps[0].pattern", "\"singleCall\" is a turn, not a nested pattern.")]
     [InlineData("single call with tools", "agents.lead.tools", "must be empty: a singleCall agent is offered no tools.")]
     public void Invalid_patterns_are_reported(string kind, string path, string problem)
     {
@@ -168,6 +223,7 @@ public class PatternTests
             "router on text" => (new() { Type = PatternOptions.Router, Routes = Routes, On = "output.route" }, null),
             "route not in schema" => (new() { Type = PatternOptions.Router, Routes = Routes, On = "output.desk" }, agent => agent with { Output = structured }),
             "missing goto" => (Workflow("one") with { Next = [new() { From = "one", Goto = "nowhere" }] }, null),
+            "nested turn" => (new() { Type = PatternOptions.Workflow, Steps = [new() { Id = "one", Pattern = new() { Type = PatternOptions.SingleCall } }] }, null),
             "loop of agents" => (new() { Type = PatternOptions.Router, Classify = new() { Agent = "lead" }, Routes = Routes, On = "output.route" }, null),
             _ => (new() { Type = PatternOptions.SingleCall }, agent => agent with { Tools = ["all"] }),
         };
@@ -182,16 +238,16 @@ public class PatternTests
     private static PatternOptions Workflow(params string[] ids) =>
         new() { Type = PatternOptions.Workflow, Steps = [.. ids.Select(id => new StepOptions { Id = id, Agent = "worker" })] };
 
-    private static OfficinaOptions Options(PatternOptions pattern, Func<AgentDefinition, AgentDefinition>? lead = null)
+    private static OfficinaOptions Options(PatternOptions pattern, Func<AgentDefinition, AgentDefinition>? lead = null, Func<AgentDefinition, AgentDefinition>? worker = null)
     {
         var options = ToolSetup.Options(("report", Extension("report")));
-        var worker = options.Agents[Agent] with { Output = new() { Checks = [] } };
+        var workerAgent = (worker ?? (agent => agent))(options.Agents[Agent] with { Output = new() { Checks = [] } });
         return options with
         {
             Agents = new Dictionary<string, AgentDefinition>
             {
                 ["lead"] = (lead ?? (agent => agent))(new() { Instructions = "Lead.", Pattern = pattern }),
-                ["worker"] = worker,
+                ["worker"] = workerAgent,
             },
             Checks = new Dictionary<string, CheckOptions> { ["fixed"] = new() { Use = "extension:fixed" } },
         };
@@ -208,9 +264,9 @@ public class PatternTests
     private static async Task<IEnumerable<CoreEvent>> StepsEnded(TestKit kit) =>
         (await kit.Storage.Events.ReadAsync(null, kit.Storage.Runs.Runs[^1].RunId, 0, Ct)).Where(coreEvent => coreEvent.Payload is StepEnded);
 
-    private TestKit Kit(PatternOptions pattern, Func<AgentDefinition, AgentDefinition>? lead = null, IReadOnlyDictionary<string, ILoopPattern>? patterns = null) =>
+    private TestKit Kit(PatternOptions pattern, Func<AgentDefinition, AgentDefinition>? lead = null, IReadOnlyDictionary<string, ILoopPattern>? patterns = null, Func<AgentDefinition, AgentDefinition>? worker = null) =>
         new(
-            Options(pattern, lead),
+            Options(pattern, lead, worker),
             new Dictionary<string, ITool> { ["report"] = new FakeTool(ToolKind.Read, run: async (_, token) => await report(token)) },
             checks: new Dictionary<string, ICheck> { ["fixed"] = new Fixed() },
             patterns: patterns);

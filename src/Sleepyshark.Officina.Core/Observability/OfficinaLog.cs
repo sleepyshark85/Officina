@@ -32,7 +32,7 @@ internal sealed class OfficinaLog : EventSource
     /// <param name="tool">The tool.</param>
     /// <param name="category">The error category the model was told.</param>
     /// <param name="detail">The internal detail, with known secrets removed.</param>
-    [Event(2, Level = EventLevel.Warning, Message = "Run {0}: agent {1}'s call of {3} in step {2} failed ({4}): {5}")]
+    [Event(2, Version = 1, Level = EventLevel.Warning, Message = "Run {0}: agent {1}'s call of {3} in step {2} failed ({4}): {5}")]
     public void ToolFailed(string runId, string agent, string step, string tool, string category, string detail) =>
         WriteEvent(2, runId, agent, step, tool, category, detail);
 

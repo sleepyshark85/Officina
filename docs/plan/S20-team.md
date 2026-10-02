@@ -19,4 +19,6 @@ The lead, roles, parallel agents and the coding team preset.
 
 ## Notes
 
+Remove the "the team pattern cannot run yet" stub (S13), and run `samples/team` in `SampleTests` (TEST-06).
+
 Write the TEST-31 benchmark goals and their hidden tests during this slice.
