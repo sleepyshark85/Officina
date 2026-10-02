@@ -46,7 +46,8 @@ Last updated 2026-10-02.
     can overlap with the left-behind one, and the left-behind turn reports zero cost.
   - S20 (from S19): the run's budget is shared by work items only through the stored events, which are read when a run
     resumes; work that joins a running run in the same process (a team's tasks) needs the run's budget kept per run, and the
-    agent budget per agent instance. Cost is broken down by agent, task, step and model; "by definition" is the same as by agent
+    agent budget per agent instance. The run's time counts only inside work items; once work joins a live run, S20 checks
+    that this still measures what RUN-05 means. Cost is broken down by agent, task, step and model; "by definition" is the same as by agent
     until the team gives a definition several agents, so S20 adds the instance to the event (RUN-10). S20 also takes
     the run's tokens and tool-call limits (RUN-05), which only the turn and the agent have, and the task has cost only.
     The per-run rate limit (ING-03) counts a run's first work and each resume, in memory: the CLI resumes in a new process, so it never
