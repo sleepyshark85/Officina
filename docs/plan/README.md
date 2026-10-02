@@ -6,11 +6,10 @@ Status: draft · 2026-10-01 · slices `REQUIREMENTS.md` (revision 2) into delive
 
 Last updated 2026-10-02.
 
-- **Done:** M0 spikes S00a and S00b; M1 slices S01 (walking skeleton) and S02 (configuration); S03 (tool pipeline); S04 (turn loop); S05 (context and caching); S06 (run record and output); S07 (history and conversation store); S08 (events, storage and observability); S09 (triggers and admission); S10 (MCP and knowledge); S11 (Claude provider); S12 (model gateway); S13 (loop patterns); S14 (git workspace); S15 (sandbox); S16 (human interaction and CLI); S17 (project memory); S18 (task board); S19 (checkpoints and long runs: part 1, checkpoints, resume and rollback; part 2, budgets, report and cleanup).
+- **Done:** M0 spikes S00a and S00b; M1 slices S01 (walking skeleton) and S02 (configuration); S03 (tool pipeline); S04 (turn loop); S05 (context and caching); S06 (run record and output); S07 (history and conversation store); S08 (events, storage and observability); S09 (triggers and admission); S10 (MCP and knowledge); S11 (Claude provider); S12 (model gateway); S13 (loop patterns); S14 (git workspace); S15 (sandbox); S16 (human interaction and CLI); S17 (project memory); S18 (task board); S19 (checkpoints and long runs: part 1, checkpoints, resume and rollback; part 2, budgets, report and cleanup); S20 (team: part 1, the team runs; part 2, integration and the scripted team simulation; part 3, `extends`, the three presets, helpers, the plan sign-off, the hand-off tool and the TEST-31 benchmark goals).
 - **Waiting:** the M0 design review sign-off on `REQUIREMENTS.md`, `CONFIGURATION.md` and `DESIGN.md`.
-- **Doing:** S20 (team, [#22](https://github.com/sleepyshark85/Officina/issues/22)): part 1, the team runs; part 2, integration
-  and the scripted team simulation (TEST-29, milestone M6's target); next part 3, definitions, presets, helpers and sign-offs.
-- **Next:** S20 part 3.
+- **Next:** S21 (hardening and benchmark, [#23](https://github.com/sleepyshark85/Officina/issues/23)), which runs the TEST-31
+  benchmark in [`benchmark/`](../../benchmark/README.md) against the live model.
 - **Open follow-ups:**
   - S02 kept a `formatVersion` check, though only version 1 exists. Consider removing the setting
     until a version 2 exists (principle 13). S06 keeps `output.schema` as JSON text, and S13 too; if a later slice wants the
@@ -41,8 +40,9 @@ Last updated 2026-10-02.
     registers, which `sof run` refuses.
   - S21 (from S16): `sof config dry-run` cannot run a configuration that uses the `workspace.*` or `sandbox.*` tools. It
     should register them over the test kit's `InMemoryWorkspace` and `FakeSandbox` (CFG-12).
-  - S20 part 3 adds the plan-approval sign-off and the model's tool to hand off to a human (EGR-04). Part 2 added integration
-    to `IWorkspace`, with a checkpoint at `CheckpointPoint.Integration` after each one.
+  - S20 part 3 added the plan-approval sign-off and the model's tool to hand off to a human (EGR-04). Part 2 added integration
+    to `IWorkspace`, with a checkpoint at `CheckpointPoint.Integration` after each one. S21 (from S20): a `team.handoff` tool, if a
+    case needs one (a team agent's handoff already goes back to its lead).
   - S21 (from S16): when a cancelled turn outlives `run.cancelWithin`, the agent's lock is released, so its next turn
     can overlap with the left-behind one, and the left-behind turn reports zero cost.
   - S20 part 1 (from S19): a team's agents share the run's budget in one process, each with its own agent level from its
@@ -136,7 +136,7 @@ A slice is **done** when:
 | [S17](S17-project-memory.md) | Project memory | M5 | S | S05, S16 | [#19](https://github.com/sleepyshark85/Officina/issues/19) | done |
 | [S18](S18-task-board.md) | Task board | M6 | M | S06, S08 | [#20](https://github.com/sleepyshark85/Officina/issues/20) | done |
 | [S19](S19-checkpoints-long-runs.md) | Checkpoints and long runs | M6 | M ×2 | S08, S14 | [#21](https://github.com/sleepyshark85/Officina/issues/21) | done |
-| [S20](S20-team.md) | Team | M6 | M ×3 | S13, S18, S19 | [#22](https://github.com/sleepyshark85/Officina/issues/22) | doing |
+| [S20](S20-team.md) | Team | M6 | M ×3 | S13, S18, S19 | [#22](https://github.com/sleepyshark85/Officina/issues/22) | done |
 | [S21](S21-hardening.md) | Hardening and benchmark | M7 | M | S20 | [#23](https://github.com/sleepyshark85/Officina/issues/23) | todo |
 
 ## Order

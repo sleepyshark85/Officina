@@ -58,6 +58,8 @@ internal sealed class Turn
     private readonly bool signOffToExceedRunBudget;
     private bool warnedTask;
     private readonly Func<CancellationToken, Task> whilePaused;
+    private readonly Func<ToolContext, string, Budget, CancellationToken, Task<AgentResult>> runHelper;
+    private int helpers;
     private readonly List<ToolAttempt> attempts = [];
     private readonly List<CacheWarning> cacheWarnings = [];
     private readonly List<string> retrieved = [];
@@ -94,6 +96,7 @@ internal sealed class Turn
     /// <param name="whilePaused">Waits while the owner has paused the agent (RUN-06).</param>
     /// <param name="budget">The budget the turn's own is drawn from: its pattern's, or the run's.</param>
     /// <param name="time">The clock for the time budgets and the operating facts.</param>
+    /// <param name="runHelper">Runs a turn of a helper the agent starts, on its work, within the budget given (TEAM-07).</param>
     public Turn(
         ToolContext context,
         OfficinaOptions options,
@@ -112,9 +115,11 @@ internal sealed class Turn
         ConcurrentQueue<(Sender From, string Text)> inbox,
         Func<CancellationToken, Task> whilePaused,
         Budget budget,
-        TimeProvider time)
+        TimeProvider time,
+        Func<ToolContext, string, Budget, CancellationToken, Task<AgentResult>> runHelper)
     {
-        this.context = context;
+        this.context = context with { StartHelper = StartHelperAsync };
+        this.runHelper = runHelper;
         project = options.Project;
         agent = options.Agents[context.Agent];
         this.budget = budget.Draw("turn's", agent.Budget.Turn);
@@ -244,6 +249,43 @@ internal sealed class Turn
                 return (await FinishAsync(lastText, ct, revisable: false).ConfigureAwait(false))!;
             }
         }
+    }
+
+    /// <summary>
+    /// TEAM-07: a helper the agent starts, if its definition allows it and within the depth and count limits. The helper is an
+    /// agent of its own, such as <c>researcher[developer[1].1]</c>, with a turn whose budget is drawn from this turn's, and
+    /// permissions no wider than this agent's. It works on the same task, so it reads its working copy but never changes it.
+    /// </summary>
+    /// <returns>Whether the helper completed, and its output, or why not.</returns>
+    private async Task<(bool Completed, string Text)> StartHelperAsync(string helper, string work, CancellationToken ct)
+    {
+        var team = options.Capabilities.Team;
+        if (agent.Helpers?.Contains(helper) != true)
+        {
+            var allowed = agent.Helpers is { Count: > 0 } named ? string.Join(", ", named) : "none";
+            return (false, $"{context.Agent} may not start {helper}; it may start: {allowed}.");
+        }
+
+        if (context.HelperDepth >= team.HelperDepth)
+        {
+            return (false, $"a helper may not start helpers deeper than {team.HelperDepth}.");
+        }
+
+        var number = Interlocked.Increment(ref helpers);
+        if (number > team.HelperCount)
+        {
+            return (false, $"a turn may start at most {team.HelperCount} helpers.");
+        }
+
+        var within = agent.Permissions is null ? context.Within : context.Within is null ? agent.Permissions : [.. context.Within.Intersect(agent.Permissions)];
+        var helperContext = context with
+        {
+            Agent = helper, Instance = $"{helper}[{context.AgentId}.{number}]", Lead = false, HelperDepth = context.HelperDepth + 1, Within = within, StartHelper = null,
+        };
+        var result = await runHelper(helperContext, work, budget, ct).ConfigureAwait(false);
+        return result.Outcome == AgentOutcome.Completed
+            ? (true, result.Output)
+            : (false, $"{helperContext.AgentId} did not complete: {result.Handoff?.Detail ?? result.Output}");
     }
 
     public AgentResult HandOff(HandoffReason reason, string detail, string? to = null, ToolRequest? pendingAction = null) =>
@@ -648,6 +690,12 @@ internal sealed class Turn
         var batch = requests.Zip(results, (call, result) => new ToolAttempt(call, result)).ToList();
         var progressed = batch.Any(IsProgress);
         attempts.AddRange(batch);
+
+        if (batch.FirstOrDefault(attempt => attempt.Result.HandOffToHuman is not null) is { } asked)
+        {
+            // EGR-04: the model asked for a human with the tool for it, an explicit signal, never words in its text.
+            return HandOff(HandoffReason.PolicyGap, $"the agent asked for a human: {asked.Result.HandOffToHuman}", ToolResult.Human);
+        }
 
         if (batch.FirstOrDefault(attempt => attempt.Result.RouteTo is not null) is { } routed)
         {

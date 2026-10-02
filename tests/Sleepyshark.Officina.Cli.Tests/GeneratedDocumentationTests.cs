@@ -39,7 +39,7 @@ public sealed partial class GeneratedDocumentationTests
         AssertValid("""{ "agents": { "a": { "model": "strong" } }, "project": { "name": null } }""");
         Assert.False(Evaluate("""{ "agents": { "a": { "instruction": "x" } } }""").IsValid);
         Assert.False(Evaluate("""{ "providers": { "claude": { "apiKey": "sk-ant-literal" } } }""").IsValid);
-        Assert.False(Evaluate("""{ "extends": ["base.json"] }""").IsValid);
+        AssertValid("""{ "extends": ["preset:coding-team", "base.json"], "agents": { "a": { "extends": "b" } } }""");
     }
 
     private static void AssertCurrent(string relativePath, string generated)

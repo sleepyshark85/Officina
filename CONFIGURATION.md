@@ -12,13 +12,16 @@ Status: draft for M0 design review · 2026-09-30 · companion to `REQUIREMENTS.m
   is not.
 - **A configuration file only holds what differs.** `sof.json` is merged on top of the code
   defaults. It is JSON, and comments are allowed.
-- **Presets are ready-made files** that sit between the code defaults and your file. For example,
-  `preset:coding-team` will set up the whole team; presets arrive with the coding team.
-- **Layers, lowest to highest:** code defaults < `sof.json` < `sof.<environment>.json`
-  < environment variables (`SOF__section__setting`) < CLI options. Loading uses
-  Microsoft.Extensions.Configuration, so setting names match ignoring case, unknown settings are ignored,
-  a list should be set in one layer only (lists merge by position), and `null` only unsets a setting that
-  may be unset. Agent definitions cannot build on each other yet.
+- **Presets are ready-made files** that sit between the code defaults and your file. A file names them,
+  and other files of its own, in `extends`: `"extends": ["preset:coding-team"]` sets up the whole team. Three
+  presets ship: `coding-team`, `tool-using-assistant` and `single-call-extractor`.
+- **Layers, lowest to highest:** code defaults < what `sof.json` extends < `sof.json` < `sof.<environment>.json`
+  < environment variables (`SOF__section__setting`) < CLI options. Files merge object by object, setting names
+  match ignoring case, and a list or a value in a higher file replaces the lower one's. Environment variables
+  and CLI options are bound by Microsoft.Extensions.Configuration, so a list there merges by position. Unknown
+  settings are ignored, and `null` only unsets a setting that may be unset.
+- **An agent definition can build on another** with `"extends": "<agent>"`: it inherits every setting it does
+  not set itself, with the same rule for lists. The coding team's roles share a base this way (CFG-05).
 - **To see what is in effect,** run `sof config show --origin`. It lists every setting with its effective
   value and the file, variable or option it came from, down to "code default, core 1.2.0" (CFG-04).
 - **Everything is validated before anything runs** (CFG-06). `sof config validate` checks a
@@ -57,8 +60,6 @@ One agent, which runs on the default model profile (`claude-opus-5-5`):
 
 The coding team:
 
-Presets arrive with the coding team; until then this is how the team will be set up:
-
 ```jsonc
 {
   "extends": ["preset:coding-team"],
@@ -91,7 +92,7 @@ Every default is the safe option:
 - network off;
 - permission mode `ask`;
 - irreversible tools need approval;
-- no helper agents;
+- no helper agents (an agent starts helpers only when its definition lists them);
 - masking on (the coding preset turns it off, because it would corrupt source code);
 - conversation content not logged.
 

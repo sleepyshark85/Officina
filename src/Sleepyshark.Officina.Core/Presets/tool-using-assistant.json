@@ -1,0 +1,16 @@
+{
+  // CFG-11: one agent that calls tools in a loop and continues its conversation with each caller, with the owner asked
+  // before every write. The application gives its instructions and its tools: agents.assistant.instructions and .tools.
+  "agents": {
+    "assistant": {
+      "description": "Answers and acts with the tools it is given, continuing its conversation with each caller.",
+      "pattern": { "type": "toolLoop" },
+      "context": { "history": { "strategy": "full" } }
+    }
+  },
+  "run": { "permissionMode": "ask" },
+  "capabilities": {
+    "conversationStore": { "enabled": true },
+    "humanInteraction": { "enabled": true }
+  }
+}

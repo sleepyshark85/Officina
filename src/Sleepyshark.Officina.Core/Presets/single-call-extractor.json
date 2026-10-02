@@ -1,0 +1,11 @@
+{
+  // CFG-11: one agent that answers in one model call, with structured output, keeping no history. The application gives
+  // its instructions and its output schema: agents.extractor.instructions and agents.extractor.output.schema.
+  "agents": {
+    "extractor": {
+      "description": "Extracts structured data from the work it is given, in one model call.",
+      "pattern": { "type": "singleCall" },
+      "output": { "format": "structured" }
+    }
+  }
+}

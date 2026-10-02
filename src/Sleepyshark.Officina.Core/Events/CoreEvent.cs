@@ -43,6 +43,7 @@ public sealed record CoreEvent(string RunId, string Agent, string? Step, long Se
 [JsonDerivedType(typeof(MessageSent), "messageSent")]
 [JsonDerivedType(typeof(AgentStatusChanged), "agentStatusChanged")]
 [JsonDerivedType(typeof(Warning), "warning")]
+[JsonDerivedType(typeof(PlanApproved), "planApproved")]
 public abstract record EventPayload
 {
     private static readonly Dictionary<Type, string> Names = typeof(EventPayload).GetCustomAttributes<JsonDerivedTypeAttribute>()
@@ -162,3 +163,6 @@ public enum AgentStatus
 /// <summary>Something went wrong that does not change how the work goes on, such as cleaning up after it, for the owner to know.</summary>
 /// <param name="Text">What went wrong.</param>
 public sealed record Warning(string Text) : EventPayload;
+
+/// <summary>The owner approved the lead's plan, so the team's work may start; a restart does not ask again (TEAM-10).</summary>
+public sealed record PlanApproved : EventPayload;

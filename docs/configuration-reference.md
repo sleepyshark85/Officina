@@ -302,9 +302,12 @@ Built-in tool packs (TOOL-01) are only offered when their capability is on (CAP-
 - **`sandbox.*`:** `run`, `start_process`, `read_process_output`, `stop_process`.
 - **`record.*`:** `propose_fact`, `propose_finding`, `propose_decision`, `cite` (REC-02).
 - **`tasks.*`:** `create`, `update`, `claim`, `submit_for_review`, `review` (TASK).
-- **`team.*`:** `message` (to another agent of the team and run, by its id); `start_helper` and `handoff` arrive in S20 part 3.
+- **`team.*`:** `message` (to another agent of the team and run, by its id); `start_helper` (a helper agent on a piece of
+  work, TEAM-07). An agent of a team that hands off goes back to its lead, so there is no `team.handoff` (S21 builds one if a
+  case needs it).
 - **`memory.*`:** `propose_change`, and `review`, for the lead to approve or reject a proposal (MEM-03). Both are write tools, so each needs `gates` or a `gateExemption`.
-- **`human.*`:** `ask_owner`, `request_handoff` (HITL-06, EGR-04).
+- **`human.*`:** `ask_owner`, and `request_handoff`, with which the model hands its work to a human: the turn ends in a
+  handoff to a human with its reason (HITL-06, EGR-04).
 - **`artifact.*`:** `page` (TOOL-09).
 - **`control.*`:** `finish`, the designated finish tool (LOOP-05).
 
@@ -433,7 +436,7 @@ missing makes every other test false.
     "permissions": ["workspace:write", "sandbox:run"],   // narrows the owner's (INV-02)
     "policies": { "gates": ["tests-first"] },            // gates for all this agent's tools
     "capabilities": ["workspace", "sandbox", "projectMemory", "taskBoard"],   // not built: agents use every capability that is on
-    "helpers": { "allowed": false },           // TEAM-07
+    "helpers": ["researcher"],                 // TEAM-07: the agents it may start with team.start_helper; none by default
     "triggers": ["longRunning"]                // TRG-01: unset accepts work that arrives any way
   }
 }
@@ -608,7 +611,7 @@ object with `"enabled"` plus its own settings.
     "signOffs": ["planApproval", "runBudgetExceeded", "irreversibleAction"]   // HITL-04; without it, an exhausted run budget hands off
   },
   "checkpoints": { "at": ["turn", "integration"] },                 // RUN-03; also "step". One is always taken at the start and on demand
-  "team":        { "enabled": true },                              // TEAM; helper limits arrive with helpers (S20 part 3)
+  "team":        { "enabled": true, "helperDepth": 2, "helperCount": 4 },   // TEAM; TEAM-07: how deep helpers go, and how many one turn starts
   "taskBoard":   { "maxAttempts": 3, "budget": 8 },                // TASK-09; the transitions are fixed (TASK-02), and each task says whether it needs a review
   "workspace": {
     "type": "builtin:git",
@@ -737,22 +740,26 @@ workspace hides it from agents.
 The CLI loads configuration with Microsoft.Extensions.Configuration. Layers, lowest to highest:
 
 ```
-code defaults (Options classes) < sof.json < sof.<environment>.json < environment variables < command-line options
+code defaults (Options classes) < what sof.json extends < sof.json < sof.<environment>.json < environment variables < command-line options
 ```
 
 - **Environment variables** use the form `SOF__agents__developer__budget__turn__cost=8`.
 - **Command-line options** are what the CLI passes, for example `--budget 40`.
 - **Setting names match ignoring case**, in files and variables alike.
 - **Unknown settings are ignored.**
-- **Presets and `extends`** (between files or agent definitions) are not available yet; they arrive with the coding team.
+- **`extends`** in a file lists presets (`preset:<id>`, §15) and other files, relative to it, each a layer below the file,
+  lowest first, each once. The files they extend come below them. A cycle or a missing preset is a Merge error (§14).
+- **`extends`** in an agent definition names another agent it builds on: it inherits what it does not set itself, with the
+  rules below, after the files are merged. `sof config show --origin` names an inherited setting's source as "inherited by
+  agents.X through extends". A cycle or a missing agent is a Merge error.
 
-Merge rules:
+Merge rules, for files and `extends`:
 
 | Value | Rule |
 |---|---|
 | Object | Merged key by key |
 | Named map (`agents`, `tools`, …) | Merged by name; a new name adds an entry |
-| List | Merged by position, so set a list in one layer only |
+| List | Replaced by the higher layer's list. Environment variables and options merge a list by position, so set it in one layer. |
 | `null` | Makes a setting that may be unset unset. It does not remove other values, and it never removes a budget. |
 
 `sof config show` lists every effective setting, defaults included. With `--origin`, each one also shows
@@ -780,7 +787,7 @@ Validation runs in this order:
 |---|---|---|
 | 1 | Parse | Invalid JSON, unknown `formatVersion` |
 | 2 | Shape | Wrong types, values outside allowed ranges, missing required settings (unknown settings are ignored) |
-| 3 | Merge | Cycles in `extends`, missing presets (with presets) |
+| 3 | Merge | Cycles in `extends`, missing presets and agents to build on |
 | 4 | References | Missing models, tools, tool sets, gates, checks, knowledge sources, agents, tool servers, extensions, secrets (by name only; secrets are not read), unknown placeholders |
 | 5 | Capabilities | Capabilities used but not enabled, unmet dependencies (§9) |
 | 6 | Provider | Settings or features the model or platform does not support (MDL-06), fallbacks that cannot serve their slots (MDL-04), models without prices when a cost budget is set |
@@ -816,27 +823,36 @@ ordinary lower layer, so an application overrides it with the same merge rules. 
 presets (CFG-11).
 
 **`preset:single-call-extractor`**
-- One agent with the `singleCall` pattern and structured output.
+- One agent, `extractor`, with the `singleCall` pattern and structured output.
 - No history.
 - No capabilities.
+- The application gives `agents.extractor.instructions` and `output.schema`.
 
 **`preset:tool-using-assistant`**
-- One agent with the `toolLoop` pattern and a conversation store.
+- One agent, `assistant`, with the `toolLoop` pattern, its full history, and a conversation store.
 - Human interaction on, in `ask` mode.
-- The application adds its own tools.
+- The application gives `agents.assistant.instructions` and its own tools.
 
 **`preset:coding-team`** sets:
 - **Capabilities:** team, task board, workspace (git), sandbox, project memory, checkpoints,
   conversation store, and human interaction (CLI channel).
 - **Masking:** off (ING-02).
-- **Sign-offs:** plan approval, run budget exceeded, irreversible action.
-- **Roles:**
+- **Sign-offs:** plan approval, run budget exceeded, irreversible action (HITL-04).
+- **Checkpoints:** after each turn and each integration.
+- **Command rules:** read-only `git` commands allowed, `git push` and `git remote` denied; the application adds its own
+  project's commands, repeating these, since a list replaces the preset's.
+- **Roles,** each built on the shared `coder` definition (CFG-05):
 
 | Role | Model (effort) | Tools | Job |
 |---|---|---|---|
-| `lead` | `claude-opus-5-5` (high) | read-only files, tasks, team, record, memory, human | Plans, assigns, reviews results, re-plans. Has no write tools of its own. |
-| `developer` (max 3) | `claude-opus-5-5` (high) | files, shell, record, tasks (own task) | Implements a task in its working copy until its checks pass. |
-| `reviewer` (max 1) | `claude-opus-5-5` (medium) | read-only files, `tasks.review` | Reviews another agent's task. Never the author. |
+| `lead` | `claude-opus-5-5` (high) | read-only files, tasks, team, memory review, human | Plans, assigns, decides on failed tasks, re-plans. Has no write tools of its own. |
+| `developer` (max 3) | `claude-opus-5-5` (high) | files, shell, `tasks.submit_for_review`, team, memory proposals, human | Implements a task in its working copy until its checks pass. |
+| `reviewer` (max 1) | `claude-opus-5-5` (medium) | read-only files, `tasks.review`, team, `human.request_handoff` | Reviews another agent's task. Never the author. |
+
+The reviewer has no write tools and no `sandbox.*` commands: a command runs in the task's working copy, which TASK-06
+keeps for the task's assignee, and the workspace tools refuse another agent's writes there, but a command's effects cannot be
+told apart. File writes are allowed by `policies.permissionRules`, as they stay in the task's copy until its checks and
+review pass.
 
 - **Checks:** `build` and `tests`, from `project.values.buildCommand` and
   `project.values.testCommand`, used as task verification and baseline checks.
@@ -858,6 +874,8 @@ An application using the coding team preset needs only:
   }
 }
 ```
+
+[`benchmark/sof.json`](../benchmark/sof.json) is such a file, with command rules for `dotnet`.
 
 The CLI's `sof init` writes this file, asking only for the build and test commands. If the
 project already has them, for example in a `.csproj` or `package.json`, it detects them.

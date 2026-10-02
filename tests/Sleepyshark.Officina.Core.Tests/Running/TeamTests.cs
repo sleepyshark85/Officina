@@ -376,6 +376,32 @@ public class TeamTests
         Assert.Contains(events, coreEvent => coreEvent.Payload is CheckpointTaken { Point: CheckpointPoint.Integration });
     }
 
+    // TEAM-10, HITL-04: with the sign-off on, no work starts until the owner approves the lead's plan; a denial sends it back to the lead.
+    [Fact]
+    public async Task No_work_starts_until_the_owner_approves_the_leads_plan()
+    {
+        var kit = Kit(options => options with
+        {
+            Capabilities = options.Capabilities with { HumanInteraction = new() { Enabled = true, SignOffs = [SignOff.PlanApproval] } },
+        }, null);
+        kit.Human.Answer(HumanAnswer.Deny).Answer(HumanAnswer.Approve);
+        Lead(kit, "You lead a team", Create("a"));
+        Lead(kit, "The owner did not approve your plan", Create("b"));
+        Lead(kit, "Every task is done").Reply("Done.");
+        Work(kit, "a").CallTools(("submit", """{ "id": "a" }""")).Reply("Submitted.");
+        Work(kit, "b").CallTools(("submit", """{ "id": "b" }""")).Reply("Submitted.");
+
+        var work = new Work("team", "Build it.") { Caller = Ann };
+        var result = await kit.Runner.RunAsync(work, Ct);
+
+        Assert.Equal(AgentOutcome.Completed, result.Outcome);
+        Assert.Equal([HumanRequestKind.SignOff, HumanRequestKind.SignOff], kit.Human.Requests.Select(request => request.Kind));
+        Assert.Contains("b Task b", kit.Human.Requests[1].Summary, StringComparison.Ordinal); // the changed plan
+        var events = await kit.Storage.Events.ReadAsync(null, work.RunId, 0, Ct);
+        var approved = Assert.Single(events, coreEvent => coreEvent.Payload is PlanApproved).Sequence;
+        Assert.All(events.Where(coreEvent => coreEvent.Payload is TaskStatusChanged { Status: TaskState.InProgress }), claimed => Assert.True(claimed.Sequence > approved));
+    }
+
     // TEAM-05, TEAM-06: a message names its sender and recipient, is recorded, and reaches the recipient as data; only the team's agents receive one.
     [Fact]
     public async Task A_message_between_agents_is_recorded_and_reaches_its_recipient_as_data()
@@ -416,13 +442,21 @@ public class TeamTests
     }
 
     // RUN-04, TEST-12: a team resumes from its last checkpoint's board: the plan is not made again, and a task in progress goes back to its agent.
-    [Fact]
-    public async Task A_team_resumes_from_its_board_after_a_crash()
+    // TEAM-10: nor is a plan the owner approved before the crash approved again (the second process's owner has no answer to give).
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task A_team_resumes_from_its_board_after_a_crash(bool planApproval)
     {
+        Func<OfficinaOptions, OfficinaOptions> approval = options => !planApproval ? options : options with
+        {
+            Capabilities = options.Capabilities with { HumanInteraction = new() { Enabled = true, SignOffs = [SignOff.PlanApproval] } },
+        };
         var crashed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var bClaimed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var aDone = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var first = Kit(checkpoints: true);
+        var first = Kit(approval, null, checkpoints: true);
+        first.Human.Answer(HumanAnswer.Approve);
         hold = async (task, ct) =>
         {
             if (task == "a")
@@ -449,7 +483,7 @@ public class TeamTests
 
         // A new process: the same storage, a runner of its own.
         hold = (_, _) => Task.CompletedTask;
-        var second = Kit(checkpoints: true, storage: first.Storage);
+        var second = Kit(approval, null, checkpoints: true, storage: first.Storage);
         Work(second, "b").CallTools(("submit", """{ "id": "b" }""")).Reply("Submitted.");
         Lead(second, "Every task is done").Reply("Both done.");
         var result = await second.Runner.ResumeAsync(work.RunId, Ann, Ct);
@@ -458,6 +492,7 @@ public class TeamTests
         Assert.DoesNotContain(second.Model.Requests, request => ScriptedModelProvider.WorkOf(request).StartsWith("You lead a team", StringComparison.Ordinal));
         Assert.Contains("It came back to you", ScriptedModelProvider.WorkOf(second.Model.Requests[0]), StringComparison.Ordinal);
         Assert.All(await second.Runner.Board(null, work.RunId).ReadAsync(Ct), task => Assert.Equal(TaskState.Done, task.State));
+        Assert.Equal((planApproval ? 1 : 0, 0), (first.Human.Requests.Count, second.Human.Requests.Count));
 
         // The process that died never comes back; it is stopped only so the test leaves nothing running.
         await dies.CancelAsync();

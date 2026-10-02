@@ -5,4 +5,9 @@
     <PackageReference Include="JsonSchema.Net" />
   </ItemGroup>
 
+  <!-- The presets shipped with the core (CFG-11). -->
+  <ItemGroup>
+    <EmbeddedResource Include="Presets\*.json" LogicalName="Sleepyshark.Officina.Core.Presets.%(Filename).json" />
+  </ItemGroup>
+
 </Project>

@@ -106,6 +106,13 @@ internal static class SchemaGenerator
                 ["description"] = "The JSON Schema of the file, for editor completion. Files only.",
                 ["type"] = "string",
             });
+            properties.Insert(1, "extends", new JsonObject
+            {
+                ["description"] = "Presets, as `preset:<id>`, and other files, relative to this one, that this file builds on: each a layer below it, lowest first. A list or a value here replaces theirs. Files only.",
+                ["type"] = "array",
+                ["items"] = new JsonObject { ["type"] = "string" },
+                ["examples"] = new JsonArray(new JsonArray("preset:coding-team")),
+            });
         }
         else if (type == typeof(AgentDefinition))
         {

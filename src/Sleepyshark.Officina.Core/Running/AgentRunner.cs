@@ -737,8 +737,11 @@ public sealed class AgentRunner
         var name = context.Agent;
         return new Turn(
             context, Options, gateway, pipeline, new RunRecord(storage.Records, context, time), pipeline.Board(context), pipeline.Memory(context), checks, knowledge, storage.Conversations,
-            shortening.GetValueOrDefault(name), Events, instructions, work, context.Instance is { } instance ? teams[context.RunId].Inboxes.GetOrAdd(instance, _ => new()) : Inbox(name),
-            token => WhilePausedAsync(context, token), budget, time);
+            shortening.GetValueOrDefault(name), Events, instructions, work,
+            context.HelperDepth > 0 ? new() // a helper reads only the work it is given
+                : context.Instance is { } instance ? teams[context.RunId].Inboxes.GetOrAdd(instance, _ => new()) : Inbox(name),
+            token => WhilePausedAsync(context, token), budget, time,
+            (helper, input, parent, token) => NewTurn(helper, work with { Input = input }, parent).RunAsync(token));
     }
 
     private IModelProvider Provider(string agentName)

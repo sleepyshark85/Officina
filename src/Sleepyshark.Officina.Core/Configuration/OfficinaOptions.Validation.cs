@@ -54,6 +54,7 @@ public sealed partial record OfficinaOptions : IValidatableObject
                 .Concat(References($"agents.{name}.tools", "tool set", agent.Tools, "toolSets", ToolSets.Keys)).Concat(TurnSettings(name, agent))
                 .Concat(References($"agents.{name}.context.retrieval.beforeTurn", "knowledge source", agent.Context?.Retrieval?.BeforeTurn ?? [], "knowledge", Knowledge.Keys))
                 .Concat(agent.Pattern is null ? [] : PatternSettings($"agents.{name}.pattern", name, agent.Pattern));
+            errors = errors.Concat(HelperSettings(name, agent));
             if (agent.Pattern?.Type == PatternOptions.SingleCall && agent.Tools.Count > 0)
             {
                 errors = errors.Append(new(ValidationPhase.Shape, $"agents.{name}.tools", "must be empty: a singleCall agent is offered no tools.",
@@ -151,6 +152,11 @@ public sealed partial record OfficinaOptions : IValidatableObject
             errors = errors.Concat(Annotations(board, "capabilities.taskBoard", ValidationPhase.Invariants));
         }
 
+        if (Capabilities.Team is { Enabled: true } team)
+        {
+            errors = errors.Concat(Annotations(team, "capabilities.team"));
+        }
+
         if (Capabilities.ProjectMemory is { Enabled: true } memory)
         {
             errors = errors.Concat(Annotations(memory, "capabilities.projectMemory"));
@@ -165,6 +171,26 @@ public sealed partial record OfficinaOptions : IValidatableObject
                 "Remove it from the list.")) : []);
 
         return errors.Concat(ToolSettings()).Concat(CapabilitySettings()).Concat(InstructionPlaceholders.Check(this)).Concat(PatternCycles());
+    }
+
+    /// <summary>
+    /// TEAM-07: an agent's helpers are agents that exist and work in turns of their own, keeping no history, since each helper is
+    /// an agent of its own whose conversation is neither shared nor kept.
+    /// </summary>
+    private IEnumerable<ConfigurationError> HelperSettings(string name, AgentDefinition agent)
+    {
+        foreach (var helper in agent.Helpers ?? [])
+        {
+            if (Agents.GetValueOrDefault(helper) is not { } definition)
+            {
+                yield return Missing($"agents.{name}.helpers", "agent", helper, "agents", Agents.Keys);
+            }
+            else if (definition.Pattern is { IsTurn: false } || definition.Context?.History is { Strategy: not HistoryStrategy.None })
+            {
+                yield return new(ValidationPhase.Shape, $"agents.{name}.helpers", $"agent \"{helper}\" must work in turns of its own and keep no history to be a helper.",
+                    $"Give agents.{helper} the toolLoop or singleCall pattern and the none history strategy.");
+            }
+        }
     }
 
     private static ConfigurationError CommandOnOutput(string path, string check) =>
@@ -199,6 +225,11 @@ public sealed partial record OfficinaOptions : IValidatableObject
         foreach (var name in Tools.Where(tool => tool.Value.BuiltinTool()?.StartsWith("team.", StringComparison.Ordinal) == true).Select(tool => tool.Key))
         {
             errors = on.Contains("team") ? errors : errors.Append(Off($"tools.{name}.source", "team"));
+        }
+
+        foreach (var name in Agents.Where(agent => agent.Value.Helpers is { Count: > 0 }).Select(agent => agent.Key))
+        {
+            errors = on.Contains("team") ? errors : errors.Append(Off($"agents.{name}.helpers", "team"));
         }
 
         foreach (var name in Agents.Where(agent => agent.Value.Pattern?.Type == PatternOptions.Team).Select(agent => agent.Key))

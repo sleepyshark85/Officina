@@ -262,7 +262,7 @@ public sealed class ToolPipeline
             ? (await AskQuestionAsync(context, arguments, ct).ConfigureAwait(false), null)
             : await InvokeAsync(
                 tool, new ToolCall(real ? context.Masker!.Restore(arguments) : arguments, context.Caller, key, secrets, record, board, PublishAsync) {
-                    Agent = context.AgentId, Definition = context.Agent, WorkingCopy = WorkingCopyOf(context), Memory = Memory(context), Send = Messages is { } send ? (to, text, token) => send(context, to, text, token) : null,
+                    TimeLimit = tool.Options.Timeout, StartHelper = context.StartHelper, Agent = context.AgentId, Definition = context.Agent, WorkingCopy = WorkingCopyOf(context), Memory = Memory(context), Send = Messages is { } send ? (to, text, token) => send(context, to, text, token) : null,
                 }, ct).ConfigureAwait(false);
         detail = detail is null || masker is null ? detail : masker.Mask(detail);
         if ((tool.Options.Untrusted && result.Error is null) || result.Untrusted)
@@ -325,7 +325,7 @@ public sealed class ToolPipeline
         // 2. Permissions: the caller's, narrowed by the agent's (INV-02), then the permission rules, where the first match decides.
         var held = context.Caller.Id is null ? options.Policies.AnonymousPermissions : (IEnumerable<string>)context.Caller.Permissions;
         var narrowed = options.Agents[context.Agent].Permissions;
-        if (tool.Options.Permissions.FirstOrDefault(needed => !held.Contains(needed) || narrowed?.Contains(needed) == false) is { } missing)
+        if (tool.Options.Permissions.FirstOrDefault(needed => !held.Contains(needed) || narrowed?.Contains(needed) == false || context.Within?.Contains(needed) == false) is { } missing)
         {
             yield return new(PolicyAction.Deny, ToolErrorCategory.NotAuthorised, $"the caller does not hold the permission {missing}", "permissions");
         }

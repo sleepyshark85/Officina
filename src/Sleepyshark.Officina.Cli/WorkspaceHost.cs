@@ -92,7 +92,8 @@ internal sealed class WorkspaceHost : IWorkspace, IAsyncDisposable
             ? new Dictionary<string, ICheck>()
             : options.Checks.Where(check => check.Value.Command is not null).ToDictionary(
                 check => check.Value.Id(check.Key),
-                ICheck (check) => new CommandCheck(sandbox, options.Capabilities.Sandbox, options.Capabilities.Workspace, check.Value.Command!, check.Value.Timeout, time));
+                ICheck (check) => new CommandCheck(
+                    sandbox, options.Capabilities.Sandbox, options.Capabilities.Workspace, InstructionPlaceholders.FillCommand(check.Value.Command!, options.Project), check.Value.Timeout, time));
         // An application's check is not sof's to run: the runner refuses the configuration for it, as for any unregistered check.
         var baselineChecks = options.Capabilities.Workspace.BaselineChecks.Where(name => checks.ContainsKey(options.Checks[name].Id(name)))
             .ToDictionary(name => name, name => checks[options.Checks[name].Id(name)]);
