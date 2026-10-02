@@ -36,6 +36,12 @@ public interface IWorkingCopy
 
     /// <summary>Creates a file, or replaces one the agent has read since it last changed.</summary>
     Task WriteAsync(string path, string content, CancellationToken ct);
+
+    /// <summary>Deletes a file the agent has read since it last changed.</summary>
+    Task DeleteAsync(string path, CancellationToken ct);
+
+    /// <summary>Moves a file the agent has read since it last changed, to a path where no file exists.</summary>
+    Task MoveAsync(string path, string newPath, CancellationToken ct);
 }
 
 /// <summary>A line that matched a search.</summary>

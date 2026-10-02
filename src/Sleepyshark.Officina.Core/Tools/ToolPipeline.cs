@@ -233,7 +233,7 @@ public sealed class ToolPipeline
         var (result, detail) = tool.Implementation is AskOwnerTool
             ? (await AskQuestionAsync(context, arguments, ct).ConfigureAwait(false), null)
             : await InvokeAsync(
-                tool, new ToolCall(real ? context.Masker!.Restore(arguments) : arguments, context.Caller, key, secrets, record, board, PublishAsync), ct).ConfigureAwait(false);
+                tool, new ToolCall(real ? context.Masker!.Restore(arguments) : arguments, context.Caller, key, secrets, record, board, PublishAsync) { Agent = context.Agent }, ct).ConfigureAwait(false);
         detail = detail is null || masker is null ? detail : masker.Mask(detail);
         if (tool.Options.Untrusted && result.Error is null)
         {

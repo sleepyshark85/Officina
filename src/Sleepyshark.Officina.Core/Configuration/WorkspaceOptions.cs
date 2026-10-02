@@ -29,6 +29,10 @@ public sealed record WorkspaceOptions
         Example = """[{ "path": "secrets/**", "access": "hidden" }]""")]
     public IReadOnlyList<ProtectedPath> ProtectedPaths { get; init; } = [];
 
+    [Setting("The checks, by name in `checks`, that the baseline must still pass after a change is applied to it, before the change is integrated.",
+        Example = """["build", "tests"]""")]
+    public IReadOnlyList<string> BaselineChecks { get; init; } = [];
+
     [Setting("Whether an agent's working copy is kept when its task ends, so the owner can look at it.", Example = "true")]
     public bool KeepWorkingCopies { get; init; }
 }

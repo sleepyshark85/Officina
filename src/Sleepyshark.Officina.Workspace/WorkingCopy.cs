@@ -103,6 +103,32 @@ public sealed class WorkingCopy : IWorkingCopy
         await WriteTextAsync(full, relative, content, ct).ConfigureAwait(false);
     }
 
+    /// <summary>Deletes a file the agent has read since it last changed (WS-07).</summary>
+    public async Task DeleteAsync(string path, CancellationToken ct = default)
+    {
+        var (full, relative) = Resolve(path, change: true);
+        await ReadTextAsync(full, relative, path, ct, check: true).ConfigureAwait(false);
+        File.Delete(full);
+        seen.TryRemove(relative, out _);
+    }
+
+    /// <summary>Moves a file the agent has read since it last changed, to a path where no file exists (WS-07).</summary>
+    public async Task MoveAsync(string path, string newPath, CancellationToken ct = default)
+    {
+        var (source, sourceRelative) = Resolve(path, change: true);
+        var (target, targetRelative) = Resolve(newPath, change: true);
+        await ReadTextAsync(source, sourceRelative, path, ct, check: true).ConfigureAwait(false);
+        if (Path.Exists(target))
+        {
+            throw new WorkspaceException($"{newPath} already exists.");
+        }
+
+        System.IO.Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+        File.Move(source, target);
+        seen.TryRemove(sourceRelative, out var hash);
+        seen[targetRelative] = hash!;
+    }
+
     /// <summary>The full path of a file the agent may reach, and its path relative to the copy with '/' separators.</summary>
     private (string Full, string Relative) Resolve(string path, bool change)
     {

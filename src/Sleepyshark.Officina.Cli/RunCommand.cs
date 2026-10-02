@@ -3,7 +3,11 @@ using System.Text.Json;
 using Sleepyshark.Officina.Core.Configuration;
 using Sleepyshark.Officina.Core.Extensibility;
 using Sleepyshark.Officina.Core.Running;
+using Sleepyshark.Officina.Core.Tools;
+using Sleepyshark.Officina.Mcp;
+using Sleepyshark.Officina.Providers.Claude;
 using Sleepyshark.Officina.Storage.Sqlite;
+using Sleepyshark.Officina.Workspace;
 
 namespace Sleepyshark.Officina.Cli;
 
@@ -40,45 +44,95 @@ internal static class RunCommand
             }
 
             var options = configuration.Options;
-            if (options.Models[options.Agents[name].Model].Provider is var missing && !host.Providers.ContainsKey(missing))
+
+            // INV-06: the API key and the tool servers' secrets are read through the secrets the runner removes from what tools return.
+            var secrets = new KnownSecrets(new EnvironmentSecrets(host.Variables));
+            var providers = new Dictionary<string, IModelProvider>(host.Providers);
+            using var claude = !providers.ContainsKey(ProviderOptions.ClaudeName) && options.Providers.TryGetValue(ProviderOptions.ClaudeName, out var claudeOptions)
+                ? new ClaudeProvider(claudeOptions, secrets) : null;
+            if (claude is not null)
+            {
+                providers[ProviderOptions.ClaudeName] = claude;
+            }
+
+            if (options.Models[options.Agents[name].Model].Provider is var missing && !providers.ContainsKey(missing))
             {
                 host.Error.WriteLine($"error: provider \"{missing}\" is not available in this build of sof.");
                 return ExitCodes.Usage;
             }
 
+            if (WorkspaceHost.CapabilityErrors(options).ToList() is { Count: > 0 } off)
+            {
+                off.ForEach(error => host.Error.WriteLine($"error: {error}"));
+                return ExitCodes.Invalid;
+            }
+
             var output = TextWriter.Synchronized(host.Out);
             var queue = new OwnerQueue(output);
-            var status = new StatusView(output);
-            var state = Directory.CreateDirectory(Path.Combine(shared.Directory(parse, host), WorkspaceOptions.StateFolder)).FullName;
-            var storage = await SqliteStorage.OpenAsync(Path.Combine(state, "sof.db"), ct);
-            AgentRunner runner;
+            var work = new Work(name, parse.GetValue(input)!);
+            var tools = new Dictionary<string, ITool>();
+            var gates = new Dictionary<string, IGate>();
             try
             {
-                runner = new AgentRunner(
-                    options, host.Providers, storage, new Dictionary<string, ITool>(), new Dictionary<string, IGate>(), new Dictionary<string, ICheck>(),
-                    new Dictionary<string, IKnowledgeSource>(), queue, new EnvironmentSecrets(host.Variables), host.Time);
+                await using var servers = options.ToolServers.Count > 0 ? await ToolServers.ConnectAsync(options, secrets, ct) : null;
+                tools = new(servers?.Tools ?? new Dictionary<string, ITool>());
+                await using var workspace = options.Capabilities.Workspace.Enabled
+                    ? await WorkspaceHost.OpenAsync(
+                        options, shared.Directory(parse, host), work.RunId, options.Capabilities.Sandbox.Enabled ? host.Sandbox ?? WorkspaceHost.MachineSandbox() : null,
+                        BaselineChecks(options, host), host.Time, ct)
+                    : null;
+                foreach (var (id, tool) in workspace?.Tools ?? new Dictionary<string, ITool>())
+                {
+                    tools[id] = tool;
+                }
+
+                gates = new(workspace?.Gates ?? new Dictionary<string, IGate>());
+                return await RunAsync(work, name, options, providers, tools, gates, secrets, queue, output, workspace, shared.Directory(parse, host), host, ct);
             }
             catch (ConfigurationException exception)
             {
                 host.Error.WriteLine($"error: {exception.Message}");
                 return ExitCodes.Invalid;
             }
-
-            var work = new Work(name, parse.GetValue(input)!);
-            using var stop = new CancellationTokenSource();
-            var watching = WatchAsync(runner, work.RunId, status, stop.Token);
-            // A read from the console cannot be cancelled, so the command loop is left to end with the process.
-            _ = CommandAsync(runner, name, queue, status, host.In, output, stop.Token);
-            var result = await runner.RunAsync(work, ct);
-            await stop.CancelAsync();
-            await watching;
-
-            output.WriteLine();
-            output.WriteLine($"{name}: {result.Outcome}{(result.Handoff is { } handoff ? $" ({handoff.Reason}: {handoff.Detail})" : "")}, cost ${result.Statistics.Cost:0.00}");
-            output.WriteLine(result.Output);
-            return result.Outcome == AgentOutcome.Completed ? ExitCodes.Success : ExitCodes.NotCompleted;
+            catch (Exception exception) when (exception is WorkspaceException or InvalidOperationException or KeyNotFoundException or IOException or HttpRequestException)
+            {
+                host.Error.WriteLine($"error: {exception.Message}");
+                return ExitCodes.Invalid;
+            }
         });
         return command;
+    }
+
+    /// <summary>The baseline checks the workspace names (WS-02), from the checks the host registers.</summary>
+    private static Dictionary<string, ICheck> BaselineChecks(OfficinaOptions options, SofEnvironment host) =>
+        options.Capabilities.Workspace.BaselineChecks.ToDictionary(
+            check => check,
+            check => host.Checks.TryGetValue(options.Checks[check].ExtensionId()!, out var found)
+                ? found
+                : throw new ConfigurationException([new(ValidationPhase.References, "capabilities.workspace.baselineChecks", $"check extension \"{options.Checks[check].ExtensionId()}\" is not registered.", "")]));
+
+    private static async Task<int> RunAsync(
+        Work work, string name, OfficinaOptions options, Dictionary<string, IModelProvider> providers, Dictionary<string, ITool> tools, Dictionary<string, IGate> gates,
+        KnownSecrets secrets, OwnerQueue queue, TextWriter output, WorkspaceHost? workspace, string directory, SofEnvironment host, CancellationToken ct)
+    {
+        var status = new StatusView(output, workspace is null ? null : () => workspace.Queue);
+        var state = Directory.CreateDirectory(Path.Combine(directory, WorkspaceOptions.StateFolder)).FullName;
+        var storage = await SqliteStorage.OpenAsync(Path.Combine(state, "sof.db"), ct);
+        var runner = new AgentRunner(
+            options, providers, storage, tools, gates, new Dictionary<string, ICheck>(host.Checks),
+            new Dictionary<string, IKnowledgeSource>(), queue, secrets, host.Time);
+        using var stop = new CancellationTokenSource();
+        var watching = WatchAsync(runner, work.RunId, status, stop.Token);
+        // A read from the console cannot be cancelled, so the command loop is left to end with the process.
+        _ = CommandAsync(runner, name, queue, status, host.In, output, stop.Token);
+        var result = await runner.RunAsync(work, ct);
+        await stop.CancelAsync();
+        await watching;
+
+        output.WriteLine();
+        output.WriteLine($"{name}: {result.Outcome}{(result.Handoff is { } handoff ? $" ({handoff.Reason}: {handoff.Detail})" : "")}, cost ${result.Statistics.Cost:0.00}");
+        output.WriteLine(result.Output);
+        return result.Outcome == AgentOutcome.Completed ? ExitCodes.Success : ExitCodes.NotCompleted;
     }
 
     /// <summary>Shows the run's events until the run ends.</summary>
