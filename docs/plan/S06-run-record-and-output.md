@@ -39,6 +39,6 @@ The shared run record, and checked output.
 Left to later slices:
 - S13: the check-failure outcome "revise", where the pattern supports it (OUT-03); until then a failure hands off.
 - S21: send the output schema to providers that support structured output natively (CLD-06, moved from S11).
-- S16: `capabilities.workspace.baselineChecks` names checks from `checks`; `checks` takes `extension:` checks only, and
-  S16 adds the command checks it needs (WS-02).
+- S20: `checks` takes `extension:` checks only; S20 adds the command checks that integration needs and the
+  `capabilities.workspace.baselineChecks` setting that names them (WS-02).
 - S18: `task` record scope (REC-06), the task board in `GateContext` (TOOL-06), task verification checks.

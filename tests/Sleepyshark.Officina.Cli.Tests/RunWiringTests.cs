@@ -93,32 +93,42 @@ public sealed class RunWiringTests : IDisposable
         var (exitCode, _, error) = await sof.RunAsync("run", "--input", "Go.");
 
         Assert.Equal(ExitCodes.Invalid, exitCode);
-        Assert.Contains($"error: {path}: needs the {capability} capability, which is off.", error, StringComparison.Ordinal);
+        Assert.Contains($"{path}: needs the {capability} capability, which is off.", error, StringComparison.Ordinal);
+
+        // CFG-06: validate reports it too, before anything runs.
+        var (validateCode, _, validateError) = await sof.RunAsync("config", "validate");
+        Assert.Equal(ExitCodes.Invalid, validateCode);
+        Assert.Contains($"{path}: needs the {capability} capability, which is off.", validateError, StringComparison.Ordinal);
     }
 
+    // WS-01: agents of one run work apart, and an agent whose name is not fit for a branch still gets a copy.
     [Fact]
-    public async Task Baseline_checks_name_checks_the_host_has_registered()
+    public async Task Two_agents_of_one_run_each_work_in_their_own_working_copy()
     {
-        var configuration = Workspace.Replace("\"workspace\": { \"enabled\": true }", """
-            "workspace": { "enabled": true, "baselineChecks": ["build"] }
-            """, StringComparison.Ordinal).Replace("\"gates\":", """
-            "checks": { "build": { "use": "extension:Tests.Build" } }, "gates":
-            """, StringComparison.Ordinal);
-        sof.Write("sof.json", configuration).Commit();
-        sof.Sandbox = new FakeSandbox();
-        model.Reply("Done.");
+        sof.Write("sof.json", """
+            {
+              "run": { "permissionMode": "auto" },
+              "agents": {
+                "release": { "instructions": "Run both.", "pattern": { "type": "workflow", "steps": [{ "id": "one", "agent": "alice" }, { "id": "two", "agent": "bob smith" }] } },
+                "alice": { "instructions": "Write.", "tools": ["files"] },
+                "bob smith": { "instructions": "Read.", "tools": ["files"] }
+              },
+              "tools": {
+                "write": { "source": "extension:workspace.write_file", "gateExemption": "Writes only to the agent's working copy." },
+                "read": { "source": "extension:workspace.read_file" }
+              },
+              "toolSets": { "files": ["write", "read"] },
+              "capabilities": { "workspace": { "enabled": true } }
+            }
+            """).Commit();
+        model.CallTools(("write", """{ "path": "a.txt", "content": "alice" }""")).Reply("Wrote.")
+            .CallTools(("read", """{ "path": "a.txt" }""")).Reply("Read.").Reply("Done.");
 
-        var missing = await sof.RunAsync("run", "--input", "Go.");
-        sof.Checks["Tests.Build"] = new Build();
-        var registered = await sof.RunAsync("run", "--input", "Go.");
-        sof.Write("sof.json", configuration.Replace("[\"build\"]", "[\"nope\"]", StringComparison.Ordinal));
-        var unknown = await sof.RunAsync("config", "validate");
+        var (exitCode, _, error) = await sof.RunAsync("run", "--agent", "release", "--input", "Go.");
 
-        Assert.Equal(
-            (ExitCodes.Invalid, true, ExitCodes.Success),
-            (missing.ExitCode, missing.Error.Contains("check extension \"Tests.Build\" is not registered.", StringComparison.Ordinal), registered.ExitCode));
-        Assert.Equal(ExitCodes.Invalid, unknown.ExitCode);
-        Assert.Contains("capabilities.workspace.baselineChecks", unknown.Error, StringComparison.Ordinal);
+        Assert.Equal((ExitCodes.Success, ""), (exitCode, error));
+        var results = model.Requests.SelectMany(request => request.History).SelectMany(message => message.Content).OfType<ToolResultContent>().Select(content => content.Text);
+        Assert.Contains(results, text => text.Contains("a.txt does not exist.", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -170,10 +180,5 @@ public sealed class RunWiringTests : IDisposable
 
         Assert.Equal(ExitCodes.NotCompleted, exitCode); // no ANTHROPIC_API_KEY is set, so the first call fails without reaching the network
         Assert.Contains("dev: HandedOff (ProviderFail", output, StringComparison.Ordinal);
-    }
-
-    private sealed class Build : ICheck
-    {
-        public ValueTask<CheckResult> RunAsync(CheckContext context, CancellationToken ct) => ValueTask.FromResult(new CheckResult(true, []));
     }
 }

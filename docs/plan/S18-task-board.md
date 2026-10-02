@@ -45,7 +45,7 @@ Left to later slices:
   (`CheckContext.Directory`), integrates verified tasks through the queue, and calls `CompleteAsync` or
   `ReturnAsync`; agents of a team share one run, and so one board; `team` requires `taskBoard` (CAP-03); messages
   between agents as events.
-- S16: the CLI's board view (TASK-08).
+- S20: the CLI's board view (TASK-08), when a team fills the board.
 - S19: the agent budget level, and the hierarchy's escalation (RUN-05).
 - Not built, for want of a case: the `requires-task-status` built-in gate and the `task` field of conditions
   (reference §5.6 and §6); an extension gate reads the board.

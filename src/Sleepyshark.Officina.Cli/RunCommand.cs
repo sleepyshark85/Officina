@@ -61,41 +61,35 @@ internal static class RunCommand
                 return ExitCodes.Usage;
             }
 
-            if (WorkspaceHost.CapabilityErrors(options).ToList() is { Count: > 0 } off)
-            {
-                off.ForEach(error => host.Error.WriteLine($"error: {error}"));
-                return ExitCodes.Invalid;
-            }
-
             var output = TextWriter.Synchronized(host.Out);
             var queue = new OwnerQueue(output);
             var work = new Work(name, parse.GetValue(input)!);
-            var tools = new Dictionary<string, ITool>();
-            var gates = new Dictionary<string, IGate>();
+            var directory = shared.Directory(parse, host);
+            var starting = true;
             try
             {
                 await using var servers = options.ToolServers.Count > 0 ? await ToolServers.ConnectAsync(options, secrets, ct) : null;
-                tools = new(servers?.Tools ?? new Dictionary<string, ITool>());
+                var tools = new Dictionary<string, ITool>(servers?.Tools ?? new Dictionary<string, ITool>());
                 await using var workspace = options.Capabilities.Workspace.Enabled
                     ? await WorkspaceHost.OpenAsync(
-                        options, shared.Directory(parse, host), work.RunId, options.Capabilities.Sandbox.Enabled ? host.Sandbox ?? WorkspaceHost.MachineSandbox() : null,
-                        BaselineChecks(options, host), host.Time, ct)
+                        options, directory, work.RunId, options.Capabilities.Sandbox.Enabled ? host.Sandbox ?? WorkspaceHost.MachineSandbox() : null, host.Time, ct)
                     : null;
                 foreach (var (id, tool) in workspace?.Tools ?? new Dictionary<string, ITool>())
                 {
                     tools[id] = tool;
                 }
 
-                gates = new(workspace?.Gates ?? new Dictionary<string, IGate>());
-                return await RunAsync(work, name, options, providers, tools, gates, secrets, queue, output, workspace, shared.Directory(parse, host), host, ct);
+                var state = Directory.CreateDirectory(Path.Combine(directory, WorkspaceOptions.StateFolder)).FullName;
+                var storage = await SqliteStorage.OpenAsync(Path.Combine(state, "sof.db"), ct);
+                var runner = new AgentRunner(
+                    options, providers, storage, tools, new Dictionary<string, IGate>(workspace?.Gates ?? new Dictionary<string, IGate>()), new Dictionary<string, ICheck>(),
+                    new Dictionary<string, IKnowledgeSource>(), queue, secrets, host.Time);
+                starting = false;
+                return await RunAsync(runner, work, name, queue, output, workspace, host, ct);
             }
-            catch (ConfigurationException exception)
+            catch (Exception exception) when (starting && exception is ConfigurationException or WorkspaceException or InvalidOperationException or KeyNotFoundException or IOException or HttpRequestException)
             {
-                host.Error.WriteLine($"error: {exception.Message}");
-                return ExitCodes.Invalid;
-            }
-            catch (Exception exception) when (exception is WorkspaceException or InvalidOperationException or KeyNotFoundException or IOException or HttpRequestException)
-            {
+                // Only what stops the run from starting; a failure during the run is not a configuration error.
                 host.Error.WriteLine($"error: {exception.Message}");
                 return ExitCodes.Invalid;
             }
@@ -103,24 +97,10 @@ internal static class RunCommand
         return command;
     }
 
-    /// <summary>The baseline checks the workspace names (WS-02), from the checks the host registers.</summary>
-    private static Dictionary<string, ICheck> BaselineChecks(OfficinaOptions options, SofEnvironment host) =>
-        options.Capabilities.Workspace.BaselineChecks.ToDictionary(
-            check => check,
-            check => host.Checks.TryGetValue(options.Checks[check].ExtensionId()!, out var found)
-                ? found
-                : throw new ConfigurationException([new(ValidationPhase.References, "capabilities.workspace.baselineChecks", $"check extension \"{options.Checks[check].ExtensionId()}\" is not registered.", "")]));
-
     private static async Task<int> RunAsync(
-        Work work, string name, OfficinaOptions options, Dictionary<string, IModelProvider> providers, Dictionary<string, ITool> tools, Dictionary<string, IGate> gates,
-        KnownSecrets secrets, OwnerQueue queue, TextWriter output, WorkspaceHost? workspace, string directory, SofEnvironment host, CancellationToken ct)
+        AgentRunner runner, Work work, string name, OwnerQueue queue, TextWriter output, WorkspaceHost? workspace, SofEnvironment host, CancellationToken ct)
     {
         var status = new StatusView(output, workspace is null ? null : () => workspace.Queue);
-        var state = Directory.CreateDirectory(Path.Combine(directory, WorkspaceOptions.StateFolder)).FullName;
-        var storage = await SqliteStorage.OpenAsync(Path.Combine(state, "sof.db"), ct);
-        var runner = new AgentRunner(
-            options, providers, storage, tools, gates, new Dictionary<string, ICheck>(host.Checks),
-            new Dictionary<string, IKnowledgeSource>(), queue, secrets, host.Time);
         using var stop = new CancellationTokenSource();
         var watching = WatchAsync(runner, work.RunId, status, stop.Token);
         // A read from the console cannot be cancelled, so the command loop is left to end with the process.

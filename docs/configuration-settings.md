@@ -24,7 +24,7 @@ It lists the settings the code has today. Settings that later slices add are spe
 | `run` | section | `{"budget":{"cost":25,"time":"08:00:00"},"permissionMode":"ask","approvalTimeout":"00:30:00","cancelWithin":"00:00:10"}` | Defaults for every run. | `{"permissionMode":"ask"}` |
 | `operations` | section | `{"telemetry":{"cacheHitWarning":0.7}}` | How the engine is operated. | `{"telemetry":{"cacheHitWarning":0.7}}` |
 | `storage` | section | `{"retention":{"audit":"365.00:00:00"}}` | What is stored, and for how long. | `{"unstoredEvents":["textGenerated"],"retention":{"events":"30.00:00:00"}}` |
-| `capabilities` | section | `{"conversationStore":{"enabled":false},"knowledge":{"enabled":false},"humanInteraction":{"enabled":false},"workspace":{"enabled":false,"protectedPaths":[],"baselineChecks":[],"keepWorkingCopies":false},"sandbox":{"enabled":false,"allowedHosts":[],"toolchains":[],"commandRules":[],"secrets":{}},"taskBoard":{"enabled":false,"maxAttempts":3,"budget":8}}` | Optional capabilities and their settings. All are off by default. | `{"conversationStore":{"enabled":true}}` |
+| `capabilities` | section | `{"conversationStore":{"enabled":false},"knowledge":{"enabled":false},"humanInteraction":{"enabled":false},"workspace":{"enabled":false,"protectedPaths":[],"keepWorkingCopies":false},"sandbox":{"enabled":false,"allowedHosts":[],"toolchains":[],"commandRules":[],"secrets":{}},"taskBoard":{"enabled":false,"maxAttempts":3,"budget":8}}` | Optional capabilities and their settings. All are off by default. | `{"conversationStore":{"enabled":true}}` |
 
 ## `project`
 
@@ -163,7 +163,7 @@ It lists the settings the code has today. Settings that later slices add are spe
 | `conversationStore` | section | `{"enabled":false}` | The conversation store: each agent's conversation with each caller is kept, anonymous callers sharing one, so a history strategy other than `none` continues it across requests and restarts. | `{"enabled":true}` |
 | `knowledge` | section | `{"enabled":false}` | Knowledge retrieval: the sources in `knowledge`, searched before a turn or through `knowledge:` tools. | `{"enabled":true}` |
 | `humanInteraction` | section | `{"enabled":false}` | Human interaction: the `builtin:human.ask_owner` tool, and sign-offs where the run waits for the owner. | `{"enabled":true,"signOffs":["runBudgetExceeded"]}` |
-| `workspace` | section | `{"enabled":false,"protectedPaths":[],"baselineChecks":[],"keepWorkingCopies":false}` | The git workspace: a working copy per agent, and an integration queue into the baseline. | `{"enabled":true,"protectedPaths":[{"path":"secrets/**","access":"hidden"}]}` |
+| `workspace` | section | `{"enabled":false,"protectedPaths":[],"keepWorkingCopies":false}` | The git workspace: a working copy per agent, and an integration queue into the baseline. | `{"enabled":true,"protectedPaths":[{"path":"secrets/**","access":"hidden"}]}` |
 | `sandbox` | section | `{"enabled":false,"allowedHosts":[],"toolchains":[],"commandRules":[],"secrets":{}}` | The sandbox that commands run in: no network unless allowed, and command rules. It needs the workspace. | `{"enabled":true,"allowedHosts":["api.nuget.org"]}` |
 | `taskBoard` | section | `{"enabled":false,"maxAttempts":3,"budget":8}` | The task board: tasks with dependencies, verification checks and review, which agents change through the `tasks.*` tools and the owner at any time. | `{"enabled":true,"maxAttempts":2}` |
 
@@ -343,7 +343,6 @@ It lists the settings the code has today. Settings that later slices add are spe
 |---|---|---|---|---|
 | `enabled` | boolean | `false` | Whether the workspace is on. | `true` |
 | `protectedPaths` | list | `[]` | Paths agents cannot see or change, in addition to the fixed ones: `.git`, `**/.env*` and `.sof/**` are hidden, and `sof.json` and `sof.*.json` are read-only. | `[{"path":"secrets/**","access":"hidden"}]` |
-| `baselineChecks` | list | `[]` | The checks, by name in `checks`, that the baseline must still pass after a change is applied to it, before the change is integrated. | `["build","tests"]` |
 | `keepWorkingCopies` | boolean | `false` | Whether an agent's working copy is kept when its task ends, so the owner can look at it. | `true` |
 
 ## `capabilities.sandbox`

@@ -88,7 +88,7 @@ public sealed class SofConfiguration
 
         var configuration = new SofConfiguration(bound, errors, root, describe);
         errors.AddRange(PlainTextSecrets(root).Select(error => error with { Location = configuration.Provided(error.Path) }));
-        errors.AddRange(bound.Validate().Select(error => error with { Location = configuration.Provided(error.Path) }));
+        errors.AddRange(bound.Validate().Concat(WorkspaceHost.CapabilityErrors(bound)).Select(error => error with { Location = configuration.Provided(error.Path) }));
         return configuration;
     }
 

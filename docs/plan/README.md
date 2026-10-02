@@ -6,12 +6,12 @@ Status: draft · 2026-10-01 · slices `REQUIREMENTS.md` (revision 2) into delive
 
 Last updated 2026-10-02.
 
-- **Done:** M0 spikes S00a and S00b; M1 slices S01 (walking skeleton) and S02 (configuration); S03 (tool pipeline); S04 (turn loop); S05 (context and caching); S06 (run record and output); S07 (history and conversation store); S08 (events, storage and observability); S09 (triggers and admission); S10 (MCP and knowledge); S11 (Claude provider); S13 (loop patterns); S14 (git workspace); S15 (sandbox); S18 (task board); S16 (human interaction and CLI).
+- **Done:** M0 spikes S00a and S00b; M1 slices S01 (walking skeleton) and S02 (configuration); S03 (tool pipeline); S04 (turn loop); S05 (context and caching); S06 (run record and output); S07 (history and conversation store); S08 (events, storage and observability); S09 (triggers and admission); S10 (MCP and knowledge); S11 (Claude provider); S13 (loop patterns); S14 (git workspace); S15 (sandbox); S16 (human interaction and CLI); S18 (task board).
 - **Waiting:** the M0 design review sign-off on `REQUIREMENTS.md`, `CONFIGURATION.md` and `DESIGN.md`.
 - **Next:** S12 (model gateway) and S17 (project memory).
 - **Open follow-ups:**
   - S02 kept a `formatVersion` check, though only version 1 exists. Consider removing the setting
-    until a version 2 exists (principle 13). S06 keeps `output.schema` as JSON text, and S13 too; when S16 wants the
+    until a version 2 exists (principle 13). S06 keeps `output.schema` as JSON text, and S13 too; if a later slice wants the
     reference's `{ "file": … }` form, that is a format change.
   - S02 rejects a plain-text `apiKey`, because the binder would otherwise skip it silently and
     fall back to the default secret reference. Kept on purpose.
@@ -32,8 +32,13 @@ Last updated 2026-10-02.
   - S20 (from S16): `sof run` gives each agent one working copy, named `<run>-<agent>`, opened when the agent first
     calls a `workspace.*` or `sandbox.*` tool and disposed when the run ends. S20 gives each task its own and disposes it
     when the task ends. Nothing integrates in `sof run` before then, so the CLI shows an empty integration queue.
-  - S20 adds the plan-approval sign-off and the model's tool to hand off to a human (EGR-04). S18 and S19 add
-    integration and snapshots to `IWorkspace`.
+  - S20 (from S16, S18 and S06): the CLI's board view (TASK-08); the command checks integration needs and the
+    `capabilities.workspace.baselineChecks` setting that names them (WS-02). Fan-out branches of one agent share that
+    agent's working copy while they run at the same time; S20 gives branches their own when they change files.
+  - S21 (from S16): `sof config dry-run` cannot run a configuration that uses the `workspace.*` or `sandbox.*` tools. It
+    should register them over the test kit's `InMemoryWorkspace` and `FakeSandbox` (CFG-12).
+  - S20 adds the plan-approval sign-off and the model's tool to hand off to a human (EGR-04). S20 adds
+    integration and S19 snapshots to `IWorkspace`.
   - S21 (from S16): when a cancelled turn outlives `run.cancelWithin`, the agent's lock is released, so its next turn
     can overlap with the left-behind one, and the left-behind turn reports zero cost.
   - S19 cleans up what the Windows sandbox leaves outside a cleaned-up working copy: its AppContainer

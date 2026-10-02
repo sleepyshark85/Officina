@@ -28,8 +28,8 @@ The owner in the loop, through the `sof` CLI.
   needs no sign-off by default (HITL-04), and a tool's `approval` covers it when wanted.
 - The pause and cancel controls act per agent on the runner (`Pause`, `Resume`, `Cancel`); the host's cancellation
   token cancels the whole run. A cancelled turn that does not stop within `run.cancelWithin` is left behind.
-- The `workspace.*` tools (read, search, edit, write) live in Core over `IWorkingCopy`, so the test kit's
-  `InMemoryWorkspace` drives them; `IWorkspace` has only opening and closing working copies until S18 (integration)
+- The `workspace.*` tools (read, search, edit, write, delete and move) live in Core over `IWorkingCopy`, so the test kit's
+  `InMemoryWorkspace` drives them; `IWorkspace` has only opening and closing working copies until S20 (integration)
   and S19 (snapshots) need more.
 - HITL-07 (a MAY: rating results) moved to S21.
 
@@ -42,5 +42,7 @@ Part 2 (S16b) wired `sof run`:
 - Each agent gets a working copy and its own `SandboxTools` when it first calls one of those tools (`ToolCall.Agent` tells a shared tool
   which agent called). They end with the run (SBX-03). The machine's sandbox is probed once, before the workspace opens, and a machine
   that cannot sandbox stops the command (SBX-07).
-- `capabilities.workspace.baselineChecks` names checks from `checks`; `sof` resolves them from the checks its host registers (WS-02).
-  `status` shows the integration queue's length and longest wait (WS-09).
+- `status` shows the integration queue's length and longest wait (WS-09). The capability check (CAP-02) is part of loading the
+  configuration, so `config validate` reports it too (CFG-06).
+- Moved to S20, which integrates: the CLI's board view (TASK-08), the command checks, and `capabilities.workspace.baselineChecks` (WS-02).
+  Moved to S21: `config dry-run` with the `workspace.*` and `sandbox.*` tools (CFG-12).

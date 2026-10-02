@@ -17,8 +17,6 @@ internal sealed class Sof : IDisposable
 
     public Dictionary<string, IModelProvider> Providers { get; } = [];
 
-    public Dictionary<string, ICheck> Checks { get; } = [];
-
     public FakeSandbox? Sandbox { get; set; }
 
     public FakeTimeProvider Time { get; } = new();
@@ -39,7 +37,7 @@ internal sealed class Sof : IDisposable
     {
         using var error = new StringWriter();
         var start = Out.ToString().Length;
-        var host = new SofEnvironment(Out, error, Directory, Variables) { In = In, Providers = Providers, Checks = Checks, Sandbox = Sandbox, Time = Time };
+        var host = new SofEnvironment(Out, error, Directory, Variables) { In = In, Providers = Providers, Sandbox = Sandbox, Time = Time };
         var exitCode = await SofCommandLine.RunAsync(args, host);
         return (exitCode, Out.ToString()[start..].ReplaceLineEndings("\n"), error.ToString().ReplaceLineEndings("\n"));
     }

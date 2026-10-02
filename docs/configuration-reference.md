@@ -51,7 +51,7 @@ constant in code, and can be dropped from this draft rather than built speculati
 | `"name"` | A reference to a named item of the kind the setting expects | `"model": "strong"` |
 | `{ "secret": "NAME" }` | A secret resolved from the secret source at use time (CFG-09) | `"apiKey": { "secret": "ANTHROPIC_API_KEY" }` |
 | `{ "file": "path" }` | File contents | `"instructions": { "file": "prompts/lead.md" }` |
-| `"builtin:<id>"` | A component shipped with the core | `"builtin:workspace.edit_file"` |
+| `"builtin:<id>"` | A component shipped with the core | `"builtin:record.propose_fact"` |
 | `"extension:<id>"` | A component supplied by the application (§11) | `"extension:Acme.CreateIssue"` |
 | `"mcp:<server>/<tool>"` | A tool from an external tool server | `"mcp:github/create_pull_request"` |
 | `"knowledge:<name>"` | A tool that searches a knowledge source (CTX-04) | `"knowledge:handbook"` |
@@ -241,11 +241,11 @@ example, a tool that declares itself `write` cannot be configured as `read`.
 
 ```jsonc
 "tools": {
-  "read_file":   { "source": "builtin:workspace.read_file" },
-  "search":      { "source": "builtin:workspace.search" },
-  "edit_file":   { "source": "builtin:workspace.edit_file" },     // has built-in gates (WS-07)
+  "read_file":   { "source": "extension:workspace.read_file" },
+  "search":      { "source": "extension:workspace.search" },
+  "edit_file":   { "source": "extension:workspace.edit_file" },     // has built-in gates (WS-07)
   "run_command": {
-    "source": "builtin:sandbox.run",
+    "source": "extension:sandbox.run",
     "timeout": "00:15:00",
     "maxResultLength": 16000                                       // TOOL-09
   },

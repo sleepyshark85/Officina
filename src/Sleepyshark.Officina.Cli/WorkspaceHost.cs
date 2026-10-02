@@ -1,4 +1,7 @@
 using System.Collections.Concurrent;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.RegularExpressions;
 using Sleepyshark.Officina.Core.Configuration;
 using Sleepyshark.Officina.Core.Extensibility;
 using Sleepyshark.Officina.Core.Tools;
@@ -12,7 +15,7 @@ namespace Sleepyshark.Officina.Cli;
 /// working copy, and its own <see cref="SandboxTools"/> over it, when it first calls one of them (WS-01). Disposing the
 /// host, when the run ends, stops the agents' background processes (SBX-03) and removes their working copies.
 /// </summary>
-internal sealed class WorkspaceHost : IAsyncDisposable
+internal sealed partial class WorkspaceHost : IAsyncDisposable
 {
     private readonly GitWorkspace workspace;
     private readonly OfficinaOptions options;
@@ -56,14 +59,14 @@ internal sealed class WorkspaceHost : IAsyncDisposable
     /// <exception cref="InvalidOperationException">The sandbox is on and this machine cannot provide it; nothing runs unsandboxed (SBX-07).</exception>
     /// <exception cref="WorkspaceException">The workspace cannot be opened.</exception>
     public static async Task<WorkspaceHost> OpenAsync(
-        OfficinaOptions options, string root, string runId, ISandbox? sandbox, IReadOnlyDictionary<string, ICheck> baselineChecks, TimeProvider time, CancellationToken ct)
+        OfficinaOptions options, string root, string runId, ISandbox? sandbox, TimeProvider time, CancellationToken ct)
     {
         if (sandbox?.Probe() is { } problem)
         {
             throw new InvalidOperationException($"commands cannot run, because this machine cannot sandbox them: {problem}");
         }
 
-        var workspace = await GitWorkspace.OpenAsync(root, runId, options.Capabilities.Workspace, baselineChecks, time, ct).ConfigureAwait(false);
+        var workspace = await GitWorkspace.OpenAsync(root, runId, options.Capabilities.Workspace, new Dictionary<string, ICheck>(), time, ct).ConfigureAwait(false);
         try
         {
             return new WorkspaceHost(workspace, options, sandbox, runId, root);
@@ -103,27 +106,78 @@ internal sealed class WorkspaceHost : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
-        foreach (var hold in holds.Values.Where(hold => hold.Value.IsCompletedSuccessfully))
+        // One failing disposal must not leave the others' processes, worktrees or the run lock behind.
+        var failures = new List<Exception>();
+        foreach (var hold in holds.Values)
         {
-            var (copy, tools) = hold.Value.Result;
-            if (tools is not null)
+            try
             {
-                await tools.DisposeAsync().ConfigureAwait(false);
+                var (copy, tools) = await hold.Value.ConfigureAwait(false);
+                try
+                {
+                    if (tools is not null)
+                    {
+                        await tools.DisposeAsync().ConfigureAwait(false);
+                    }
+                }
+                finally
+                {
+                    await workspace.CloseWorkingCopyAsync(copy).ConfigureAwait(false);
+                }
             }
-
-            await workspace.CloseWorkingCopyAsync(copy).ConfigureAwait(false);
+            catch (Exception exception)
+            {
+                failures.Add(exception);
+            }
         }
 
         workspace.Dispose();
+        if (failures.Count > 0)
+        {
+            throw new AggregateException(failures);
+        }
     }
 
-    private Task<Hold> HoldOf(string agent) => holds.GetOrAdd(agent, name => new(() => OpenAsync(name))).Value;
+    private async Task<Hold> HoldOf(string agent)
+    {
+        var hold = holds.GetOrAdd(agent, name => new(() => OpenAsync(name)));
+        try
+        {
+            return await hold.Value.ConfigureAwait(false);
+        }
+        catch
+        {
+            // A failed open is not kept, so the agent's next call tries again.
+            holds.TryRemove(new KeyValuePair<string, Lazy<Task<Hold>>>(agent, hold));
+            throw;
+        }
+    }
 
     private async Task<Hold> OpenAsync(string agent)
     {
-        var copy = await workspace.OpenWorkingCopyAsync($"{runId}-{agent}", agent).ConfigureAwait(false);
-        return new(copy, sandbox is null ? null : new SandboxTools(sandbox, options.Capabilities.Sandbox, options.Capabilities.Workspace, agent, copy.Directory));
+        var copy = await workspace.OpenWorkingCopyAsync($"{runId}-{SafeName(agent)}", agent).ConfigureAwait(false);
+        try
+        {
+            return new(copy, sandbox is null ? null : new SandboxTools(sandbox, options.Capabilities.Sandbox, options.Capabilities.Workspace, agent, copy.Directory));
+        }
+        catch
+        {
+            await workspace.CloseWorkingCopyAsync(copy).ConfigureAwait(false);
+            throw;
+        }
     }
+
+    /// <summary>The agent's name as part of a git branch and a folder name; a name with other characters gets a hash, so two such names stay apart.</summary>
+    private static string SafeName(string agent) =>
+        SafeCharacters().IsMatch(agent)
+            ? agent
+            : $"{UnsafeCharacters().Replace(agent, "_")}-{Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(agent)))[..6]}";
+
+    [GeneratedRegex("^[A-Za-z0-9_-]+$")]
+    private static partial Regex SafeCharacters();
+
+    [GeneratedRegex("[^A-Za-z0-9_-]")]
+    private static partial Regex UnsafeCharacters();
 
     private sealed record Hold(WorkingCopy Copy, SandboxTools? Tools);
 
