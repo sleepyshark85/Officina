@@ -14,13 +14,28 @@ internal static class ChatCommand
 {
     private const string Store = "capabilities.conversationStore.enabled";
 
-    public static Command Create(ConfigurationCommandOptions shared, SofEnvironment host)
+    /// <summary><c>sof chat</c>, which plain <c>sof</c> is too (<see cref="AddTo"/>).</summary>
+    public static Command Create(ConfigurationCommandOptions shared, SofEnvironment host) =>
+        AddTo(new Command("chat", "Chat with an agent: each line you type is a message, and the conversation carries over. Plain sof does the same."), shared, host);
+
+    /// <summary>Makes <paramref name="command"/> start a chat session, with the chat's options and the shared ones.</summary>
+    public static Command AddTo(Command command, ConfigurationCommandOptions shared, SofEnvironment host)
     {
-        var agent = new Option<string>("--agent") { Description = "The agent to chat with (default: the only agent), such as team for the coding team." };
+        var agent = new Option<string>("--agent") { Description = "The agent to chat with, such as team for the coding team (default: the only agent, or the one you pick)." };
         var fresh = new Option<bool>("--new") { Description = "Start a new conversation instead of continuing the stored one." };
-        var command = new Command("chat", "Chat with an agent: each line you type is a message, and the conversation carries over.") { agent, fresh };
+        command.Options.Add(agent);
+        command.Options.Add(fresh);
         shared.AddTo(command);
-        command.SetAction((parse, ct) => new ChatSession(parse, shared, host, parse.GetValue(agent), parse.GetValue(fresh)).RunAsync(ct));
+        command.SetAction((parse, ct) =>
+        {
+            if (host.InSession)
+            {
+                host.Error.WriteLine("error: this is a chat session already; /new starts a new conversation.");
+                return Task.FromResult(ExitCodes.Usage);
+            }
+
+            return new ChatSession(parse, shared, host, parse.GetValue(agent), parse.GetValue(fresh)).RunAsync(ct);
+        });
         return command;
     }
 

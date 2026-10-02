@@ -208,7 +208,7 @@ public sealed class ChatCommandTests : IDisposable
         sof.In.Type("/approve 1");
         await sof.Out.WaitForAsync("error: no reply is running; /approve works while one does.", Ct);
         sof.In.Type("/report");
-        await sof.Out.WaitForAsync("error: no message has been sent in this session yet.", Ct);
+        await sof.Out.WaitForAsync("error: no message has been sent in this session yet; /report <run> shows any run's.", Ct);
         sof.In.Type("/mode auto"); // in ask mode, the write would wait for the owner's approval
         sof.In.Type("Note the database.");
         await sof.Out.WaitForAsync("dev: Completed", Ct);
@@ -349,6 +349,79 @@ public sealed class ChatCommandTests : IDisposable
         Assert.Contains("Another run has written to dev's conversation", error, StringComparison.Ordinal);
         Assert.Equal((ExitCodes.Success, ExitCodes.Success), (rolledBack, resumed));
         Assert.Equal([Message.User("First."), Message.Assistant("One."), Message.User("Second.")], model.Requests[2].History);
+    }
+
+    // Plain sof is the chat session; with several agents and none named, the owner picks one.
+    [Fact]
+    public async Task Plain_sof_starts_the_session_and_asks_which_agent_when_there_are_several()
+    {
+        sof.Write("sof.json", """
+            {
+              "providers": { "claude": { "prices": { "claude-opus-5-5": { "input": 1 } } } },
+              "agents": { "dev": { "instructions": "Work." }, "ops": { "instructions": "Operate.", "description": "Runs things." } }
+            }
+            """);
+        model.Reply("Hi from ops.");
+
+        var chat = sof.RunAsync();
+        await sof.Out.WaitForAsync("  2. ops: Runs things.", Ct);
+        sof.In.Type("9");
+        await sof.Out.WaitForAsync("Type a number from 1 to 2, or an agent's name.", Ct);
+        sof.In.Type("2");
+        await sof.Out.WaitForAsync("Chatting with ops.", Ct);
+        sof.In.Type("Hello.");
+        sof.In.Dispose();
+        var (exitCode, output, _) = await chat;
+
+        Assert.Equal(ExitCodes.Success, exitCode);
+        Assert.Contains("[ops] Hi from ops.", output, StringComparison.Ordinal);
+    }
+
+    // Every sof command can be typed after a /, parsed by the same command line. Between replies the session holds no run, lock or
+    // store, so /rollback and /resume run as from another terminal; while a reply runs, they wait, and /report shows the reply's run.
+    [Fact]
+    public async Task Every_sof_command_works_in_the_session_and_those_that_take_the_console_wait_for_the_reply()
+    {
+        sof.Write("sof.json", """
+            {
+              "providers": { "claude": { "prices": { "claude-opus-5-5": { "input": 1 } } } },
+              "agents": { "dev": { "instructions": "Work.", "tools": ["owner"] } },
+              "tools": { "note": { "source": "builtin:record.propose_finding", "approval": "always" } },
+              "toolSets": { "owner": ["note"] },
+              "capabilities": { "humanInteraction": { "enabled": true }, "conversationStore": { "enabled": true }, "checkpoints": { "enabled": true } }
+            }
+            """);
+        model.CallTools(("note", """{ "text": "Uses SQLite." }""")).Reply("Noted.").CallTools(("note", """{ "text": "Uses SQLite." }""")).Reply("Noted again.");
+
+        var chat = sof.RunAsync();
+        sof.In.Type("/config validate");
+        await sof.Out.WaitForAsync("The configuration is valid.", Ct);
+        sof.In.Type("/help rollback");
+        await sof.Out.WaitForAsync("--to", Ct);
+        sof.In.Type("Note it.");
+        await sof.Out.WaitForAsync("#1 dev asks to run note", Ct);
+        sof.In.Type("/rollback 0 --to 0"); // /resume while a reply runs resumes what /pause paused
+        await sof.Out.WaitForAsync("error: /rollback waits until no reply runs", Ct);
+        sof.In.Type("/report");
+        await sof.Out.WaitForAsync("Work: Note it.", Ct);
+        sof.In.Type("/approve 1");
+        await sof.Out.WaitForAsync("dev: Completed", Ct);
+        var run = sof.Out.ToString().Split('\n').First(line => line.StartsWith("run ", StringComparison.Ordinal))[4..].TrimEnd('\r');
+        sof.In.Type($"/rollback {run} --to 0");
+        await sof.Out.WaitForAsync($"Run {run} is back at checkpoint 0.", Ct);
+        sof.In.Type($"/resume {run}");
+        await sof.Out.WaitForAsync("Answer with approve, deny or change.", Ct); // the resumed run's own console
+        sof.In.Type("/approve 1");
+        await sof.Out.WaitForAsync("dev: Completed, cost $0.00\nNoted again.", Ct);
+        sof.In.Type("/new");
+        await sof.Out.WaitForAsync("Your next message starts a new conversation.", Ct);
+        sof.In.Type("/chat");
+        sof.In.Dispose();
+        var (exitCode, _, error) = await chat;
+
+        Assert.Equal(ExitCodes.Success, exitCode);
+        Assert.Contains("error: this is a chat session already; /new starts a new conversation.", error, StringComparison.Ordinal);
+        Assert.Equal(Message.User("Note it."), model.Requests[2].History[0]); // the resumed run starts from its checkpoint
     }
 
     /// <summary>The work of a request's current turn, which a conversation's earlier turns come before.</summary>

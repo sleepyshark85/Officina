@@ -27,6 +27,9 @@ public sealed record SofEnvironment(TextWriter Out, TextWriter Error, string Wor
     /// </summary>
     public Func<Action<PosixSignal>, IDisposable>? Signals { get; init; }
 
+    /// <summary>Whether the command runs inside a chat session, typed after a <c>/</c>: the session handles the signals, and holds the console.</summary>
+    internal bool InSession { get; init; }
+
     /// <summary>The process's own signals, for <see cref="Signals"/>.</summary>
     public static IDisposable ProcessSignals(Action<PosixSignal> handler) => new Registrations(
         [.. new[] { PosixSignal.SIGINT, PosixSignal.SIGTERM }.Select(signal => PosixSignalRegistration.Create(signal, context =>

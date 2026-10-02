@@ -1,4 +1,5 @@
 using System.CommandLine;
+using System.CommandLine.Parsing;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Runtime.InteropServices;
@@ -12,42 +13,54 @@ using Sleepyshark.Officina.Storage.Sqlite;
 namespace Sleepyshark.Officina.Cli;
 
 /// <summary>
-/// One <c>sof chat</c> session. The console is read on a thread of its own, as a read blocks its thread, and the session takes
-/// each line from <see cref="lines"/>. Each message is a run, opened and closed as <c>sof run</c>'s is; while it runs, a command
-/// is carried out at once and a message waits until the reply ends. Ctrl+C cancels the reply; a second Ctrl+C, <c>/quit</c> or
-/// the end of the input ends the session, the end of the input once the messages it sent have their replies.
+/// One chat session (<c>sof</c> or <c>sof chat</c>). The console is read on a thread of its own, as a read blocks its thread, and
+/// the session takes each line from <see cref="lines"/>. Each message is a run, opened and closed as <c>sof run</c>'s is, so
+/// between replies the session holds no run, lock or store, and every <c>sof</c> command can be typed after a <c>/</c>. While a
+/// reply runs, a command is carried out at once and a message waits until the reply ends. Ctrl+C cancels the reply or the
+/// command; a second Ctrl+C, <c>/quit</c> or the end of the input ends the session, the end of the input once the messages it
+/// sent have their replies.
 /// </summary>
 [SuppressMessage("Reliability", "CA1001", Justification = "The session's token source has no timer, so it holds nothing to dispose, and a signal may still cancel it as the process ends.")]
 internal sealed class ChatSession
 {
+    /// <summary>The commands that act on the run of the reply that runs (<see cref="RunCommand.CarryOutAsync"/>).</summary>
+    private static readonly HashSet<string> RunCommands = ["approve", "deny", "change", "answer", "tell", "pause", "resume", "cancel", "checkpoint", "board", "memory"];
+
+    /// <summary>The <c>sof</c> commands that take the console or the workspace, so they wait until no reply runs.</summary>
+    private static readonly HashSet<string> Between = ["run", "resume", "rollback"];
+
     private static readonly string Help = $"""
         {RunCommand.Help("/")}
-                  | /report | /quit (or Ctrl+D)
-        A line that does not start with / is a message. While a reply runs, a message waits until it ends; /tell reaches an agent at once.
+                  | /new | /report [run] | /resume <run> | /rollback <run> [--to <n>] | /run --input <text>
+                  | /config validate | /config show [--origin] | /config dry-run ... | /help [command] | /quit (or Ctrl+D)
+        A line that does not start with / is a message. While a reply runs, a message waits until it ends, and /tell reaches an
+        agent at once. /approve to /memory act on the reply that runs; /resume <run>, /rollback and /run wait until none does.
         """;
 
     private readonly ParseResult parse;
     private readonly ConfigurationCommandOptions shared;
     private readonly SofEnvironment host;
     private readonly string? named;
-    private readonly Channel<string> lines = Channel.CreateUnbounded<string>(new() { SingleReader = true, SingleWriter = true });
+    private readonly Channel<string> lines = Channel.CreateUnbounded<string>(new() { SingleWriter = true });
     private readonly Queue<string> queued = new();
     private readonly CancellationTokenSource ending = new();
     private readonly Lock gate = new();
+    private readonly TextWriter output;
     private readonly OwnerQueue owner;
     private readonly StatusView status;
 
-    /// <summary>Whether the next message starts a new conversation (<c>--new</c>).</summary>
+    /// <summary>Whether the next message starts a new conversation (<c>--new</c>, <c>/new</c>).</summary>
     private bool fresh;
 
-    /// <summary>The reply that runs now, which Ctrl+C cancels.</summary>
+    /// <summary>The reply, or the command between replies, that runs now, which Ctrl+C cancels.</summary>
     private CancellationTokenSource? replying;
 
-    /// <summary>Whether the next Ctrl+C ends the session: one was pressed after the last message was sent.</summary>
+    /// <summary>Whether the next Ctrl+C ends the session: one was pressed after the last message or command was sent.</summary>
     private bool armed;
 
     private bool inputEnded;
     private string agent = "";
+    private bool keepsHistory;
     private PermissionMode? mode;
     private string? lastRun;
     private RunCommand.Session? current;
@@ -55,7 +68,7 @@ internal sealed class ChatSession
     public ChatSession(ParseResult parse, ConfigurationCommandOptions shared, SofEnvironment host, string? named, bool fresh)
     {
         (this.parse, this.shared, this.host, this.named, this.fresh) = (parse, shared, host, named, fresh);
-        var output = TextWriter.Synchronized(host.Out);
+        output = TextWriter.Synchronized(host.Out);
         owner = new OwnerQueue(output, "/");
         status = new StatusView(output, () => current?.Workspace?.Queue, stream: true);
     }
@@ -68,39 +81,14 @@ internal sealed class ChatSession
             return code;
         }
 
-        if (ConfigurationCommandOptions.Agent(named, configuration.Options, host) is not { } name)
-        {
-            return ExitCodes.Usage;
-        }
-
-        if (ChatCommand.Refusal(configuration, name) is { } refusal)
-        {
-            host.Error.WriteLine($"error: {refusal}");
-            return ExitCodes.Invalid;
-        }
-
-        agent = name;
-        var options = ChatCommand.Conversing(configuration, name);
-        var keeps = ChatCommand.KeepsHistory(options, name);
-        status.WriteLine($"Chatting with {name}. Each line you type is a message; /help lists the commands, and /quit or Ctrl+D ends the session.");
-        if (options.Agents[keeps].Context.History.Strategy == HistoryStrategy.None)
-        {
-            status.WriteLine($"note: agents.{keeps}.context.history.strategy is none, so each message starts a new conversation.");
-            fresh = false;
-        }
-        else if (fresh)
-        {
-            status.WriteLine("Your first message starts a new conversation.");
-        }
-
         using var signals = host.Signals?.Invoke(Signalled);
         using var cancelled = ct.Register(End);
         // A read from the console blocks its thread and cannot be cancelled, so the console is read on a thread of its own, which
         // is left to end with the process.
         _ = Task.Run(ReadConsoleAsync, CancellationToken.None);
         using var done = new CancellationTokenSource();
-        var chatting = ChatAsync();
-        var forced = ForcedAsync(SofCommandLine.TerminationTimeout(options), done.Token);
+        var chatting = ChatAsync(configuration);
+        var forced = ForcedAsync(SofCommandLine.TerminationTimeout(configuration.Options), done.Token);
         var first = await Task.WhenAny(chatting, forced);
         await done.CancelAsync();
         if (first == chatting)
@@ -113,24 +101,43 @@ internal sealed class ChatSession
         return ExitCodes.NotCompleted;
     }
 
-    /// <summary>Takes the owner's lines until the session ends: each command is carried out and each message sent.</summary>
-    private async Task<int> ChatAsync()
+    /// <summary>Picks the agent, then takes the owner's lines until the session ends: each command is carried out and each message sent.</summary>
+    private async Task<int> ChatAsync(SofConfiguration configuration)
     {
         try
         {
+            var options = configuration.Options;
+            if ((named is null && options.Agents.Count > 1 ? await PickAsync(options) : ConfigurationCommandOptions.Agent(named, options, host)) is not { } name)
+            {
+                return ExitCodes.Usage;
+            }
+
+            if (ChatCommand.Refusal(configuration, name) is { } refusal)
+            {
+                host.Error.WriteLine($"error: {refusal}");
+                return ExitCodes.Invalid;
+            }
+
+            agent = name;
+            var conversing = ChatCommand.Conversing(configuration, name);
+            var keeps = ChatCommand.KeepsHistory(conversing, name);
+            keepsHistory = conversing.Agents[keeps].Context.History.Strategy != HistoryStrategy.None;
+            status.WriteLine($"Chatting with {name}. Each line you type is a message; /help lists the commands, and /quit or Ctrl+D ends the session.");
+            if (!keepsHistory)
+            {
+                status.WriteLine($"note: agents.{keeps}.context.history.strategy is none, so each message starts a new conversation.");
+                fresh = false;
+            }
+            else if (fresh)
+            {
+                status.WriteLine("Your first message starts a new conversation.");
+            }
+
             while (await NextAsync() is { } line)
             {
                 if (line.StartsWith('/'))
                 {
-                    try
-                    {
-                        await IdleAsync(line[1..].Trim());
-                    }
-                    catch (Exception exception) when (exception is not OperationCanceledException)
-                    {
-                        // A command that fails says so, and the owner can go on typing.
-                        status.WriteLine($"error: {exception.Message}");
-                    }
+                    await CommandAsync(line[1..].Trim(), null);
                 }
                 else if (line.Trim() is { Length: > 0 } message)
                 {
@@ -149,6 +156,37 @@ internal sealed class ChatSession
         }
     }
 
+    /// <summary>With several agents and none named, the owner picks one, by its number or name; null if the input ends first.</summary>
+    private async Task<string?> PickAsync(OfficinaOptions options)
+    {
+        var agents = options.Agents.Keys.Order(StringComparer.Ordinal).ToList();
+        status.WriteLine("Which agent do you want to chat with? Type its number or name.");
+        for (var index = 0; index < agents.Count; index++)
+        {
+            var description = options.Agents[agents[index]].Description;
+            status.WriteLine($"  {index + 1}. {agents[index]}{(description is null ? "" : $": {description}")}");
+        }
+
+        while (await NextAsync() is { } line)
+        {
+            var answer = line.Trim();
+            if (int.TryParse(answer, CultureInfo.InvariantCulture, out var number) && number >= 1 && number <= agents.Count)
+            {
+                return agents[number - 1];
+            }
+
+            if (agents.Contains(answer))
+            {
+                return answer;
+            }
+
+            status.WriteLine($"Type a number from 1 to {agents.Count}, or an agent's name.");
+        }
+
+        host.Error.WriteLine("error: no agent was picked.");
+        return null;
+    }
+
     /// <summary>The next line to act on: a message that waited for the last reply first, then the owner's next line; null once the session ends.</summary>
     private async Task<string?> NextAsync()
     {
@@ -164,7 +202,7 @@ internal sealed class ChatSession
 
         try
         {
-            var line = inputEnded ? null : await ReadAsync(ending.Token);
+            var line = inputEnded ? null : await ReadAsync(lines.Reader, ending.Token);
             inputEnded = line is null;
             return line;
         }
@@ -175,11 +213,11 @@ internal sealed class ChatSession
     }
 
     /// <summary>The owner's next line, or null at the end of the input.</summary>
-    private async Task<string?> ReadAsync(CancellationToken ct)
+    private static async Task<string?> ReadAsync(ChannelReader<string> lines, CancellationToken ct)
     {
-        while (await lines.Reader.WaitToReadAsync(ct))
+        while (await lines.WaitToReadAsync(ct))
         {
-            if (lines.Reader.TryRead(out var line))
+            if (lines.TryRead(out var line))
             {
                 return line;
             }
@@ -208,7 +246,23 @@ internal sealed class ChatSession
     }
 
     /// <summary>Sends a message: a run of the conversation, whose reply streams, with the owner's commands carried out while it runs.</summary>
-    private async Task SendAsync(string message)
+    private Task SendAsync(string message) => GuardedAsync(async token =>
+    {
+        var work = new Work(agent, message) { Trigger = Trigger.Conversation };
+        var code = await RunCommand.ExecuteAsync(
+            parse, shared, host, work.RunId, agent, existing: false, leaveWorkingCopies: false, (session, ct) => ReplyAsync(session, work, ct), token,
+            Trigger.Conversation, owner);
+        if (code != ExitCodes.Success && !ending.IsCancellationRequested)
+        {
+            status.WriteLine("The message was not sent.");
+        }
+    });
+
+    /// <summary>
+    /// Does what a message or a command between replies does, which Ctrl+C cancels. What fails is said, and the session goes on;
+    /// a message cancelled drops the messages that waited for it.
+    /// </summary>
+    private async Task GuardedAsync(Func<CancellationToken, Task> work)
     {
         CancellationTokenSource reply;
         lock (gate)
@@ -219,18 +273,10 @@ internal sealed class ChatSession
 
         try
         {
-            var work = new Work(agent, message) { Trigger = Trigger.Conversation };
-            var code = await RunCommand.ExecuteAsync(
-                parse, shared, host, work.RunId, agent, existing: false, leaveWorkingCopies: false, (session, token) => ReplyAsync(session, work, token), reply.Token,
-                Trigger.Conversation, owner);
-            if (code != ExitCodes.Success && !ending.IsCancellationRequested)
-            {
-                status.WriteLine("The message was not sent.");
-            }
+            await work(reply.Token);
         }
         catch (Exception exception) when (exception is not OperationCanceledException || !ending.IsCancellationRequested)
         {
-            // The session goes on: the next message opens everything again.
             status.WriteLine($"error: {exception.Message}");
         }
         finally
@@ -290,8 +336,8 @@ internal sealed class ChatSession
     }
 
     /// <summary>
-    /// <c>--new</c>: an empty shortened turn holds the whole conversation, which is nothing yet, so the next turn starts a new one
-    /// with the project memory of now (CAP-05, MEM-03). The earlier turns stay for the runs that wrote them.
+    /// <c>--new</c>, <c>/new</c>: an empty shortened turn holds the whole conversation, which is nothing yet, so the next turn starts
+    /// a new one with the project memory of now (CAP-05, MEM-03). The earlier turns stay for the runs that wrote them.
     /// </summary>
     private async Task NewConversationAsync(RunCommand.Session session, CancellationToken ct)
     {
@@ -301,40 +347,21 @@ internal sealed class ChatSession
         await session.Storage.Conversations.AppendAsync(null, new ConversationTurn(keeps, null, host.Time.GetUtcNow(), [], true, memory, memory, session.RunId), ct);
     }
 
-    /// <summary>Takes the owner's lines while a reply runs: a command is carried out on the run, and a message waits for the reply to end.</summary>
+    /// <summary>Takes the owner's lines while a reply runs: a command is carried out at once, and a message waits for the reply to end.</summary>
     private async Task DuringAsync(RunCommand.Session session, CancellationToken stop)
     {
         try
         {
-            while (await ReadAsync(stop) is { } line)
+            while (await ReadAsync(lines.Reader, stop) is { } line)
             {
-                if (!line.StartsWith('/'))
+                if (line.StartsWith('/'))
                 {
-                    if (line.Trim() is { Length: > 0 } message)
-                    {
-                        queued.Enqueue(message);
-                        status.WriteLine("(it is sent when this reply ends; /tell <agent> <text> reaches an agent now)");
-                    }
-
-                    continue;
+                    await CommandAsync(line[1..].Trim(), session);
                 }
-
-                var command = line[1..].Trim();
-                switch (command.Split(' ', 2)[0])
+                else if (line.Trim() is { Length: > 0 } message)
                 {
-                    case "quit":
-                        End();
-                        break;
-                    case "report":
-                        await ReportAsync(session.Storage, session.RunId, ending.Token);
-                        break;
-                    case "help":
-                        status.WriteLine(Help);
-                        break;
-                    default:
-                        await RunCommand.CarryOutAsync(command, session, status, Help, ending.Token); // a command once started is carried out, even if the reply ends meanwhile
-                        mode = ModeOf(command) ?? mode;
-                        break;
+                    queued.Enqueue(message);
+                    status.WriteLine("(it is sent when this reply ends; /tell <agent> <text> reaches an agent now)");
                 }
             }
 
@@ -345,49 +372,108 @@ internal sealed class ChatSession
         }
     }
 
-    /// <summary>A command between replies: those that act on a run say that none runs.</summary>
-    private async Task IdleAsync(string command)
+    /// <summary>
+    /// A command typed after a <c>/</c>: the session's own, one that acts on the run of the reply that runs (<paramref name="session"/>,
+    /// null between replies), or a <c>sof</c> command, parsed and run by the same command line. A command once started is carried
+    /// out even if the reply ends meanwhile.
+    /// </summary>
+    private async Task CommandAsync(string command, RunCommand.Session? session)
     {
-        var word = command.Split(' ', 2)[0];
-        switch (word)
+        var words = CommandLineParser.SplitCommandLine(command).ToList();
+        var word = words.FirstOrDefault() ?? "help";
+        try
         {
-            case "quit":
-                End();
-                break;
-            case "status":
-                status.Print(owner);
-                break;
-            case "mode" when ModeOf(command) is { } chosen:
-                mode = chosen;
-                break;
-            case "report" when lastRun is { } run:
-                await ReportAsync(await SqliteStorage.OpenAsync(Path.Combine(shared.Directory(parse, host), WorkspaceOptions.StateFolder, "sof.db"), ending.Token), run, ending.Token);
-                break;
-            case "report":
-                status.WriteLine("error: no message has been sent in this session yet.");
-                break;
-            case "approve" or "deny" or "change" or "answer" or "tell" or "pause" or "resume" or "cancel" or "checkpoint" or "board" or "memory":
-                status.WriteLine($"error: no reply is running; /{word} works while one does.");
-                break;
-            default:
-                status.WriteLine(Help);
-                break;
+            switch (word)
+            {
+                case "quit":
+                    End();
+                    break;
+                case "new":
+                    fresh = keepsHistory;
+                    status.WriteLine(keepsHistory ? "Your next message starts a new conversation." : "Each message starts a new conversation already.");
+                    break;
+                case "help" when words.Count == 1:
+                    status.WriteLine(Help);
+                    break;
+                case "help":
+                    await SofAsync([.. words.Skip(1), "--help"], session);
+                    break;
+                case "status":
+                    status.Print(owner);
+                    break;
+                case "mode" when ModeOf(words) is { } chosen:
+                    mode = chosen;
+                    session?.Runner.PermissionMode = chosen;
+                    break;
+                case "report" when words.Count == 1:
+                    await ReportAsync(session, ending.Token);
+                    break;
+                case var _ when session is not null && RunCommands.Contains(word):
+                    await RunCommand.CarryOutAsync(command, session, status, Help, ending.Token);
+                    break;
+                case var _ when session is not null && Between.Contains(word):
+                    status.WriteLine($"error: /{word} waits until no reply runs, as it takes the console and may need the workspace the reply holds.");
+                    break;
+                case "resume" or "config" or "report" or "rollback" or "run" or "chat":
+                    await SofAsync(words, session);
+                    break;
+                case var _ when RunCommands.Contains(word):
+                    status.WriteLine($"error: no reply is running; /{word} works while one does.");
+                    break;
+                default:
+                    status.WriteLine(Help);
+                    break;
+            }
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            // A command that fails says so, and the owner can go on typing.
+            status.WriteLine($"error: {exception.Message}");
         }
     }
 
-    /// <summary>RUN-11: the report of a message's run.</summary>
-    private async Task ReportAsync(IStorage storage, string runId, CancellationToken ct)
+    /// <summary>
+    /// A <c>sof</c> command typed in the session, run by the same command line, in the session's directory and environment. Its
+    /// console reads the session's lines while it runs, a <c>/</c> before a command optional, and Ctrl+C cancels it. Between replies
+    /// the session holds no run, lock or store, so a command such as <c>resume</c> runs as it would from another terminal.
+    /// </summary>
+    private Task SofAsync(IReadOnlyList<string> args, RunCommand.Session? session)
     {
-        if (await RunReport.BuildAsync(storage, null, runId, ct) is { } report)
+        var variables = new Dictionary<string, string>(host.Variables);
+        if (shared.Environment(parse, host) is { } environment)
+        {
+            variables["SOF_ENVIRONMENT"] = environment;
+        }
+
+        var nested = host with
+        {
+            Out = output, WorkingDirectory = shared.Directory(parse, host), Variables = variables, In = new SessionReader(lines.Reader), Signals = null, InSession = true,
+        };
+        return session is null
+            ? GuardedAsync(token => SofCommandLine.RunAsync(args, nested, token))
+            : SofCommandLine.RunAsync(args, nested, ending.Token); // only commands that read: the reply's Ctrl+C is the reply's
+    }
+
+    /// <summary>RUN-11: the report of the reply that runs, or of the last message's run.</summary>
+    private async Task ReportAsync(RunCommand.Session? session, CancellationToken ct)
+    {
+        if ((session?.RunId ?? lastRun) is not { } run)
+        {
+            status.WriteLine("error: no message has been sent in this session yet; /report <run> shows any run's.");
+            return;
+        }
+
+        IStorage storage = session?.Storage ?? await SqliteStorage.OpenAsync(Path.Combine(shared.Directory(parse, host), WorkspaceOptions.StateFolder, "sof.db"), ct);
+        if (await RunReport.BuildAsync(storage, null, run, ct) is { } report)
         {
             status.WriteLine(report.ToText().TrimEnd());
         }
     }
 
-    private static PermissionMode? ModeOf(string command) =>
-        command.Split(' ', StringSplitOptions.RemoveEmptyEntries) is ["mode", var name] && Enum.TryParse<PermissionMode>(name, ignoreCase: true, out var chosen) ? chosen : null;
+    private static PermissionMode? ModeOf(List<string> words) =>
+        words is ["mode", var name] && Enum.TryParse<PermissionMode>(name, ignoreCase: true, out var chosen) ? chosen : null;
 
-    /// <summary>Ctrl+C cancels the reply, or says how to end the session; a second one, or SIGTERM, ends the session.</summary>
+    /// <summary>Ctrl+C cancels the reply or the command, or says how to end the session; a second one, or SIGTERM, ends the session.</summary>
     private void Signalled(PosixSignal signal)
     {
         CancellationTokenSource? reply;
@@ -409,18 +495,18 @@ internal sealed class ChatSession
             return;
         }
 
-        status.WriteLine("Cancelling the reply. Press Ctrl+C again to end the session.");
+        status.WriteLine("Cancelling. Press Ctrl+C again to end the session.");
         try
         {
             reply.Cancel();
         }
         catch (ObjectDisposedException)
         {
-            // The reply ended meanwhile.
+            // It ended meanwhile.
         }
     }
 
-    /// <summary>Ends the session: a reply that runs is cancelled, and the messages that wait are dropped.</summary>
+    /// <summary>Ends the session: a reply or command that runs is cancelled, and the messages that wait are dropped.</summary>
     private void End() => _ = ending.CancelAsync();
 
     /// <summary>Completes once the session was ended and has not stopped within <paramref name="timeout"/>.</summary>
@@ -433,5 +519,20 @@ internal sealed class ChatSession
         }
 
         await Task.Delay(timeout, host.Time, done);
+    }
+
+    /// <summary>
+    /// The console of a <c>sof</c> command typed in the session: the session's lines, taken only while the command reads, and a read
+    /// is cancelled when the command stops reading, so no line is left behind to a command that has ended.
+    /// </summary>
+    private sealed class SessionReader(ChannelReader<string> lines) : TextReader
+    {
+        public override async ValueTask<string?> ReadLineAsync(CancellationToken cancellationToken)
+        {
+            var line = await ChatSession.ReadAsync(lines, cancellationToken);
+            return line is not null && line.StartsWith('/') ? line[1..] : line;
+        }
+
+        public override string? ReadLine() => ReadLineAsync(CancellationToken.None).AsTask().GetAwaiter().GetResult();
     }
 }
