@@ -30,11 +30,13 @@ internal sealed class Conversation
     /// <param name="instructions">The agent's instructions, placeholders filled.</param>
     /// <param name="context">The agent's context settings.</param>
     /// <param name="capabilities">What the provider supports.</param>
-    public Conversation(ModelProfile profile, ImmutableArray<ToolDefinition> tools, string instructions, ContextOptions context, ProviderCapabilities capabilities)
+    /// <param name="outputSchema">The JSON Schema of the agent's structured output, if it has one.</param>
+    public Conversation(
+        ModelProfile profile, ImmutableArray<ToolDefinition> tools, string instructions, ContextOptions context, ProviderCapabilities capabilities, System.Text.Json.JsonElement? outputSchema = null)
     {
         historyLifetime = context.HistoryCacheLifetime;
         boundaryLimit = capabilities.CacheBoundaries;
-        prefix = new ModelRequest(profile, tools, $"{instructions}\n\n{Labels.Policy}", [], Boundaries(memory: false));
+        prefix = new ModelRequest(profile, tools, $"{instructions}\n\n{Labels.Policy}", [], Boundaries(memory: false)) { OutputSchema = outputSchema };
         turnScoped = capabilities.TurnScopedMessages;
     }
 
@@ -90,7 +92,9 @@ internal sealed class Conversation
         var current = CurrentTurn;
         var content = shortened.IsDefault ? [] : shortened.SelectMany(message => message.Content).ToList();
         var results = content.OfType<ToolResultContent>().Select(result => result.ToolUseId).ToHashSet();
-        var problem = shortened.IsDefaultOrEmpty || shortened[0].Role != Role.User ? "does not start with a user message"
+        // A provider's summary is its own content, which may come first as an assistant message (HIST-01).
+        var problem = shortened.IsDefaultOrEmpty || !(shortened[0].Role == Role.User || shortened[0] is { Role: Role.Assistant } first && first.Content.All(content => content is ProviderContent))
+            ? "does not start with a user message or the provider's summary"
             : !content.OfType<ToolUseContent>().All(request => results.Contains(request.Id)) ? "has a tool request without its result"
             : shortened.Length < current.Length || !shortened[^current.Length..].SequenceEqual(current) ? "changes the current turn"
             : null;
@@ -119,7 +123,7 @@ internal sealed class Conversation
             AddVolatile(facts);
         }
 
-        var request = prefix with { History = [.. history] };
+        var request = prefix with { History = [.. history], TurnStart = turnStart };
         if (previous is not null && !request.StartsWith(previous))
         {
             throw new InvalidOperationException("The model request changes content an earlier request sent; history is append-only.");

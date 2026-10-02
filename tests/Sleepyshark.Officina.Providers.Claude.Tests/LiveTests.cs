@@ -65,7 +65,7 @@ public sealed class LiveTests
 
         var result = await runner.RunAsync(Agent, "Read notes.txt with the tool, then reply with its first word only.", ct: ct);
 
-        Assert.Equal(AgentOutcome.Completed, result.Outcome);
+        Assert.True(result.Outcome == AgentOutcome.Completed, result.Handoff?.Detail);
         Assert.Contains("Pelican", result.Output, StringComparison.Ordinal);
         var calls = (await storage.Events.ReadAsync(null, storage.Runs.Runs.Single().RunId, 0, ct)).Select(read => read.Payload).OfType<ModelCallEnded>().ToList();
         Assert.Equal(2, calls.Count);

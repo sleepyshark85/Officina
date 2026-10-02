@@ -68,7 +68,6 @@ public sealed class ModelGateway
         var lead = leads.Contains(agent);
         var candidates = request.Profile.Fallbacks.Select(name => (Name: (string?)name, Profile: options.Models[name])).Prepend((null, request.Profile)).ToList();
         ModelCallException? failure = null;
-        var sent = false;
         foreach (var (candidate, (name, profile)) in candidates.Index())
         {
             if (candidate > 0)
@@ -107,7 +106,6 @@ public sealed class ModelGateway
                         yield break;
                     }
 
-                    sent = true;
                     yield return events.Current;
                 }
 
@@ -116,10 +114,10 @@ public sealed class ModelGateway
                     line.PauseFor(asked);
                 }
 
-                if (sent && (attempt < retry.MaxAttempts || candidate < candidates.Count - 1))
+                // Every attempt that another follows is told of, so the run's events show each retry, and what a reply had so far is void.
+                if (attempt < retry.MaxAttempts || candidate < candidates.Count - 1)
                 {
-                    sent = false;
-                    yield return new ReplyRestarted();
+                    yield return new ReplyRestarted(failure.Failure);
                 }
             }
         }

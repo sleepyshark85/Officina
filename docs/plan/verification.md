@@ -33,5 +33,4 @@ MUSTs that S21's later parts verify; S21 is not done while any is listed here.
 | Requirement | Waits for |
 |---|---|
 | TEST-31 | The live benchmark run, on Linux and Windows, which the owner starts (S21 part 1). Its goals, suites, references and runner are tested offline |
-| CLD-06 | S21 part 3: the Claude provider's feature switches |
 | SBX-01 | S21 part 5: the CPU limit, tested on both systems (the memory, process, time and output limits, the network and the proxy are tested) |

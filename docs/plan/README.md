@@ -13,7 +13,10 @@ Last updated 2026-10-02.
   The live run, on Linux and Windows, is the owner's to start, as it costs money ([`benchmark/`](../../benchmark/README.md)).
   Part 2 added the load and latency tests (TEST-30), the core's coverage check (TEST-33: 96.5% measured, 85% required) and the MUST verification check
   ([`check_verification.py`](check_verification.py), [`verification.md`](verification.md)).
-- **Next:** S21 part 3, the Claude provider's feature switches and Message Batches (CLD-06, CLD-11).
+  Part 3 added the Claude provider's feature switches and compaction as its history shortening (CLD-06), and the S12 follow-ups;
+  Message Batches (CLD-11) are proposed as not in v1.
+- **Next:** S21 part 4, the core follow-ups (RUN-05's task levels, `config validate` matching `sof run`, `config dry-run` with the
+  workspace and sandbox tools, masking tokens in memory proposals, a cancelled turn that outlives `run.cancelWithin`).
 - **Open follow-ups:** every item below that names S21 is triaged in [S21](S21-hardening.md): built in one of its parts, or
   proposed as not in v1 for the owner to confirm.
   - After S20 (fix): integration refuses a change that adds, changes or removes a protected path, since a command can create a

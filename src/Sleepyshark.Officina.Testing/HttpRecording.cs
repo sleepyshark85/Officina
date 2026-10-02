@@ -8,8 +8,9 @@ namespace Sleepyshark.Officina.Testing;
 
 /// <summary>
 /// Real model exchanges, recorded and replayed offline (TEST-02). A recording is a JSON file: an array of exchanges, each
-/// with the request body, the status, and the response, which is the array of streamed events or the error body, and
-/// optionally the seconds of a <c>Retry-After</c> header. Only bodies are kept, never headers, so the API key is never recorded.
+/// with the request body, the beta features it asked for (its <c>anthropic-beta</c> header) if any, the status, and the
+/// response, which is the array of streamed events or the error body, and optionally the seconds of a <c>Retry-After</c>
+/// header. No other header is kept, so the API key is never recorded.
 /// </summary>
 public static class HttpRecording
 {
@@ -37,14 +38,17 @@ public static class HttpRecording
             var response = await base.SendAsync(request, cancellationToken).ConfigureAwait(false);
             var text = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
             var events = response.Content.Headers.ContentType?.MediaType == "text/event-stream";
-            exchanges.Add(new JsonObject
+            var exchange = new JsonObject { ["request"] = JsonNode.Parse(body) };
+            if (Beta(request) is { } beta)
             {
-                ["request"] = JsonNode.Parse(body),
-                ["status"] = (int)response.StatusCode,
-                ["response"] = events
-                    ? new JsonArray([.. text.Split('\n').Where(line => line.StartsWith("data: ", StringComparison.Ordinal)).Select(line => JsonNode.Parse(line[6..]))])
-                    : JsonNode.Parse(text),
-            });
+                exchange["beta"] = beta;
+            }
+
+            exchange["status"] = (int)response.StatusCode;
+            exchange["response"] = events
+                ? new JsonArray([.. text.Split('\n').Where(line => line.StartsWith("data: ", StringComparison.Ordinal)).Select(line => JsonNode.Parse(line[6..]))])
+                : JsonNode.Parse(text);
+            exchanges.Add(exchange);
             await File.WriteAllTextAsync(path, exchanges.ToJsonString(Indented), cancellationToken).ConfigureAwait(false);
             var replayed = Response(exchanges[^1]!);
             response.Dispose();
@@ -60,12 +64,26 @@ public static class HttpRecording
         {
             var exchange = next < exchanges.Count ? exchanges[next++]! : throw new InvalidOperationException($"The recording has no exchange {next + 1}.");
             var body = JsonNode.Parse(await request.Content!.ReadAsStringAsync(cancellationToken).ConfigureAwait(false));
-            return exchange["request"] is null || JsonNode.DeepEquals(body, exchange["request"])
-                ? Response(exchange)
-                : throw new InvalidOperationException(
-                    $"Request {next} differs from the recording.\nRecorded: {exchange["request"]!.ToJsonString(Indented)}\nSent: {body!.ToJsonString(Indented)}");
+            if (exchange["request"] is { } recorded && !JsonNode.DeepEquals(body, recorded))
+            {
+                throw new InvalidOperationException($"Request {next} differs from the recording.\nRecorded: {recorded.ToJsonString(Indented)}\nSent: {body!.ToJsonString(Indented)}");
+            }
+
+            // A recording names the beta features its request asked for, and none when it names none; the replay checks the same are
+            // asked for. An exchange without a request answers any, beta features too.
+            var recordedBeta = exchange["beta"]?.GetValue<string>();
+            if (exchange["request"] is not null && recordedBeta != Beta(request))
+            {
+                throw new InvalidOperationException($"Request {next} asks for beta features \"{Beta(request)}\", and the recording for \"{recordedBeta}\".");
+            }
+
+            return Response(exchange);
         }
     }
+
+    /// <summary>The beta features a request asks for, in the order sent; null when none.</summary>
+    private static string? Beta(HttpRequestMessage request) =>
+        request.Headers.TryGetValues("anthropic-beta", out var values) ? string.Join(",", values) : null;
 
     private static HttpResponseMessage Response(JsonNode exchange)
     {

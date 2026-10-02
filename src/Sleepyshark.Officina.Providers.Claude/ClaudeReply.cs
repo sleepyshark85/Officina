@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Anthropic.Models.Beta.Messages;
+using Sleepyshark.Officina.Core.Configuration;
 using Sleepyshark.Officina.Core.Extensibility;
 using Sleepyshark.Officina.Core.Messages;
 using Sleepyshark.Officina.Core.Tools;
@@ -18,11 +19,13 @@ namespace Sleepyshark.Officina.Providers.Claude;
 internal sealed class ClaudeReply
 {
     private readonly ImmutableArray<ToolDefinition> tools;
+    private readonly ModelProfile profile;
     private readonly Dictionary<string, ToolRequest> providerCalls = new(StringComparer.Ordinal);
     private readonly StringBuilder thinking = new();
     private readonly StringBuilder input = new();
     private JsonObject? block;
     private string? signature;
+    private int toolUses;
     private BetaUsage? started;
 
     /// <param name="tools">The tools the request offers.</param>
@@ -30,9 +33,11 @@ internal sealed class ClaudeReply
     /// The request's history. A paused reply (<c>pause_turn</c>) can end with a server tool's call, whose result arrives in
     /// the next reply, so the calls of the last assistant message that have no result yet are waiting for one.
     /// </param>
-    public ClaudeReply(ImmutableArray<ToolDefinition> tools, ImmutableArray<Message> history)
+    /// <param name="profile">The profile the call was made with; a refusal fallback reports the model that served it under it.</param>
+    public ClaudeReply(ImmutableArray<ToolDefinition> tools, ImmutableArray<Message> history, ModelProfile profile)
     {
         this.tools = tools;
+        this.profile = profile;
         var data = history.LastOrDefault(message => message.Role == Core.Messages.Role.Assistant)?.Content.OfType<ProviderContent>().Select(content => content.Data).ToList() ?? [];
         var answered = data.Select(block => block.TryGetProperty("tool_use_id", out var id) ? id.GetString() : null).ToHashSet(StringComparer.Ordinal);
         foreach (var block in data.Where(block => block.TryGetProperty("type", out var type) && type.GetString() == "server_tool_use"))
@@ -77,6 +82,17 @@ internal sealed class ClaudeReply
             {
                 input.Append(json.PartialJson);
             }
+            else if (blockDelta.Delta.TryPickCompaction(out _) && block is not null)
+            {
+                // A compaction block's summary can arrive in pieces, its opaque content too; the block goes back with all of it.
+                foreach (var field in new[] { "content", "encrypted_content" })
+                {
+                    if (blockDelta.Delta.Json.TryGetProperty(field, out var piece) && piece.ValueKind == JsonValueKind.String)
+                    {
+                        block[field] = (block[field]?.GetValue<string>() ?? "") + piece.GetString();
+                    }
+                }
+            }
         }
         else if (streamEvent.TryPickContentBlockStop(out _) && block is not null)
         {
@@ -89,7 +105,11 @@ internal sealed class ClaudeReply
         }
         else if (streamEvent.TryPickDelta(out var messageDelta))
         {
-            yield return new UsageReported(Usage(messageDelta.Usage));
+            foreach (var spent in Spent(messageDelta.Usage))
+            {
+                yield return spent;
+            }
+
             yield return new Stopped(Stop(messageDelta.Delta.StopReason?.Raw()));
         }
     }
@@ -130,8 +150,26 @@ internal sealed class ClaudeReply
             complete["input"] = Input();
         }
 
+        if (type == "compaction" && signature is not null)
+        {
+            complete["signature"] = signature;
+        }
+
+        if (type == "fallback")
+        {
+            // CLD-06: the declining model's tool calls are not run, and its server tool calls without a result are not waited for.
+            if (toolUses > 0)
+            {
+                yield return new ToolCallsWithdrawn();
+            }
+
+            toolUses = 0;
+            providerCalls.Clear();
+        }
+
         if (type == "tool_use")
         {
+            toolUses++;
             yield return new ContentReceived(new ToolUseContent(
                 complete["id"]!.GetValue<string>(), complete["name"]!.GetValue<string>(), JsonSerializer.SerializeToElement(complete["input"] ?? new JsonObject())));
             yield break;
@@ -167,6 +205,38 @@ internal sealed class ClaudeReply
         {
             return JsonValue.Create(input.ToString());
         }
+    }
+
+    /// <summary>
+    /// What the call used. A call served by a refusal fallback, or a compaction, lists each attempt in <c>usage.iterations</c>, each
+    /// billed at its own model's rates, while the totals count only the last: each attempt is reported in turn, and a change of
+    /// model before it, so the core prices each by its model (CLD-06, CLD-07).
+    /// </summary>
+    private IEnumerable<ModelEvent> Spent(BetaMessageDeltaUsage end)
+    {
+        if (!end.RawData.TryGetValue("iterations", out var iterations) || iterations.ValueKind != JsonValueKind.Array || iterations.GetArrayLength() == 0
+            || (iterations.GetArrayLength() == 1 && iterations[0].TryGetProperty("type", out var only) && only.GetString() == "message"))
+        {
+            yield return new UsageReported(Usage(end));
+            yield break;
+        }
+
+        var model = profile.Model;
+        foreach (var iteration in iterations.EnumerateArray())
+        {
+            if (iteration.TryGetProperty("model", out var served) && served.GetString() is { } name && name != model)
+            {
+                model = name;
+                yield return new FallbackUsed(name, profile with { Model = name }, ModelFailure.Refused);
+            }
+
+            var oneHour = iteration.TryGetProperty("cache_creation", out var creation) && creation.ValueKind == JsonValueKind.Object ? Tokens(creation, "ephemeral_1h_input_tokens") : 0;
+            yield return new UsageReported(new(Tokens(iteration, "input_tokens"), Tokens(iteration, "output_tokens"), Tokens(iteration, "cache_read_input_tokens"),
+                Tokens(iteration, "cache_creation_input_tokens"), oneHour));
+        }
+
+        static long Tokens(JsonElement iteration, string name) =>
+            iteration.TryGetProperty(name, out var count) && count.ValueKind == JsonValueKind.Number ? count.GetInt64() : 0;
     }
 
     /// <summary>

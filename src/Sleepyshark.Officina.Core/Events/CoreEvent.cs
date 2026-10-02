@@ -27,6 +27,7 @@ public sealed record CoreEvent(string RunId, string Agent, string? Step, long Se
 [JsonDerivedType(typeof(TextGenerated), "textGenerated")]
 [JsonDerivedType(typeof(ModelCallEnded), "modelCallEnded")]
 [JsonDerivedType(typeof(ModelFallback), "modelFallback")]
+[JsonDerivedType(typeof(ModelCallRetried), "modelCallRetried")]
 [JsonDerivedType(typeof(CacheHitWarning), "cacheHitWarning")]
 [JsonDerivedType(typeof(BudgetWarning), "budgetWarning")]
 [JsonDerivedType(typeof(CheckRan), "checkRan")]
@@ -79,6 +80,12 @@ public sealed record ModelCallEnded(StopReason Stop, Usage Usage, decimal Cost, 
 /// <param name="Model">Its model.</param>
 /// <param name="Failure">Why the profile before it was given up on.</param>
 public sealed record ModelFallback(string Profile, string Provider, string Model, ModelFailure Failure) : EventPayload;
+
+/// <summary>
+/// The model call failed and is tried again (REL-01): the text this call generated before it is void, as the reply starts over.
+/// </summary>
+/// <param name="Failure">What the attempt failed with.</param>
+public sealed record ModelCallRetried(ModelFailure Failure) : EventPayload;
 
 /// <summary>A model call read less of its input from the cache than configured (COST-01).</summary>
 public sealed record CacheHitWarning(CacheWarning Warning) : EventPayload;

@@ -1,0 +1,72 @@
+[
+  {
+    "request": {
+      "model": "claude-haiku-4-5",
+      "max_tokens": 64000,
+      "stream": true,
+      "tools": [],
+      "tool_choice": {
+        "type": "auto"
+      },
+      "system": [
+        {
+          "type": "text",
+          "text": "Design."
+        }
+      ],
+      "messages": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "Name the entities."
+            }
+          ]
+        },
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "Message from the operator: Project memory changed: use singular names."
+            }
+          ]
+        }
+      ]
+    },
+    "status": 200,
+    "response": [
+      {
+        "type": "message_start",
+        "message": {
+          "id": "msg_7",
+          "type": "message",
+          "role": "assistant",
+          "model": "claude-haiku-4-5",
+          "content": [],
+          "stop_reason": null,
+          "stop_sequence": null,
+          "usage": {
+            "input_tokens": 20,
+            "output_tokens": 1
+          }
+        }
+      },
+      {
+        "type": "message_delta",
+        "delta": {
+          "stop_reason": "end_turn",
+          "stop_sequence": null
+        },
+        "usage": {
+          "input_tokens": 20,
+          "output_tokens": 1
+        }
+      },
+      {
+        "type": "message_stop"
+      }
+    ]
+  }
+]

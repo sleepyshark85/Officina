@@ -43,6 +43,7 @@
       "output_config": { "effort": "high" },
       "thinking": { "type": "adaptive", "display": "summarized" }
     },
+    "beta": "mid-conversation-system-clear-at-2026-08-21",
     "status": 200,
     "response": [
       {

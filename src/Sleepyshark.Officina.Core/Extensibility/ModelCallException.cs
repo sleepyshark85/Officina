@@ -50,4 +50,10 @@ public enum ModelFailure
 
     /// <summary>The credential is missing, wrong or not allowed to make the call.</summary>
     Authentication,
+
+    /// <summary>
+    /// The model's safety classifiers declined the call, and the provider served it with another model of its own choosing
+    /// (CLD-06). It is never thrown: a provider reports it with the switch to the model that served the call.
+    /// </summary>
+    Refused,
 }

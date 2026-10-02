@@ -38,6 +38,7 @@ public sealed partial record OfficinaOptions : IValidatableObject
         {
             errors = errors.Concat(Names([name], "providers")).Concat(Annotations(provider, $"providers.{name}"))
                 .Concat(Annotations(provider.Retry, $"providers.{name}.retry"))
+                .Concat(Annotations(provider.Features, $"providers.{name}.features"))
                 .Concat(provider.ApiKey is null ? [] : Annotations(provider.ApiKey, $"providers.{name}.apiKey"))
                 .Concat(provider.Prices.SelectMany(price => Annotations(price.Value, $"providers.{name}.prices.{price.Key}")));
         }

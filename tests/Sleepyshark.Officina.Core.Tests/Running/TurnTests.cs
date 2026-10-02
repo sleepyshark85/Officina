@@ -326,6 +326,26 @@ public class TurnTests
         Assert.Equal(0, edits);
     }
 
+    // CLD-06, COST-02: the tool calls of a model whose reply was declined, which the provider withdraws, are not run, and the
+    // fallback that took over without a price is warned of.
+    [Fact]
+    public async Task Withdrawn_tool_calls_are_not_run_and_an_unpriced_fallback_is_warned_of()
+    {
+        var kit = Kit(options: Priced(Default));
+        var fallback = new ProviderContent(Args("""{ "type": "fallback" }"""));
+        kit.Model.Reply(
+            Call("edit", """{"line":"x = 1"}"""), new ToolCallsWithdrawn(), new ContentReceived(fallback),
+            new FallbackUsed("other", new ModelProfile { Model = "claude-unpriced" }, ModelFailure.Refused), new TextDelta("Done."), new Stopped(StopReason.Finished));
+        var work = new Work(Agent, "work");
+
+        var result = await kit.Runner.RunAsync(work, Ct);
+
+        Assert.Equal((AgentOutcome.Completed, "Done.", 0), (result.Outcome, result.Output, edits));
+        Assert.Equal([fallback, new TextContent("Done.")], result.Transcript[^1].Content);
+        var warning = Assert.Single((await kit.Storage.Events.ReadAsync(null, work.RunId, 0, Ct)).Select(read => read.Payload).OfType<Warning>());
+        Assert.StartsWith("Model claude-unpriced has no price", warning.Text, StringComparison.Ordinal);
+    }
+
     // EGR-04, INV-01: words in the model's text decide nothing.
     [Fact]
     public async Task Asking_for_a_human_in_text_is_not_a_handoff()

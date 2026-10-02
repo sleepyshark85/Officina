@@ -15,7 +15,8 @@ namespace Sleepyshark.Officina.Providers.Claude;
 /// Maps a model request to the Claude API (DESIGN.md §9, CLD-03): the tools, then the instructions and project memory as system blocks,
 /// then the history as messages. Each cache boundary becomes a cache marker with its lifetime, and system messages in
 /// the history become mid-conversation system messages, which a turn-scoped one asks Claude to clear at the next user
-/// message. Optional fields are left out, never sent as null.
+/// message; a model without them gets the operator's messages as user messages. The provider's features add their fields
+/// and beta headers (CLD-06). Optional fields are left out, never sent as null.
 /// </summary>
 internal static class ClaudeRequest
 {
@@ -31,8 +32,18 @@ internal static class ClaudeRequest
     private const int DefaultMaxTokens = 64_000;
 
     private const string TurnScopedBeta = "mid-conversation-system-clear-at-2026-08-21";
+    private const string ContextEditingBeta = "context-management-2025-06-27";
+    private const string TaskBudgetBeta = "task-budgets-2026-03-13";
+    private const string FallbackBeta = "server-side-fallback-2026-07-01";
+    private const string CompactionBeta = "compact-2026-09-04";
 
-    public static MessageCreateParams From(ModelRequest request)
+    /// <summary>What an operator's message starts with when the model reads it as a user message.</summary>
+    public const string OperatorLabel = "Message from the operator: ";
+
+    /// <param name="request">The core's request.</param>
+    /// <param name="features">The provider's features that are on.</param>
+    /// <param name="systemMessages">Whether the model takes a system message in the middle of the conversation.</param>
+    public static MessageCreateParams From(ModelRequest request, ProviderFeatures features, bool systemMessages)
     {
         var profile = request.Profile;
         var markers = request.CacheBoundaries.ToDictionary(boundary => boundary.After, boundary => Marker(boundary.Lifetime));
@@ -43,6 +54,7 @@ internal static class ClaudeRequest
             system.Add(Block(request.Memory, markers.GetValueOrDefault(CachePoint.Memory)));
         }
 
+        var betas = new List<string>();
         var parameters = new MessageCreateParams
         {
             Model = profile.Model,
@@ -50,24 +62,78 @@ internal static class ClaudeRequest
             Tools = [.. request.Tools.Select(Tool)],
             ToolChoice = profile.ToolChoice == ToolChoice.None ? new BetaToolChoiceNone() : new BetaToolChoiceAuto(),
             System = system,
-            Messages = [.. request.History.Select((message, index) => Message(message, index == cached?.Message ? (cached.Value.Block, markers[CachePoint.History]) : null))],
+            Messages = [.. request.History.Select((message, index) =>
+                Message(message, index == cached?.Message ? (cached.Value.Block, markers[CachePoint.History]) : null, systemMessages))],
         };
-        if (profile.Effort is not null)
+        var format = features.StructuredOutput && request.OutputSchema is { } schema ? new BetaJsonOutputFormat { Schema = Properties(schema) } : null;
+        var taskBudget = features.TaskBudget is { } total ? new BetaTokenTaskBudget { Total = total } : null;
+        if (profile.Effort is not null || format is not null || taskBudget is not null)
         {
-            parameters = parameters with { OutputConfig = new BetaOutputConfig { Effort = profile.Effort } };
+            var output = new BetaOutputConfig();
+            output = profile.Effort is null ? output : output with { Effort = profile.Effort };
+            output = format is null ? output : output with { Format = format };
+            output = taskBudget is null ? output : output with { TaskBudget = taskBudget };
+            parameters = parameters with { OutputConfig = output };
+        }
+
+        if (taskBudget is not null)
+        {
+            betas.Add(TaskBudgetBeta);
+        }
+
+        if (features.ClearToolResults)
+        {
+            parameters = parameters with { ContextManagement = new BetaContextManagementConfig { Edits = [new BetaClearToolUses20250919Edit()] } };
+            betas.Add(ContextEditingBeta);
+        }
+
+        if (features.RefusalFallback)
+        {
+            parameters = parameters with { Fallbacks = new BetaFallbacksParam(new Default()) };
+            betas.Add(FallbackBeta);
         }
 
         if (request.History.Any(message => message.TurnScoped))
         {
-            parameters = parameters with { Betas = [TurnScopedBeta] };
+            betas.Add(TurnScopedBeta);
         }
 
+        if (request.History.Any(message => message.Content.Any(content => TypeOf(content) == "compaction")))
+        {
+            betas.Add(CompactionBeta); // every request that carries a compaction block needs it
+        }
+
+        return WithSettings(betas.Count == 0 ? parameters : parameters with { Betas = [.. betas] }, profile);
+    }
+
+    /// <summary>
+    /// HIST-01: a request for a summary of the earlier turns (Claude's compaction on demand). It has the same model, instructions and
+    /// tools as the conversation, and nothing a summary call refuses: no output format, no context editing, no fallbacks.
+    /// </summary>
+    public static MessageCreateParams Compaction(ModelRequest earlier, ProviderFeatures features, bool systemMessages)
+    {
+        var parameters = From(earlier, features with { StructuredOutput = false, ClearToolResults = false, RefusalFallback = false }, systemMessages);
+        var betas = parameters.Betas?.Select(beta => beta.Raw()).ToList() ?? [];
+        if (!betas.Contains(CompactionBeta))
+        {
+            betas.Add(CompactionBeta);
+        }
+
+        return parameters with { Compaction = new BetaCompactionConfig(), Betas = [.. betas] };
+    }
+
+    /// <summary>The type of a block of Claude's own content, as it came; null for the core's own content.</summary>
+    public static string? TypeOf(Content content) =>
+        content is ProviderContent provider && provider.Data.TryGetProperty("type", out var type) ? type.GetString() : null;
+
+    /// <summary>CLD-01: any other setting of the API, such as thinking, is sent as it is: as JSON when it is JSON, otherwise as text.</summary>
+    private static MessageCreateParams WithSettings(MessageCreateParams parameters, ModelProfile profile)
+    {
         if (profile.Settings.Count == 0)
         {
             return parameters;
         }
 
-        // CLD-01: any other setting of the API, such as thinking, is sent as it is: as JSON when it is JSON, otherwise as text.
         var body = new Dictionary<string, JsonElement>(parameters.RawBodyData);
         foreach (var (name, value) in profile.Settings)
         {
@@ -76,6 +142,9 @@ internal static class ClaudeRequest
 
         return MessageCreateParams.FromRawUnchecked(parameters.RawHeaderData, parameters.RawQueryData, body);
     }
+
+    private static Dictionary<string, JsonElement> Properties(JsonElement schema) =>
+        schema.ValueKind == JsonValueKind.Object ? schema.EnumerateObject().ToDictionary(property => property.Name, property => property.Value) : [];
 
     private static BetaTextBlockParam Block(string text, BetaCacheControlEphemeral? marker) =>
         marker is null ? new BetaTextBlockParam { Text = text } : new BetaTextBlockParam { Text = text, CacheControl = marker };
@@ -111,7 +180,7 @@ internal static class ClaudeRequest
             var definition = new BetaTool
             {
                 Name = tool.Name,
-                InputSchema = new InputSchema(schema.EnumerateObject().ToDictionary(property => property.Name, property => property.Value)),
+                InputSchema = new InputSchema(Properties(schema)),
                 EagerInputStreaming = true,
             };
             return tool.Description is null ? definition : definition with { Description = tool.Description };
@@ -131,19 +200,42 @@ internal static class ClaudeRequest
         return json.Deserialize<BetaToolUnion>()!;
     }
 
-    private static BetaMessageParam Message(Message message, (int Block, BetaCacheControlEphemeral Marker)? cached)
+    private static BetaMessageParam Message(Message message, (int Block, BetaCacheControlEphemeral Marker)? cached, bool systemMessages)
     {
+        // A model without mid-conversation system messages rejects them, so it reads the operator's as a user message, labelled.
+        var operatorAsUser = message.Role == CoreRole.System && !systemMessages;
         var mapped = new BetaMessageParam
         {
             Role = message.Role switch
             {
                 CoreRole.User => ClaudeRole.User,
                 CoreRole.Assistant => ClaudeRole.Assistant,
+                _ when operatorAsUser => ClaudeRole.User,
                 _ => ClaudeRole.System,
             },
-            Content = message.Content.Select((content, index) => index == cached?.Block ? Mark(content, cached.Value.Marker) : Block(content)).ToList(),
+            Content = Kept(message).Select(kept =>
+            {
+                var block = kept.Index == cached?.Block ? Mark(kept.Content, cached.Value.Marker) : Block(kept.Content);
+                return operatorAsUser && kept.Index == 0 && block.TryPickText(out var text) ? text with { Text = OperatorLabel + text.Text } : block;
+            }).ToList(),
         };
         return message.TurnScoped ? mapped with { ClearAt = ClearAt.NextUserMessage } : mapped;
+    }
+
+    /// <summary>
+    /// What of a message goes back to Claude. After a refusal fallback, the API asks that what the declining model produced before the
+    /// last <c>fallback</c> block be left out, but its text and its server tool calls with their results: its reasoning, its tool calls,
+    /// and its server tool calls without a result. Everything else goes back as it came, the block where it was.
+    /// </summary>
+    private static IEnumerable<(Content Content, int Index)> Kept(Message message)
+    {
+        var lastFallback = message.Content.Select(TypeOf).ToList().LastIndexOf("fallback");
+        var answered = message.Content.OfType<ProviderContent>().Select(content => content.Data.TryGetProperty("tool_use_id", out var id) ? id.GetString() : null).ToHashSet();
+        return message.Content.Select((content, index) => (content, index)).Where(kept => kept.index > lastFallback
+            || kept.content is TextContent
+            || TypeOf(kept.content) is "fallback"
+            || kept.content is ProviderContent provider && provider.Data.TryGetProperty("tool_use_id", out _)
+            || kept.content is ProviderContent server && TypeOf(server) == "server_tool_use" && answered.Contains(server.Data.GetProperty("id").GetString()));
     }
 
     /// <summary>Reasoning goes back exactly as received (CLD-05), and content of Claude's own as the JSON it came in.</summary>

@@ -16,4 +16,16 @@ public sealed record ProviderCapabilities
 
     /// <summary>The tools the provider runs itself, by the name <c>provider:</c> sources use (TOOL-13).</summary>
     public IReadOnlySet<string> ProviderTools { get; init; } = new HashSet<string>();
+
+    /// <summary>
+    /// The provider features (<c>providers.&lt;name&gt;.features</c>) the model supports, by their setting names. A feature switched
+    /// on for a model without it is a configuration error (MDL-06).
+    /// </summary>
+    public IReadOnlySet<string> Features { get; init; } = new HashSet<string>();
+
+    /// <summary>
+    /// Whether the model summarizes a conversation when a request asks it to (<see cref="ModelRequest.Summarize"/>), which is then the
+    /// provider's own history shortening (HIST-01). The summary call goes through the model gateway like any other.
+    /// </summary>
+    public bool Summarizes { get; init; }
 }

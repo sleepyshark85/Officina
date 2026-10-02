@@ -23,7 +23,7 @@ public class OutputTests
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
-    // OUT-01.
+    // OUT-01, CLD-06: the request carries the schema, for a provider that constrains output natively; the core checks it either way.
     [Fact]
     public async Task Structured_output_that_matches_its_schema_completes_the_turn()
     {
@@ -31,6 +31,7 @@ public class OutputTests
         kit.Model.Reply("""{ "total": 42 }""");
 
         Assert.Equal((AgentOutcome.Completed, """{ "total": 42 }"""), Outcome(await kit.RunAsync(Agent, "Total?", Ct)));
+        Assert.Equal("number", Assert.Single(kit.Model.Requests).OutputSchema!.Value.GetProperty("properties").GetProperty("total").GetProperty("type").GetString());
     }
 
     // OUT-02, TEST-07.

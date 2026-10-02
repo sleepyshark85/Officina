@@ -104,13 +104,13 @@ public sealed class ScriptedModelProvider : IModelProvider, IHistoryShortener
         return this;
     }
 
-    public ValueTask<ImmutableArray<Message>> ShortenAsync(ModelRequest request, CancellationToken ct)
+    public ValueTask<ShortenedHistory> ShortenAsync(ModelRequest request, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(request);
         lock (gate)
         {
             return shortenings.TryDequeue(out var shorten)
-                ? ValueTask.FromResult<ImmutableArray<Message>>([.. shorten(request.History)])
+                ? ValueTask.FromResult(new ShortenedHistory([.. shorten(request.History)]))
                 : throw new InvalidOperationException("The scripted model was asked to shorten history but has no shortening left. Add one with Shorten().");
         }
     }

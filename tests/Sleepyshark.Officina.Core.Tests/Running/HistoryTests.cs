@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.Extensions.Time.Testing;
 using Sleepyshark.Officina.Core.Configuration;
+using Sleepyshark.Officina.Core.Events;
 using Sleepyshark.Officina.Core.Extensibility;
 using Sleepyshark.Officina.Core.Memory;
 using Sleepyshark.Officina.Core.Messages;
@@ -89,6 +90,64 @@ public class HistoryTests
         Assert.Equal(["Summary: 1 and 2 are done.", "3", "three", "4"], kit.Model.Requests[4].History.Select(Text));
     }
 
+    // COST-02, HIST-01: a model call the shortening makes is paid like any other: it counts against the budgets and in the run's
+    // cost, and is stored as a model call. The shortener is told where the current turn starts, which it keeps.
+    [Fact]
+    public async Task A_model_call_the_shortening_makes_is_counted_and_stored()
+    {
+        var summarizer = new PaidSummarizer();
+        var kit = new TestKit(
+            Configure(new() { Strategy = HistoryStrategy.Shortened, Shortening = "extension:Summarizer" }), Tools(),
+            shorteners: new Dictionary<string, IHistoryShortener> { ["Summarizer"] = summarizer });
+        kit.Model.Reply("one").Reply(TooLong).Reply("two");
+        await kit.RunAsync(Agent, "1", Ct);
+        var work = new Work(Agent, "2");
+
+        var result = await kit.Runner.RunAsync(work, Ct);
+
+        Assert.Equal((AgentOutcome.Completed, 4m), (result.Outcome, result.Statistics.Cost)); // a million input tokens of Opus 5.5
+        Assert.Equal(2, summarizer.TurnStart);
+        Assert.Contains(
+            (await kit.Storage.Events.ReadAsync(null, work.RunId, 0, Ct)).Select(coreEvent => coreEvent.Payload),
+            payload => payload is ModelCallEnded { Cost: 4m, Model: "claude-opus-5-5" });
+    }
+
+    // HIST-01, REL-01, COST-02: when the model summarizes a conversation itself, the summary is a model call through the gateway, so a
+    // failed one is retried, and it is paid and stored. The summary, an assistant message of the provider's content, takes the earlier
+    // turns' place before the current turn, and the operator's messages it summarized are told again after it.
+    [Fact]
+    public async Task A_models_own_summary_goes_through_the_gateway_and_takes_the_earlier_turns_place()
+    {
+        var kit = new TestKit(Configure(new() { Strategy = HistoryStrategy.Shortened }), Tools(), capabilities: new() { Summarizes = true });
+        var summary = new ProviderContent(JsonDocument.Parse("""{ "type": "summary", "text": "1 is done." }""").RootElement.Clone());
+        kit.Model.Reply("one").Reply(TooLong).Fail(ModelFailure.Transient)
+            .Reply(new ContentReceived(summary), new UsageReported(new Usage(1_000_000, 0, 0, 0)), new Stopped(StopReason.Unknown)).Reply("two");
+        kit.Runner.Send(Agent, Sender.Operator, "Use SQLite.");
+        await kit.RunAsync(Agent, "1", Ct);
+        var work = new Work(Agent, "2");
+
+        var running = kit.Runner.RunAsync(work, Ct);
+        while (!running.IsCompleted)
+        {
+            await Task.Delay(10, Ct);
+            if (kit.Time.Pending.Count > 0)
+            {
+                kit.Time.Advance(kit.Time.Pending.Min()); // the gateway's wait before it tries again
+            }
+        }
+
+        var result = await running;
+        Assert.Equal((AgentOutcome.Completed, "two", 4m), (result.Outcome, result.Output, result.Statistics.Cost));
+        var asked = kit.Model.Requests[3];
+        Assert.True(asked.Summarize);
+        Assert.Equal(kit.Model.Requests[1].History[..^1], asked.History); // the earlier turns, not the current one
+        var retried = kit.Model.Requests[4].History;
+        Assert.Equal(new Message(Role.Assistant, [summary]), retried[0]);
+        Assert.Equal(["2", "<message from=\"operator\">\nUse SQLite.\n</message>"], retried.Skip(1).Select(Text));
+        Assert.Contains(
+            (await kit.Storage.Events.ReadAsync(null, work.RunId, 0, Ct)).Select(coreEvent => coreEvent.Payload), payload => payload is ModelCallRetried);
+    }
+
     // CTX-10: the call made again has no new reply, so a turn-scoped context is not sent twice.
     [Fact]
     public async Task The_call_made_again_after_shortening_keeps_one_copy_of_a_turn_scoped_context()
@@ -149,7 +208,7 @@ public class HistoryTests
 
     // HIST-02, TEST-15.
     [Theory]
-    [InlineData("does not start with a user message")]
+    [InlineData("does not start with a user message or the provider's summary")]
     [InlineData("has a tool request without its result")]
     [InlineData("changes the current turn")]
     public async Task Shortened_history_that_is_not_valid_is_rejected(string problem)
@@ -158,7 +217,7 @@ public class HistoryTests
         kit.Model.CallTools(("read", """{ "path": "a.cs" }""")).Reply("one").Reply(TooLong);
         kit.Model.Shorten(history => problem switch
         {
-            "does not start with a user message" => history[1..],
+            "does not start with a user message or the provider's summary" => history[1..],
             "has a tool request without its result" => [history[0], history[1], history[3], history[4]],
             _ => [.. history[..^1], Message.User("other work")],
         });
@@ -250,7 +309,7 @@ public class HistoryTests
         Assert.Equal(
             [
                 (ValidationPhase.References, "agents.other.context.history.shortening", "history shortener extension \"Summarizer\" is not registered."),
-                (ValidationPhase.Provider, "agents.dev.context.history.shortening", "provider \"claude\" cannot shorten history."),
+                (ValidationPhase.Provider, "agents.dev.context.history.shortening", $"provider \"claude\" cannot shorten history with model \"{options.Models[ModelProfile.DefaultName].Model}\"."),
             ],
             error.Errors.Select(error => (error.Phase, error.Path, error.Problem)));
     }
@@ -278,5 +337,17 @@ public class HistoryTests
         public ProviderCapabilities CapabilitiesOf(string model) => ProviderCapabilities.None;
 
         public IAsyncEnumerable<ModelEvent> StreamAsync(ModelRequest request, CancellationToken ct) => throw new NotSupportedException();
+    }
+
+    /// <summary>A shortener that calls a model of its own to summarize the earlier turns, and keeps the current one.</summary>
+    private sealed class PaidSummarizer : IHistoryShortener
+    {
+        public int TurnStart { get; private set; }
+
+        public ValueTask<ShortenedHistory> ShortenAsync(ModelRequest request, CancellationToken ct)
+        {
+            TurnStart = request.TurnStart;
+            return ValueTask.FromResult(new ShortenedHistory([Message.User("Summary."), .. request.History[request.TurnStart..]]) { Usage = new Usage(1_000_000, 0, 0, 0) });
+        }
     }
 }

@@ -24,7 +24,7 @@ its runs reach 90% on both systems.
 |---|---|---|
 | 1 | The benchmark up to the live run: runner, scoring, report, reference solutions and the suites' validation (TEST-31) | done |
 | 2 | Load and latency tests (TEST-30: SCALE-01, SCALE-02, LAT-01, LAT-02, storage writes), SCALE-03, coverage (TEST-33), the MUST verification check | done |
-| 3 | The Claude provider's switches and batches (CLD-06, CLD-11), and the S12 follow-ups | todo |
+| 3 | The Claude provider's feature switches and compaction (CLD-06), and the S12 follow-ups | done |
 | 4 | The core follow-ups: a task's tokens, time and tool calls (RUN-05), step agents' `budget.total`, `config validate` and `extension:` ids, `config dry-run` with the workspace and sandbox tools, masking tokens in memory proposals, a cancelled turn that outlives `run.cancelWithin` | todo |
 | 5 | The sandbox follow-ups: the CPU limit with limit reporting on both systems, HTTPS through the proxy, and the Windows tests as a standard user | todo |
 
@@ -36,9 +36,10 @@ has a reason under principle 13.
 | From | Item | Decision |
 |---|---|---|
 | S20 part 3 | Run the TEST-31 benchmark against the live model, with each hidden suite validated first | Part 1 builds everything up to the live run; the owner runs it |
-| S11, S06, S07 | CLD-06: native structured output, compaction as the provider's `IHistoryShortener`, clearing old tool results, task budgets, the refusal fallback | Part 3 |
-| S11, S09 | CLD-11: `ModelRequest.Batch` through Message Batches (MDL-10) | Part 3 |
-| S12 | Operator and memory-change messages sent as a user message to models outside the allow list; a restarted reply's first text left in `textGenerated`; the `baseUrl` provider setting | Part 3 |
+| S11, S06, S07 | CLD-06: native structured output, compaction as the provider's `IHistoryShortener`, clearing old tool results, task budgets, the refusal fallback | Built in part 3 |
+| S11, S09 | CLD-11 (SHOULD): `ModelRequest.Batch` through Message Batches (MDL-10) | Not in v1: `sof`, the only v1 application, has no batch trigger. A batch call can wait up to a day, so it needs a way to hold no place in the model gateway's line meanwhile and to be priced at batch rates; both are design work for the first application that batches |
+| S12 | Operator and memory-change messages sent as a user message to models outside the allow list; a restarted reply's first text left in `textGenerated`, and retries that are not events | Built in part 3 |
+| S12 | The `baseUrl` provider setting of the configuration reference | Not in v1: `sof` calls the Claude API itself, and no case needs another address; the reference now says it is not built |
 | S20 part 1 | RUN-05: a task's tokens, time and tool calls (its budget caps its cost only) | Part 4 |
 | S20 part 1 | `budget.total` of a pattern's step agents, which draw on the entry agent's level | Part 4 |
 | S20 part 2 | `sof config validate` reports the `extension:` tools, gates and checks `sof` never registers, as `sof run` refuses them | Part 4 |
@@ -119,6 +120,44 @@ Linux and Windows runners where they differ much:
   recorded reviews (CFG-10, EGR-01, TASK-01). Three are readings for the owner to confirm, not verified: CFG-01 (policies and
   capabilities are the configuration's, not the agent definition's), CAP-01 (capabilities switch per application only) and TASK-02
   (the status changes are fixed, not configured). Three are pending: TEST-31's live run, CLD-06 (part 3) and SBX-01's CPU limit (part 5).
+
+## Part 3: the Claude provider's features
+
+- CLD-06: `providers.<name>.features` (`ProviderFeatures`), each off until switched on: `structuredOutput` sends the agent's
+  `output.schema` as `output_config.format` (`ModelRequest.OutputSchema` carries it; the core still checks the output);
+  `clearToolResults` sends context editing's `clear_tool_uses_20250919`; `taskBudget` sends `output_config.task_budget`;
+  `refusalFallback` sends `fallbacks: "default"`. Each beta feature sends its header, and a recording now checks the header too.
+  `ProviderCapabilities.Features` names what each model has, and a feature switched on for a model without it is a configuration
+  error at start-up (MDL-06).
+- A refusal fallback: the `fallback` block stays where it came; what the declining model produced before it is not sent back but
+  its text and its server tool calls with their results, as the API asks; its tool calls are withdrawn (`ToolCallsWithdrawn`), so they
+  are never run; each
+  attempt in `usage.iterations` is priced by its own model, the switch reported as a fallback (`ModelFailure.Refused`), so the
+  `modelFallback` event and the cost by model show it, and a later call that sticky routing sends straight to the fallback model
+  is priced right too. The fallback targets Opus 4.8 and Sonnet 5 join the shipped prices.
+- HIST-01: a model that `Summarizes` (`ProviderCapabilities`) is the provider's own shortening: the turn sends a request with
+  `Summarize` over the earlier turns (`ModelRequest.TurnStart` says where the current turn starts) through the model gateway, so the
+  call has its concurrency limit, retries and fallbacks, and is spent, priced and stored as a `modelCallEnded`, also when it fails or
+  gives no summary (COST-02). Claude's is compaction on demand (beta `compact-2026-09-04`), with the same model, instructions and tools;
+  the streamed block (`compaction_delta` pieces of its summary and opaque content, then its signature) takes the earlier turns' place
+  as an assistant message of its own, first, as documented. The operator's messages and memory changes it summarized are told again
+  after it, as the API says they stop applying. Haiku has no compaction, so an agent that has the provider shorten its history on
+  Haiku is a configuration error at start-up. A fallback model without a price is warned of. `IHistoryShortener` returns a
+  `ShortenedHistory` with what its own model call used, which the turn spends the same way.
+- S12: a model without mid-conversation system messages gets the operator's (and memory changes) as a user message starting
+  `Message from the operator:`. Every retry of a model call is a `modelCallRetried` event, so a reader knows the text before it in the
+  call is void; the gateway reports each retry, not only those after part of a reply.
+- Verified against the API's documentation (compaction on demand, refusals and fallback, the skill's reference for the other
+  fields), not against the live API: the recordings are written from the documented shapes. The owner's first live run should
+  record one exchange of each feature (`LiveTests` shows how) before it is relied on. The compaction one should also confirm two
+  points the documentation leaves open: the summary request carries the history up to the current turn, which ends with the last
+  turn's reply and so is not exactly the messages of a request already sent, as the documentation describes; and on-demand
+  compaction works on Opus 4.6 and Sonnet 4.6, which its compatibility list (not in the skill) should say.
+- Follow-up, not in v1: server tools' per-use fees (such as web search's) are priced nowhere, for a fallback attempt or any other
+  call; tokens are.
+- Not built, as the decisions above say: strict tools (DESIGN.md §9 says why), Message Batches (CLD-11) and `baseUrl`.
+- `sof config validate` does not yet run the provider checks that `sof run` does at start-up (provider tools, features, shortening);
+  part 4 makes it.
 
 ## Notes
 

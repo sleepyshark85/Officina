@@ -13,10 +13,19 @@ namespace Sleepyshark.Officina.Providers.Claude;
 /// <summary>
 /// The Claude API (CLD-01), through the official Anthropic SDK (CLD-12), mapped as DESIGN.md §9 describes. Every call
 /// streams (CLD-09). It uses the SDK's beta API, where turn-scoped system messages are typed, and turns the SDK's own
-/// retries off, so the model gateway is the only retry policy.
+/// retries off, so the model gateway is the only retry policy. A request to summarize is Claude's compaction on demand (HIST-01),
+/// and the features its configuration switches on are used (CLD-06).
 /// </summary>
 public sealed class ClaudeProvider : IModelProvider, IDisposable
 {
+    /// <summary>The models that summarize a conversation on demand, as the API's documentation lists them: all current ones but Haiku.</summary>
+    private static readonly string[] Compacts =
+        ["claude-fable-5", "claude-mythos", "claude-opus-5", "claude-opus-4-8", "claude-opus-4-7", "claude-opus-4-6", "claude-sonnet-5", "claude-sonnet-4-6"];
+
+    private static readonly string[] TaskBudgets = ["claude-opus-5", "claude-opus-4-8", "claude-opus-4-7", "claude-fable-5", "claude-sonnet-5-5"];
+
+    private static readonly string[] RefusalFallbacks = ["claude-fable-5", "claude-opus-5", "claude-sonnet-5-5"];
+
     private static readonly string[] MidConversationSystem = ["claude-opus-5", "claude-opus-4-8", "claude-fable-5", "claude-mythos-5", "claude-sonnet-5-5"];
 
     private readonly ProviderOptions options;
@@ -54,7 +63,9 @@ public sealed class ClaudeProvider : IModelProvider, IDisposable
         return new()
         {
             CacheBoundaries = 4,
-            TurnScopedMessages = MidConversationSystem.Any(prefix => model.StartsWith(prefix, StringComparison.Ordinal)),
+            TurnScopedMessages = SystemMessages(model),
+            Features = Features(model),
+            Summarizes = Compacts.Any(prefix => model.StartsWith(prefix, StringComparison.Ordinal)),
             ProviderTools = ClaudeRequest.ProviderTools.Keys.ToHashSet(StringComparer.Ordinal),
         };
     }
@@ -62,8 +73,40 @@ public sealed class ClaudeProvider : IModelProvider, IDisposable
     public async IAsyncEnumerable<ModelEvent> StreamAsync(ModelRequest request, [EnumeratorCancellation] CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(request);
-        var parameters = ClaudeRequest.From(request);
-        var reply = new ClaudeReply(request.Tools, request.History);
+        var system = SystemMessages(request.Profile.Model);
+        var parameters = request.Summarize ? ClaudeRequest.Compaction(request, options.Features, system) : ClaudeRequest.From(request, options.Features, system);
+        await foreach (var modelEvent in CallAsync(parameters, request, ct).ConfigureAwait(false))
+        {
+            yield return modelEvent;
+        }
+    }
+
+    /// <summary>
+    /// The features each model has, as the API's documentation lists them: structured output and context editing on all current
+    /// models; task budgets on Opus 5, 4.8 and 4.7, Fable 5 and Sonnet 5.5; the server-side refusal fallback on the models whose
+    /// safety classifiers decline, Fable 5, Opus 5 and Sonnet 5.5.
+    /// </summary>
+    private static HashSet<string> Features(string model)
+    {
+        var features = new HashSet<string>(StringComparer.Ordinal) { "structuredOutput", "clearToolResults" };
+        if (TaskBudgets.Any(prefix => model.StartsWith(prefix, StringComparison.Ordinal)))
+        {
+            features.Add("taskBudget");
+        }
+
+        if (RefusalFallbacks.Any(prefix => model.StartsWith(prefix, StringComparison.Ordinal)))
+        {
+            features.Add("refusalFallback");
+        }
+
+        return features;
+    }
+
+    private static bool SystemMessages(string model) => MidConversationSystem.Any(prefix => model.StartsWith(prefix, StringComparison.Ordinal));
+
+    private async IAsyncEnumerable<ModelEvent> CallAsync(MessageCreateParams parameters, ModelRequest request, [EnumeratorCancellation] CancellationToken ct)
+    {
+        var reply = new ClaudeReply(request.Tools, request.History, request.Profile);
 
         // A call that goes quiet for longer than the timeout is given up on, so it cannot hold its place for ever.
         using var quiet = new CancellationTokenSource(System.Threading.Timeout.InfiniteTimeSpan, time);
