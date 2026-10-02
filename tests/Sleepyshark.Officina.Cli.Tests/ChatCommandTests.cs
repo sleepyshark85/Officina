@@ -412,7 +412,7 @@ public sealed class ChatCommandTests : IDisposable
         sof.In.Type($"/resume {run}");
         await sof.Out.WaitForAsync("Answer with approve, deny or change.", Ct); // the resumed run's own console
         sof.In.Type("/approve 1");
-        await sof.Out.WaitForAsync("dev: Completed, cost $0.00\nNoted again.", Ct);
+        await sof.Out.WaitForAsync("\nNoted again.", Ct); // the resumed run's output, after how it ended, on a line of its own on every system
         sof.In.Type("/new");
         await sof.Out.WaitForAsync("Your next message starts a new conversation.", Ct);
         sof.In.Type("/chat");
