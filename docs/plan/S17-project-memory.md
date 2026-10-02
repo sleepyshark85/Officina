@@ -25,7 +25,9 @@ Durable project knowledge shared across runs.
   proposal can `replaces` entries, which leave memory but stay in the log. The text is rendered in entry order inside
   `<project-memory>`, and one switch, `capabilities.projectMemory`, puts it in every agent's prefix (there is no
   per-agent setting; agents use the capabilities that are on, as for the others).
-- Agents use `builtin:memory.propose_change` and `memory.review`. With `approveBy: owner` the tool pipeline asks the
+- Agents use `builtin:memory.propose_change` and `memory.review`, both write tools (an approved entry stays in every later
+  prompt), so permission modes and gates cover them and each needs a gate or an exemption. The owner's authority is a flag
+  the host sets, never an agent's name. With `approveBy: owner` the tool pipeline asks the
   owner before the proposal and applies it at once; with `lead`, the proposal waits for a `memory.review` by an agent
   that holds the tool (the lead's tool sets decide who), never its proposer. The owner uses `AgentRunner.Memory`:
   propose, approve and reject.
@@ -39,13 +41,12 @@ Durable project knowledge shared across runs.
   smaller, is not applied and stays proposed. A proposal replacing several entries is a condensation; only the owner
   approves it, whoever approves changes. Replaced entries stay in the log, so nothing is dropped silently.
 - The SQLite format version is now 4: a `memory_changes` table, and the conversation rows carry the memory revisions.
-  Memory has no retention: it outlives runs.
+  Memory has no retention: it outlives runs. An owner's own memory (`owner:<owner>`) is in the owner's export and deletion
+  (PRIV-02).
 
 Left to later slices:
-- The CLI has no command to list proposals or review condensing (S16's interactive session asks about owner-approved
-  proposals through the usual approval, like any tool).
-- S19: the checkpoint records memory's revision (DESIGN.md §8).
-- An owner's memory (`scope: owner`) is not yet in the owner's export and deletion (PRIV-02), and text the model proposes
-  is not unmasked when masking is on; masking tokens are per run, so a token would be stored.
+- S19: the checkpoint records memory's revision.
+- S20: the CLI's owner commands to list and review proposals and condensing, and tying `memory.review` to the lead role.
+- S21: unmasking text that agents propose for memory.
 
 M5 demo: one agent changes, builds and tests a real project from the CLI.

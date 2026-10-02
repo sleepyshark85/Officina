@@ -1,6 +1,7 @@
 using Sleepyshark.Officina.Core.Configuration;
 using Sleepyshark.Officina.Core.Events;
 using Sleepyshark.Officina.Core.Extensibility;
+using Sleepyshark.Officina.Core.Memory;
 
 namespace Sleepyshark.Officina.Testing;
 
@@ -46,7 +47,8 @@ public sealed class InMemoryStorage : IStorage
         return ValueTask.FromResult(new OwnerData(
             runs, Events.Rows.Where(tenant, coreEvent => ids.Contains(coreEvent.RunId)), Audit.Rows.Where(tenant, entry => ids.Contains(entry.RunId)),
             Conversations.Rows.Where(tenant, turn => turn.Owner == owner), Records.Rows.Where(tenant, entry => ids.Contains(entry.RunId)),
-            [.. Artifacts.Rows.Where(tenant, row => ids.Contains(row.RunId)).Select(row => row.Artifact)], Tasks.Rows.Where(tenant, change => ids.Contains(change.RunId))));
+            [.. Artifacts.Rows.Where(tenant, row => ids.Contains(row.RunId)).Select(row => row.Artifact)], Tasks.Rows.Where(tenant, change => ids.Contains(change.RunId)),
+            Memory.Rows.Where(tenant, change => change.Scope == ProjectMemory.OwnerScope(owner))));
     }
 
     public ValueTask DeleteAsync(string? tenant, string owner, CancellationToken ct)
@@ -56,6 +58,7 @@ public sealed class InMemoryStorage : IStorage
         Records.Rows.RemoveAll((rowTenant, entry) => rowTenant == tenant && ids.Contains(entry.RunId));
         Artifacts.Rows.RemoveAll((rowTenant, row) => rowTenant == tenant && ids.Contains(row.RunId));
         Tasks.Rows.RemoveAll((rowTenant, change) => rowTenant == tenant && ids.Contains(change.RunId));
+        Memory.Rows.RemoveAll((rowTenant, change) => rowTenant == tenant && change.Scope == ProjectMemory.OwnerScope(owner));
         Runs.Rows.RemoveAll((rowTenant, run) => rowTenant == tenant && ids.Contains(run.RunId));
         Conversations.Rows.RemoveAll((rowTenant, turn) => rowTenant == tenant && turn.Owner == owner);
         return ValueTask.CompletedTask;

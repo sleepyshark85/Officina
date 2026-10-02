@@ -105,11 +105,11 @@ public sealed class ToolPipeline
     /// <summary>The project memory of a caller, as the owner changes it (MEM-03).</summary>
     /// <exception cref="InvalidOperationException">Project memory is off.</exception>
     public ProjectMemory Memory(Caller caller) =>
-        Memory(new ToolContext("", ProjectMemory.Owner, caller)) ?? throw new InvalidOperationException("Project memory is off. Set capabilities.projectMemory.enabled to true.");
+        Memory(new ToolContext("", ProjectMemory.Owner, caller), owner: true) ?? throw new InvalidOperationException("Project memory is off. Set capabilities.projectMemory.enabled to true.");
 
     /// <summary>The project memory the agent of <paramref name="context"/> acts on; null when project memory is off.</summary>
-    internal ProjectMemory? Memory(ToolContext context) => options.Capabilities.ProjectMemory is { Enabled: true } memory
-        ? new ProjectMemory(storage.Memory, context.Caller.Tenant, ProjectMemory.ScopeOf(memory, options.Project, context.Caller), memory, time, context.Agent)
+    internal ProjectMemory? Memory(ToolContext context, bool owner = false) => options.Capabilities.ProjectMemory is { Enabled: true } memory
+        ? new ProjectMemory(storage.Memory, context.Caller.Tenant, ProjectMemory.ScopeOf(memory, options.Project, context.Caller), memory, time, context.Agent, owner)
         : null;
 
     /// <summary>The run's task board as the agent of <paramref name="context"/> acts on it; null when the task board is off.</summary>

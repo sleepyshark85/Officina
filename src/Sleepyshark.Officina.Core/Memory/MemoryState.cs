@@ -47,17 +47,15 @@ public sealed record MemoryChange(
 /// <param name="Content">What was approved.</param>
 /// <param name="Author">Who proposed it.</param>
 /// <param name="Date">When it was approved.</param>
-/// <param name="ApprovedBy">Who approved it.</param>
 /// <param name="Revision">The log revision that approved it.</param>
-public sealed record MemoryEntry(long Id, MemoryProposal Content, string Author, DateTimeOffset Date, string ApprovedBy, long Revision = 0);
+public sealed record MemoryEntry(long Id, MemoryProposal Content, string Author, DateTimeOffset Date, long Revision = 0);
 
 /// <summary>A proposal and where it stands.</summary>
 /// <param name="Id">Its number.</param>
 /// <param name="Content">What it proposes.</param>
 /// <param name="By">Who proposed it.</param>
-/// <param name="Time">When.</param>
 /// <param name="Status">Proposed while it waits for a decision.</param>
-public sealed record Proposal(long Id, MemoryProposal Content, string By, DateTimeOffset Time, MemoryAction Status)
+public sealed record Proposal(long Id, MemoryProposal Content, string By, MemoryAction Status)
 {
     public bool Pending => Status == MemoryAction.Proposed;
 }
@@ -75,7 +73,7 @@ public sealed class MemoryState
         {
             if (change.Action == MemoryAction.Proposed)
             {
-                proposals[change.Proposal] = new(change.Proposal, change.Content!, change.By, change.Time, MemoryAction.Proposed);
+                proposals[change.Proposal] = new(change.Proposal, change.Content!, change.By, MemoryAction.Proposed);
                 continue;
             }
 
@@ -83,7 +81,7 @@ public sealed class MemoryState
             proposals[change.Proposal] = proposal with { Status = change.Action };
             if (change.Action == MemoryAction.Approved)
             {
-                approved.Add(new(proposal.Id, proposal.Content, proposal.By, change.Time, change.By, change.Revision));
+                approved.Add(new(proposal.Id, proposal.Content, proposal.By, change.Time, change.Revision));
                 Revision = change.Revision;
             }
         }

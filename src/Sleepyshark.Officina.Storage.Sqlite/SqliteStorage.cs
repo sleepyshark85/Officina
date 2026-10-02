@@ -236,7 +236,10 @@ public sealed class SqliteStorage : IStorage, IRunStore, IConversationStore, IEv
             $"SELECT * FROM artifacts WHERE tenant IS $tenant AND run_id IN ({OwnerRuns}) ORDER BY id", ReadArtifact, ct, parameters).ConfigureAwait(false);
         var tasks = await QueryAsync(
             $"SELECT * FROM task_changes WHERE tenant IS $tenant AND run_id IN ({OwnerRuns}) ORDER BY run_id, revision", ReadTaskChange, ct, parameters).ConfigureAwait(false);
-        return new OwnerData(runs, events, audit, conversations, record, artifacts, tasks);
+        var memory = await QueryAsync(
+            "SELECT * FROM memory_changes WHERE tenant IS $tenant AND scope = $scope ORDER BY revision", ReadMemoryChange, ct,
+            ("$tenant", tenant), ("$scope", ProjectMemory.OwnerScope(owner))).ConfigureAwait(false);
+        return new OwnerData(runs, events, audit, conversations, record, artifacts, tasks, memory);
     }
 
     public ValueTask AppendAsync(string? tenant, ConversationTurn turn, CancellationToken ct)
@@ -264,8 +267,9 @@ public sealed class SqliteStorage : IStorage, IRunStore, IConversationStore, IEv
             DELETE FROM task_changes WHERE tenant IS $tenant AND run_id IN ({OwnerRuns});
             DELETE FROM runs WHERE tenant IS $tenant AND owner = $owner;
             DELETE FROM conversations WHERE tenant IS $tenant AND owner = $owner;
+            DELETE FROM memory_changes WHERE tenant IS $tenant AND scope = $scope;
             """, ct,
-            ("$tenant", tenant), ("$owner", owner));
+            ("$tenant", tenant), ("$owner", owner), ("$scope", ProjectMemory.OwnerScope(owner)));
 
     public ValueTask DeleteExpiredAsync(RetentionOptions retention, DateTimeOffset now, CancellationToken ct)
     {

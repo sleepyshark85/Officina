@@ -6,8 +6,9 @@ namespace Sleepyshark.Officina.Core.Memory;
 
 /// <summary>
 /// A built-in memory tool, through which agents propose changes to project memory and the lead decides on them
-/// (MEM-03). Like the record tools, it declares itself a read: it changes only memory's log, which checks every change
-/// and keeps it with its author, so it needs no gate. Where the owner approves, the tool pipeline asks the owner
+/// (MEM-03). Both are write tools, because an approved
+/// entry stays in every later conversation's system prompt: permission modes and gates cover them, and the configuration
+/// gives them a gate or an exemption (INV-04). Where the owner approves, the tool pipeline asks the owner
 /// before a proposal is made, and the proposal is then applied at once.
 /// </summary>
 internal sealed class MemoryTool : ITool
@@ -21,7 +22,7 @@ internal sealed class MemoryTool : ITool
 
     private MemoryTool(string description, string schema, Func<ToolCall, CancellationToken, Task<(bool, string)>> run)
     {
-        Descriptor = new(description, JsonDocument.Parse(schema).RootElement.Clone(), ToolKind.Read, ParallelSafe: true);
+        Descriptor = new(description, JsonDocument.Parse(schema).RootElement.Clone(), ToolKind.Write, ParallelSafe: true);
         this.run = run;
     }
 

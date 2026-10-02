@@ -25,4 +25,8 @@ From earlier slices: add the CLI's board view (TASK-08, from S18); the command c
 `capabilities.workspace.baselineChecks` setting that names them (WS-02, from S06 and S16); a working copy per task, disposed
 when the task ends (from S16); and a working copy of their own for fan-out branches of one agent that change files.
 
+From S17: the CLI's owner commands for project memory: list the proposals, and approve or reject them, including the
+condensing only the owner approves (until then the owner uses `AgentRunner.Memory`); and tie `memory.review` to the
+lead role, so that only the team's lead can use it (S17 leaves that to the tool sets that hold it).
+
 Write the TEST-31 benchmark goals and their hidden tests during this slice.

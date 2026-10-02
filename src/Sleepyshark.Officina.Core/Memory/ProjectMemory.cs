@@ -13,7 +13,7 @@ namespace Sleepyshark.Officina.Core.Memory;
 /// </summary>
 public sealed class ProjectMemory
 {
-    /// <summary>Who the owner's changes are attributed to.</summary>
+    /// <summary>Who the owner's changes are attributed to. Only <c>owner: true</c> gives the owner's authority, so no agent's name can take it.</summary>
     public const string Owner = "owner";
 
     private readonly IMemoryStore store;
@@ -22,8 +22,9 @@ public sealed class ProjectMemory
     private readonly ProjectMemoryOptions options;
     private readonly TimeProvider time;
     private readonly string by;
+    private readonly bool owner;
 
-    internal ProjectMemory(IMemoryStore store, string? tenant, string scope, ProjectMemoryOptions options, TimeProvider time, string by)
+    internal ProjectMemory(IMemoryStore store, string? tenant, string scope, ProjectMemoryOptions options, TimeProvider time, string by, bool owner = false)
     {
         this.store = store;
         this.tenant = tenant;
@@ -31,21 +32,25 @@ public sealed class ProjectMemory
         this.options = options;
         this.time = time;
         this.by = by;
+        this.owner = owner;
     }
 
     /// <summary>Which memory a caller's agents share: the project's, the caller's or the tenant's (MEM-04).</summary>
     internal static string ScopeOf(ProjectMemoryOptions options, ProjectOptions project, Caller caller) => options.Scope switch
     {
         MemoryScope.Project => $"project:{project.Name}",
-        MemoryScope.Owner => $"owner:{caller.Id}",
+        MemoryScope.Owner => OwnerScope(caller.Id),
         _ => "tenant",
     };
 
     /// <summary>Whether the owner, and not the lead, approves agents' changes (MEM-03).</summary>
     internal bool OwnerApproves => options.ApproveBy == MemoryApprover.Owner;
 
+    /// <summary>The scope of the memory that belongs to an owner, which export and deletion cover (PRIV-02).</summary>
+    public static string OwnerScope(string? owner) => $"owner:{owner}";
+
     /// <summary>The same memory, as the owner acts on it.</summary>
-    internal ProjectMemory AsOwner() => new(store, tenant, scope, options, time, Owner);
+    internal ProjectMemory AsOwner() => new(store, tenant, scope, options, time, Owner, owner: true);
 
     /// <summary>Memory as it is now: its entries, the proposals waiting, and its revision.</summary>
     public async ValueTask<MemoryState> ReadAsync(CancellationToken ct) => new(await store.ReadAsync(tenant, scope, ct).ConfigureAwait(false));
@@ -103,7 +108,7 @@ public sealed class ProjectMemory
                 }
 
                 var current = state.Current();
-                var next = Render([.. current.Where(entry => !proposal.Content.Replaced.Contains(entry.Id)), new MemoryEntry(id, proposal.Content, proposal.By, time.GetUtcNow(), by)]);
+                var next = Render([.. current.Where(entry => !proposal.Content.Replaced.Contains(entry.Id)), new MemoryEntry(id, proposal.Content, proposal.By, time.GetUtcNow())]);
                 if (Tokens(next) > options.MaxTokens && Tokens(next) > Tokens(Render(current)))
                 {
                     // MEM-05: nothing is dropped to make room, and the proposal stays for the owner.
@@ -120,7 +125,7 @@ public sealed class ProjectMemory
 
     /// <summary>Why this approver may not decide on the proposal; null when they may (MEM-03, MEM-05).</summary>
     private string? Authority(Proposal proposal) =>
-        by == Owner ? null
+        owner ? null
         : options.ApproveBy != MemoryApprover.Lead ? "the owner decides on changes."
         : proposal.By == by ? "you cannot decide on your own proposal."
         : proposal.Content.Condenses ? "the owner reviews condensing."

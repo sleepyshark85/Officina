@@ -271,6 +271,7 @@ public abstract class StorageContract
         var export = await storage.ExportAsync("acme", "ann", Ct);
 
         Assert.Equal(["run-1"], export.Runs.Select(run => run.RunId));
+        Assert.Equal(["owner:ann"], export.Memory.Select(change => change.Scope));
         Assert.Equal([Event("run-1", 1)], export.Events);
         Assert.Equal([Entry("run-1", AuditOutcome.Intent)], export.Audit);
         Assert.Equal(["ann"], export.Conversations.Select(turn => turn.Owner));
@@ -296,6 +297,10 @@ public abstract class StorageContract
         Assert.Empty(await storage.Tasks.ReadAsync("acme", "run-1", Ct));
         Assert.Equal([Entry("run-1", AuditOutcome.Intent)], await storage.Audit.ReadAsync("acme", "run-1", Ct));
         Assert.Single((await storage.ExportAsync("acme", "bob", Ct)).Runs);
+
+        // PRIV-02: an owner's own memory goes with the owner's data; the project's and others' stay.
+        Assert.Empty(await storage.Memory.ReadAsync("acme", "owner:ann", Ct));
+        Assert.Single(await storage.Memory.ReadAsync("acme", "owner:bob", Ct));
     }
 
     // PRIV-01, EVT-05, TEST-18; REC-05: a record is deleted whole, never trimmed.
@@ -362,13 +367,14 @@ public abstract class StorageContract
         await storage.Records.TryAppendAsync(tenant, Fact(runId, 1, time), Ct);
         await storage.Artifacts.SaveAsync(tenant, runId, new($"{runId} result", "full text"), time ?? Start, Ct);
         await storage.Tasks.TryAppendAsync(tenant, Change(runId, 1, time), Ct);
+        await storage.Memory.TryAppendAsync(tenant, Proposed($"owner:{owner}", 1), Ct);
     }
 
     /// <summary>How many items an export of the owner's data holds.</summary>
     private static async Task<int> CountAsync(IStorage storage, string? tenant, string owner)
     {
         var data = await storage.ExportAsync(tenant, owner, Ct);
-        return data.Runs.Count + data.Events.Count + data.Audit.Count + data.Conversations.Count + data.Records.Count + data.Artifacts.Count + data.Tasks.Count;
+        return data.Runs.Count + data.Events.Count + data.Audit.Count + data.Conversations.Count + data.Records.Count + data.Artifacts.Count + data.Tasks.Count + data.Memory.Count;
     }
 
     private static JsonElement Args => JsonDocument.Parse("""{ "path": "a.cs" }""").RootElement;

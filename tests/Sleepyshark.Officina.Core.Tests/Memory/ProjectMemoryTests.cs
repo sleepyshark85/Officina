@@ -155,8 +155,8 @@ public class ProjectMemoryTests
             "<project-memory>\n- decision #2 db: Use Postgres. Why: We need many writers. (decided by dev on 2026-11-05) Replaces #1.\n</project-memory>",
             state.Text());
         Assert.Equal(
-            [(1L, "dev", new DateTimeOffset(2026, 10, 2, 9, 0, 0, TimeSpan.Zero), "lead"), (2L, "dev", new DateTimeOffset(2026, 11, 5, 9, 0, 0, TimeSpan.Zero), "lead")],
-            state.Entries.Select(entry => (entry.Id, entry.Author, entry.Date, entry.ApprovedBy)));
+            [(1L, "dev", new DateTimeOffset(2026, 10, 2, 9, 0, 0, TimeSpan.Zero)), (2L, "dev", new DateTimeOffset(2026, 11, 5, 9, 0, 0, TimeSpan.Zero))],
+            state.Entries.Select(entry => (entry.Id, entry.Author, entry.Date)));
     }
 
     // MEM-03: the lead decides, never on a proposal of its own.
@@ -186,6 +186,26 @@ public class ProjectMemoryTests
         Assert.Empty(setup.Human.Requests);
     }
 
+    // MEM-03, INV-02: authority is the host's, never a name, so an agent called "owner" is an agent like the others.
+    [Fact]
+    public async Task An_agent_named_owner_has_no_authority_over_memory()
+    {
+        Setup(out var pipeline);
+        var memory = pipeline.Memory(Owner);
+        await memory.ProposeAsync(Note("build", new string('a', 20)), Ct);
+        await memory.ProposeAsync(Note("test", new string('b', 20)), Ct);
+        await memory.ApproveAsync(1, null, Ct);
+        await memory.ApproveAsync(2, null, Ct);
+
+        await CallAsync(pipeline, "owner", "propose", """{ "kind": "note", "subject": "style", "text": "Tabs." }""");
+        var own = await CallAsync(pipeline, "owner", "review", """{ "id": 3, "approved": true, "reason": "Fine." }""");
+        await CallAsync(pipeline, Agent, "propose", """{ "kind": "note", "subject": "all", "text": "Both.", "replaces": [1, 2] }""");
+        var condensing = await CallAsync(pipeline, "owner", "review", """{ "id": 4, "approved": true, "reason": "Shorter." }""");
+
+        Assert.Equal("invalid arguments: you cannot decide on your own proposal.", own);
+        Assert.Equal("invalid arguments: the owner reviews condensing.", condensing);
+    }
+
     // MEM-03: where the owner approves, the owner is asked with the proposal, and a denial changes nothing.
     [Fact]
     public async Task Where_the_owner_approves_the_owner_is_asked_and_a_denial_leaves_memory_as_it_was()
@@ -203,7 +223,8 @@ public class ProjectMemoryTests
         Assert.Equal("Proposed as #1. The owner approved it, so it is memory now.", approved);
         Assert.Equal("invalid arguments: #1 is not a proposal waiting for a decision.", review);
         var state = await memory.ReadAsync(Ct);
-        Assert.Equal([("dev", "owner")], state.Entries.Select(entry => (entry.Author, entry.ApprovedBy)));
+        Assert.Equal(["dev"], state.Entries.Select(entry => entry.Author));
+        Assert.Equal("owner", state.Log.Single(change => change.Action == MemoryAction.Approved).By);
         Assert.Equal([HumanRequestKind.Approval, HumanRequestKind.Approval], setup.Human.Requests.Select(request => request.Kind));
         Assert.Equal("propose", setup.Human.Requests[0].Tool);
     }
@@ -243,7 +264,7 @@ public class ProjectMemoryTests
     [Fact]
     public void The_memory_tools_need_the_capability_and_owner_approval_needs_human_interaction()
     {
-        var options = Options(("propose", new() { Source = "builtin:memory.propose_change" }), ("review", new() { Source = "builtin:memory.review" })) with
+        var options = Options(("propose", new() { Source = "builtin:memory.propose_change", GateExemption = Exempt }), ("review", new() { Source = "builtin:memory.review", GateExemption = Exempt })) with
         {
             Capabilities = new() { ProjectMemory = new() { Enabled = true, ApproveBy = MemoryApprover.Owner } },
         };
@@ -293,15 +314,17 @@ public class ProjectMemoryTests
 
     private const string Lead = "lead";
 
+    private const string Exempt = "Its proposals wait for approval.";
+
     private static OfficinaOptions Configure(ProjectMemoryOptions memory, HistoryStrategy history = HistoryStrategy.None)
     {
         var options = Options(
-            ("read", Extension("read")), ("propose", new() { Source = "builtin:memory.propose_change" }), ("review", new() { Source = "builtin:memory.review" }));
+            ("read", Extension("read")), ("propose", new() { Source = "builtin:memory.propose_change", GateExemption = Exempt }), ("review", new() { Source = "builtin:memory.review", GateExemption = Exempt }));
         var dev = options.Agents[Agent] with { Context = new() { History = new() { Strategy = history } } };
         return options with
         {
             Project = new() { Name = "app" },
-            Agents = new Dictionary<string, AgentDefinition> { [Agent] = dev, [Lead] = dev },
+            Agents = new Dictionary<string, AgentDefinition> { [Agent] = dev, [Lead] = dev, ["owner"] = dev },
             Capabilities = new()
             {
                 ProjectMemory = memory, ConversationStore = new() { Enabled = history != HistoryStrategy.None }, HumanInteraction = new() { Enabled = true },

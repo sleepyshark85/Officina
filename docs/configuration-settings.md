@@ -371,7 +371,7 @@ It lists the settings the code has today. Settings that later slices add are spe
 | `enabled` | boolean | `false` | Whether project memory is on: every agent's stable prefix then holds the memory, and agents propose changes with the `memory.*` tools. | `true` |
 | `scope` | `"project"`, `"owner"`, `"tenant"` | `"project"` | Whose memory it is: `project` (one per project name), `owner` (one per caller) or `tenant` (one per tenant). Agents of one definition share a prefix only within one scope. | `"project"` |
 | `maxTokens` | whole number, ≥ 1 | `20000` | The size limit, in tokens, counted as one token per four characters. A change that would take memory past it is not applied: agents propose a condensed version instead, which only the owner approves. | `20000` |
-| `approveBy` | `"lead"`, `"owner"` | `"lead"` | Who approves an agent's proposed change: `lead`, through a `builtin:memory.review` tool that only the lead's tool sets hold, or `owner`, who is asked at the proposal and needs `humanInteraction`. | `"lead"` |
+| `approveBy` | `"lead"`, `"owner"` | `"lead"` | Who approves an agent's proposed change: `lead`, through a `builtin:memory.review` tool, which you give only to the lead's tool sets (nothing checks that yet), or `owner`, who is asked at the proposal and needs `humanInteraction`. | `"lead"` |
 
 ## `agents.<name>.pattern.steps[]`
 

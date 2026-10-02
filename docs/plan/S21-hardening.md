@@ -20,6 +20,9 @@ Prove the non-functional targets and the coding team's success rate.
 - HITL-07 (a MAY: end users rate a result, linked to its run) moved here from S16: build it if time allows, or record
   it as not in v1.
 
+From S17: restore masked values in text that agents propose for project memory (memory is durable, and masking tokens
+are per run) or refuse proposals that contain a token, when masking is on.
+
 From S11, each a feature switch of the Claude provider:
 - CLD-06: native structured output (`output_config.format`, `strict` tools), compaction as the provider's
   `IHistoryShortener` (HIST-01), clearing old tool results, task budgets and the server-side refusal fallback.

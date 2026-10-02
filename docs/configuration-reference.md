@@ -424,7 +424,7 @@ missing makes every other test false.
     "budget": { },                             // §7.5
     "permissions": ["workspace:write", "sandbox:run"],   // narrows the owner's (INV-02)
     "policies": { "gates": ["tests-first"] },            // gates for all this agent's tools
-    "capabilities": ["workspace", "sandbox", "projectMemory", "taskBoard"],
+    "capabilities": ["workspace", "sandbox", "projectMemory", "taskBoard"],   // not built: agents use every capability that is on
     "helpers": { "allowed": false },           // TEAM-07
     "triggers": ["longRunning"]                // TRG-01: unset accepts work that arrives any way
   }
@@ -436,7 +436,7 @@ every model slot. A step inside a pattern that calls a model is its own slot: it
 `model` and `tools`, and it inherits whatever it does not set. The tools offered in a slot depend
 only on that slot's configuration and the enabled capabilities, never on the caller.
 
-**Capabilities per agent.** `capabilities` lists which of the application's enabled capabilities
+**Capabilities per agent (not built).** `capabilities` lists which of the application's enabled capabilities
 this agent uses; when it is not set, the agent uses all of them. Listing a capability the
 application has not enabled is a validation error (CAP-03).
 

@@ -52,7 +52,8 @@ Last updated 2026-10-02.
     already bumped it past the version on main.
   - S19 snapshots and restores the workspace, and cleans up worktrees left by a crash.
   - S05 moved CTX-06 to S07 and CTX-07 to S06.
-  - S17 PLACEHOLDER
+  - S17 left the owner's CLI commands for memory proposals and tying `memory.review` to the lead (S20), unmasking
+    proposed text (S21) and the checkpoint's memory revision (S19); their slice files say so.
   - S09 left parts of its requirements to the slices that add the state they need; its Notes list them
     (S06, S19, S20, and S21 for Message Batches).
   - REQUIREMENTS.md §4.3 lists masking as replaceable, but DESIGN.md §4 keeps it in Core and not replaceable in v1.

@@ -21,7 +21,7 @@ Durable storage, the event stream, telemetry, and data rules.
 S02 records each run with its resolved `OfficinaOptions` object (CFG-07); the SQLite storage writes it as text.
 
 Parts of the closed requirements need state that later slices add:
-- S06, S07, S17 (memory has no retention), S18, S19: their stores join `IStorage`, with retention for conversations, the run record and
+- S06, S07, S17 (memory has no retention; an owner's memory is exported and deleted with the owner's data), S18, S19: their stores join `IStorage`, with retention for conversations, the run record and
   artifacts (PRIV-01), and their rows in export and deletion (PRIV-02).
 - S09: runs carry the caller's tenant and owner; until then they are anonymous. S09 and S16 give the host a run's
   id when it starts the run, so a reader can follow it live from the start.
