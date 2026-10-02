@@ -249,7 +249,7 @@ public class CheckpointTests
         };
         var tool = new FakeTool(ToolKind.Write, run: async (_, _) => deploy is null ? ToolResult.Success("deployed") : await deploy());
         deployed = tool;
-        var tools = new Dictionary<string, ITool>(new WorkspaceTools(agent => workspace.OpenWorkingCopyAsync("w", agent, Ct)).Tools) { ["deploy"] = tool };
+        var tools = new Dictionary<string, ITool>(new WorkspaceTools(call => workspace.OpenWorkingCopyAsync("w", call.Agent, Ct)).Tools) { ["deploy"] = tool };
         return new TestKit(options, tools, workspace: workspace, storage: storage);
     }
 }

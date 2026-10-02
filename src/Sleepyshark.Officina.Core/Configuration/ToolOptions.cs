@@ -30,7 +30,7 @@ public sealed record ToolOptions
         Example = "\"always\"")]
     public Approval? Approval { get; init; }
 
-    [Setting("The longest one call may take, as `hh:mm:ss`.", Example = "\"00:15:00\"")]
+    [Setting("The longest one call may take, as `hh:mm:ss`. It does not apply to `builtin:tasks.submit_for_review`, whose checks each have their own time limit.", Example = "\"00:15:00\"")]
     [Range(typeof(TimeSpan), "00:00:00", "10675199.02:48:05.4775807", MinimumIsExclusive = true, ErrorMessage = "must be greater than zero.")]
     public TimeSpan Timeout { get; init; } = TimeSpan.FromMinutes(2);
 

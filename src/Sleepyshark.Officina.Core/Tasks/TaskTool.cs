@@ -23,6 +23,12 @@ internal sealed class TaskTool : ITool
 
     private readonly Func<TaskBoard, JsonElement, CancellationToken, Task<(bool Accepted, string Text)>> run;
 
+    /// <summary>
+    /// Whether the tool runs the task's checks, which bound their own time: a command check has its <c>timeout</c>, so the tool's
+    /// own time limit does not cut a check short or run it again.
+    /// </summary>
+    internal bool RunsChecks { get; private init; }
+
     private TaskTool(string description, string properties, string required, Func<TaskBoard, JsonElement, CancellationToken, Task<(bool, string)>> run)
     {
         var schema = $$"""{ "type": "object", "properties": { "id": {{Text}}{{(properties.Length > 0 ? $", {properties}" : "")}} }, "required": ["id"{{required}}], "additionalProperties": false }""";
@@ -56,7 +62,7 @@ internal sealed class TaskTool : ITool
             $$""" "artifacts": {{Texts}} """, "",
             (board, arguments, ct) => board.SubmitAsync(
                 Get(arguments, "id"), arguments.TryGetProperty("artifacts", out var artifacts) ? [.. artifacts.EnumerateArray().Select(artifact => artifact.GetString()!)] : [],
-                checks, ct)),
+                checks, ct)) { RunsChecks = true },
         "tasks.review" => new(
             "Reviews another agent's task in review: approves it, or asks for changes, and gives the reasons.",
             $$""" "approved": { "type": "boolean" }, "reasons": {{Text}} """, """, "approved", "reasons" """,
@@ -67,7 +73,10 @@ internal sealed class TaskTool : ITool
     public async ValueTask<ToolResult> InvokeAsync(ToolCall toolCall, CancellationToken ct)
     {
         var (accepted, text) = await run(toolCall.Board!, toolCall.Arguments, ct).ConfigureAwait(false);
-        return accepted ? ToolResult.Success(text) : ToolResult.Failed(ToolErrorCategory.InvalidArguments, text);
+
+        // SEC-04: a check's findings come from running the agents' code, so the agent that reads them has read untrusted content.
+        return (accepted ? ToolResult.Success(text) : ToolResult.Failed(ToolErrorCategory.InvalidArguments, text))
+            with { Untrusted = RunsChecks && text.StartsWith(TaskBoard.CheckFailed, StringComparison.Ordinal) };
     }
 
     private static string Get(JsonElement arguments, string name) => arguments.GetProperty(name).GetString()!;

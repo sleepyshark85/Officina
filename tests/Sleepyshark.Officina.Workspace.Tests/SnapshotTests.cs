@@ -1,5 +1,6 @@
 using Sleepyshark.Officina.Core.Checkpoints;
 using Sleepyshark.Officina.Core.Configuration;
+using Sleepyshark.Officina.Core.Extensibility;
 using static Sleepyshark.Officina.Workspace.Tests.Repository;
 
 namespace Sleepyshark.Officina.Workspace.Tests;
@@ -62,7 +63,7 @@ public class SnapshotTests
         using var second = await repository.OpenAsync();
         await second.RestoreAsync(snapshots, Ct);
 
-        Assert.Equal(["t1", "t2"], second.OpenCopies.Select(copy => copy.TaskId).Order());
+        Assert.Equal(["t1", "t2"], second.OpenCopies.Select(copy => copy.Name).Order());
         var (alice2, bob2) = (await second.OpenWorkingCopyAsync("t1", "alice", Ct), await second.OpenWorkingCopyAsync("t2", "bob", Ct));
         Assert.Equal(("alice\n", "bob\n"), (await alice2.ReadAsync("a.txt", ct: Ct), await bob2.ReadAsync("a.txt", ct: Ct)));
     }
@@ -156,7 +157,7 @@ public class SnapshotTests
         await Write(copy, "b.txt", "new\n");
         await workspace.SnapshotAsync(Ct);
 
-        Assert.Equal(IntegrationOutcome.Integrated, (await workspace.IntegrateAsync(copy, Ct)).Outcome);
+        Assert.Equal(IntegrationOutcome.Integrated, (await workspace.IntegrateAsync(copy, copy.Name, copy.Agent, Ct)).Outcome);
 
         Assert.Equal("Task t1\nStart\n", await repository.GitAsync("log", "--format=%s"), ignoreLineEndingDifferences: true);
         Assert.Equal(("two\n", "new\n"), (repository.Baseline("a.txt"), repository.Baseline("b.txt")));

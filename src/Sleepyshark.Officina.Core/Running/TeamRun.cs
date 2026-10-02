@@ -1,4 +1,5 @@
 using System.Text;
+using Sleepyshark.Officina.Core.Checkpoints;
 using Sleepyshark.Officina.Core.Configuration;
 using Sleepyshark.Officina.Core.Events;
 using Sleepyshark.Officina.Core.Extensibility;
@@ -8,12 +9,13 @@ using static Sleepyshark.Officina.Core.Tasks.TaskState;
 
 namespace Sleepyshark.Officina.Core.Running;
 
-/// <summary>What the team needs of its runner: the board, the stored events, each agent's cancellation, and who is in the team.</summary>
+/// <summary>What the team needs of its runner: the board, the workspace, the stored events, each agent's cancellation, and who is in the team.</summary>
 /// <param name="Pipeline">The tool pipeline, whose board the team acts on.</param>
+/// <param name="Workspace">Where the tasks' working copies are, and their changes are integrated; null when the run has none.</param>
 /// <param name="Log">The run's stored events, which say what each agent spent before a restart (INV-07).</param>
 /// <param name="CancelOf">The owner's cancellation of an agent, by its id (RUN-06).</param>
 /// <param name="Members">Registers the team's agents for the run, so they can message each other; null ends the team and drops its messages.</param>
-internal sealed record TeamServices(ToolPipeline Pipeline, IEventLog Log, Func<string, CancellationToken> CancelOf, Action<string, IReadOnlySet<string>?> Members);
+internal sealed record TeamServices(ToolPipeline Pipeline, IWorkspace? Workspace, IEventLog Log, Func<string, CancellationToken> CancelOf, Action<string, IReadOnlySet<string>?> Members);
 
 /// <summary>
 /// The team pattern (TEAM): a lead and agents of several roles over the run's task board. The lead turns the goal into tasks,
@@ -50,6 +52,7 @@ internal sealed class TeamRun
     private readonly Dictionary<string, AgentStatus> statuses = new(StringComparer.Ordinal);
     private readonly List<Job> running = [];
     private readonly HashSet<long> told = [];
+    private readonly HashSet<string> closed = new(StringComparer.Ordinal);
     private IReadOnlyList<CoreEvent>? stored;
     private long stuckAt = -1;
 
@@ -90,10 +93,12 @@ internal sealed class TeamRun
                 // One read, so the tasks and their history agree.
                 var history = await board.HistoryAsync(stop.Token).ConfigureAwait(false);
                 var tasks = TaskBoard.Current(history);
-                if (await CompleteVerifiedAsync(board, tasks, stop.Token).ConfigureAwait(false))
+                if (await IntegrateVerifiedAsync(board, tasks, stop.Token).ConfigureAwait(false))
                 {
                     continue; // the board changed, so it is read again
                 }
+
+                await CloseCancelledAsync(tasks, stop.Token).ConfigureAwait(false);
 
                 await DispatchAsync(tasks, history, stop.Token).ConfigureAwait(false);
                 await ShowStatusesAsync(tasks, stop.Token).ConfigureAwait(false);
@@ -136,16 +141,84 @@ internal sealed class TeamRun
         }
     }
 
-    /// <summary>Marks done each task in review that is verified, and approved if it requires a review (TASK-05). Done means integrated, and a team without a workspace has nothing to integrate.</summary>
-    private static async Task<bool> CompleteVerifiedAsync(TaskBoard board, IReadOnlyList<BoardTask> tasks, CancellationToken ct)
+    /// <summary>
+    /// Integrates each task in review that is verified, and approved if it requires a review, once nobody works on it, then marks it
+    /// done, closes its working copy and takes a checkpoint (TASK-05, WS-09, RUN-03). A conflict or a failed baseline check sends it
+    /// back to its author as a failed attempt (WS-02, WS-03). Without a workspace there is nothing to integrate, so it is done.
+    /// </summary>
+    /// <returns>Whether the board changed.</returns>
+    private async Task<bool> IntegrateVerifiedAsync(TaskBoard board, IReadOnlyList<BoardTask> tasks, CancellationToken ct)
     {
         var changed = false;
-        foreach (var task in tasks.Where(task => task is { State: InReview, Verified: true } && (!task.RequiresReview || task.Approved)))
+        foreach (var task in tasks.Where(task => task is { State: InReview, Verified: true } && (!task.RequiresReview || task.Approved) && !running.Any(job => job.Task == task.Id)))
         {
-            changed |= (await board.CompleteAsync(task.Id, "verified and approved", ct).ConfigureAwait(false)).Accepted;
+            if (services.Workspace is not { } workspace)
+            {
+                changed |= (await board.CompleteAsync(task.Id, "verified and approved", ct).ConfigureAwait(false)).Accepted;
+                continue;
+            }
+
+            // The queue integrates one change at a time, so the team waits for its turn (WS-09).
+            var author = task.Assignee ?? team.Agent;
+            var copy = await workspace.OpenWorkingCopyAsync(WorkingCopies.OfTask(team.RunId, task.Id), author, ct).ConfigureAwait(false);
+            var result = await workspace.IntegrateAsync(copy, task.Id, author, ct).ConfigureAwait(false);
+            if (result.Warning is { } warning)
+            {
+                await steps.PublishAsync(team, new Warning(warning), ct).ConfigureAwait(false);
+            }
+
+            if (result.Outcome != IntegrationOutcome.Integrated)
+            {
+                if (result.Outcome == IntegrationOutcome.ChecksFailed)
+                {
+                    team.MarkUntrusted(); // SEC-04: the findings come from running the agents' code, and reach the author
+                }
+
+                var why = result.Outcome == IntegrationOutcome.Conflict
+                    ? $"it conflicts with the baseline in {string.Join(", ", result.Details)}; the working copy now holds the baseline with the conflicts marked, to resolve"
+                    : $"the baseline checks failed with it: {string.Join("; ", result.Details)}";
+                changed |= (await board.ReturnAsync(task.Id, why, ct).ConfigureAwait(false)).Accepted;
+                continue;
+            }
+
+            changed |= (await board.CompleteAsync(task.Id, "integrated", ct).ConfigureAwait(false)).Accepted;
+            await steps.CheckpointAsync(team, CheckpointPoint.Integration, ct).ConfigureAwait(false);
+            closed.Add(task.Id);
+            await CloseAsync(workspace, copy, task.Id, ct).ConfigureAwait(false);
         }
 
         return changed;
+    }
+
+    /// <summary>Closes the working copy of each task that was cancelled after an agent took it: the task has ended.</summary>
+    private async Task CloseCancelledAsync(IReadOnlyList<BoardTask> tasks, CancellationToken ct)
+    {
+        if (services.Workspace is not { } workspace)
+        {
+            return;
+        }
+
+        foreach (var task in tasks.Where(task => task is { State: Cancelled, Assignee: not null } && !running.Any(job => job.Task == task.Id) && closed.Add(task.Id)))
+        {
+            var copy = await workspace.OpenWorkingCopyAsync(WorkingCopies.OfTask(team.RunId, task.Id), task.Assignee!, ct).ConfigureAwait(false);
+            await CloseAsync(workspace, copy, task.Id, ct).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// Closes a task's working copy once the task has ended. A failure to remove it is reported and the team goes on: the work
+    /// is integrated or no longer needed, and the next run to hold the workspace removes what is left.
+    /// </summary>
+    private async Task CloseAsync(IWorkspace workspace, IWorkingCopy copy, string taskId, CancellationToken ct)
+    {
+        try
+        {
+            await workspace.CloseWorkingCopyAsync(copy, ct).ConfigureAwait(false);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException || !ct.IsCancellationRequested)
+        {
+            await steps.PublishAsync(team, new Warning($"the working copy of task {taskId} was not removed: {exception.Message}"), ct).ConfigureAwait(false);
+        }
     }
 
     /// <summary>Starts the work that can start now: the lead on failed tasks, then each task in order of priority.</summary>

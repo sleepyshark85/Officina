@@ -141,6 +141,46 @@ public sealed class RunCommandTests : IDisposable
             request => request.History.Contains(Message.User("<message from=\"owner\">\nKeep it short.\n</message>")));
     }
 
+    // TASK-08, MEM-03, MEM-05: at the console the owner views the run's board, lists the proposed changes to project memory, and decides on them.
+    [Fact]
+    public async Task The_owner_views_the_board_and_reviews_the_proposed_changes_to_project_memory()
+    {
+        sof.Write("sof.json", """
+            {
+              "providers": { "claude": { "prices": { "claude-opus-5-5": { "input": 1 } } } },
+              "run": { "permissionMode": "auto" },
+              "agents": { "dev": { "instructions": "Work.", "tools": ["owner"] } },
+              "tools": {
+                "plan": { "source": "builtin:tasks.create" },
+                "propose": { "source": "builtin:memory.propose_change", "gateExemption": "The owner decides on it." },
+                "ask": { "source": "builtin:human.ask_owner" }
+              },
+              "toolSets": { "owner": ["plan", "propose", "ask"] },
+              "capabilities": { "humanInteraction": { "enabled": true }, "taskBoard": { "enabled": true }, "projectMemory": { "enabled": true } }
+            }
+            """);
+        model.CallTools(
+                ("plan", """{ "id": "t1", "title": "Parse", "reason": "plan" }"""),
+                ("propose", """{ "kind": "note", "subject": "build", "text": "Run dotnet test." }"""))
+            .CallTools(("ask", """{ "question": "Anything else?" }"""))
+            .Reply("Done.");
+
+        var run = sof.RunAsync("run", "--input", "Plan it.");
+        await sof.Out.WaitForAsync("#1 dev asks: Anything else?", Ct);
+        sof.In.Type("board");
+        await sof.Out.WaitForAsync("t1 Parse: Ready, priority 0, $0.00 of $8.00", Ct);
+        sof.In.Type("memory");
+        await sof.Out.WaitForAsync("#1 note build: Run dotnet test. (by dev)", Ct);
+        sof.In.Type("memory approve 1 Agreed.");
+        await sof.Out.WaitForAsync("Approved #1.", Ct);
+        sof.In.Type("memory");
+        await sof.Out.WaitForAsync("no changes to project memory wait for you.", Ct);
+        sof.In.Type("answer 1 No.");
+        var (exitCode, _, _) = await run;
+
+        Assert.Equal(ExitCodes.Success, exitCode);
+    }
+
     [Fact]
     public async Task A_provider_this_build_does_not_have_is_reported()
     {

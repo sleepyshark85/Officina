@@ -23,7 +23,8 @@ internal static class RunCommand
 {
     private const string Help = """
         Commands: status | approve <n> | deny <n> | change <n> <json> | answer <n> <text> | tell <agent> <text>
-                  | mode <ask|auto|readOnly> | pause [agent] | resume [agent] | cancel [agent] | checkpoint
+                  | mode <ask|auto|readOnly> | pause [agent] | resume [agent] | cancel [agent] | checkpoint | board
+                  | memory | memory approve <n> [reason] | memory reject <n> <reason>
         """;
 
     public static Command Create(ConfigurationCommandOptions shared, SofEnvironment host)
@@ -132,8 +133,8 @@ internal static class RunCommand
             }
 
             var runner = new AgentRunner(
-                options, providers, storage, tools, new Dictionary<string, IGate>(workspace?.Gates ?? new Dictionary<string, IGate>()), new Dictionary<string, ICheck>(),
-                new Dictionary<string, IKnowledgeSource>(), queue, secrets, host.Time, workspace: workspace?.Workspace);
+                options, providers, storage, tools, new Dictionary<string, IGate>(workspace?.Gates ?? new Dictionary<string, IGate>()), new Dictionary<string, ICheck>(workspace?.Checks ?? new Dictionary<string, ICheck>()),
+                new Dictionary<string, IKnowledgeSource>(), queue, secrets, host.Time, workspace: workspace);
             starting = false;
             exitCode = await body(new Session(runner, name, runId, queue, output, workspace, storage), ct);
             return exitCode.Value;
@@ -231,6 +232,14 @@ internal static class RunCommand
                 {
                     output.WriteLine(await CheckpointAsync(runner, runId, ct));
                 }
+                else if (line.Trim() == "board")
+                {
+                    output.Write(await BoardAsync(runner, runId, ct));
+                }
+                else if (line.Trim().Split(' ', 4, StringSplitOptions.RemoveEmptyEntries) is ["memory", .. var memory])
+                {
+                    output.Write(await MemoryAsync(runner, memory, ct));
+                }
                 else if (Apply(line.Trim(), runner, agent, runId, queue, status) is { } problem)
                 {
                     output.WriteLine(problem);
@@ -253,6 +262,52 @@ internal static class RunCommand
         {
             return $"error: {exception.Message}";
         }
+    }
+
+    /// <summary>TASK-08: the run's task board as it is now, one task a line, the highest priority first.</summary>
+    private static async Task<string> BoardAsync(AgentRunner runner, string runId, CancellationToken ct)
+    {
+        if (!runner.Options.Capabilities.TaskBoard.Enabled)
+        {
+            return "error: the task board is off.\n";
+        }
+
+        var tasks = await runner.Board(null, runId).ReadAsync(ct);
+        return tasks.Count == 0 ? "the board is empty.\n" : string.Concat(tasks.Select(task =>
+            $"{task.Id} {task.Title}: {task.State}{(task.Assignee is { } assignee ? $", with {assignee}" : "")}{(task.Role is { } role ? $", role {role}" : "")}"
+            + $"{(task.DependsOn.Count > 0 ? $", depends on {string.Join(", ", task.DependsOn)}" : "")}, priority {task.Priority}, ${task.Spent:0.00} of ${task.Budget:0.00}\n"));
+    }
+
+    /// <summary>
+    /// MEM-03, MEM-05: the owner lists the proposed changes to project memory, and approves or rejects one, the condensing that only
+    /// the owner approves included.
+    /// </summary>
+    private static async Task<string> MemoryAsync(AgentRunner runner, string[] words, CancellationToken ct)
+    {
+        if (!runner.Options.Capabilities.ProjectMemory.Enabled)
+        {
+            return "error: project memory is off.\n";
+        }
+
+        var memory = runner.Memory(Caller.Anonymous);
+        if (words is [])
+        {
+            var pending = (await memory.ReadAsync(ct)).Pending;
+            return pending.Count == 0 ? "no changes to project memory wait for you.\n" : string.Concat(pending.Select(proposal =>
+                $"#{proposal.Id} {proposal.Content.Kind.ToString().ToLowerInvariant()} {proposal.Content.Subject}: {proposal.Content.Text} (by {proposal.By})"
+                + (proposal.Content.Replaces is { Count: > 0 } replaces ? $", replaces {string.Join(", ", replaces.Select(id => $"#{id}"))}" : "") + "\n"));
+        }
+
+        if (words is not [var action and ("approve" or "reject"), var number, ..] || !long.TryParse(number.TrimStart('#'), out var id)
+            || (action == "reject" && words.Length < 3))
+        {
+            return "error: memory approve <n> [reason] | memory reject <n> <reason>\n";
+        }
+
+        var (_, text) = action == "approve"
+            ? await memory.ApproveAsync(id, words.Length > 2 ? words[2] : null, ct)
+            : await memory.RejectAsync(id, words[2], ct);
+        return text + "\n";
     }
 
     /// <summary>Carries out one command; returns what was wrong with it, if anything.</summary>

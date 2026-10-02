@@ -131,7 +131,7 @@ internal sealed class Turn
         this.memory = memory;
         outputSchema = agent.Output.Format == OutputFormat.Structured ? JsonSchema.FromText(agent.Output.Schema!) : null;
         citations = agent.Output.Citations ?? (options.Capabilities.Knowledge.Enabled ? CitationRule.Resolve : CitationRule.Off);
-        this.checks = [.. agent.Output.Checks.Select(name => (name, checks[options.Checks[name].ExtensionId()!]))];
+        this.checks = [.. agent.Output.Checks.Select(name => (name, checks[options.Checks[name].Id(name)]))];
         beforeTurn = [.. agent.Context.Retrieval.BeforeTurn.Select(name => (name, knowledge[options.Knowledge[name].ExtensionId()!], options.Knowledge[name].Mask))];
         this.conversations = conversations;
         this.shortener = shortener;
@@ -191,6 +191,9 @@ internal sealed class Turn
         while (true)
         {
             await whilePaused(ct).ConfigureAwait(false);
+
+            // RUN-06: a turn cancelled while it was paused, or just before, starts no other model call.
+            ct.ThrowIfCancellationRequested();
             if (Exhausted() is { } exhausted && !(exhausted.OfRun && await SignedOffToExceedAsync(exhausted.Limit, exhausted.Extensions, ct).ConfigureAwait(false)))
             {
                 return HandOff(HandoffReason.BudgetExhausted, $"the {exhausted.Limit} budget is used up");

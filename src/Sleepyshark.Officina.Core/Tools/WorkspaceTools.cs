@@ -9,8 +9,8 @@ namespace Sleepyshark.Officina.Core.Tools;
 /// <see cref="IWorkingCopy"/>, so they work the same on the git workspace and the test kit's in-memory one (TEST-01). A
 /// refused operation reaches the model as a failure with the workspace's reason.
 /// </summary>
-/// <param name="copyOf">The working copy of the agent that makes a call, which the host opens when the agent first needs it.</param>
-public sealed class WorkspaceTools(Func<string, Task<IWorkingCopy>> copyOf)
+/// <param name="copyOf">The working copy a call works in (<see cref="ToolCall.WorkingCopy"/>), which the host opens when it is first needed.</param>
+public sealed class WorkspaceTools(Func<ToolCall, Task<IWorkingCopy>> copyOf)
 {
     public const string Read = "workspace.read_file";
     public const string Search = "workspace.search";
@@ -83,16 +83,23 @@ public sealed class WorkspaceTools(Func<string, Task<IWorkingCopy>> copyOf)
     private static int? Number(JsonElement arguments, string name) => arguments.TryGetProperty(name, out var value) ? value.GetInt32() : null;
 
     private sealed class Tool(
-        string description, string inputSchema, ToolKind kind, Func<string, Task<IWorkingCopy>> copyOf,
+        string description, string inputSchema, ToolKind kind, Func<ToolCall, Task<IWorkingCopy>> copyOf,
         Func<IWorkingCopy, JsonElement, CancellationToken, Task<string>> invoke) : ITool
     {
         public ToolDescriptor Descriptor { get; } = new(description, JsonDocument.Parse(inputSchema).RootElement.Clone(), kind, ParallelSafe: kind == ToolKind.Read);
 
         public async ValueTask<ToolResult> InvokeAsync(ToolCall toolCall, CancellationToken ct)
         {
+            // TASK-06: a task's copy holds its assignee's work, which the reviewer reads and never changes.
+            if (Descriptor.Kind == ToolKind.Write && toolCall.Board is { TaskId: { } taskId } board
+                && (await board.ReadAsync(ct).ConfigureAwait(false)).FirstOrDefault(task => task.Id == taskId) is { } task && task.Assignee != toolCall.Agent)
+            {
+                return ToolResult.Failed(ToolErrorCategory.NotAuthorised, $"only the agent working on task {taskId} changes its working copy");
+            }
+
             try
             {
-                var copy = await copyOf(toolCall.Agent).ConfigureAwait(false);
+                var copy = await copyOf(toolCall).ConfigureAwait(false);
                 return ToolResult.Success(await invoke(copy, toolCall.Arguments, ct).ConfigureAwait(false));
             }
             catch (WorkspaceException exception)

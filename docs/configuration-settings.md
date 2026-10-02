@@ -24,7 +24,7 @@ It lists the settings the code has today. Settings that later slices add are spe
 | `run` | section | `{"budget":{"cost":25,"time":"08:00:00"},"permissionMode":"ask","approvalTimeout":"00:30:00","cancelWithin":"00:00:10"}` | Defaults for every run. | `{"permissionMode":"ask"}` |
 | `operations` | section | `{"telemetry":{"cacheHitWarning":0.7}}` | How the engine is operated. | `{"telemetry":{"cacheHitWarning":0.7}}` |
 | `storage` | section | `{"retention":{"audit":"365.00:00:00"}}` | What is stored, and for how long. | `{"unstoredEvents":["textGenerated"],"retention":{"events":"30.00:00:00"}}` |
-| `capabilities` | section | `{"conversationStore":{"enabled":false},"knowledge":{"enabled":false},"humanInteraction":{"enabled":false},"workspace":{"enabled":false,"protectedPaths":[],"keepWorkingCopies":false},"sandbox":{"enabled":false,"allowedHosts":[],"toolchains":[],"commandRules":[],"secrets":{}},"taskBoard":{"enabled":false,"maxAttempts":3,"budget":8},"projectMemory":{"enabled":false,"scope":"project","maxTokens":20000,"approveBy":"lead"},"checkpoints":{"enabled":false},"team":{"enabled":false}}` | Optional capabilities and their settings. All are off by default. | `{"conversationStore":{"enabled":true}}` |
+| `capabilities` | section | `{"conversationStore":{"enabled":false},"knowledge":{"enabled":false},"humanInteraction":{"enabled":false},"workspace":{"enabled":false,"protectedPaths":[],"baselineChecks":[],"keepWorkingCopies":false},"sandbox":{"enabled":false,"allowedHosts":[],"toolchains":[],"commandRules":[],"secrets":{}},"taskBoard":{"enabled":false,"maxAttempts":3,"budget":8},"projectMemory":{"enabled":false,"scope":"project","maxTokens":20000,"approveBy":"lead"},"checkpoints":{"enabled":false},"team":{"enabled":false}}` | Optional capabilities and their settings. All are off by default. | `{"conversationStore":{"enabled":true}}` |
 
 ## `project`
 
@@ -97,7 +97,7 @@ It lists the settings the code has today. Settings that later slices add are spe
 | `gates` | list | `[]` | The tool's own gates, by name in `gates`. They run after the gates for all tools. | `["issue-dedupe"]` |
 | `gateExemption` | text |  | Why a write tool needs no gate of its own. Every write tool needs gates or this reason. | `"Writes only to a scratch folder."` |
 | `approval` | `"never"`, `"always"` |  | Whether each call needs a human's approval. Unset means `always` for irreversible tools, otherwise `never`. For approval by rule, give the tool a `builtin:require-approval` gate with a condition. | `"always"` |
-| `timeout` | time span (`hh:mm:ss` or `d.hh:mm:ss`) | `"00:02:00"` | The longest one call may take, as `hh:mm:ss`. | `"00:15:00"` |
+| `timeout` | time span (`hh:mm:ss` or `d.hh:mm:ss`) | `"00:02:00"` | The longest one call may take, as `hh:mm:ss`. It does not apply to `builtin:tasks.submit_for_review`, whose checks each have their own time limit. | `"00:15:00"` |
 | `maxAttempts` | whole number, ≥ 1 | `1` | How many times a call is tried. Only timeouts and unavailable errors are retried, and irreversible tools never are. | `3` |
 | `maxResultLength` | whole number, ≥ 1 | `32000` | The most characters of a result that enter the conversation. The full result is kept as an artifact, which a `builtin:artifact.page` tool reads. | `8000` |
 | `parallelSafe` | boolean |  | Whether calls may run at the same time as other calls. Unset uses the tool's declaration; `true` cannot loosen a tool that declares itself unsafe. Irreversible tools never run in parallel. | `false` |
@@ -129,7 +129,9 @@ It lists the settings the code has today. Settings that later slices add are spe
 
 | Setting | Allowed values | Default | Description | Example |
 |---|---|---|---|---|
-| `use` | text |  | The check the application registers, as `extension:<id>`. Required. | `"extension:Acme.NoSecretsCheck"` |
+| `use` | text |  | The check the application registers, as `extension:<id>`. Set it or `command`. | `"extension:Acme.NoSecretsCheck"` |
+| `command` | text |  | A command that checks a working copy, run in the sandbox there: the check passes when it exits with 0, and its last lines of output are the findings. It needs the sandbox, and checks a task's work or the baseline, not an agent's output. Set it or `use`. | `"dotnet test"` |
+| `timeout` | time span (`hh:mm:ss` or `d.hh:mm:ss`) | `"00:20:00"` | For a command: the longest it may run, as `hh:mm:ss`; then it is stopped, and the check fails. | `"00:40:00"` |
 
 ## `knowledge.<name>`
 
@@ -167,7 +169,7 @@ It lists the settings the code has today. Settings that later slices add are spe
 | `conversationStore` | section | `{"enabled":false}` | The conversation store: each agent's conversation with each caller is kept, anonymous callers sharing one, so a history strategy other than `none` continues it across requests and restarts. | `{"enabled":true}` |
 | `knowledge` | section | `{"enabled":false}` | Knowledge retrieval: the sources in `knowledge`, searched before a turn or through `knowledge:` tools. | `{"enabled":true}` |
 | `humanInteraction` | section | `{"enabled":false}` | Human interaction: the `builtin:human.ask_owner` tool, and sign-offs where the run waits for the owner. | `{"enabled":true,"signOffs":["runBudgetExceeded"]}` |
-| `workspace` | section | `{"enabled":false,"protectedPaths":[],"keepWorkingCopies":false}` | The git workspace: a working copy per agent, and an integration queue into the baseline. | `{"enabled":true,"protectedPaths":[{"path":"secrets/**","access":"hidden"}]}` |
+| `workspace` | section | `{"enabled":false,"protectedPaths":[],"baselineChecks":[],"keepWorkingCopies":false}` | The git workspace: a working copy per agent, and an integration queue into the baseline. | `{"enabled":true,"protectedPaths":[{"path":"secrets/**","access":"hidden"}]}` |
 | `sandbox` | section | `{"enabled":false,"allowedHosts":[],"toolchains":[],"commandRules":[],"secrets":{}}` | The sandbox that commands run in: no network unless allowed, and command rules. It needs the workspace. | `{"enabled":true,"allowedHosts":["api.nuget.org"]}` |
 | `taskBoard` | section | `{"enabled":false,"maxAttempts":3,"budget":8}` | The task board: tasks with dependencies, verification checks and review, which agents change through the `tasks.*` tools and the owner at any time. | `{"enabled":true,"maxAttempts":2}` |
 | `projectMemory` | section | `{"enabled":false,"scope":"project","maxTokens":20000,"approveBy":"lead"}` | Project memory: durable instructions, conventions and decisions in every agent's stable prefix, which agents change through the `memory.*` tools once the lead or the owner approves. | `{"enabled":true,"scope":"project","approveBy":"lead"}` |
@@ -362,6 +364,7 @@ It lists the settings the code has today. Settings that later slices add are spe
 |---|---|---|---|---|
 | `enabled` | boolean | `false` | Whether the workspace is on. | `true` |
 | `protectedPaths` | list | `[]` | Paths agents cannot see or change, in addition to the fixed ones: `.git`, `**/.env*` and `.sof/**` are hidden, and `sof.json` and `sof.*.json` are read-only. | `[{"path":"secrets/**","access":"hidden"}]` |
+| `baselineChecks` | list | `[]` | The checks, by name in `checks`, that the baseline must still pass with a change before it is integrated, in order. They run on the change applied to the baseline as it is when its turn in the integration queue comes. | `["build","tests"]` |
 | `keepWorkingCopies` | boolean | `false` | Whether an agent's working copy is kept when its task ends, so the owner can look at it. | `true` |
 
 ## `capabilities.sandbox`

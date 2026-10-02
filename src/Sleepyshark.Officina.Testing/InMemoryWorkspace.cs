@@ -8,8 +8,10 @@ namespace Sleepyshark.Officina.Testing;
 
 /// <summary>
 /// A workspace held in memory, for tests (TEST-01). Each working copy starts from <see cref="Files"/> as they are then,
-/// and keeps its changes to itself. Edits are checked against what the agent last read, as in the git workspace (WS-07);
-/// there are no protected paths.
+/// and keeps its changes to itself until it is integrated. Edits are checked against what the agent last read, as in the git
+/// workspace (WS-07); there are no protected paths and no baseline checks. A change to a file that the baseline changed too
+/// since the copy started is a conflict (WS-03): the copy then takes the baseline's other changes and keeps its own, as if its
+/// author had resolved the conflicts in favour of its change, so the next integration applies.
 /// </summary>
 public sealed class InMemoryWorkspace : IWorkspace
 {
@@ -18,21 +20,60 @@ public sealed class InMemoryWorkspace : IWorkspace
 
     private readonly Dictionary<string, (Copy Copy, string Agent)> open = new(StringComparer.Ordinal);
 
-    public Task<IWorkingCopy> OpenWorkingCopyAsync(string taskId, string agent, CancellationToken ct)
+    public Task<IWorkingCopy> OpenWorkingCopyAsync(string name, string agent, CancellationToken ct)
     {
         lock (open)
         {
-            if (!open.TryGetValue(taskId, out var found))
+            if (!open.TryGetValue(name, out var found))
             {
-                open[taskId] = found = (new Copy(new(Files)), agent);
+                open[name] = found = (new Copy(new(Files)), agent);
             }
 
             return Task.FromResult<IWorkingCopy>(found.Copy);
         }
     }
 
+    public Task<IntegrationResult> IntegrateAsync(IWorkingCopy copy, string task, string author, CancellationToken ct)
+    {
+        var integrating = (Copy)copy;
+        lock (open)
+        {
+            var changed = integrating.Changed();
+            var conflicts = changed
+                .Where(path => Files.GetValueOrDefault(path) != integrating.Base.GetValueOrDefault(path) && Files.GetValueOrDefault(path) != integrating.Files.GetValueOrDefault(path))
+                .Order(StringComparer.Ordinal).ToList();
+            if (conflicts.Count > 0)
+            {
+                integrating.Merge(new(Files));
+                return Task.FromResult(new IntegrationResult(IntegrationOutcome.Conflict, conflicts));
+            }
+
+            foreach (var path in changed)
+            {
+                if (integrating.Files.TryGetValue(path, out var text))
+                {
+                    Files[path] = text;
+                }
+                else
+                {
+                    Files.TryRemove(path, out _);
+                }
+            }
+
+            return Task.FromResult(new IntegrationResult(IntegrationOutcome.Integrated, []));
+        }
+    }
+
+    /// <summary>What closing a copy throws, as removing a folder the operating system holds on to would; null for nothing.</summary>
+    public Exception? CloseFails { get; set; }
+
     public Task CloseWorkingCopyAsync(IWorkingCopy copy, CancellationToken ct)
     {
+        if (CloseFails is { } failure)
+        {
+            throw failure;
+        }
+
         lock (open)
         {
             foreach (var task in open.Where(found => found.Value.Copy == copy).Select(found => found.Key).ToList())
@@ -82,6 +123,49 @@ public sealed class InMemoryWorkspace : IWorkspace
     public sealed class Copy(Dictionary<string, string> files) : IWorkingCopy
     {
         private readonly Dictionary<string, string> seen = new(StringComparer.Ordinal);
+
+        /// <summary>The baseline's files when the copy started.</summary>
+        internal Dictionary<string, string> Base { get; } = new(files, StringComparer.Ordinal);
+
+        /// <summary>In memory, so there is no folder.</summary>
+        public string? Directory => null;
+
+        /// <summary>Takes the baseline as it is now: its changes where the copy has none, and the copy's own where it has.</summary>
+        internal void Merge(Dictionary<string, string> baseline)
+        {
+            lock (files)
+            {
+                var own = Changed();
+                foreach (var path in baseline.Keys.Union(Base.Keys).Except(own).ToList())
+                {
+                    if (baseline.TryGetValue(path, out var text))
+                    {
+                        files[path] = text;
+                    }
+                    else
+                    {
+                        files.Remove(path);
+                    }
+
+                    seen.Remove(path);
+                }
+
+                Base.Clear();
+                foreach (var (path, text) in baseline)
+                {
+                    Base[path] = text;
+                }
+            }
+        }
+
+        /// <summary>The paths the copy added, changed or deleted since it started.</summary>
+        internal List<string> Changed()
+        {
+            lock (files)
+            {
+                return [.. files.Keys.Union(Base.Keys).Where(path => files.GetValueOrDefault(path) != Base.GetValueOrDefault(path))];
+            }
+        }
 
         /// <summary>The copy's files, by path.</summary>
         public IReadOnlyDictionary<string, string> Files => files;

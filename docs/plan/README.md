@@ -8,9 +8,9 @@ Last updated 2026-10-02.
 
 - **Done:** M0 spikes S00a and S00b; M1 slices S01 (walking skeleton) and S02 (configuration); S03 (tool pipeline); S04 (turn loop); S05 (context and caching); S06 (run record and output); S07 (history and conversation store); S08 (events, storage and observability); S09 (triggers and admission); S10 (MCP and knowledge); S11 (Claude provider); S12 (model gateway); S13 (loop patterns); S14 (git workspace); S15 (sandbox); S16 (human interaction and CLI); S17 (project memory); S18 (task board); S19 (checkpoints and long runs: part 1, checkpoints, resume and rollback; part 2, budgets, report and cleanup).
 - **Waiting:** the M0 design review sign-off on `REQUIREMENTS.md`, `CONFIGURATION.md` and `DESIGN.md`.
-- **Doing:** S20 (team): part 1, the team runs ([#22](https://github.com/sleepyshark85/Officina/issues/22)); next part 2,
-  integration and the scripted simulation, then part 3, definitions, presets, helpers and sign-offs.
-- **Next:** S20 part 2.
+- **Doing:** S20 (team, [#22](https://github.com/sleepyshark85/Officina/issues/22)): part 1, the team runs; part 2, integration
+  and the scripted team simulation (TEST-29, milestone M6's target); next part 3, definitions, presets, helpers and sign-offs.
+- **Next:** S20 part 3.
 - **Open follow-ups:**
   - S02 kept a `formatVersion` check, though only version 1 exists. Consider removing the setting
     until a version 2 exists (principle 13). S06 keeps `output.schema` as JSON text, and S13 too; if a later slice wants the
@@ -33,17 +33,16 @@ Last updated 2026-10-02.
     allow list (such as Haiku 4.5 and Sonnet 5) rejects (`InvalidRequest`); the provider should send it as a user message for them. A reply the model
     gateway starts over after a mid-stream failure leaves its first text in the stored `textGenerated` events, and retries
     are not events of their own. The `baseUrl` provider setting of the reference is not built.
-  - S20 part 2 (from S16): `sof run` gives each agent one working copy, named `<run>-<agent>` (an agent of a team by its id),
-    opened when the agent first calls a `workspace.*` or `sandbox.*` tool and disposed when the run ends. Part 2 gives each
-    task its own and disposes it when the task ends. Nothing integrates in `sof run` before then, so the CLI shows an empty
-    integration queue, and a team cannot be on with the workspace.
-  - S20 part 2 (from S16, S18 and S06): the CLI's board view (TASK-08); the command checks integration needs and the
-    `capabilities.workspace.baselineChecks` setting that names them (WS-02). Fan-out branches of one agent share that
-    agent's working copy while they run at the same time; part 2 gives branches their own when they change files.
+  - S20 part 2 (from S16, S18 and S06): each task has its own working copy, which goes when the task ends; work for no task keeps
+    the agent's own, until the run ends. The team integrates through the queue with `capabilities.workspace.baselineChecks`;
+    command checks (`checks.<name>.command`) run in the sandbox; `sof run`'s console shows the board (TASK-08).
+    S21 (from S20): fan-out branches of one agent share that agent's working copy while they run at the same time; a copy of
+    their own when they change files waits for a case. `sof config validate` does not report the `extension:` ids `sof` never
+    registers, which `sof run` refuses.
   - S21 (from S16): `sof config dry-run` cannot run a configuration that uses the `workspace.*` or `sandbox.*` tools. It
     should register them over the test kit's `InMemoryWorkspace` and `FakeSandbox` (CFG-12).
-  - S20 part 3 adds the plan-approval sign-off and the model's tool to hand off to a human (EGR-04). Part 2 adds integration
-    to `IWorkspace`, and takes a checkpoint at `CheckpointPoint.Integration` after each one.
+  - S20 part 3 adds the plan-approval sign-off and the model's tool to hand off to a human (EGR-04). Part 2 added integration
+    to `IWorkspace`, with a checkpoint at `CheckpointPoint.Integration` after each one.
   - S21 (from S16): when a cancelled turn outlives `run.cancelWithin`, the agent's lock is released, so its next turn
     can overlap with the left-behind one, and the left-behind turn reports zero cost.
   - S20 part 1 (from S19): a team's agents share the run's budget in one process, each with its own agent level from its
@@ -57,10 +56,9 @@ Last updated 2026-10-02.
     (they draw on the entry agent's).
   - S21 runs the Windows sandbox tests once as a standard user in CI (the S00a recipe), tests the CPU
     limit on both systems with limit reporting, and proves HTTPS through the proxy (a CONNECT tunnel).
-  - S20 part 1 runs the team on the task board: it claims and assigns tasks, a failed task goes back to the lead, who
-    retries it, and a verified, approved task is done. Part 2 gives each task a working copy that its checks look at,
-    integrates a task in review once verified and approved, then calls `CompleteAsync`, or `ReturnAsync` on a conflict or
-    failed baseline check (WS-03, TASK-05). S18's Notes list the rest.
+  - S20 runs the team on the task board: it claims and assigns tasks, a failed task goes back to the lead, who retries it, and
+    a task in review once verified and approved is integrated, then done (`CompleteAsync`), or returned to its author on a
+    conflict, with the baseline merged into its copy, or a failed baseline check (`ReturnAsync`, WS-03, TASK-05). S18's Notes list the rest.
   - S18 moved the SQLite format version to 3. A slice that adds a table bumps it again, unless an unmerged PR has
     already bumped it past the version on main.
   - S19 (follow-up): a resumed pattern runs again from its first step, redoing the steps already done (resume part-way);
@@ -70,8 +68,8 @@ Last updated 2026-10-02.
     masking tokens from before a crash are not restored; the host passes the `Caller` to `ResumeAsync`, because only its id and
     tenant are stored; a crashed run's branches are kept until it ends, and nothing lists runs yet.
   - S05 moved CTX-06 to S07 and CTX-07 to S06.
-  - S17 left the owner's CLI commands for memory proposals (S20 part 2; part 1 tied `memory.review` to the team's lead),
-    and unmasking proposed text (S21); their slice files say so.
+  - S17 left the owner's CLI commands for memory proposals (S20 part 2 added them to `sof run`'s console; part 1 tied
+    `memory.review` to the team's lead), and unmasking proposed text (S21); their slice files say so.
   - S09 left parts of its requirements to the slices that add the state they need; its Notes list them
     (S06, S19, S20, and S21 for Message Batches).
   - REQUIREMENTS.md §4.3 lists masking as replaceable, but DESIGN.md §4 keeps it in Core and not replaceable in v1.

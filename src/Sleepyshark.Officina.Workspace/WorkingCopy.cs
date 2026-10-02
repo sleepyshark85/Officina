@@ -16,26 +16,28 @@ public sealed class WorkingCopy : IWorkingCopy
     private readonly Matcher hidden;
     private readonly Matcher readOnly;
 
-    // The content hash of each file when the agent last read or wrote it (WS-07). The copy has one agent, so one map.
+    // The content hash of each file when it was last read or written in the copy (WS-07). Only its task's assignee writes, so one map.
     private readonly ConcurrentDictionary<string, string> seen = new(StringComparer.Ordinal);
 
-    internal WorkingCopy(string taskId, string agent, string directory, Matcher hidden, Matcher readOnly)
+    internal WorkingCopy(string name, string agent, string directory, Matcher hidden, Matcher readOnly)
     {
-        TaskId = taskId;
+        Name = name;
         Agent = agent;
         Directory = directory;
         this.hidden = hidden;
         this.readOnly = readOnly;
     }
 
-    public string TaskId { get; }
+    /// <summary>The copy's name, such as a task's (<see cref="WorkingCopies"/>), which its branch and folder are named by.</summary>
+    public string Name { get; }
 
+    /// <summary>The agent the copy was opened for.</summary>
     public string Agent { get; }
 
     /// <summary>Where the copy is on disk, for the sandbox to run commands in (S15).</summary>
     public string Directory { get; }
 
-    internal string Branch => $"agent/{TaskId}";
+    internal string Branch => $"agent/{Name}";
 
     /// <summary>Reads a file, or only some of its lines, so a large file need not enter the conversation whole (WS-06).</summary>
     /// <param name="path">The file, relative to the copy.</param>

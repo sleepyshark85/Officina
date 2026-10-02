@@ -22,12 +22,13 @@ public sealed partial class GitWorkspace : IWorkspace, IDisposable
     private readonly Matcher readOnly;
     private readonly ConcurrentDictionary<string, WorkingCopy> open = new(StringComparer.Ordinal);
 
-    private GitWorkspace(string root, string baseline, string runId, WorkspaceOptions options, IReadOnlyDictionary<string, ICheck> baselineChecks, TimeProvider time, FileStream runLock)
+    private GitWorkspace(
+        string root, string baseline, string runId, WorkspaceOptions options, IReadOnlyDictionary<string, ICheck> baselineChecks, TimeProvider time, FileStream runLock, Action<string>? released)
     {
         this.root = root;
         this.options = options;
         this.runLock = runLock;
-        queue = new IntegrationQueue(root, baseline, runId, baselineChecks, time);
+        queue = new IntegrationQueue(root, baseline, runId, baselineChecks, time, released);
         var paths = WorkspaceOptions.FixedProtectedPaths.Concat(options.ProtectedPaths).ToList();
         hidden = Globs(paths.Where(path => path.Access == PathAccess.Hidden));
         readOnly = Globs(paths.Where(path => path.Access == PathAccess.ReadOnly));
@@ -47,10 +48,12 @@ public sealed partial class GitWorkspace : IWorkspace, IDisposable
     /// <param name="options">The workspace settings.</param>
     /// <param name="baselineChecks">The checks a change must pass on the baseline before it is integrated (WS-02), by name.</param>
     /// <param name="time">The clock for the queue's waiting time.</param>
+    /// <param name="released">Called with each folder the baseline checks ran in before it is removed; null for nothing.</param>
     /// <param name="ct">Cancels opening.</param>
     /// <exception cref="WorkspaceException">Another run holds the workspace, or the root has no branch checked out.</exception>
     public static async Task<GitWorkspace> OpenAsync(
-        string root, string runId, WorkspaceOptions options, IReadOnlyDictionary<string, ICheck> baselineChecks, TimeProvider time, CancellationToken ct = default)
+        string root, string runId, WorkspaceOptions options, IReadOnlyDictionary<string, ICheck> baselineChecks, TimeProvider time, Action<string>? released = null,
+        CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(root);
         ArgumentNullException.ThrowIfNull(options);
@@ -86,7 +89,7 @@ public sealed partial class GitWorkspace : IWorkspace, IDisposable
             await File.WriteAllTextAsync(activeRun, runId, ct).ConfigureAwait(false);
             var (exitCode, branch, _) = await Git.TryRunAsync(root, ct, "symbolic-ref", "--short", "HEAD").ConfigureAwait(false);
             return exitCode == 0
-                ? new GitWorkspace(root, branch.Trim(), runId, options, baselineChecks, time, runLock)
+                ? new GitWorkspace(root, branch.Trim(), runId, options, baselineChecks, time, runLock, released)
                 : throw new WorkspaceException($"{root} must be a git repository with the baseline branch checked out.");
         }
         catch
@@ -100,16 +103,16 @@ public sealed partial class GitWorkspace : IWorkspace, IDisposable
     /// Creates the working copy where an agent does a task, from the baseline as it is now (WS-01). One already open for the
     /// task, or brought back by <see cref="RestoreAsync"/>, is returned as it is.
     /// </summary>
-    public async Task<WorkingCopy> OpenWorkingCopyAsync(string taskId, string agent, CancellationToken ct = default)
+    public async Task<WorkingCopy> OpenWorkingCopyAsync(string name, string agent, CancellationToken ct = default)
     {
-        if (open.TryGetValue(taskId, out var existing))
+        if (open.TryGetValue(name, out var existing))
         {
             return existing;
         }
 
-        var copy = new WorkingCopy(taskId, agent, Path.Combine(WorktreeFolder, taskId), hidden, readOnly);
+        var copy = new WorkingCopy(name, agent, Path.Combine(WorktreeFolder, name), hidden, readOnly);
         await Git.RunAsync(root, ct, "worktree", "add", "-b", copy.Branch, copy.Directory, "HEAD").ConfigureAwait(false);
-        open[taskId] = copy;
+        open[name] = copy;
         return copy;
     }
 
@@ -164,7 +167,7 @@ public sealed partial class GitWorkspace : IWorkspace, IDisposable
     public async Task<IReadOnlyList<CopySnapshot>> SnapshotAsync(CancellationToken ct = default)
     {
         var snapshots = new List<CopySnapshot>();
-        foreach (var copy in open.Values.OrderBy(copy => copy.TaskId, StringComparer.Ordinal))
+        foreach (var copy in open.Values.OrderBy(copy => copy.Name, StringComparer.Ordinal))
         {
             if ((await Git.RunAsync(copy.Directory, ct, "status", "--porcelain").ConfigureAwait(false)).Length > 0)
             {
@@ -172,7 +175,7 @@ public sealed partial class GitWorkspace : IWorkspace, IDisposable
                 await Git.RunAsync(copy.Directory, ct, "-c", "user.name=Officina", "-c", "user.email=officina@localhost", "-c", "commit.gpgsign=false", "commit", "--no-verify", "--message", "Officina checkpoint").ConfigureAwait(false);
             }
 
-            snapshots.Add(new CopySnapshot(copy.TaskId, copy.Agent, (await Git.RunAsync(copy.Directory, ct, "rev-parse", "HEAD").ConfigureAwait(false)).Trim()));
+            snapshots.Add(new CopySnapshot(copy.Name, copy.Agent, (await Git.RunAsync(copy.Directory, ct, "rev-parse", "HEAD").ConfigureAwait(false)).Trim()));
         }
 
         return snapshots;
@@ -186,7 +189,7 @@ public sealed partial class GitWorkspace : IWorkspace, IDisposable
     {
         ArgumentNullException.ThrowIfNull(snapshot);
         var saved = snapshot.Select(copy => copy.TaskId).ToHashSet(StringComparer.Ordinal);
-        foreach (var added in open.Values.Where(copy => !saved.Contains(copy.TaskId)).ToList())
+        foreach (var added in open.Values.Where(copy => !saved.Contains(copy.Name)).ToList())
         {
             await CloseWorkingCopyAsync(added, ct).ConfigureAwait(false);
         }
@@ -213,18 +216,18 @@ public sealed partial class GitWorkspace : IWorkspace, IDisposable
         }
     }
 
-    /// <summary>Queues the working copy's changes for integration into the baseline, and waits for the result (WS-09).</summary>
-    public Task<IntegrationResult> IntegrateAsync(WorkingCopy copy, CancellationToken ct = default)
+    /// <summary>Queues a task's change for integration, attributed to the task and its author (WS-04), and waits for the result (WS-09).</summary>
+    public Task<IntegrationResult> IntegrateAsync(WorkingCopy copy, string task, string author, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(copy);
-        return queue.EnqueueAsync(copy, ct);
+        return queue.EnqueueAsync(copy, task, author, ct);
     }
 
     /// <summary>Removes the working copy and its branch when its task ends, unless the owner keeps working copies (WS-08).</summary>
     public async Task CloseWorkingCopyAsync(WorkingCopy copy, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(copy);
-        open.TryRemove(copy.TaskId, out _);
+        open.TryRemove(copy.Name, out _);
         if (!options.KeepWorkingCopies)
         {
             await Git.RunAsync(root, ct, "worktree", "remove", "--force", copy.Directory).ConfigureAwait(false);
@@ -232,10 +235,12 @@ public sealed partial class GitWorkspace : IWorkspace, IDisposable
         }
     }
 
-    async Task<IWorkingCopy> IWorkspace.OpenWorkingCopyAsync(string taskId, string agent, CancellationToken ct) =>
-        await OpenWorkingCopyAsync(taskId, agent, ct).ConfigureAwait(false);
+    async Task<IWorkingCopy> IWorkspace.OpenWorkingCopyAsync(string name, string agent, CancellationToken ct) =>
+        await OpenWorkingCopyAsync(name, agent, ct).ConfigureAwait(false);
 
     Task IWorkspace.CloseWorkingCopyAsync(IWorkingCopy copy, CancellationToken ct) => CloseWorkingCopyAsync((WorkingCopy)copy, ct);
+
+    Task<IntegrationResult> IWorkspace.IntegrateAsync(IWorkingCopy copy, string task, string author, CancellationToken ct) => IntegrateAsync((WorkingCopy)copy, task, author, ct);
 
     Task<IReadOnlyList<CopySnapshot>> IWorkspace.SnapshotAsync(CancellationToken ct) => SnapshotAsync(ct);
 

@@ -18,7 +18,7 @@ public class GitWorkspaceTests
         await EditAsync(alice, "src/a.txt", "one", "two");
 
         Assert.Equal(("one\n", "one\n"), (await bob.ReadAsync("src/a.txt", ct: Ct), repository.Baseline("src/a.txt")));
-        Assert.Equal(IntegrationOutcome.Integrated, (await workspace.IntegrateAsync(alice, Ct)).Outcome);
+        Assert.Equal(IntegrationOutcome.Integrated, (await workspace.IntegrateAsync(alice, alice.Name, alice.Agent, Ct)).Outcome);
         var carol = await workspace.OpenWorkingCopyAsync("t3", "carol", Ct);
         Assert.Equal(("two\n", "two\n"), (repository.Baseline("src/a.txt"), await carol.ReadAsync("src/a.txt", ct: Ct)));
     }
@@ -31,7 +31,7 @@ public class GitWorkspaceTests
         var alice = await workspace.OpenWorkingCopyAsync("t1", "alice", Ct);
         await EditAsync(alice, "a.txt", "one", "two");
 
-        await workspace.IntegrateAsync(alice, Ct);
+        await workspace.IntegrateAsync(alice, alice.Name, alice.Agent, Ct);
 
         Assert.Equal(
             "alice\nTask t1\n\nOfficina-Run: run-7\nOfficina-Agent: alice\nOfficina-Task: t1",
@@ -49,11 +49,106 @@ public class GitWorkspaceTests
         await EditAsync(alice, "a.txt", "one", "alice's");
         await EditAsync(bob, "a.txt", "one", "bob's");
 
-        await workspace.IntegrateAsync(alice, Ct);
-        var result = await workspace.IntegrateAsync(bob, Ct);
+        await workspace.IntegrateAsync(alice, alice.Name, alice.Agent, Ct);
+        var result = await workspace.IntegrateAsync(bob, bob.Name, bob.Agent, Ct);
 
         Assert.Equal((IntegrationOutcome.Conflict, "a.txt"), (result.Outcome, Assert.Single(result.Details)));
         Assert.Equal("alice's\n", repository.Baseline("a.txt"));
+    }
+
+    // WS-03: the conflict becomes the author's work: the baseline is merged into its copy with the conflicts marked, and once it
+    // resolves them, its change integrates as one commit of its own, with no merge on the baseline.
+    [Fact]
+    public async Task A_conflict_leaves_the_baseline_merged_into_the_copy_for_its_author_to_resolve()
+    {
+        using var repository = await CreateAsync(("a.txt", "one\n"), ("b.txt", "bee\n"));
+        using var workspace = await repository.OpenAsync();
+        var alice = await workspace.OpenWorkingCopyAsync("t1", "alice", Ct);
+        var bob = await workspace.OpenWorkingCopyAsync("t2", "bob", Ct);
+        await EditAsync(alice, "a.txt", "one", "alice's");
+        await EditAsync(alice, "b.txt", "bee", "buzz");
+        await EditAsync(bob, "a.txt", "one", "bob's");
+        await workspace.IntegrateAsync(alice, alice.Name, alice.Agent, Ct);
+
+        var conflict = await workspace.IntegrateAsync(bob, bob.Name, bob.Agent, Ct);
+        var marked = await bob.ReadAsync("a.txt", ct: Ct);
+        await bob.WriteAsync("a.txt", "alice's and bob's\n", Ct);
+        var resolved = await workspace.IntegrateAsync(bob, "t2", "bob", Ct);
+
+        Assert.Equal(IntegrationOutcome.Conflict, conflict.Outcome);
+        Assert.Contains("<<<<<<<", marked, StringComparison.Ordinal);
+        Assert.Contains("alice's", marked, StringComparison.Ordinal);
+        Assert.Contains("bob's", marked, StringComparison.Ordinal);
+        Assert.Equal("buzz\n", await bob.ReadAsync("b.txt", ct: Ct)); // the rest of the baseline came with the merge
+        Assert.Equal(IntegrationOutcome.Integrated, resolved.Outcome);
+        Assert.Equal(("alice's and bob's\n", "buzz\n"), (repository.Baseline("a.txt"), repository.Baseline("b.txt")));
+        Assert.Equal("", (await repository.GitAsync("log", "--merges", "--format=%s", "main")).Trim());
+        Assert.Equal(["Task t2", "Task t1", "Start"], (await repository.GitAsync("log", "--format=%s", "main")).Trim().Split('\n'));
+    }
+
+    // WS-03: a change that still holds the conflict's markers is a conflict still, so they never reach the baseline.
+    [Fact]
+    public async Task A_change_resubmitted_with_its_conflict_markers_is_refused_and_the_baseline_stays_clean()
+    {
+        using var repository = await CreateAsync(("a.txt", "one\n"));
+        using var workspace = await repository.OpenAsync();
+        var alice = await workspace.OpenWorkingCopyAsync("t1", "alice", Ct);
+        var bob = await workspace.OpenWorkingCopyAsync("t2", "bob", Ct);
+        await EditAsync(alice, "a.txt", "one", "alice's");
+        await EditAsync(bob, "a.txt", "one", "bob's");
+        await workspace.IntegrateAsync(alice, "t1", "alice", Ct);
+        await workspace.IntegrateAsync(bob, "t2", "bob", Ct);
+
+        var again = await workspace.IntegrateAsync(bob, "t2", "bob", Ct); // nothing resolved
+
+        Assert.Equal((IntegrationOutcome.Conflict, "a.txt"), (again.Outcome, Assert.Single(again.Details)));
+        Assert.Equal("alice's\n", repository.Baseline("a.txt"));
+        Assert.Equal(["Task t1", "Start"], (await repository.GitAsync("log", "--format=%s", "main")).Trim().Split('\n'));
+    }
+
+    // WS-09: a scratch folder that could not be removed after an integration loses nothing: the result stands, with a warning, and
+    // the next integration removes the folder first.
+    [Fact]
+    public async Task A_scratch_folder_left_behind_keeps_the_result_and_does_not_block_the_next_integration()
+    {
+        using var repository = await CreateAsync(("a.txt", "one\n"), ("b.txt", "bee\n"));
+        var locked = false;
+        using var workspace = await repository.OpenAsync(released: folder =>
+        {
+            if (!locked)
+            {
+                locked = true;
+                repository.GitAsync("worktree", "lock", folder).GetAwaiter().GetResult(); // so git refuses to remove it
+            }
+        });
+        var alice = await workspace.OpenWorkingCopyAsync("t1", "alice", Ct);
+        var bob = await workspace.OpenWorkingCopyAsync("t2", "bob", Ct);
+        await EditAsync(alice, "a.txt", "one", "two");
+        await EditAsync(bob, "b.txt", "bee", "buzz");
+
+        var first = await workspace.IntegrateAsync(alice, "t1", "alice", Ct);
+        var second = await workspace.IntegrateAsync(bob, "t2", "bob", Ct);
+
+        Assert.Equal(IntegrationOutcome.Integrated, first.Outcome);
+        Assert.StartsWith("the integration's scratch folder", first.Warning, StringComparison.Ordinal);
+        Assert.Equal((IntegrationOutcome.Integrated, null), (second.Outcome, second.Warning));
+        Assert.Equal(("two\n", "buzz\n"), (repository.Baseline("a.txt"), repository.Baseline("b.txt")));
+    }
+
+    // WS-02: what the sandbox set up for the baseline checks goes with the folder they ran in.
+    [Fact]
+    public async Task The_folder_the_baseline_checks_ran_in_is_released_before_it_is_removed()
+    {
+        using var repository = await CreateAsync(("a.txt", "one\n"));
+        var released = new List<string>();
+        using var workspace = await repository.OpenAsync(checks: new() { ["build"] = Check.Passing }, released: released.Add);
+        var alice = await workspace.OpenWorkingCopyAsync("t1", "alice", Ct);
+        await EditAsync(alice, "a.txt", "one", "two");
+
+        await workspace.IntegrateAsync(alice, alice.Name, alice.Agent, Ct);
+
+        Assert.Equal(Path.Combine(repository.Root, ".sof", "integration"), Assert.Single(released));
+        Assert.False(Directory.Exists(Assert.Single(released)));
     }
 
     [Fact]
@@ -72,8 +167,8 @@ public class GitWorkspaceTests
         await EditAsync(alice, "a.txt", "one", "1");
         await EditAsync(bob, "a.txt", "three", "3");
 
-        await workspace.IntegrateAsync(alice, Ct);
-        await workspace.IntegrateAsync(bob, Ct);
+        await workspace.IntegrateAsync(alice, alice.Name, alice.Agent, Ct);
+        await workspace.IntegrateAsync(bob, bob.Name, bob.Agent, Ct);
 
         Assert.Equal(["1\ntwo\nthree\n", "1\ntwo\n3\n"], checkedFiles);
         Assert.Equal("1\ntwo\n3\n", repository.Baseline("a.txt"));
@@ -91,7 +186,7 @@ public class GitWorkspaceTests
         var alice = await workspace.OpenWorkingCopyAsync("t1", "alice", Ct);
         await EditAsync(alice, "a.txt", "one", "broken");
 
-        var result = await workspace.IntegrateAsync(alice, Ct);
+        var result = await workspace.IntegrateAsync(alice, alice.Name, alice.Agent, Ct);
 
         Assert.Equal((IntegrationOutcome.ChecksFailed, "tests: a.txt does not compile"), (result.Outcome, Assert.Single(result.Details)));
         Assert.Equal("one\n", repository.Baseline("a.txt"));
@@ -118,11 +213,11 @@ public class GitWorkspaceTests
             copies.Add(copy);
         }
 
-        var first = workspace.IntegrateAsync(copies[0], Ct);
+        var first = workspace.IntegrateAsync(copies[0], copies[0].Name, copies[0].Agent, Ct);
         await started.Task;
-        var second = workspace.IntegrateAsync(copies[1], Ct);
+        var second = workspace.IntegrateAsync(copies[1], copies[1].Name, copies[1].Agent, Ct);
         repository.Time.Advance(TimeSpan.FromMinutes(5));
-        var third = workspace.IntegrateAsync(copies[2], Ct);
+        var third = workspace.IntegrateAsync(copies[2], copies[2].Name, copies[2].Agent, Ct);
 
         Assert.Equal(new IntegrationQueueStatus(2, TimeSpan.FromMinutes(5)), workspace.Queue);
         release.SetResult();
@@ -163,7 +258,7 @@ public class GitWorkspaceTests
         var copy = await workspace.OpenWorkingCopyAsync("t1", "alice", Ct);
         await copy.WriteAsync("new.txt", "new", Ct);
 
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => workspace.IntegrateAsync(copy, new CancellationToken(canceled: true)));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => workspace.IntegrateAsync(copy, copy.Name, copy.Agent, new CancellationToken(canceled: true)));
 
         Assert.Equal("?? new.txt", (await Git.RunAsync(copy.Directory, Ct, "status", "--porcelain")).Trim());
     }

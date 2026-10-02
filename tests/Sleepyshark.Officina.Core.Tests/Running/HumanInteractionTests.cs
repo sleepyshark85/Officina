@@ -167,6 +167,33 @@ public class HumanInteractionTests
         Assert.Equal(outcome == AgentOutcome.Completed ? null : HandoffReason.BudgetExhausted, result.Handoff?.Reason);
     }
 
+    // HITL-04, RUN-05: the owner's yes lets the run use as many tokens or tool calls again, as it does its cost and time.
+    [Theory]
+    [InlineData("token")]
+    [InlineData("tool-call")]
+    public async Task The_owners_yes_extends_the_runs_token_and_tool_call_limits_too(string limit)
+    {
+        var options = Configure() with
+        {
+            Run = new() { PermissionMode = PermissionMode.Auto, Budget = limit == "token" ? new() { Tokens = 1000 } : new() { ToolCalls = 1 } },
+            Capabilities = new() { HumanInteraction = new() { Enabled = true, SignOffs = [SignOff.RunBudgetExceeded] } },
+        };
+        var kit = new TestKit(options, new Dictionary<string, ITool> { ["edit"] = edit, ["read"] = new FakeTool(ToolKind.Read) });
+        kit.Human.Answer(HumanAnswer.Approve);
+        kit.Model
+            .Reply(limit == "token" ? [new UsageReported(new Usage(1000, 0, 0, 0)), new Stopped(StopReason.Paused)]
+                : [new ContentReceived(new ToolUseContent("call-1", "read", Args("{}"))), new Stopped(StopReason.WantsTools)])
+            .Reply(new UsageReported(new Usage(limit == "token" ? 500 : 0, 0, 0, 0)), new Stopped(StopReason.Paused)) // within the extended limit
+            .Reply("Done.");
+
+        var result = await kit.RunAsync(Agent, "work", Ct);
+
+        Assert.Equal(AgentOutcome.Completed, result.Outcome);
+        var asked = Assert.Single(kit.Human.Requests);
+        Assert.Equal(
+            $"The run's {limit} budget is used up. Go on for another 25 USD and 08:00:00, {(limit == "token" ? "1000 tokens" : "1 tool calls")}?", asked.Summary);
+    }
+
     // HITL-04, RUN-05: with nothing configured but the default run budget of $25, the owner is asked, and no agent level ends the turn first.
     [Fact]
     public async Task The_default_run_budget_asks_the_owner_before_any_agent_level_ends_the_turn()
