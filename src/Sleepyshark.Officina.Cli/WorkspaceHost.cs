@@ -1,7 +1,5 @@
 using System.Collections.Concurrent;
-using System.Security.Cryptography;
-using System.Text;
-using System.Text.RegularExpressions;
+using Sleepyshark.Officina.Core.Checkpoints;
 using Sleepyshark.Officina.Core.Configuration;
 using Sleepyshark.Officina.Core.Extensibility;
 using Sleepyshark.Officina.Core.Tools;
@@ -11,31 +9,35 @@ using Sleepyshark.Officina.Workspace;
 namespace Sleepyshark.Officina.Cli;
 
 /// <summary>
-/// The git workspace of a run, and what the <c>workspace.*</c> and <c>sandbox.*</c> tools need of it. Each agent gets its
-/// working copy, and its own <see cref="SandboxTools"/> over it, when it first calls one of them (WS-01). Disposing the
-/// host, when the run ends, stops the agents' background processes (SBX-03) and removes their working copies.
+/// The git workspace of a run, as the run and its tools use it. A working copy is opened, by its name (<see cref="WorkingCopies"/>),
+/// when it is first needed: a task's, which the agents working on and reviewing the task share, or an agent's own for work
+/// that is for no task (WS-01). Each agent gets its own <see cref="SandboxTools"/> in a copy. Closing a copy, when its task ends,
+/// stops its agents' background processes (SBX-03); disposing the host, when the run ends, closes every copy still open. The
+/// command checks run in the sandbox too (WS-02).
 /// </summary>
-internal sealed partial class WorkspaceHost : IAsyncDisposable
+internal sealed class WorkspaceHost : IWorkspace, IAsyncDisposable
 {
     private readonly GitWorkspace workspace;
     private readonly OfficinaOptions options;
     private readonly ISandbox? sandbox;
-    private readonly string runId;
     private readonly bool leaveWorkingCopies;
-    private readonly ConcurrentDictionary<string, Lazy<Task<Hold>>> holds = new(StringComparer.Ordinal);
+    private readonly TextWriter warnings;
+    private readonly ConcurrentDictionary<string, Lazy<Task<WorkingCopy>>> copies = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<(string Copy, string Agent), Lazy<SandboxTools>> sandboxes = new();
 
-    private WorkspaceHost(GitWorkspace workspace, OfficinaOptions options, ISandbox? sandbox, string runId, string root, bool leaveWorkingCopies)
+    private WorkspaceHost(
+        GitWorkspace workspace, OfficinaOptions options, ISandbox? sandbox, string root, bool leaveWorkingCopies, IReadOnlyDictionary<string, ICheck> checks, TextWriter warnings)
     {
+        this.warnings = warnings;
         this.workspace = workspace;
         this.leaveWorkingCopies = leaveWorkingCopies;
         this.options = options;
         this.sandbox = sandbox;
-        this.runId = runId;
-        var tools = new Dictionary<string, ITool>(new WorkspaceTools(async agent => (await HoldOf(agent).ConfigureAwait(false)).Copy).Tools);
+        var tools = new Dictionary<string, ITool>(new WorkspaceTools(async call => await OpenAsync(call.WorkingCopy, call.Agent).ConfigureAwait(false)).Tools);
         var gates = new Dictionary<string, IGate>();
         if (sandbox is not null)
         {
-            // Only the descriptions are taken from this one; each call runs on its own agent's tools.
+            // Only the descriptions are taken from this one; each call runs on its own agent's tools in its working copy.
             foreach (var (id, tool) in new SandboxTools(sandbox, options.Capabilities.Sandbox, options.Capabilities.Workspace, "", root).Tools)
             {
                 tools[id] = new SandboxTool(id, tool.Descriptor, this);
@@ -46,6 +48,7 @@ internal sealed partial class WorkspaceHost : IAsyncDisposable
 
         Tools = tools;
         Gates = gates;
+        Checks = checks;
     }
 
     /// <summary>The tools, by the id that <c>extension:&lt;id&gt;</c> sources name; the sandbox's only when its capability is on (CAP-02).</summary>
@@ -54,11 +57,11 @@ internal sealed partial class WorkspaceHost : IAsyncDisposable
     /// <summary>The command rules gate, when the sandbox is on.</summary>
     public IReadOnlyDictionary<string, IGate> Gates { get; }
 
+    /// <summary>The command checks, by the id <see cref="CheckOptions.Id"/> gives them (WS-02, TASK-05).</summary>
+    public IReadOnlyDictionary<string, ICheck> Checks { get; }
+
     /// <summary>The integration queue's length and waiting time (WS-09).</summary>
     public IntegrationQueueStatus Queue => workspace.Queue;
-
-    /// <summary>The workspace whose working copies checkpoints save and restore (RUN-04).</summary>
-    public IWorkspace Workspace => workspace;
 
     /// <summary>
     /// Opens the workspace in <paramref name="root"/>, after checking that the machine can sandbox commands when they are on, and
@@ -84,11 +87,21 @@ internal sealed partial class WorkspaceHost : IAsyncDisposable
             throw new InvalidOperationException($"commands cannot run, because this machine cannot sandbox them: {problem}");
         }
 
-        var workspace = await GitWorkspace.OpenAsync(root, runId, options.Capabilities.Workspace, new Dictionary<string, ICheck>(), time, ct).ConfigureAwait(false);
+        // A command check needs the sandbox, which validation requires of it (SBX-07).
+        var checks = sandbox is null
+            ? new Dictionary<string, ICheck>()
+            : options.Checks.Where(check => check.Value.Command is not null).ToDictionary(
+                check => check.Value.Id(check.Key),
+                ICheck (check) => new CommandCheck(sandbox, options.Capabilities.Sandbox, options.Capabilities.Workspace, check.Value.Command!));
+        // An application's check is not sof's to run: the runner refuses the configuration for it, as for any unregistered check.
+        var baselineChecks = options.Capabilities.Workspace.BaselineChecks.Where(name => checks.ContainsKey(options.Checks[name].Id(name)))
+            .ToDictionary(name => name, name => checks[options.Checks[name].Id(name)]);
+        var workspace = await GitWorkspace.OpenAsync(
+            root, runId, options.Capabilities.Workspace, baselineChecks, time, folder => ReleaseLeftover(sandbox, options, folder, warnings), ct).ConfigureAwait(false);
         try
         {
             await workspace.RemoveLeftoversAsync(keepLeftover, folder => ReleaseLeftover(sandbox, options, folder, warnings), ct).ConfigureAwait(false);
-            return new WorkspaceHost(workspace, options, sandbox, runId, root, leaveWorkingCopies);
+            return new WorkspaceHost(workspace, options, sandbox, root, leaveWorkingCopies, checks, warnings);
         }
         catch
         {
@@ -97,7 +110,7 @@ internal sealed partial class WorkspaceHost : IAsyncDisposable
         }
     }
 
-    /// <summary>What a run that died left outside its working copy goes with the copy. Failing to remove it must not stop the next run.</summary>
+    /// <summary>What commands in a folder that is going away left outside it goes too. Failing to remove it must not stop the run.</summary>
     private static void ReleaseLeftover(ISandbox? sandbox, OfficinaOptions options, string folder, TextWriter warnings)
     {
         try
@@ -106,7 +119,7 @@ internal sealed partial class WorkspaceHost : IAsyncDisposable
         }
         catch (AggregateException exception)
         {
-            warnings.WriteLine($"warning: could not remove what a run that died left outside {folder}: {string.Join("; ", exception.InnerExceptions.Select(inner => inner.Message))}");
+            warnings.WriteLine($"warning: could not remove what commands left outside {folder}: {string.Join("; ", exception.InnerExceptions.Select(inner => inner.Message))}");
         }
     }
 
@@ -136,6 +149,37 @@ internal sealed partial class WorkspaceHost : IAsyncDisposable
         }
     }
 
+    /// <summary>The working copy of the name, opened once for whoever needs it first; one that failed to open is tried again next time.</summary>
+    public async Task<IWorkingCopy> OpenWorkingCopyAsync(string taskId, string agent, CancellationToken ct) => await OpenAsync(taskId, agent).ConfigureAwait(false);
+
+    /// <summary>Closes a working copy when its task ends: its agents' background processes stop, and the copy goes unless the owner keeps copies (WS-08).</summary>
+    public async Task CloseWorkingCopyAsync(IWorkingCopy copy, CancellationToken ct)
+    {
+        var closing = (WorkingCopy)copy;
+        copies.TryRemove(closing.TaskId, out _);
+        var released = false;
+        try
+        {
+            released = await DisposeSandboxesAsync(closing.TaskId).ConfigureAwait(false);
+        }
+        finally
+        {
+            await workspace.CloseWorkingCopyAsync(closing, ct).ConfigureAwait(false);
+            if (!released)
+            {
+                // Checks may have run commands there even if no agent did.
+                ReleaseLeftover(sandbox, options, closing.Directory, warnings);
+            }
+        }
+    }
+
+    public Task<IntegrationResult> IntegrateAsync(IWorkingCopy copy, string task, string author, CancellationToken ct) =>
+        workspace.IntegrateAsync((WorkingCopy)copy, task, author, ct);
+
+    public Task<IReadOnlyList<CopySnapshot>> SnapshotAsync(CancellationToken ct) => workspace.SnapshotAsync(ct);
+
+    public Task RestoreAsync(IReadOnlyList<CopySnapshot> snapshot, CancellationToken ct) => workspace.RestoreAsync(snapshot, ct);
+
     public async ValueTask DisposeAsync()
     {
         // One failing disposal must not leave the others' processes, worktrees or the run lock behind.
@@ -146,21 +190,14 @@ internal sealed partial class WorkspaceHost : IAsyncDisposable
             return;
         }
 
-        foreach (var hold in holds.Values)
+        var released = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var name in sandboxes.Keys.Select(key => key.Copy).Distinct().ToList())
         {
             try
             {
-                var (copy, tools) = await hold.Value.ConfigureAwait(false);
-                try
+                if (await DisposeSandboxesAsync(name).ConfigureAwait(false))
                 {
-                    if (tools is not null)
-                    {
-                        await tools.DisposeAsync().ConfigureAwait(false);
-                    }
-                }
-                finally
-                {
-                    await workspace.CloseWorkingCopyAsync(copy).ConfigureAwait(false);
+                    released.Add(name);
                 }
             }
             catch (Exception exception)
@@ -169,12 +206,16 @@ internal sealed partial class WorkspaceHost : IAsyncDisposable
             }
         }
 
-        // Working copies a restore brought back that no agent has used since.
+        // Every copy still open, also those a restore brought back that nobody has used since.
         foreach (var copy in workspace.OpenCopies)
         {
             try
             {
                 await workspace.CloseWorkingCopyAsync(copy).ConfigureAwait(false);
+                if (!released.Contains(copy.TaskId))
+                {
+                    ReleaseLeftover(sandbox, options, copy.Directory, warnings);
+                }
             }
             catch (Exception exception)
             {
@@ -189,54 +230,52 @@ internal sealed partial class WorkspaceHost : IAsyncDisposable
         }
     }
 
-    private async Task<Hold> HoldOf(string agent)
+    private async Task<WorkingCopy> OpenAsync(string name, string agent)
     {
-        var hold = holds.GetOrAdd(agent, name => new(() => OpenAsync(name)));
+        var opening = copies.GetOrAdd(name, _ => new(() => workspace.OpenWorkingCopyAsync(name, agent)));
         try
         {
-            return await hold.Value.ConfigureAwait(false);
+            return await opening.Value.ConfigureAwait(false);
         }
         catch
         {
-            // A failed open is not kept, so the agent's next call tries again.
-            holds.TryRemove(new KeyValuePair<string, Lazy<Task<Hold>>>(agent, hold));
+            // A failed open is not kept, so the next call tries again.
+            copies.TryRemove(new KeyValuePair<string, Lazy<Task<WorkingCopy>>>(name, opening));
             throw;
         }
     }
 
-    private async Task<Hold> OpenAsync(string agent)
+    /// <summary>Stops the background processes of every agent in a copy (SBX-03), which releases what the sandbox set up for it.</summary>
+    /// <returns>Whether any agent's tools were there, so the copy is released.</returns>
+    private async Task<bool> DisposeSandboxesAsync(string name)
     {
-        var copy = await workspace.OpenWorkingCopyAsync($"{runId}-{SafeName(agent)}", agent).ConfigureAwait(false);
-        try
+        var released = false;
+        foreach (var key in sandboxes.Keys.Where(key => key.Copy == name).ToList())
         {
-            return new(copy, sandbox is null ? null : new SandboxTools(sandbox, options.Capabilities.Sandbox, options.Capabilities.Workspace, agent, copy.Directory));
+            if (sandboxes.TryRemove(key, out var tools) && tools.IsValueCreated)
+            {
+                await tools.Value.DisposeAsync().ConfigureAwait(false);
+                released = true;
+            }
         }
-        catch
-        {
-            await workspace.CloseWorkingCopyAsync(copy).ConfigureAwait(false);
-            throw;
-        }
+
+        return released;
     }
 
-    /// <summary>The agent's name as part of a git branch and a folder name; a name with other characters gets a hash, so two such names stay apart.</summary>
-    private static string SafeName(string agent) =>
-        SafeCharacters().IsMatch(agent)
-            ? agent
-            : $"{UnsafeCharacters().Replace(agent, "_")}-{Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(agent)))[..6]}";
-
-    [GeneratedRegex("^[A-Za-z0-9_-]+$")]
-    private static partial Regex SafeCharacters();
-
-    [GeneratedRegex("[^A-Za-z0-9_-]")]
-    private static partial Regex UnsafeCharacters();
-
-    private sealed record Hold(WorkingCopy Copy, SandboxTools? Tools);
+    /// <summary>The agent's sandbox tools in the working copy of the call; each agent's commands get its own role's secrets (SBX-05).</summary>
+    private async Task<SandboxTools> SandboxOf(ToolCall call)
+    {
+        var copy = await OpenAsync(call.WorkingCopy, call.Agent).ConfigureAwait(false);
+        return sandboxes.GetOrAdd(
+            (call.WorkingCopy, call.Agent),
+            _ => new(() => new SandboxTools(sandbox!, options.Capabilities.Sandbox, options.Capabilities.Workspace, call.Agent, copy.Directory))).Value;
+    }
 
     private sealed class SandboxTool(string id, ToolDescriptor descriptor, WorkspaceHost host) : ITool
     {
         public ToolDescriptor Descriptor { get; } = descriptor;
 
         public async ValueTask<ToolResult> InvokeAsync(ToolCall toolCall, CancellationToken ct) =>
-            await (await host.HoldOf(toolCall.Agent).ConfigureAwait(false)).Tools!.Tools[id].InvokeAsync(toolCall, ct).ConfigureAwait(false);
+            await (await host.SandboxOf(toolCall).ConfigureAwait(false)).Tools[id].InvokeAsync(toolCall, ct).ConfigureAwait(false);
     }
 }

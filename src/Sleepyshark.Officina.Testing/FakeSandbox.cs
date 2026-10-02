@@ -15,6 +15,12 @@ public sealed class FakeSandbox : ISandbox
     private readonly ConcurrentQueue<string> released = new();
     private readonly TaskCompletionSource<FakeSandboxProcess> firstStarted = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
+    /// <summary>
+    /// The reply to a command when no scripted reply is left, such as for the checks of agents that work at once, in any order;
+    /// null for none, so such a command fails the test.
+    /// </summary>
+    public Func<SandboxCommand, (string Output, int? ExitCode)>? Answer { get; init; }
+
     /// <summary>What <see cref="Probe"/> reports: null when the machine can isolate commands.</summary>
     public string? Problem { get; init; }
 
@@ -45,7 +51,7 @@ public sealed class FakeSandbox : ISandbox
     {
         if (!replies.TryDequeue(out var reply))
         {
-            throw new InvalidOperationException($"The fake sandbox was asked to run \"{command.CommandLine}\" but has no reply left. Add one with Reply().");
+            reply = Answer?.Invoke(command) ?? throw new InvalidOperationException($"The fake sandbox was asked to run \"{command.CommandLine}\" but has no reply left. Add one with Reply().");
         }
 
         var process = new FakeSandboxProcess(command, reply.Output, reply.ExitCode);

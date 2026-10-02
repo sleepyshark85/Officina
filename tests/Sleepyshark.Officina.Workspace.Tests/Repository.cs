@@ -36,8 +36,8 @@ internal sealed class Repository : IDisposable
     /// <summary>A file of the baseline, as checked out at the root.</summary>
     public string Baseline(string path) => File.ReadAllText(Path.Combine(Root, path));
 
-    public Task<GitWorkspace> OpenAsync(WorkspaceOptions? options = null, Dictionary<string, ICheck>? checks = null, string runId = "run-1") =>
-        GitWorkspace.OpenAsync(Root, runId, options ?? new(), checks ?? [], Time, Ct);
+    public Task<GitWorkspace> OpenAsync(WorkspaceOptions? options = null, Dictionary<string, ICheck>? checks = null, string runId = "run-1", Action<string>? released = null) =>
+        GitWorkspace.OpenAsync(Root, runId, options ?? new(), checks ?? [], Time, released, Ct);
 
     public void Dispose()
     {

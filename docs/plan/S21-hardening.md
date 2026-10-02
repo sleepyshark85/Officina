@@ -34,3 +34,8 @@ From S20 (part 1):
 - `budget.total` of a pattern's step agents, which still draw on the entry agent's level (a team's agents have their own).
 - The condition roots `checks.<name>`, `outcome` and `stopReason` (configuration reference §6), for a case that needs them.
 - RUN-05: a task's tokens, time and tool calls; its budget caps its cost only. (S20 built the run's tokens and tool calls.)
+
+From S20 (part 2):
+- A working copy of their own for fan-out branches of one agent that change files: from the agent's copy as it is, with a rule
+  for what becomes of each branch's changes. Until then branches of one agent share its working copy.
+- A time limit for command checks, so a hanging command cannot hold the integration queue.

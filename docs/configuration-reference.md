@@ -348,16 +348,16 @@ The built-in gates are:
 
 ```jsonc
 "checks": {
-  "build":  { "use": "builtin:command", "settings": { "command": "{{project.values.buildCommand}}", "timeout": "00:10:00" } },
-  "tests":  { "use": "builtin:command", "settings": { "command": "{{project.values.testCommand}}", "timeout": "00:20:00" } },
-  "review": { "use": "builtin:agent-review", "settings": { "reviewer": "reviewer" } },
-  "cites":  { "use": "builtin:citations-resolve" }
+  "build":  { "command": "dotnet build" },             // WS-02, TASK-05: run in the sandbox, in the working copy checked
+  "tests":  { "command": "dotnet test" },              // passes when the command exits with 0
+  "cites":  { "use": "extension:Acme.CitationsCheck" } // the application's check, on output (OUT-03)
 }
 ```
 
-A check returns a structured result: passed or failed, with findings. `builtin:agent-review` runs
-another agent whose output is a schema-validated verdict, so even a review decides by a structured
-signal (INV-01). The reviewer is never the author (TASK-06).
+A check returns a structured result: passed or failed, with findings. A command check needs the sandbox,
+and checks a working copy: a task's when it is submitted, or the change applied to the baseline before it
+is integrated (`capabilities.workspace.baselineChecks`); it gets no secrets, and has no time limit of its
+own yet (S21). A review is a task's (`tasks.review`), by an agent other than the author (TASK-06).
 
 ### 5.8 Knowledge sources
 

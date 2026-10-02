@@ -93,6 +93,13 @@ public sealed class ToolPipeline
     /// <summary>Delivers a message from the agent of the context to another agent of its team; it returns why it cannot, or null (TEAM-06).</summary>
     internal Func<ToolContext, string, string, CancellationToken, ValueTask<string?>>? Messages { get; set; }
 
+    /// <summary>The workspace whose task copies verification checks look at (TASK-05); null when the run has none.</summary>
+    internal IWorkspace? Workspace { get; set; }
+
+    /// <summary>The working copy the agent of the context works in: its task's, or else its own.</summary>
+    internal static string WorkingCopyOf(ToolContext context) =>
+        context.TaskId is { } task ? WorkingCopies.OfTask(context.RunId, task) : WorkingCopies.OfAgent(context.RunId, context.AgentId);
+
     /// <summary>Who answers approvals, questions and sign-offs, by their deadline.</summary>
     internal OwnerChannel Owner { get; }
 
@@ -117,7 +124,14 @@ public sealed class ToolPipeline
 
     /// <summary>The run's task board as the agent of <paramref name="context"/> acts on it; null when the task board is off.</summary>
     internal TaskBoard? Board(ToolContext context, bool owner = false) =>
-        options.Capabilities.TaskBoard.Enabled ? new TaskBoard(storage.Tasks, context, options, events, time, owner) : null;
+        options.Capabilities.TaskBoard.Enabled
+            ? new TaskBoard(storage.Tasks, context, options, events, time, owner)
+            {
+                CopyOf = Workspace is { } workspace
+                    ? async (task, agent, ct) => (await workspace.OpenWorkingCopyAsync(WorkingCopies.OfTask(context.RunId, task), agent, ct).ConfigureAwait(false)).Directory
+                    : null,
+            }
+            : null;
 
     /// <summary>
     /// Runs the calls of one model reply. When every tool called is safe to run in parallel they run at the same time, up
@@ -248,7 +262,7 @@ public sealed class ToolPipeline
             ? (await AskQuestionAsync(context, arguments, ct).ConfigureAwait(false), null)
             : await InvokeAsync(
                 tool, new ToolCall(real ? context.Masker!.Restore(arguments) : arguments, context.Caller, key, secrets, record, board, PublishAsync) {
-                    Agent = context.AgentId, Memory = Memory(context), Send = Messages is { } send ? (to, text, token) => send(context, to, text, token) : null,
+                    Agent = context.AgentId, WorkingCopy = WorkingCopyOf(context), Memory = Memory(context), Send = Messages is { } send ? (to, text, token) => send(context, to, text, token) : null,
                 }, ct).ConfigureAwait(false);
         detail = detail is null || masker is null ? detail : masker.Mask(detail);
         if (tool.Options.Untrusted && result.Error is null)

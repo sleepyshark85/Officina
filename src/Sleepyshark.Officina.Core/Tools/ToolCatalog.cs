@@ -68,8 +68,11 @@ internal sealed class ToolCatalog
                 .Where(gate => gate.Value.ExtensionId() is { } id && !gates.ContainsKey(id))
                 .Select(gate => Unregistered($"gates.{gate.Key}.use", "gate", gate.Value.ExtensionId()!)));
             errors.AddRange(options.Checks
-                .Where(check => !checks.ContainsKey(check.Value.ExtensionId()!))
-                .Select(check => Unregistered($"checks.{check.Key}.use", "check", check.Value.ExtensionId()!)));
+                .Where(check => !checks.ContainsKey(check.Value.Id(check.Key)))
+                .Select(check => check.Value.Command is null
+                    ? Unregistered($"checks.{check.Key}.use", "check", check.Value.ExtensionId()!)
+                    : new(ValidationPhase.References, $"checks.{check.Key}.command", "is a command, which the host runs in its sandbox, but the host registered none.",
+                        $"Register the host's command check under the id \"{check.Value.Id(check.Key)}\".")));
             errors.AddRange(catalog.Values.Where(tool => tool.Schema is not null).SelectMany(tool => Conditions(tool, options)));
         }
 

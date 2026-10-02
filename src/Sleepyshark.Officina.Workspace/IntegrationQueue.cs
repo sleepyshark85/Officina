@@ -7,9 +7,16 @@ namespace Sleepyshark.Officina.Workspace;
 /// The workspace's one integration queue (WS-09). Changes are integrated one at a time, in the order they arrive. Each is
 /// rebased onto the baseline as it is when its turn comes, in a scratch worktree, then the baseline checks run there, and
 /// only if they all pass does the baseline fast-forward to it (WS-02). A change that no longer applies is a conflict,
-/// never resolved silently (WS-03).
+/// never resolved silently (WS-03): the baseline is merged into the working copy, with the conflicts marked in its files and
+/// committed, so its author resolves them there and the next integration takes the resolved files.
 /// </summary>
-internal sealed class IntegrationQueue(string root, string baseline, string runId, IReadOnlyDictionary<string, ICheck> checks, TimeProvider time)
+/// <param name="root">The workspace's top folder.</param>
+/// <param name="baseline">The baseline branch.</param>
+/// <param name="runId">The run whose changes are integrated, named in each commit (WS-04).</param>
+/// <param name="checks">The baseline checks, by name, in order (WS-02).</param>
+/// <param name="time">The clock for the waiting time.</param>
+/// <param name="released">Called with the scratch worktree's folder before it is removed, such as to release what a sandbox set up for its checks.</param>
+internal sealed class IntegrationQueue(string root, string baseline, string runId, IReadOnlyDictionary<string, ICheck> checks, TimeProvider time, Action<string>? released)
 {
     private readonly Lock gate = new();
     private readonly Queue<DateTimeOffset> waiting = new();
@@ -26,7 +33,7 @@ internal sealed class IntegrationQueue(string root, string baseline, string runI
         }
     }
 
-    public Task<IntegrationResult> EnqueueAsync(WorkingCopy copy, CancellationToken ct)
+    public Task<IntegrationResult> EnqueueAsync(WorkingCopy copy, string task, string author, CancellationToken ct)
     {
         lock (gate)
         {
@@ -41,7 +48,7 @@ internal sealed class IntegrationQueue(string root, string baseline, string runI
                         waiting.Dequeue();
                     }
 
-                    return IntegrateAsync(copy, ct);
+                    return IntegrateAsync(copy, task, author, ct);
                 },
                 CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default).Unwrap();
             tail = turn;
@@ -49,11 +56,11 @@ internal sealed class IntegrationQueue(string root, string baseline, string runI
         }
     }
 
-    private async Task<IntegrationResult> IntegrateAsync(WorkingCopy copy, CancellationToken ct)
+    private async Task<IntegrationResult> IntegrateAsync(WorkingCopy copy, string task, string author, CancellationToken ct)
     {
         // A change cancelled while it waited is dropped before git touches it.
         ct.ThrowIfCancellationRequested();
-        await CommitAsync(copy, ct).ConfigureAwait(false);
+        await CommitAsync(copy, task, author, ct).ConfigureAwait(false);
         var scratch = Path.Combine(root, WorkspaceOptions.StateFolder, "integration");
         await Git.RunAsync(root, ct, "worktree", "add", "--detach", scratch, copy.Branch).ConfigureAwait(false);
         try
@@ -62,6 +69,7 @@ internal sealed class IntegrationQueue(string root, string baseline, string runI
             {
                 var conflicts = await Git.RunAsync(scratch, ct, "diff", "--name-only", "--diff-filter=U").ConfigureAwait(false);
                 await Git.RunAsync(scratch, ct, "rebase", "--abort").ConfigureAwait(false);
+                await MergeBaselineAsync(copy, ct).ConfigureAwait(false);
                 return new(IntegrationOutcome.Conflict, Lines(conflicts));
             }
 
@@ -80,7 +88,23 @@ internal sealed class IntegrationQueue(string root, string baseline, string runI
         }
         finally
         {
+            released?.Invoke(scratch);
             await Git.RunAsync(root, CancellationToken.None, "worktree", "remove", "--force", scratch).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// WS-03: brings the baseline into the working copy, which its change no longer applies to. Git marks the conflicts in the files,
+    /// and the merge is committed with them, so the author sees and resolves them; the next integration squashes from the baseline
+    /// as merged, so it takes only the author's resolved change.
+    /// </summary>
+    private async Task MergeBaselineAsync(WorkingCopy copy, CancellationToken ct)
+    {
+        string[] identity = ["-c", "user.name=Officina", "-c", "user.email=officina@localhost", "-c", "commit.gpgsign=false"];
+        if ((await Git.TryRunAsync(copy.Directory, ct, [.. identity, "merge", "--no-verify", "--no-edit", baseline]).ConfigureAwait(false)).ExitCode != 0)
+        {
+            await Git.RunAsync(copy.Directory, ct, "add", "--all").ConfigureAwait(false);
+            await Git.RunAsync(copy.Directory, ct, [.. identity, "commit", "--no-verify", "--message", "Officina: the baseline merged, with conflicts to resolve"]).ConfigureAwait(false);
         }
     }
 
@@ -88,15 +112,15 @@ internal sealed class IntegrationQueue(string root, string baseline, string runI
     /// Commits what the agent changed as one commit, attributed to the run, the agent and the task (WS-04). The checkpoint
     /// commits on the branch (RUN-03) are squashed into it, so the baseline's history holds none of them.
     /// </summary>
-    private async Task CommitAsync(WorkingCopy copy, CancellationToken ct)
+    private async Task CommitAsync(WorkingCopy copy, string task, string author, CancellationToken ct)
     {
         await Git.RunAsync(copy.Directory, ct, "add", "--all").ConfigureAwait(false);
         var branchPoint = (await Git.RunAsync(copy.Directory, ct, "merge-base", "HEAD", baseline).ConfigureAwait(false)).Trim();
         await Git.RunAsync(copy.Directory, ct, "reset", "--soft", branchPoint).ConfigureAwait(false);
         if ((await Git.TryRunAsync(copy.Directory, ct, "diff", "--cached", "--quiet").ConfigureAwait(false)).ExitCode != 0)
         {
-            await Git.RunAsync(copy.Directory, ct, "commit", "--no-verify", "--author", $"{copy.Agent} <{copy.Agent}@officina>",
-                "-m", $"Task {copy.TaskId}", "-m", $"Officina-Run: {runId}\nOfficina-Agent: {copy.Agent}\nOfficina-Task: {copy.TaskId}").ConfigureAwait(false);
+            await Git.RunAsync(copy.Directory, ct, "commit", "--no-verify", "--author", $"{author} <{author}@officina>",
+                "-m", $"Task {task}", "-m", $"Officina-Run: {runId}\nOfficina-Agent: {author}\nOfficina-Task: {task}").ConfigureAwait(false);
         }
     }
 
@@ -107,20 +131,3 @@ internal sealed class IntegrationQueue(string root, string baseline, string runI
 /// <param name="Length">The changes waiting, not counting the one being integrated.</param>
 /// <param name="LongestWait">How long the oldest of them has waited.</param>
 public sealed record IntegrationQueueStatus(int Length, TimeSpan LongestWait);
-
-/// <summary>How an integration ended.</summary>
-/// <param name="Outcome">Whether the change reached the baseline.</param>
-/// <param name="Details">For a conflict, the conflicting files; for failed checks, each finding after its check's name.</param>
-public sealed record IntegrationResult(IntegrationOutcome Outcome, IReadOnlyList<string> Details);
-
-public enum IntegrationOutcome
-{
-    /// <summary>The baseline now has the change.</summary>
-    Integrated,
-
-    /// <summary>The change no longer applies to the baseline; it goes back to the author or the lead (WS-03).</summary>
-    Conflict,
-
-    /// <summary>A baseline check failed on the change, so the baseline did not move (WS-02).</summary>
-    ChecksFailed,
-}

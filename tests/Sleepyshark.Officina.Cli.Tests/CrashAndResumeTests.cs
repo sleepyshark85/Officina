@@ -168,12 +168,12 @@ public sealed class CrashAndResumeTests : IDisposable
                 Checkpoints = new() { Enabled = true, At = [CheckpointPoint.Step] },
             },
         };
-        var workspace = await GitWorkspace.OpenAsync(sof.Directory, runId, options.Capabilities.Workspace, new Dictionary<string, ICheck>(), time, Ct);
+        var workspace = await GitWorkspace.OpenAsync(sof.Directory, runId, options.Capabilities.Workspace, new Dictionary<string, ICheck>(), time, ct: Ct);
         IStorage storage = await SqliteStorage.OpenAsync(Database, Ct); // in the workspace's state folder
 
         // As sof does when it opens the workspace: a run that can resume keeps its branches.
         await workspace.RemoveLeftoversAsync(task => Task.FromResult(task.StartsWith(runId, StringComparison.Ordinal)), null, Ct);
-        var tools = new Dictionary<string, ITool>(new WorkspaceTools(async agent => await workspace.OpenWorkingCopyAsync($"{runId}-{agent}", agent, Ct)).Tools)
+        var tools = new Dictionary<string, ITool>(new WorkspaceTools(async call => await workspace.OpenWorkingCopyAsync($"{runId}-{call.Agent}", call.Agent, Ct)).Tools)
         {
             ["deploy"] = deploy,
         };

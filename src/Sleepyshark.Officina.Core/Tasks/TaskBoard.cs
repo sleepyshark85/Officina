@@ -62,6 +62,9 @@ public sealed class TaskBoard
 
     public string RunId => context.RunId;
 
+    /// <summary>The folder of a task's working copy, opened for its agent, which its verification checks look at; null without a workspace.</summary>
+    internal Func<string, string, CancellationToken, Task<string?>>? CopyOf { get; init; }
+
     /// <summary>The task the agent works on, if any.</summary>
     public string? TaskId => context.TaskId;
 
@@ -222,6 +225,7 @@ public sealed class TaskBoard
         }
 
         string? failed = null;
+        var directory = task.Checks.Count > 0 && CopyOf is not null ? await CopyOf(id, task.Assignee, ct).ConfigureAwait(false) : null;
         foreach (var name in task.Checks)
         {
             if (!options.Checks.ContainsKey(name))
@@ -229,7 +233,7 @@ public sealed class TaskBoard
                 return (false, $"check {name} no longer exists in the configuration.");
             }
 
-            var result = await checks[options.Checks[name].ExtensionId()!].RunAsync(new CheckContext(null, null, [], task), ct).ConfigureAwait(false);
+            var result = await checks[options.Checks[name].Id(name)].RunAsync(new CheckContext(directory, null, [], task), ct).ConfigureAwait(false);
             Telemetry.CheckEnded(context, name, result.Passed);
             await events.PublishAsync(context, new CheckRan(name, result.Passed, id), ct).ConfigureAwait(false);
             if (!result.Passed)

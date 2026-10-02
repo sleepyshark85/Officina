@@ -9,8 +9,8 @@ namespace Sleepyshark.Officina.Core.Tools;
 /// <see cref="IWorkingCopy"/>, so they work the same on the git workspace and the test kit's in-memory one (TEST-01). A
 /// refused operation reaches the model as a failure with the workspace's reason.
 /// </summary>
-/// <param name="copyOf">The working copy of the agent that makes a call, which the host opens when the agent first needs it.</param>
-public sealed class WorkspaceTools(Func<string, Task<IWorkingCopy>> copyOf)
+/// <param name="copyOf">The working copy a call works in (<see cref="ToolCall.WorkingCopy"/>), which the host opens when it is first needed.</param>
+public sealed class WorkspaceTools(Func<ToolCall, Task<IWorkingCopy>> copyOf)
 {
     public const string Read = "workspace.read_file";
     public const string Search = "workspace.search";
@@ -83,7 +83,7 @@ public sealed class WorkspaceTools(Func<string, Task<IWorkingCopy>> copyOf)
     private static int? Number(JsonElement arguments, string name) => arguments.TryGetProperty(name, out var value) ? value.GetInt32() : null;
 
     private sealed class Tool(
-        string description, string inputSchema, ToolKind kind, Func<string, Task<IWorkingCopy>> copyOf,
+        string description, string inputSchema, ToolKind kind, Func<ToolCall, Task<IWorkingCopy>> copyOf,
         Func<IWorkingCopy, JsonElement, CancellationToken, Task<string>> invoke) : ITool
     {
         public ToolDescriptor Descriptor { get; } = new(description, JsonDocument.Parse(inputSchema).RootElement.Clone(), kind, ParallelSafe: kind == ToolKind.Read);
@@ -92,7 +92,7 @@ public sealed class WorkspaceTools(Func<string, Task<IWorkingCopy>> copyOf)
         {
             try
             {
-                var copy = await copyOf(toolCall.Agent).ConfigureAwait(false);
+                var copy = await copyOf(toolCall).ConfigureAwait(false);
                 return ToolResult.Success(await invoke(copy, toolCall.Arguments, ct).ConfigureAwait(false));
             }
             catch (WorkspaceException exception)

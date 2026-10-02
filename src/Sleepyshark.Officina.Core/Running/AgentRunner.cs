@@ -109,6 +109,7 @@ public sealed class AgentRunner
         admission = new Admission(options.Policies, time);
         checkpointer = new Checkpointer(options, storage, workspace, Events, pipeline, time);
         pipeline.Messages = DeliverAsync;
+        pipeline.Workspace = workspace;
         Options = options;
     }
 
@@ -593,7 +594,7 @@ public sealed class AgentRunner
         }
 
         var context = new ToolContext(work.RunId, name, work.Caller) { Masker = masker, TaskId = work.TaskId, Run = new() };
-        var steps = new Steps(Options, patterns, checks, Events, NewTurn, context, admitted, time, checkpointer.TakeAsync, new(pipeline, storage.Events, agentId => CancelOf(context.RunId, agentId), Members));
+        var steps = new Steps(Options, patterns, checks, Events, NewTurn, context, admitted, time, checkpointer.TakeAsync, new(pipeline, pipeline.Workspace, storage.Events, agentId => CancelOf(context.RunId, agentId), Members));
         var oneAtATime = turns.GetOrAdd(name, _ => new SemaphoreSlim(1, 1));
         using var stop = CancellationTokenSource.CreateLinkedTokenSource(ct, cancels.GetOrAdd(name, _ => new CancellationTokenSource()).Token);
         var entered = false;

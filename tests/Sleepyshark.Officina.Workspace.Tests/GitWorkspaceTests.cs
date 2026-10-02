@@ -56,6 +56,52 @@ public class GitWorkspaceTests
         Assert.Equal("alice's\n", repository.Baseline("a.txt"));
     }
 
+    // WS-03: the conflict becomes the author's work: the baseline is merged into its copy with the conflicts marked, and once it
+    // resolves them, its change integrates as one commit of its own, with no merge on the baseline.
+    [Fact]
+    public async Task A_conflict_leaves_the_baseline_merged_into_the_copy_for_its_author_to_resolve()
+    {
+        using var repository = await CreateAsync(("a.txt", "one\n"), ("b.txt", "bee\n"));
+        using var workspace = await repository.OpenAsync();
+        var alice = await workspace.OpenWorkingCopyAsync("t1", "alice", Ct);
+        var bob = await workspace.OpenWorkingCopyAsync("t2", "bob", Ct);
+        await EditAsync(alice, "a.txt", "one", "alice's");
+        await EditAsync(alice, "b.txt", "bee", "buzz");
+        await EditAsync(bob, "a.txt", "one", "bob's");
+        await workspace.IntegrateAsync(alice, Ct);
+
+        var conflict = await workspace.IntegrateAsync(bob, Ct);
+        var marked = await bob.ReadAsync("a.txt", ct: Ct);
+        await bob.WriteAsync("a.txt", "alice's and bob's\n", Ct);
+        var resolved = await workspace.IntegrateAsync(bob, "t2", "bob", Ct);
+
+        Assert.Equal(IntegrationOutcome.Conflict, conflict.Outcome);
+        Assert.Contains("<<<<<<<", marked, StringComparison.Ordinal);
+        Assert.Contains("alice's", marked, StringComparison.Ordinal);
+        Assert.Contains("bob's", marked, StringComparison.Ordinal);
+        Assert.Equal("buzz\n", await bob.ReadAsync("b.txt", ct: Ct)); // the rest of the baseline came with the merge
+        Assert.Equal(IntegrationOutcome.Integrated, resolved.Outcome);
+        Assert.Equal(("alice's and bob's\n", "buzz\n"), (repository.Baseline("a.txt"), repository.Baseline("b.txt")));
+        Assert.Equal("", (await repository.GitAsync("log", "--merges", "--format=%s", "main")).Trim());
+        Assert.Equal(["Task t2", "Task t1", "Start"], (await repository.GitAsync("log", "--format=%s", "main")).Trim().Split('\n'));
+    }
+
+    // WS-02: what the sandbox set up for the baseline checks goes with the folder they ran in.
+    [Fact]
+    public async Task The_folder_the_baseline_checks_ran_in_is_released_before_it_is_removed()
+    {
+        using var repository = await CreateAsync(("a.txt", "one\n"));
+        var released = new List<string>();
+        using var workspace = await repository.OpenAsync(checks: new() { ["build"] = Check.Passing }, released: released.Add);
+        var alice = await workspace.OpenWorkingCopyAsync("t1", "alice", Ct);
+        await EditAsync(alice, "a.txt", "one", "two");
+
+        await workspace.IntegrateAsync(alice, Ct);
+
+        Assert.Equal(Path.Combine(repository.Root, ".sof", "integration"), Assert.Single(released));
+        Assert.False(Directory.Exists(Assert.Single(released)));
+    }
+
     [Fact]
     public async Task A_change_is_checked_against_the_baseline_as_it_is_when_its_turn_comes()
     {

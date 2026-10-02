@@ -65,6 +65,9 @@ internal sealed class Steps(
             : RunPatternAsync(run, agent.Pattern, RunInput, budget.Draw("pattern's", agent.Budget.Turn), ct);
     }
 
+    /// <summary>Takes a checkpoint of the run if its configuration asks for one at the point (RUN-03).</summary>
+    public Task<Checkpoint?> CheckpointAsync(ToolContext context, CheckpointPoint point, CancellationToken ct) => checkpoint(context, point, ct);
+
     /// <summary>Publishes an event of the run.</summary>
     public ValueTask PublishAsync(ToolContext context, EventPayload payload, CancellationToken ct) => events.PublishAsync(context, payload, ct);
 
@@ -109,7 +112,7 @@ internal sealed class Steps(
     public async Task<string?> CheckAsync(ToolContext context, IReadOnlyList<string> names, string output, CancellationToken ct)
     {
         var failed = await Turn.FailedCheckAsync(
-            context, events, names.Select(name => (name, checks[options.Checks[name].ExtensionId()!])), output, [.. turns.SelectMany(turn => turn.Artifacts)], ct).ConfigureAwait(false);
+            context, events, names.Select(name => (name, checks[options.Checks[name].Id(name)])), output, [.. turns.SelectMany(turn => turn.Artifacts)], ct).ConfigureAwait(false);
 
         // A check sees the artifacts as tools produced them, so its findings are masked before a model sees them (ING-02).
         return failed is null ? null : context.Masker?.Mask(failed) ?? failed;

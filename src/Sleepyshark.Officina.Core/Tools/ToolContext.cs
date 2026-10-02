@@ -73,6 +73,12 @@ internal sealed class UntrustedMark
     public bool Set
     {
         get => set;
-        set => this.set |= value;
+        set
+        {
+            if (value)
+            {
+                this.set = true;
+            }
+        }
     }
 }

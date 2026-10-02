@@ -1,9 +1,9 @@
 using System.Collections.Concurrent;
 using System.Text;
 using System.Text.Json;
-using Microsoft.Extensions.FileSystemGlobbing;
 using Sleepyshark.Officina.Core.Configuration;
 using Sleepyshark.Officina.Core.Extensibility;
+using Sleepyshark.Officina.Core.Tools;
 
 namespace Sleepyshark.Officina.Sandbox;
 
@@ -34,8 +34,7 @@ public sealed class SandboxTools : IAsyncDisposable
     private readonly SandboxOptions options;
     private readonly string directory;
     private readonly IReadOnlyList<string> secrets;
-    private readonly Matcher hidden = new();
-    private readonly Matcher readOnly = new();
+    private readonly WorkspaceOptions workspace;
     private readonly ConcurrentDictionary<string, Background> background = new();
     private int started;
 
@@ -58,11 +57,8 @@ public sealed class SandboxTools : IAsyncDisposable
         this.sandbox = sandbox;
         this.options = options;
         this.directory = directory;
-        secrets = options.Secrets.GetValueOrDefault(agent) ?? [];
-        foreach (var path in WorkspaceOptions.FixedProtectedPaths.Concat(workspace.ProtectedPaths))
-        {
-            (path.Access == PathAccess.Hidden ? hidden : readOnly).AddInclude(path.Path);
-        }
+        secrets = options.Secrets.GetValueOrDefault(ToolContext.DefinitionOf(agent)) ?? []; // secrets are per role, an agent of a team its instance
+        this.workspace = workspace;
 
         Tools = new Dictionary<string, ITool>
         {
@@ -134,32 +130,9 @@ public sealed class SandboxTools : IAsyncDisposable
         }
 
         var command = call.Arguments.GetProperty("command").GetString()!;
-        var (hiddenPaths, readOnlyPaths) = (new List<string>(), new List<string>());
-        Protect(directory, hiddenPaths, readOnlyPaths);
+        var (hiddenPaths, readOnlyPaths) = ProtectedPaths.Find(directory, workspace);
         return await sandbox.StartAsync(
             new SandboxCommand(command, directory, SandboxLimits.Default, options.AllowedHosts, environment, hiddenPaths, readOnlyPaths, options.Toolchains), ct).ConfigureAwait(false);
-    }
-
-    /// <summary>Finds the protected paths in a folder of the working copy as it is now. Links are skipped; they lead nowhere inside the sandbox.</summary>
-    private void Protect(string folder, List<string> hiddenPaths, List<string> readOnlyPaths)
-    {
-        // The default also skips hidden entries, which on Linux are the dot files, such as .env, that matter most here.
-        foreach (var entry in new DirectoryInfo(folder).EnumerateFileSystemInfos("*", new EnumerationOptions { AttributesToSkip = FileAttributes.ReparsePoint }))
-        {
-            var relative = Path.GetRelativePath(directory, entry.FullName).Replace('\\', '/');
-            if (hidden.Match(relative).HasMatches)
-            {
-                hiddenPaths.Add(entry.FullName);
-            }
-            else if (readOnly.Match(relative).HasMatches)
-            {
-                readOnlyPaths.Add(entry.FullName);
-            }
-            else if (entry is DirectoryInfo)
-            {
-                Protect(entry.FullName, hiddenPaths, readOnlyPaths);
-            }
-        }
     }
 
     private static string Id(ToolCall call) => call.Arguments.GetProperty("id").GetString()!;

@@ -242,6 +242,31 @@ public class ValidationTests
             (error.Phase, error.Path, error.Problem, error.Fix));
     }
 
+    // WS-02, SBX-07: a check is the application's or a command; a command runs only in the sandbox, checks a working copy rather
+    // than output, and the baseline checks name checks that exist.
+    [Fact]
+    public void A_command_check_needs_the_sandbox_and_checks_a_working_copy()
+    {
+        var options = WithAgent(Extractor with { Output = new() { Checks = ["tests"] } }) with
+        {
+            Checks = new Dictionary<string, CheckOptions>
+            {
+                ["tests"] = new() { Command = "dotnet test" }, ["neither"] = new(), ["both"] = new() { Use = "extension:Acme.Check", Command = "make" },
+            },
+            Capabilities = new() { Workspace = new() { Enabled = true, BaselineChecks = ["tests", "lint"] } },
+        };
+
+        Assert.Equal(
+            [
+                (ValidationPhase.Shape, "checks.neither", "needs either use or command."),
+                (ValidationPhase.Shape, "checks.both", "needs either use or command."),
+                (ValidationPhase.References, "agents.extractor.output.checks", "check \"tests\" is a command, which checks a working copy, not output."),
+                (ValidationPhase.References, "capabilities.workspace.baselineChecks", "check \"lint\" does not exist."),
+                (ValidationPhase.Capabilities, "checks.tests.command", "needs the sandbox capability, which is off."),
+            ],
+            options.Validate().Select(error => (error.Phase, error.Path, error.Problem)));
+    }
+
     // CAP-02, TEST-08: its tools and storage are in the history tests.
     [Fact]
     public void The_settings_of_a_capability_that_is_off_are_not_required()

@@ -1,3 +1,5 @@
+using Sleepyshark.Officina.Core.Checkpoints;
+using Sleepyshark.Officina.Core.Tools;
 using Sleepyshark.Officina.Core.Configuration;
 using Sleepyshark.Officina.Core.Events;
 using Sleepyshark.Officina.Core.Extensibility;
@@ -300,8 +302,52 @@ public class TeamTests
         var result = await running;
 
         Assert.Equal(AgentOutcome.HandedOff, result.Outcome);
+        Assert.Empty(kit.Model.Requests); // a cancelled turn starts no model call, even once the run is resumed
         Assert.Contains((AgentStatus.Failed, "lead was stopped"), Statuses(await kit.Storage.Events.ReadAsync(null, work.RunId, 0, Ct), "lead"));
         Assert.Empty(await kit.Runner.Board(null, work.RunId).ReadAsync(Ct));
+    }
+
+    // WS-01, WS-03, WS-09, TASK-05, RUN-03: each task is done in a working copy of its own, and done means integrated; a change
+    // that no longer applies goes back to its author as a failed attempt, never resolved silently, and integrates once reworked.
+    // A checkpoint follows each integration, and a task's copy goes when the task is done.
+    [Fact]
+    public async Task Each_task_is_integrated_from_its_own_working_copy_and_a_conflict_goes_back_to_its_author()
+    {
+        var workspace = new InMemoryWorkspace();
+        workspace.Files["shared.txt"] = "start";
+        var kit = Kit(options => options with
+        {
+            Tools = new Dictionary<string, ToolOptions>(options.Tools) {
+                ["edit"] = new() { Source = $"extension:{WorkspaceTools.Write}", GateExemption = "Tests only." }, ["look"] = new() { Source = $"extension:{WorkspaceTools.Read}" },
+            },
+            ToolSets = new Dictionary<string, IReadOnlyList<string>>(options.ToolSets) { ["developer"] = ["submit", "edit", "look", "hold"] },
+            Capabilities = options.Capabilities with
+            {
+                Workspace = new() { Enabled = true }, ConversationStore = new() { Enabled = true },
+                Checkpoints = new() { Enabled = true, At = [CheckpointPoint.Integration] },
+            },
+        }, null, workspace: workspace);
+        var both = new Barrier(2);
+        hold = (_, ct) => Task.Run(() => both.SignalAndWait(ct), ct); // both have changed shared.txt before either submits
+        Lead(kit, "You lead a team", Create("a"), Create("b"));
+        Lead(kit, "Every task is done").Reply("Done.");
+        foreach (var task in new[] { "a", "b" })
+        {
+            Work(kit, task).CallTools(("look", """{ "path": "shared.txt" }"""), ("edit", $$"""{ "path": "{{task}}.txt", "content": "{{task}}" }"""))
+                .CallTools(("edit", $$"""{ "path": "shared.txt", "content": "from {{task}}" }""")).CallTools(("hold", "{}")).CallTools(("submit", $$"""{ "id": "{{task}}" }""")).Reply("Submitted.")
+                .CallTools(("submit", $$"""{ "id": "{{task}}" }""")).Reply("Resolved."); // after the conflict, with its own version kept
+        }
+
+        var work = new Work("team", "Build it.") { Caller = Ann };
+        var result = await kit.Runner.RunAsync(work, Ct);
+
+        Assert.Equal(AgentOutcome.Completed, result.Outcome);
+        Assert.Equal(("a", "b"), (workspace.Files["a.txt"], workspace.Files["b.txt"]));
+        var returned = Assert.Single(await kit.Runner.Board(null, work.RunId).HistoryAsync(Ct), change => change.By == "team" && change.Reason.StartsWith("it conflicts", StringComparison.Ordinal));
+        var second = returned.Tasks.Single().Id;
+        Assert.Equal($"from {second}", workspace.Files["shared.txt"]); // the reworked change came last
+        Assert.Equal(2, (await kit.Storage.Checkpoints.ReadAsync(null, work.RunId, Ct)).Count(checkpoint => checkpoint.Point == CheckpointPoint.Integration));
+        Assert.Empty(await workspace.SnapshotAsync(Ct)); // every task's copy went with its task
     }
 
     // TEAM-05, TEAM-06: a message names its sender and recipient, is recorded, and reaches the recipient as data; only the team's agents receive one.
@@ -425,7 +471,6 @@ public class TeamTests
                 (ValidationPhase.Capabilities, "tools.update.source"),
                 (ValidationPhase.Capabilities, "tools.submit.source"),
                 (ValidationPhase.Capabilities, "tools.review.source"),
-                (ValidationPhase.Capabilities, "capabilities.team.enabled"),
                 (ValidationPhase.Capabilities, "agents.reviewer.context.history.strategy"),
             ],
             broken.Validate().Select(error => (error.Phase, error.Path)));
@@ -505,7 +550,7 @@ public class TeamTests
 
     private TestKit Kit(
         Func<OfficinaOptions, OfficinaOptions> configure, IHumanChannel? human, Func<AgentDefinition, AgentDefinition>? developer = null, bool checkpoints = false,
-        InMemoryStorage? storage = null)
+        InMemoryStorage? storage = null, InMemoryWorkspace? workspace = null)
     {
         var options = configure(Configure(developer, checkpoints));
         var tools = new Dictionary<string, ITool>
@@ -513,7 +558,15 @@ public class TeamTests
             ["hold"] = new FakeTool(ToolKind.Read, run: async (call, ct) => { await hold(call.Board?.TaskId, ct); return ToolResult.Success("held"); }),
             ["fetch"] = new FakeTool(ToolKind.Read), ["write"] = new FakeTool(ToolKind.Write),
         };
-        return new TestKit(options, tools, storage: storage, human: human);
+        if (workspace is not null)
+        {
+            foreach (var (id, tool) in new WorkspaceTools(call => workspace.OpenWorkingCopyAsync(call.WorkingCopy, call.Agent, Ct)).Tools)
+            {
+                tools[id] = tool;
+            }
+        }
+
+        return new TestKit(options, tools, storage: storage, human: human, workspace: workspace);
     }
 
     private static OfficinaOptions Configure(Func<AgentDefinition, AgentDefinition>? developer = null, bool checkpoints = false)

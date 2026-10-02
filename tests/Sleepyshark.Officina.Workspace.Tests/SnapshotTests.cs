@@ -1,5 +1,6 @@
 using Sleepyshark.Officina.Core.Checkpoints;
 using Sleepyshark.Officina.Core.Configuration;
+using Sleepyshark.Officina.Core.Extensibility;
 using static Sleepyshark.Officina.Workspace.Tests.Repository;
 
 namespace Sleepyshark.Officina.Workspace.Tests;

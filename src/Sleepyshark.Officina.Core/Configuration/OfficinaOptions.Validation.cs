@@ -84,6 +84,21 @@ public sealed partial record OfficinaOptions : IValidatableObject
                 errors = errors.Append(new(ValidationPhase.Shape, $"checks.{name}.use", $"\"{check.Use}\" is not a check.",
                     "Use extension:<id> for a check the application registers."));
             }
+
+            if ((check.Use is null) == string.IsNullOrWhiteSpace(check.Command))
+            {
+                errors = errors.Append(new(ValidationPhase.Shape, $"checks.{name}", "needs either use or command.",
+                    "Set use to extension:<id> for the application's check, or command to a command that checks a working copy."));
+            }
+            else if (check.Command is not null)
+            {
+                // A command checks a working copy: a task's work or the baseline (WS-02), never an agent's output, which has none.
+                var checkName = name;
+                errors = errors.Concat(Agents.Where(agent => agent.Value.Output?.Checks.Contains(checkName) == true)
+                    .Select(agent => CommandOnOutput($"agents.{agent.Key}.output.checks", checkName)))
+                    .Concat(Agents.SelectMany(agent => agent.Value.Pattern?.Nested($"agents.{agent.Key}.pattern") ?? [])
+                        .Where(nested => nested.Pattern.Checks.Contains(checkName)).Select(nested => CommandOnOutput($"{nested.Path}.checks", checkName)));
+            }
         }
 
         foreach (var (name, server) in ToolServers)
@@ -113,6 +128,11 @@ public sealed partial record OfficinaOptions : IValidatableObject
         foreach (var (index, path) in (Capabilities.Workspace is { Enabled: true } workspace ? workspace.ProtectedPaths : []).Index())
         {
             errors = errors.Concat(Annotations(path, $"capabilities.workspace.protectedPaths[{index}]"));
+        }
+
+        if (Capabilities.Workspace is { Enabled: true } baseline)
+        {
+            errors = errors.Concat(References("capabilities.workspace.baselineChecks", "check", baseline.BaselineChecks, "checks", Checks.Keys));
         }
 
         if (Capabilities.Sandbox is { Enabled: true } sandbox)
@@ -146,6 +166,10 @@ public sealed partial record OfficinaOptions : IValidatableObject
 
         return errors.Concat(ToolSettings()).Concat(CapabilitySettings()).Concat(InstructionPlaceholders.Check(this)).Concat(PatternCycles());
     }
+
+    private static ConfigurationError CommandOnOutput(string path, string check) =>
+        new(ValidationPhase.References, path, $"check \"{check}\" is a command, which checks a working copy, not output.",
+            "Use it as a task's check or in capabilities.workspace.baselineChecks.");
 
     /// <summary>The events a resumed run reads its spent budget from.</summary>
     private static readonly string[] SpentKinds = ["modelCallEnded", "toolCallEnded", "runResumed", "runRolledBack", "turnStarted", "turnEnded", "budgetWarning"];
@@ -182,16 +206,15 @@ public sealed partial record OfficinaOptions : IValidatableObject
             errors = on.Contains("team") ? errors : errors.Append(Off($"agents.{name}.pattern.type", "team"));
         }
 
-        if (on.Contains("team") && on.Contains("workspace"))
-        {
-            // S20 part 2 gives each task a working copy and integrates it; until then a team's changes would never reach the baseline.
-            errors = errors.Append(new(ValidationPhase.Capabilities, "capabilities.team.enabled", "cannot be on with the workspace yet: the team does not integrate working copies.",
-                "Turn capabilities.workspace off for a team."));
-        }
 
         if (Capabilities.ProjectMemory is { Enabled: true, ApproveBy: MemoryApprover.Owner } && !on.Contains("humanInteraction"))
         {
             errors = errors.Append(Off("capabilities.projectMemory.approveBy", "humanInteraction"));
+        }
+
+        foreach (var name in Checks.Where(check => check.Value is { Command: not null, Use: null } && !on.Contains("sandbox")).Select(check => check.Key))
+        {
+            errors = errors.Append(Off($"checks.{name}.command", "sandbox")); // SBX-07: commands run only in the sandbox
         }
 
         foreach (var (name, _) in Tools.Where(tool => tool.Value.BuiltinTool() == AskOwnerTool.Name && !on.Contains("humanInteraction")))
