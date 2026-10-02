@@ -79,6 +79,18 @@ public class HelperTests
         Assert.Equal((HandoffReason.BudgetExhausted, "the turn's token budget is used up"), (result.Handoff?.Reason, result.Handoff?.Detail));
     }
 
+    // TEAM-07: a helper has no tool its parent does not.
+    [Fact]
+    public void A_helper_has_only_tools_its_parent_has()
+    {
+        var options = Configure();
+        options = options with { ToolSets = new Dictionary<string, IReadOnlyList<string>>(options.ToolSets) { ["research"] = ["helper", "look", "handoff"], ["dev"] = ["helper"] } };
+
+        Assert.Equal(
+            ["agents.dev.helpers: agent \"researcher\" has tools that dev does not: handoff, look."],
+            options.Validate().Select(error => $"{error.Path}: {error.Problem}"));
+    }
+
     // EGR-04: the model hands its work to a human by calling the tool for it; the turn ends in a handoff to a human.
     [Fact]
     public async Task An_agent_hands_its_work_to_a_human_with_the_tool_for_it()
@@ -95,13 +107,16 @@ public class HelperTests
 
     private static ModelScript Script(TestKit kit, string work) => kit.Model.When(request => ScriptedModelProvider.WorkOf(request) == work);
 
-    private static TestKit Kit(Func<TeamOptions, TeamOptions>? team = null, Func<OfficinaOptions, OfficinaOptions>? configure = null)
+    private static TestKit Kit(Func<TeamOptions, TeamOptions>? team = null, Func<OfficinaOptions, OfficinaOptions>? configure = null) =>
+        new((configure ?? (value => value))(Configure(team)), new Dictionary<string, ITool> { ["look"] = new FakeTool(ToolKind.Read) });
+
+    private static OfficinaOptions Configure(Func<TeamOptions, TeamOptions>? team = null)
     {
         var options = Options(
             ("helper", new() { Source = "builtin:team.start_helper" }),
             ("handoff", new() { Source = "builtin:human.request_handoff" }),
             ("look", Extension("look") with { Permissions = ["look"] }));
-        options = options with
+        return options with
         {
             Agents = new Dictionary<string, AgentDefinition>
             {
@@ -109,13 +124,12 @@ public class HelperTests
                 ["researcher"] = new() { Instructions = "Research.", Tools = ["research"], Helpers = ["researcher"] },
                 ["writer"] = new() { Instructions = "Write." },
             },
-            ToolSets = new Dictionary<string, IReadOnlyList<string>> { ["dev"] = ["helper", "handoff"], ["research"] = ["helper", "look"] },
+            ToolSets = new Dictionary<string, IReadOnlyList<string>> { ["dev"] = ["helper", "handoff", "look"], ["research"] = ["helper", "look"] },
             Capabilities = new() { Team = (team ?? (settings => settings))(new() { Enabled = true }), TaskBoard = new() { Enabled = true } },
             Providers = new Dictionary<string, ProviderOptions>
             {
                 [ProviderOptions.ClaudeName] = ProviderOptions.Claude with { Prices = new Dictionary<string, ModelPrice> { ["claude-opus-5-5"] = new() { Input = 1 } } },
             },
         };
-        return new TestKit((configure ?? (value => value))(options), new Dictionary<string, ITool> { ["look"] = new FakeTool(ToolKind.Read) });
     }
 }

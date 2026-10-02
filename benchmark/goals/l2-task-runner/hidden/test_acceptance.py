@@ -1,13 +1,11 @@
 import json
 import os
-import shutil
 import sys
-import tempfile
 import time
 import unittest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..")))
-from harness import build, run  # noqa: E402
+from harness import build, folder, run  # noqa: E402
 
 APP = "src/Taskr"
 PY = f'"{sys.executable}"' if " " in sys.executable else sys.executable
@@ -24,8 +22,7 @@ class Taskr(unittest.TestCase):
         build(APP)
 
     def setUp(self):
-        self.folder = tempfile.mkdtemp(prefix="taskr-")
-        self.addCleanup(shutil.rmtree, self.folder, True)
+        self.folder = folder("taskr-")
 
     def tasks(self, tasks):
         with open(os.path.join(self.folder, "taskr.json"), "w") as file:

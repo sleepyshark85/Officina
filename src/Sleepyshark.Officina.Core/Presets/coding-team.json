@@ -2,7 +2,8 @@
   // CFG-11: the coding team of sof. A lead plans the goal as tasks; up to three developers each work on a task in its own
   // working copy, building and testing in the sandbox; a reviewer, never the author, reviews each; a task is done once its
   // change is integrated and the build and the tests pass on the baseline. The application gives the project's commands:
-  // project.values.buildCommand and project.values.testCommand.
+  // project.values.buildCommand and project.values.testCommand. An application's file overrides any of this: objects merge
+  // key by key, but a list it sets (tools of an agent, sign-offs, command rules) replaces the preset's list whole.
   "models": {
     "default": { "effort": "high" },
     "review": { "effort": "medium" }
@@ -97,7 +98,10 @@
     "taskBoard": { "enabled": true },
     "team": { "enabled": true },
     "workspace": { "enabled": true, "baselineChecks": ["build", "tests"] },
-    // The project's own commands are the application's to allow; anything no rule matches is asked about.
+    // The project's own commands are the application's to allow; anything no rule matches is asked about. The git deny rules
+    // are a convenience, not the boundary: that is the sandbox, which has no network unless allowedHosts says so, and asking
+    // about every command no rule matches. A list in the application's file replaces this one rather than merging with it, so
+    // an application that sets commandRules repeats the rules it keeps.
     "sandbox": {
       "enabled": true,
       "commandRules": [

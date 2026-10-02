@@ -222,12 +222,14 @@ decides the outcome.
   the lead as failed (TASK-09). A change that adds conflict-marker lines (`<<<<<<< `, `>>>>>>> `) is a conflict, even in a
   file that really holds them, such as documentation about git.
 - **The plan sign-off** (TEAM-10, HITL-04): with `planApproval` on, no task is dispatched until the owner approves the
-  lead's plan; a denial goes back to the lead to re-plan, and no answer hands the run off. The approval is a `planApproved`
+  lead's plan; a denial goes back to the lead to re-plan (it carries no reason: the owner explains with `tell lead …`), and no
+  answer hands the run off. The approval is a `planApproved`
   event, so a resumed run does not ask again.
 - **Helpers** (TEAM-07) are nested turns: `team.start_helper` runs one of the agents the definition lists in `helpers`, as
-  `helper[parent.n]`, inside the parent's turn. Its spending counts against the parent's turn budget, its permissions are
-  within the parent's, it keeps the parent's task (so TASK-06 keeps it out of the task's working copy), and depth and count
-  are limited by `capabilities.team.helperDepth` and `helperCount`.
+  `helper[parent.n]` with `n` numbered in the run, inside the parent's turn. Its spending counts against the parent's turn
+  budget, its permissions are within the parent's, it has no tool the parent does not, and it keeps the parent's task (so the
+  workspace write tools refuse it in that task's copy, TASK-06); depth and count are limited by
+  `capabilities.team.helperDepth` and `helperCount`.
 - **A human handoff** (EGR-04) is only explicit: `human.request_handoff` ends the turn in a handoff to a human with the
   model's reason.
 

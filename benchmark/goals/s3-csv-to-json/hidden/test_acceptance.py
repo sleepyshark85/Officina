@@ -1,11 +1,10 @@
 import json
 import os
 import sys
-import tempfile
 import unittest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..")))
-from harness import build, run  # noqa: E402
+from harness import build, folder, run  # noqa: E402
 
 APP = "src/CsvToJson"
 
@@ -33,9 +32,10 @@ class CsvToJson(unittest.TestCase):
         self.assertEqual(["a, b", "line one\r\nline two", 'say "hi"'], [record["note"] for record in self.convert(text)])
 
     def test_reads_the_named_file(self):
-        with tempfile.NamedTemporaryFile("w", suffix=".csv", delete=False, newline="") as file:
+        path = os.path.join(folder(), "data.csv")
+        with open(path, "w", newline="") as file:
             file.write("k\nv")
-        self.assertEqual([{"k": "v"}], json.loads(run(APP, file.name)[1]))
+        self.assertEqual([{"k": "v"}], json.loads(run(APP, path)[1]))
 
     def test_types_turn_numbers_booleans_and_empty_fields(self):
         records = self.convert("n,d,b,e,s\n42,-1.5,true,,007x\n", "--types")

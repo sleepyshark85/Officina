@@ -43,4 +43,5 @@ From S20 (part 2):
 From S20 (part 3):
 - `team.handoff`, for a case where a team agent hands off to someone other than its lead.
 - Run the TEST-31 benchmark in `benchmark/` (its goals and hidden tests are written) against the live model, 3 runs per goal with
-  a forced restart each, tracking success, cost, time and human inputs.
+  a forced restart each, tracking success, cost, time and human inputs. First validate each hidden suite against a reference
+  solution, so a failure is the team's and not the suite's; only s1's harness use was tried, against a throwaway `wc`.

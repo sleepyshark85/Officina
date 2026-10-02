@@ -190,7 +190,15 @@ public sealed partial record OfficinaOptions : IValidatableObject
                 yield return new(ValidationPhase.Shape, $"agents.{name}.helpers", $"agent \"{helper}\" must work in turns of its own and keep no history to be a helper.",
                     $"Give agents.{helper} the toolLoop or singleCall pattern and the none history strategy.");
             }
+            else if (ToolsOf(definition).Except(ToolsOf(agent)).Order(StringComparer.Ordinal).ToList() is { Count: > 0 } more)
+            {
+                // TEAM-07: a helper acts within its parent's means, so it has no tool its parent does not.
+                yield return new(ValidationPhase.Tools, $"agents.{name}.helpers", $"agent \"{helper}\" has tools that {name} does not: {string.Join(", ", more)}.",
+                    $"Give agents.{helper} only tools that agents.{name} has.");
+            }
         }
+
+        IEnumerable<string> ToolsOf(AgentDefinition definition) => definition.Tools.Where(ToolSets.ContainsKey).SelectMany(set => ToolSets[set]);
     }
 
     private static ConfigurationError CommandOnOutput(string path, string check) =>

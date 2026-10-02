@@ -48,9 +48,9 @@ public sealed class SofConfiguration
         ArgumentNullException.ThrowIfNull(variables);
         var layers = new List<(string Source, JsonObject Json)>();
         var mergeErrors = new List<ConfigurationError>();
+        var loaded = new HashSet<string>(StringComparer.Ordinal);
         try
         {
-            var loaded = new HashSet<string>(StringComparer.Ordinal);
             ConfigurationFiles.Add(Path.Combine(directory, "sof.json"), "sof.json", layers, mergeErrors, loaded);
             var overlay = Path.Combine(directory, $"sof.{environment}.json");
             if (environment is { Length: > 0 } && File.Exists(overlay))
@@ -104,10 +104,34 @@ public sealed class SofConfiguration
             bound = new OfficinaOptions();
         }
 
+        bound = ProtectExtended(bound, directory, loaded);
         var configuration = new SofConfiguration(bound, errors, root, describe);
         errors.AddRange(PlainTextSecrets(root).Select(error => error with { Location = configuration.Provided(error.Path) }));
         errors.AddRange(bound.Validate().Concat(WorkspaceHost.CapabilityErrors(bound)).Select(error => error with { Location = configuration.Provided(error.Path) }));
         return configuration;
+    }
+
+    /// <summary>
+    /// INV-10: the files <c>sof.json</c> extends hold definitions, permissions, budgets, rules and checks as much as it does, so
+    /// those in the workspace are read-only to agents, to their file tools and their commands alike, as <c>sof.json</c> is.
+    /// </summary>
+    private static OfficinaOptions ProtectExtended(OfficinaOptions options, string directory, HashSet<string> loaded)
+    {
+        var root = Path.GetFullPath(directory);
+        var extended = loaded
+            .Where(file => !file.StartsWith("preset:", StringComparison.Ordinal))
+            .Select(file => Path.GetRelativePath(root, file))
+            .Where(file => !file.StartsWith("..", StringComparison.Ordinal) && !Path.IsPathRooted(file)) // outside, agents cannot reach it
+            .Select(file => new ProtectedPath { Path = file.Replace('\\', '/'), Access = PathAccess.ReadOnly })
+            .Where(path => !WorkspaceOptions.FixedProtectedPaths.Contains(path))
+            .ToList();
+        if (extended.Count == 0)
+        {
+            return options;
+        }
+
+        var workspace = options.Capabilities.Workspace;
+        return options with { Capabilities = options.Capabilities with { Workspace = workspace with { ProtectedPaths = [.. workspace.ProtectedPaths, .. extended] } } };
     }
 
     /// <summary>Where a setting's value came from: the highest layer that sets it, or the code default.</summary>

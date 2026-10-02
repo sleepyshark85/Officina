@@ -147,22 +147,26 @@ Part 3:
   commands), `preset:tool-using-assistant` and `preset:single-call-extractor`. A check's `command` may use `project.name` and
   `project.values.*` placeholders, validated like the instructions'.
 - TEAM-07: `agents.<name>.helpers` lists the agents it may start with `builtin:team.start_helper`; `capabilities.team.helperDepth`
-  (2) and `helperCount` (4 per turn) limit them. A helper is a nested turn, `helper[parent.n]`, with a fresh inbox and no history:
-  its spending counts against the parent's turn budget, its permissions are within its parent's, and it keeps the parent's task,
-  so TASK-06 keeps it out of the task's working copy. A helper must work in turns with the `none` history strategy.
+  (2) and `helperCount` (4 per turn) limit them. A helper is a nested turn, `helper[parent.n]`, with a fresh inbox and no history;
+  `n` is numbered in the run, and a resumed run goes on after its events' numbers, so an id never repeats in a run. Its spending
+  counts against the parent's turn budget, its permissions are within its parent's, and it has no tool its parent does not (a
+  validation error otherwise). It keeps the parent's task, so the `workspace.*` write tools refuse it in the task's working copy
+  (TASK-06), as they refuse a reviewer; a `sandbox.*` command is not refused, so a helper of a reviewer must have none, which the
+  rule on tools gives when the reviewer has none. A helper must work in turns with the `none` history strategy.
 - TEAM-10: `planApproval` asks the owner to approve the lead's plan before any task is dispatched; a denial goes back to the lead
-  to re-plan, no answer hands the run off, and the `planApproved` event keeps a resumed run from asking again. No answer comes
-  from the owner channel's timeout (S16), which is tested there.
+  to re-plan, no answer within `run.approvalTimeout` hands the run off, and the `planApproved` event keeps a resumed run from asking
+  again. A denial carries no reason; the owner says what to change with `tell lead <text>` at the `sof run` console.
 - EGR-04: `builtin:human.request_handoff` ends the turn in a handoff to a human (reason `policyGap`) with the model's reason. A team
   agent's handoff already goes back to its lead, so `team.handoff` is not built (moved to S21, for a case).
-- From the part 2 review: a non-command check run at submit is bounded by the submit tool's own `timeout` (the submit tool is
-  exempt from the pipeline's limit, so its command checks are never cut short).
+- From the part 2 review: a non-command check run at submit is bounded by the submit tool's own `timeout`, which the tool takes
+  when it is made (the submit tool is exempt from the pipeline's limit, so its command checks are never cut short).
 - TEST-26: `TamperTests` runs an agent with file, command and task tools through `sof run`: `sof.json` (definitions, permissions,
-  budgets, rules and checks) is read-only to its file tools and its commands, and a task's checks and budget are not its to
-  change. No tool has access to the configuration (INV-10).
+  budgets, rules and checks), and every file in the workspace it extends, is read-only to its file tools and its commands, and a
+  task's checks and budget are not its to change. No tool has access to the configuration (INV-10). The loader adds the extended
+  files to `capabilities.workspace.protectedPaths` as read-only, so `sof config show` lists them.
 - TEST-31: [`benchmark/`](../../benchmark/README.md) holds ten goals (four small, four medium, two larger), each a paragraph with a
   hidden acceptance test suite in Python's standard library that tests the built program from outside, and the `sof.json` every
-  run uses. S21 runs them against the live model.
+  run uses. S21 runs them against the live model, and checks each suite against a reference solution first.
 
 Moved to S21 from part 3:
 - `team.handoff`, if a case needs a team agent to hand off to anyone but its lead.

@@ -131,7 +131,7 @@ internal sealed class ToolCatalog
                 MessageTool.Name => MessageTool.Instance,
                 HelperTool.Name => HelperTool.Instance,
                 HandOffTool.Name => HandOffTool.Instance,
-                _ => RecordTool.All.GetValueOrDefault(builtin) ?? MemoryTool.All.GetValueOrDefault(builtin) ?? (ITool)TaskTool.Create(builtin, checks),
+                _ => RecordTool.All.GetValueOrDefault(builtin) ?? MemoryTool.All.GetValueOrDefault(builtin) ?? (ITool)TaskTool.Create(builtin, checks, tool.Timeout),
             };
         }
 

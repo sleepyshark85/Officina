@@ -748,7 +748,8 @@ code defaults (Options classes) < what sof.json extends < sof.json < sof.<enviro
 - **Setting names match ignoring case**, in files and variables alike.
 - **Unknown settings are ignored.**
 - **`extends`** in a file lists presets (`preset:<id>`, §15) and other files, relative to it, each a layer below the file,
-  lowest first, each once. The files they extend come below them. A cycle or a missing preset is a Merge error (§14).
+  lowest first, each once. The files they extend come below them. A cycle or a missing preset is a Merge error (§14). An
+  extended file inside the workspace is read-only to agents, as `sof.json` is (INV-10).
 - **`extends`** in an agent definition names another agent it builds on: it inherits what it does not set itself, with the
   rules below, after the files are merged. `sof config show --origin` names an inherited setting's source as "inherited by
   agents.X through extends". A cycle or a missing agent is a Merge error.

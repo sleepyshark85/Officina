@@ -5,8 +5,10 @@ free port, and never reads the source. The assembly is run directly, not through
 stops the service itself. Only the standard library is used, on Linux and Windows.
 """
 
+import atexit
 import json
 import os
+import shutil
 import socket
 import subprocess
 import tempfile
@@ -46,6 +48,13 @@ def run(path, *args, stdin="", cwd=None, timeout=60):
     return result.returncode, result.stdout, result.stderr
 
 
+def folder(prefix="bench-"):
+    """A temporary folder, removed when the tests end."""
+    path = tempfile.mkdtemp(prefix=prefix)
+    atexit.register(shutil.rmtree, path, True)
+    return path
+
+
 def free_port():
     with socket.socket() as probe:
         probe.bind(("127.0.0.1", 0))
@@ -58,7 +67,7 @@ class Service:
     def __init__(self, path, environment):
         self.path = path
         self.port = free_port()
-        self.data = tempfile.mkdtemp(prefix="bench-")
+        self.data = folder()
         self.environment = {name: value.format(data=self.data) for name, value in environment.items()}
         self.process = None
 

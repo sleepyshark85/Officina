@@ -44,7 +44,8 @@ internal sealed class TaskTool : ITool
     /// <summary>The task tool with a name from <see cref="Names"/>.</summary>
     /// <param name="name">The tool's name.</param>
     /// <param name="checks">The application's checks, by extension id, which a submitted task's checks name.</param>
-    public static TaskTool Create(string name, IReadOnlyDictionary<string, ICheck> checks) => name switch
+    /// <param name="timeout">The tool's configured time limit, which bounds an application's check at submit.</param>
+    public static TaskTool Create(string name, IReadOnlyDictionary<string, ICheck> checks, TimeSpan timeout) => name switch
     {
         "tasks.create" => new(
             "Adds a task to the board: its id, title, what it is, its acceptance criteria, the checks that must pass before it is reviewed, the role it needs, the tasks it depends on, its priority (higher first), whether it needs a review, and why. It is ready once its dependencies are done.",
@@ -62,7 +63,7 @@ internal sealed class TaskTool : ITool
             $$""" "artifacts": {{Texts}} """, "",
             (board, call, ct) => board.SubmitAsync(
                 Get(call.Arguments, "id"), call.Arguments.TryGetProperty("artifacts", out var artifacts) ? [.. artifacts.EnumerateArray().Select(artifact => artifact.GetString()!)] : [],
-                checks, call.TimeLimit, ct)) { RunsChecks = true },
+                checks, timeout, ct)) { RunsChecks = true },
         "tasks.review" => new(
             "Reviews another agent's task in review: approves it, or asks for changes, and gives the reasons.",
             $$""" "approved": { "type": "boolean" }, "reasons": {{Text}} """, """, "approved", "reasons" """,

@@ -207,13 +207,16 @@ public class TaskBoardTests
             Capabilities = options.Capabilities with { Workspace = new() { Enabled = true }, Sandbox = new() { Enabled = true } },
         });
         Assert.True((await pipeline.Board(Owner.Tenant, Context.RunId).AddAsync("t1", new() { Title = "Run the tests", Checks = ["slow"] }, "planned", Ct)).Accepted);
-        var context = Context with { }; // its own, as a failed check marks it untrusted
+        var context = Context; // one for the agent, which a failed check marks as untrusted
         await RunAsync(pipeline, "claim", """{ "id": "t1" }""", context);
 
         var submitting = RunAsync(pipeline, "submit", """{ "id": "t1" }""", context);
         await slow.Started.Task.WaitAsync(Ct);
         setup.Time.Advance(TimeSpan.FromMinutes(5)); // far past the tool's limit
-        slow.Release.TrySetResult(new(true, []));
+        if (command)
+        {
+            slow.Release.TrySetResult(new(true, [])); // a command check ends only by itself
+        }
 
         Assert.Equal(
             command ? "Changed: t1 state InProgress → InReview, verified false → true." : "check slow failed: timed out after 00:00:01. Changed: t1 failedAttempts 0 → 1.",
@@ -476,8 +479,9 @@ public class TaskBoardTests
         public async ValueTask<CheckResult> RunAsync(CheckContext context, CancellationToken ct)
         {
             Runs++;
+            var waiting = Release.Task.WaitAsync(ct); // waiting before it says so, so a cancellation that follows always ends it
             Started.TrySetResult();
-            return await Release.Task.WaitAsync(ct);
+            return await waiting;
         }
     }
 }

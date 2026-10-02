@@ -32,6 +32,9 @@ public sealed record ToolContext(string RunId, string Agent, Caller Caller)
     /// <summary>The permissions a helper's calls may use at most: its parent's; null when nothing narrows them beyond the agent (TEAM-07).</summary>
     internal IReadOnlyList<string>? Within { get; init; }
 
+    /// <summary>The run's helper numbers, which every context made from the run's shares; null outside a run (TEAM-07).</summary>
+    internal Running.HelperNumbers? Helpers { get; init; }
+
     /// <summary>Starts a helper of the agent, on its work; null where the agent cannot (TEAM-07).</summary>
     internal Func<string, string, CancellationToken, Task<(bool Completed, string Text)>>? StartHelper { get; init; }
 

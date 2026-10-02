@@ -42,14 +42,23 @@ public sealed class TamperTests : IDisposable
 
     public void Dispose() => sof.Dispose();
 
-    [Fact]
-    public async Task An_agent_cannot_change_any_definition_permission_budget_rule_or_check()
+    // The definitions are in sof.json, or in a file it extends, which is as much the configuration (CFG-05).
+    [Theory]
+    [InlineData("sof.json")]
+    [InlineData("team.json")]
+    public async Task An_agent_cannot_change_any_definition_permission_budget_rule_or_check(string file)
     {
-        sof.Write("sof.json", Configuration).Commit();
+        sof.Write(file, Configuration);
+        if (file != "sof.json")
+        {
+            sof.Write("sof.json", $$"""{ "extends": ["{{file}}"] }""");
+        }
+
+        sof.Commit();
         sof.Sandbox = new FakeSandbox().Reply("", 0);
         var loose = Configuration.Replace("\"cost\": 1", "\"cost\": 1000", StringComparison.Ordinal);
-        model.CallTools(("write", $$"""{ "path": "sof.json", "content": {{System.Text.Json.JsonSerializer.Serialize(loose)}} }"""))
-            .CallTools(("run", """{ "command": "echo {} > sof.json" }"""))
+        model.CallTools(("write", $$"""{ "path": "{{file}}", "content": {{System.Text.Json.JsonSerializer.Serialize(loose)}} }"""))
+            .CallTools(("run", $$"""{ "command": "echo {} > {{file}}" }"""))
             .CallTools(("create", """{ "id": "t1", "title": "Fix it", "checks": ["tests"], "reason": "plan" }"""))
             .CallTools(("update", """{ "id": "t1", "checks": [], "reason": "The tests are slow." }"""), ("update", """{ "id": "t1", "budget": 100, "reason": "More." }"""))
             .Reply("Done.");
@@ -58,11 +67,11 @@ public sealed class TamperTests : IDisposable
 
         Assert.Equal((ExitCodes.Success, ""), (exitCode, error));
         var results = model.Requests[^1].History.SelectMany(message => message.Content).OfType<ToolResultContent>().Select(content => content.Text).ToList();
-        Assert.Contains(results, text => text.Contains("sof.json is read-only.", StringComparison.Ordinal)); // the definitions, rules and checks are in it
+        Assert.Contains(results, text => text.Contains($"{file} is read-only.", StringComparison.Ordinal)); // the definitions, rules and checks are in it
         var command = Assert.Single(sof.Sandbox.Processes).Command;
-        Assert.Contains(Path.Combine(command.Directory, "sof.json"), command.ReadOnlyPaths); // and the sandbox keeps commands off it
+        Assert.Contains(Path.Combine(command.Directory, file), command.ReadOnlyPaths); // and the sandbox keeps commands off it
         Assert.Equal(2, results.Count(text => text.Contains("invalid arguments", StringComparison.Ordinal))); // a task's checks and budget are the owner's
-        Assert.Equal(Configuration, await File.ReadAllTextAsync(Path.Combine(sof.Directory, "sof.json"), Ct));
+        Assert.Equal(Configuration, await File.ReadAllTextAsync(Path.Combine(sof.Directory, file), Ct));
         var runId = output.Split('\n')[0]["run ".Length..];
         var task = (await ((Core.Extensibility.IStorage)await SqliteStorage.OpenAsync(Path.Combine(sof.Directory, ".sof", "sof.db"), Ct)).Tasks.ReadAsync(null, runId, Ct))[^1].Tasks.Single();
         Assert.Equal(["tests"], task.Checks);

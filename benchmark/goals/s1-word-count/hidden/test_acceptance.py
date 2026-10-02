@@ -1,10 +1,9 @@
 import os
 import sys
-import tempfile
 import unittest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..")))
-from harness import build, run  # noqa: E402
+from harness import build, folder, run  # noqa: E402
 
 APP = "src/WordCount"
 
@@ -13,7 +12,7 @@ class WordCount(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         build(APP)
-        cls.folder = tempfile.mkdtemp()
+        cls.folder = folder()
         cls.a = cls.write("a.txt", b"one two\nthree\n")
         cls.b = cls.write("b.txt", b"  four\tfive  six\n\nseven")
 

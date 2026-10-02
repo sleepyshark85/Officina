@@ -2,12 +2,11 @@ import gzip
 import json
 import os
 import sys
-import tempfile
 import time
 import unittest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..")))
-from harness import build, run  # noqa: E402
+from harness import build, folder, run  # noqa: E402
 
 APP = "src/LogReport"
 LOG = """\
@@ -24,7 +23,7 @@ class LogReport(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         build(APP)
-        cls.folder = tempfile.mkdtemp()
+        cls.folder = folder()
 
     def report(self, *args, stdin=LOG):
         code, out, err = run(APP, *args, stdin=stdin)

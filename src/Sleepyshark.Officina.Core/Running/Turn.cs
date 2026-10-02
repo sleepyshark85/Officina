@@ -271,11 +271,12 @@ internal sealed class Turn
             return (false, $"a helper may not start helpers deeper than {team.HelperDepth}.");
         }
 
-        var number = Interlocked.Increment(ref helpers);
-        if (number > team.HelperCount)
+        if (Interlocked.Increment(ref helpers) > team.HelperCount)
         {
             return (false, $"a turn may start at most {team.HelperCount} helpers.");
         }
+
+        var number = (context.Helpers ?? new()).Next(); // the run's, so an id never repeats within it
 
         var within = agent.Permissions is null ? context.Within : context.Within is null ? agent.Permissions : [.. context.Within.Intersect(agent.Permissions)];
         var helperContext = context with

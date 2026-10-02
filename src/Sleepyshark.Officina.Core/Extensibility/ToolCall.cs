@@ -38,9 +38,6 @@ public sealed record ToolCall(
     /// <summary>Sends another agent of the caller's team a message; it returns why it cannot, or null. Null when the agent is in no team.</summary>
     internal Func<string, string, CancellationToken, ValueTask<string?>>? Send { get; init; }
 
-    /// <summary>The tool's configured time limit, for a tool that bounds parts of its work itself, such as the checks a submit runs.</summary>
-    internal TimeSpan TimeLimit { get; init; }
-
     /// <summary>Starts a helper of the calling agent; null where the agent cannot (TEAM-07).</summary>
     internal Func<string, string, CancellationToken, Task<(bool Completed, string Text)>>? StartHelper { get; init; }
 }

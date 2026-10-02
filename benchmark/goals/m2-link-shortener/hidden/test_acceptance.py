@@ -1,6 +1,7 @@
 import os
 import re
 import sys
+import time
 import unittest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..")))
@@ -64,7 +65,10 @@ class Shortener(unittest.TestCase):
         self.assertEqual(302, self.service.call("GET", "/open", follow=False)[0])
 
     def test_lists_newest_first_and_survives_a_restart(self):
-        codes = [self.shorten(f"https://example.com/{n}", f"code{n}")["code"] for n in range(3)]
+        codes = []
+        for n in range(3):
+            codes.append(self.shorten(f"https://example.com/{n}", f"code{n}")["code"])
+            time.sleep(1.1)  # a creation time to the second still orders them
         self.service.call("GET", "/code1", follow=False)
         self.service.restart()
         listed = self.service.call("GET", "/api/links", headers=KEY)[2]
