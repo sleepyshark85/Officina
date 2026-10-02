@@ -33,7 +33,7 @@ public sealed record ProviderOptions
         Example = """{ "claude-opus-5-5": { "input": 4, "output": 20, "cacheRead": 0.2, "cacheWrite5m": 5, "cacheWrite1h": 8 } }""")]
     public IReadOnlyDictionary<string, ModelPrice> Prices { get; init; } = new Dictionary<string, ModelPrice>();
 
-    [Setting("How long a call may go without anything from the provider, as `hh:mm:ss`, before it is given up on as a transient failure and retried.", Example = "\"00:10:00\"")]
+    [Setting("How long to wait for the provider to answer a call, and then for each next piece of its streamed reply, as `hh:mm:ss`. A call that goes quiet for longer is given up on as a transient failure and retried.", Example = "\"00:10:00\"")]
     [Range(typeof(TimeSpan), "00:00:00", "10675199.02:48:05.4775807", MinimumIsExclusive = true, ErrorMessage = "must be greater than zero.")]
     public TimeSpan Timeout { get; init; } = TimeSpan.FromMinutes(10);
 

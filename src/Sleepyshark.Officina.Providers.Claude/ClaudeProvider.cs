@@ -66,8 +66,8 @@ public sealed class ClaudeProvider : IModelProvider, IDisposable
         var reply = new ClaudeReply(request.Tools, request.History);
 
         // A call that goes quiet for longer than the timeout is given up on, so it cannot hold its place for ever.
-        using var idle = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        using var timer = time.CreateTimer(_ => idle.Cancel(), null, System.Threading.Timeout.InfiniteTimeSpan, System.Threading.Timeout.InfiniteTimeSpan);
+        using var quiet = new CancellationTokenSource(System.Threading.Timeout.InfiniteTimeSpan, time);
+        using var idle = CancellationTokenSource.CreateLinkedTokenSource(ct, quiet.Token);
         var stream = (await ClientAsync(ct).ConfigureAwait(false)).Beta.Messages.CreateStreaming(parameters, idle.Token).GetAsyncEnumerator(idle.Token);
         await using var _ = stream.ConfigureAwait(false);
         var inputTooLong = false;
@@ -75,13 +75,13 @@ public sealed class ClaudeProvider : IModelProvider, IDisposable
         {
             try
             {
-                timer.Change(options.Timeout, System.Threading.Timeout.InfiniteTimeSpan);
+                quiet.CancelAfter(options.Timeout);
                 if (!await stream.MoveNextAsync().ConfigureAwait(false))
                 {
                     break;
                 }
 
-                timer.Change(System.Threading.Timeout.InfiniteTimeSpan, System.Threading.Timeout.InfiniteTimeSpan);
+                quiet.CancelAfter(System.Threading.Timeout.InfiniteTimeSpan);
             }
             catch (AnthropicBadRequestException exception) when (exception.ResponseBody.Contains("prompt is too long", StringComparison.OrdinalIgnoreCase))
             {
@@ -146,7 +146,7 @@ public sealed class ClaudeProvider : IModelProvider, IDisposable
             if (client is null)
             {
                 var key = options.ApiKey is { } reference ? await secrets.GetAsync(reference.Secret, ct).ConfigureAwait(false) : null;
-                client = new AnthropicClient { ApiKey = key, MaxRetries = 0, HttpClient = new HttpClient(retryAfter, disposeHandler: false) { Timeout = System.Threading.Timeout.InfiniteTimeSpan } };
+                client = new AnthropicClient { ApiKey = key, MaxRetries = 0, Timeout = options.Timeout, HttpClient = new HttpClient(retryAfter, disposeHandler: false) { Timeout = System.Threading.Timeout.InfiniteTimeSpan } };
             }
 
             return client;

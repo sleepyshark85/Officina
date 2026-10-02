@@ -39,7 +39,7 @@ It lists the settings the code has today. Settings that later slices add are spe
 |---|---|---|---|---|
 | `apiKey` | section |  | The provider's credential, as the name of a secret, which is read when it is used. | `{"secret":"ANTHROPIC_API_KEY"}` |
 | `prices` | named entries | `{}` | Prices per million tokens, by model id, for reporting cost and enforcing cost budgets. Every model a profile uses needs one; the `claude` provider ships the prices of current models, and a configured price overrides the shipped values it sets. | `{"claude-opus-5-5":{"input":4,"output":20,"cacheRead":0.2,"cacheWrite5m":5,"cacheWrite1h":8}}` |
-| `timeout` | time span (`hh:mm:ss` or `d.hh:mm:ss`) | `"00:10:00"` | How long a call may go without anything from the provider, as `hh:mm:ss`, before it is given up on as a transient failure and retried. | `"00:10:00"` |
+| `timeout` | time span (`hh:mm:ss` or `d.hh:mm:ss`) | `"00:10:00"` | How long to wait for the provider to answer a call, and then for each next piece of its streamed reply, as `hh:mm:ss`. A call that goes quiet for longer is given up on as a transient failure and retried. | `"00:10:00"` |
 | `retry` | section | `{"maxAttempts":5,"initialDelay":"00:00:01","maxDelay":"00:01:00"}` | How failed calls are retried, for every agent that calls this provider. | `{"maxAttempts":5,"initialDelay":"00:00:01"}` |
 | `maxConcurrentCalls` | whole number, ≥ 1 |  | The most calls to this provider in flight at once, across all agents: the account's share of the provider's rate limit. Calls over it wait their turn, the team lead's first. Unset means no limit. | `8` |
 
