@@ -10,8 +10,8 @@ Confirm that the Anthropic C# SDK supports everything the Claude provider needs.
 
 ## Acceptance criteria
 
-- [ ] A throwaway console app exercises: streaming with tools; cache markers with 5-minute and 1-hour lifetimes; mid-conversation and turn-scoped system messages; adaptive thinking with effort; reasoning blocks sent back unchanged; structured output; the SDK's option for raw request fields; error types; usage including cache by lifetime.
-- [ ] `docs/spikes/claude-sdk.md` lists each feature as typed, raw-only or missing, with the workaround.
+- [x] A throwaway console app exercises: streaming with tools; cache markers with 5-minute and 1-hour lifetimes; mid-conversation and turn-scoped system messages; adaptive thinking with effort; reasoning blocks sent back unchanged; structured output; the SDK's option for raw request fields; error types; usage including cache by lifetime.
+- [x] `docs/spikes/claude-sdk.md` lists each feature as typed, raw-only or missing, with the workaround.
 
 ## Notes
 

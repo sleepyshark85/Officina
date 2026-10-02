@@ -28,7 +28,7 @@ requirement changes at revision 3.
 
 ## Pending
 
-MUSTs that S21's later parts verify; S21 is not done while any is listed here.
+MUSTs still to verify; S21 is not done while any is listed here.
 
 | Requirement | Waits for |
 |---|---|

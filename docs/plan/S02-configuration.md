@@ -10,11 +10,11 @@ Build the configuration machinery: Options classes, loading, layers, validation,
 
 ## Acceptance criteria
 
-- [ ] Layers merge as in the reference (§13). `sof config show --origin` names the layer of every value, including "code default, core x.y".
-- [ ] Validation reports every error with its path and a fix. There is a test per validation phase and per attempt to weaken an invariant.
-- [ ] The build generates the JSON Schema and the settings reference from the Options classes, and the documentation's examples validate against the schema.
-- [ ] The placeholder rules are implemented and tested.
-- [ ] Each run stores its resolved configuration.
+- [x] Layers merge as in the reference (§13). `sof config show --origin` names the layer of every value, including "code default, core x.y".
+- [x] Validation reports every error with its path and a fix. There is a test per validation phase and per attempt to weaken an invariant.
+- [x] The build generates the JSON Schema and the settings reference from the Options classes, and the documentation's examples validate against the schema.
+- [x] The placeholder rules are implemented and tested.
+- [x] Each run stores its resolved configuration.
 
 ## Notes
 
