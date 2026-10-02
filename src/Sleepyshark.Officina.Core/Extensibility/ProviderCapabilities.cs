@@ -13,4 +13,7 @@ public sealed record ProviderCapabilities
     /// the volatile context is kept in the history (CTX-10).
     /// </summary>
     public bool TurnScopedMessages { get; init; }
+
+    /// <summary>The tools the provider runs itself, by the name <c>provider:</c> sources use (TOOL-13).</summary>
+    public IReadOnlySet<string> ProviderTools { get; init; } = new HashSet<string>();
 }

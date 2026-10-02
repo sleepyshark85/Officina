@@ -64,6 +64,9 @@ public sealed record ToolOptions
     [Setting("Why a provider tool is enabled. Required for `provider:` tools.", Example = "\"The lead researches unfamiliar libraries.\"")]
     public string? Reason { get; init; }
 
+    [Setting("The limits the provider applies to a `provider:` tool, where it offers them.", Example = """{ "maxUses": 5, "allowedDomains": ["github.com"] }""")]
+    public ProviderToolLimits? Limits { get; init; }
+
     /// <summary>The id of the application's tool, for an <c>extension:</c> source.</summary>
     public string? ExtensionId() => After(Source, "extension:");
 

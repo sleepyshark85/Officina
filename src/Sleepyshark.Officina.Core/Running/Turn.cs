@@ -196,8 +196,9 @@ internal sealed class Turn
             }
             catch (Exception exception) when (exception is not OperationCanceledException || !ct.IsCancellationRequested)
             {
-                // The exception's message may quote the request, so only its type is reported.
-                return HandOff(HandoffReason.ProviderFailure, $"the model call failed: {exception.GetType().Name}");
+                // The exception's message may quote the request, so only its type or classification is reported (MDL-05).
+                return HandOff(HandoffReason.ProviderFailure,
+                    $"the model call failed: {(exception is ModelCallException failed ? failed.Failure.ToString() : exception.GetType().Name)}");
             }
 
             var result = stop switch

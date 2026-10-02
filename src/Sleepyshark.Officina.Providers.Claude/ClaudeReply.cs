@@ -1,0 +1,182 @@
+using System.Collections.Immutable;
+using System.Text;
+using System.Text.Json;
+using System.Text.Json.Nodes;
+using Anthropic.Models.Beta.Messages;
+using Sleepyshark.Officina.Core.Extensibility;
+using Sleepyshark.Officina.Core.Messages;
+using Sleepyshark.Officina.Core.Tools;
+using CoreUsage = Sleepyshark.Officina.Core.Messages.Usage;
+
+namespace Sleepyshark.Officina.Providers.Claude;
+
+/// <summary>
+/// Reads one streamed reply. Text is passed on as it arrives (MDL-07); every other block once it is complete, in the
+/// order of the reply, so the reply goes back to Claude as it came. A tool's input streams unchecked (eager input
+/// streaming), and the tool pipeline checks it against the tool's schema before the tool runs.
+/// </summary>
+internal sealed class ClaudeReply
+{
+    private readonly ImmutableArray<ToolDefinition> tools;
+    private readonly Dictionary<string, ToolRequest> providerCalls = new(StringComparer.Ordinal);
+    private readonly StringBuilder thinking = new();
+    private readonly StringBuilder input = new();
+    private JsonObject? block;
+    private string? signature;
+    private BetaUsage? started;
+
+    /// <param name="tools">The tools the request offers.</param>
+    /// <param name="history">
+    /// The request's history. A paused reply (<c>pause_turn</c>) can end with a server tool's call, whose result arrives in
+    /// the next reply, so the calls of the last assistant message that have no result yet are waiting for one.
+    /// </param>
+    public ClaudeReply(ImmutableArray<ToolDefinition> tools, ImmutableArray<Message> history)
+    {
+        this.tools = tools;
+        var data = history.LastOrDefault(message => message.Role == Core.Messages.Role.Assistant)?.Content.OfType<ProviderContent>().Select(content => content.Data).ToList() ?? [];
+        var answered = data.Select(block => block.TryGetProperty("tool_use_id", out var id) ? id.GetString() : null).ToHashSet(StringComparer.Ordinal);
+        foreach (var block in data.Where(block => block.TryGetProperty("type", out var type) && type.GetString() == "server_tool_use"))
+        {
+            if (!answered.Contains(block.GetProperty("id").GetString()))
+            {
+                providerCalls[block.GetProperty("id").GetString()!] = Request(block);
+            }
+        }
+    }
+
+    public IEnumerable<ModelEvent> Read(BetaRawMessageStreamEvent streamEvent)
+    {
+        if (streamEvent.TryPickStart(out var start))
+        {
+            started = start.Message.Usage;
+        }
+        else if (streamEvent.TryPickContentBlockStart(out var blockStart))
+        {
+            block = JsonNode.Parse(blockStart.ContentBlock.Json.GetRawText())!.AsObject();
+            (signature, thinking.Length, input.Length) = (null, 0, 0);
+            if (block["type"]?.GetValue<string>() == "text" && block["text"]?.GetValue<string>() is { Length: > 0 } text)
+            {
+                yield return new TextDelta(text);
+            }
+        }
+        else if (streamEvent.TryPickContentBlockDelta(out var blockDelta))
+        {
+            if (blockDelta.Delta.TryPickText(out var text))
+            {
+                yield return new TextDelta(text.Text);
+            }
+            else if (blockDelta.Delta.TryPickThinking(out var reasoning))
+            {
+                thinking.Append(reasoning.Thinking);
+            }
+            else if (blockDelta.Delta.TryPickSignature(out var signed))
+            {
+                signature = signed.Signature;
+            }
+            else if (blockDelta.Delta.TryPickInputJson(out var json))
+            {
+                input.Append(json.PartialJson);
+            }
+        }
+        else if (streamEvent.TryPickContentBlockStop(out _) && block is not null)
+        {
+            foreach (var modelEvent in Complete(block))
+            {
+                yield return modelEvent;
+            }
+
+            block = null;
+        }
+        else if (streamEvent.TryPickDelta(out var messageDelta))
+        {
+            yield return new UsageReported(Usage(messageDelta.Usage));
+            yield return new Stopped(Stop(messageDelta.Delta.StopReason?.Raw()));
+        }
+    }
+
+    /// <summary>CLD-04: every stop reason Claude has; anything else is unknown, not an error.</summary>
+    private static StopReason Stop(string? reason) => reason switch
+    {
+        "end_turn" => StopReason.Finished,
+        "tool_use" => StopReason.WantsTools,
+        "max_tokens" => StopReason.OutputLimit,
+        "stop_sequence" => StopReason.StopSequence,
+        "pause_turn" => StopReason.Paused,
+        "refusal" => StopReason.Refused,
+        "model_context_window_exceeded" => StopReason.InputTooLong,
+        _ => StopReason.Unknown,
+    };
+
+    /// <summary>
+    /// The block, complete. Reasoning keeps its signature (CLD-05); content of Claude's own, such as a server tool's call
+    /// and result, is kept as its JSON, and a result is reported as a call the provider ran (TOOL-13).
+    /// </summary>
+    private IEnumerable<ModelEvent> Complete(JsonObject complete)
+    {
+        var type = complete["type"]?.GetValue<string>();
+        if (type == "text")
+        {
+            yield break;
+        }
+
+        if (type == "thinking")
+        {
+            yield return new ContentReceived(new ReasoningContent(thinking.ToString(), signature));
+            yield break;
+        }
+
+        if (input.Length > 0)
+        {
+            complete["input"] = Input();
+        }
+
+        if (type == "tool_use")
+        {
+            yield return new ContentReceived(new ToolUseContent(
+                complete["id"]!.GetValue<string>(), complete["name"]!.GetValue<string>(), JsonSerializer.SerializeToElement(complete["input"] ?? new JsonObject())));
+            yield break;
+        }
+
+        var data = JsonSerializer.SerializeToElement(complete);
+        yield return new ContentReceived(new ProviderContent(data));
+        if (type == "server_tool_use")
+        {
+            providerCalls[complete["id"]!.GetValue<string>()] = Request(data);
+        }
+        else if (complete["tool_use_id"]?.GetValue<string>() is { } id && providerCalls.Remove(id, out var call))
+        {
+            yield return new ProviderToolUsed(call, complete["content"]?.ToJsonString() ?? "");
+        }
+    }
+
+    /// <summary>A server tool's call. Claude names its tools by their own names; the core knows them by their configured ones.</summary>
+    private ToolRequest Request(JsonElement call)
+    {
+        var name = call.GetProperty("name").GetString()!;
+        return new ToolRequest(tools.FirstOrDefault(tool => tool.ProviderTool == name)?.Name ?? name, call.GetProperty("input"));
+    }
+
+    /// <summary>The streamed input; input cut off by the output limit is kept as text, which no tool's schema accepts.</summary>
+    private JsonNode? Input()
+    {
+        try
+        {
+            return JsonNode.Parse(input.ToString());
+        }
+        catch (JsonException)
+        {
+            return JsonValue.Create(input.ToString());
+        }
+    }
+
+    /// <summary>
+    /// CLD-07: the tokens of the whole call. The counts at the end are totals that include any server tool's work; the
+    /// split of cache writes by lifetime is known from the start only.
+    /// </summary>
+    private CoreUsage Usage(BetaMessageDeltaUsage end) => new(
+        end.InputTokens ?? started?.InputTokens ?? 0,
+        end.OutputTokens,
+        end.CacheReadInputTokens ?? started?.CacheReadInputTokens ?? 0,
+        end.CacheCreationInputTokens ?? started?.CacheCreationInputTokens ?? 0,
+        started?.CacheCreation?.Ephemeral1hInputTokens ?? 0);
+}

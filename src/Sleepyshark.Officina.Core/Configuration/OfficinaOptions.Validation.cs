@@ -43,7 +43,8 @@ public sealed partial record OfficinaOptions : IValidatableObject
 
         foreach (var (name, profile) in Models)
         {
-            errors = errors.Concat(Names([name], "models")).Concat(Annotations(profile, $"models.{name}")).Concat(ProviderExists(name, profile));
+            errors = errors.Concat(Names([name], "models")).Concat(Annotations(profile, $"models.{name}")).Concat(ProviderExists(name, profile))
+                .Concat(Priced(name, profile));
         }
 
         foreach (var (name, agent) in Agents)
@@ -176,7 +177,8 @@ public sealed partial record OfficinaOptions : IValidatableObject
             .Concat(References("policies.gates", "gate", Policies.Gates, "gates", Gates.Keys));
         foreach (var (name, tool) in Tools)
         {
-            errors = errors.Concat(Annotations(tool, $"tools.{name}")).Concat(References($"tools.{name}.gates", "gate", tool.Gates, "gates", Gates.Keys));
+            errors = errors.Concat(Annotations(tool, $"tools.{name}")).Concat(References($"tools.{name}.gates", "gate", tool.Gates, "gates", Gates.Keys))
+                .Concat(tool.Limits is null ? [] : Annotations(tool.Limits, $"tools.{name}.limits"));
             if (tool.McpTool() is { } mcp)
             {
                 errors = mcp.Split('/') is [var server, { Length: > 0 }] && server.Length > 0
@@ -213,6 +215,11 @@ public sealed partial record OfficinaOptions : IValidatableObject
                     tool.ProviderTool() is null
                         ? "Remove it; built-in tools work on what the agent has seen, which is masked already."
                         : "Remove it; the provider runs the call, so the core cannot mask or restore its values."));
+            }
+
+            if (tool.ProviderTool() is null && tool.Limits is not null)
+            {
+                errors = errors.Append(new(ValidationPhase.Tools, $"tools.{name}.limits", "applies only to a provider tool.", "Remove it."));
             }
         }
 
@@ -359,6 +366,13 @@ public sealed partial record OfficinaOptions : IValidatableObject
         profile.Provider is null || Providers.ContainsKey(profile.Provider)
             ? []
             : [Missing($"models.{name}.provider", "provider", profile.Provider, "providers", Providers.Keys)];
+
+    /// <summary>MDL-09: cost budgets always exist (INV-07), so each model needs a price to be counted against them.</summary>
+    private IEnumerable<ConfigurationError> Priced(string name, ModelProfile profile) =>
+        profile.Provider is null || profile.Model is null || !Providers.TryGetValue(profile.Provider, out var provider) || provider.Prices.ContainsKey(profile.Model)
+            ? []
+            : [new(ValidationPhase.Provider, $"models.{name}.model", $"model \"{profile.Model}\" has no price, which the cost budgets need.",
+                $"Add its prices to providers.{profile.Provider}.prices.")];
 
     private IEnumerable<ConfigurationError> ModelExists(string name, AgentDefinition agent) =>
         agent.Model is null || Models.ContainsKey(agent.Model)

@@ -28,6 +28,6 @@ Parts of the closed requirements need state that later slices add:
 - S13: steps in events, traces and logs (EVT-02, OBS-01, OBS-03). S18: task status events, and task as a
   metric dimension (EVT-01, OBS-02). S18 and S20: messages between agents as events.
 - S19: budget warnings; the event sequence continues from the stored log when a run resumes in a new process.
-- S06: check pass rates (OBS-02). S11: fallbacks used (OBS-02); events for tools the provider runs itself (EVT-01).
+- S06: check pass rates (OBS-02). S12: fallbacks used (OBS-02). S11 publishes the tools the provider runs itself (EVT-01).
 - S16: the CLI opens the SQLite storage in the project directory (STO-01).
 - Capabilities that add their own events (EVT-01) add their payload kinds to `EventPayload`.

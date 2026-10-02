@@ -3,6 +3,7 @@ using Sleepyshark.Officina.Core.Configuration;
 using Sleepyshark.Officina.Core.Extensibility;
 using Sleepyshark.Officina.Core.Messages;
 using Sleepyshark.Officina.Core.Running;
+using Sleepyshark.Officina.Core.Tools;
 using Sleepyshark.Officina.Testing;
 using static Sleepyshark.Officina.Core.Tests.Tools.ToolSetup;
 
@@ -46,7 +47,11 @@ public class AgentRunnerTests
         var second = new ScriptedModelProvider().Reply("from second");
         var options = new OfficinaOptions
         {
-            Providers = new Dictionary<string, ProviderOptions> { ["first"] = new(), ["second"] = new() },
+            Providers = new Dictionary<string, ProviderOptions>
+            {
+                ["first"] = new() { Prices = new Dictionary<string, ModelPrice> { ["small"] = new() } },
+                ["second"] = new() { Prices = new Dictionary<string, ModelPrice> { ["large"] = new() } },
+            },
             Models = new Dictionary<string, ModelProfile>
             {
                 ["cheap"] = new() { Provider = "first", Model = "small" },
@@ -156,6 +161,33 @@ public class AgentRunnerTests
             (result.Outcome, result.Handoff!.Reason, result.Output));
     }
 
+    // MDL-05: the handoff names the provider's classification, never the request.
+    [Fact]
+    public async Task A_classified_model_failure_is_named_in_the_handoff()
+    {
+        var runner = Runner(Options(), new FailingProvider(), new Dictionary<string, ITool>(), new InMemorySecretSource(new Dictionary<string, string>()));
+
+        var result = await runner.RunAsync(Agent, "work", ct: Ct);
+
+        Assert.Equal((HandoffReason.ProviderFailure, "the model call failed: RateLimited"), (result.Handoff!.Reason, result.Output));
+    }
+
+    // INV-06: the host shares one KnownSecrets with the providers and tool servers, so what they read is removed too.
+    [Fact]
+    public async Task A_secret_a_provider_read_is_removed_from_what_tools_return()
+    {
+        var secrets = new KnownSecrets(new InMemorySecretSource(new Dictionary<string, string> { ["ANTHROPIC_API_KEY"] = "sk-test-1" }));
+        await secrets.GetAsync("ANTHROPIC_API_KEY", Ct); // as the provider does at its first call
+        var model = new ScriptedModelProvider().CallTools(("env", "{}")).Reply("Done.");
+        var env = new FakeTool(ToolKind.Read, run: (_, _) => ValueTask.FromResult(ToolResult.Success("ANTHROPIC_API_KEY=sk-test-1")));
+        var runner = Runner(Options(("env", Extension("env"))), model, new Dictionary<string, ITool> { ["env"] = env }, secrets);
+
+        await runner.RunAsync(Agent, "Print the environment.", ct: Ct);
+
+        var result = Assert.Single(model.Requests[1].History.SelectMany(message => message.Content).OfType<ToolResultContent>());
+        Assert.Contains("ANTHROPIC_API_KEY=[secret]", result.Text, StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task An_extension_that_throws_ends_the_run_as_failed_with_every_tool_request_answered()
     {
@@ -176,8 +208,20 @@ public class AgentRunnerTests
     private static TestKit Extractor(AgentDefinition? agent = null) =>
         new(new OfficinaOptions { Agents = new Dictionary<string, AgentDefinition> { ["extractor"] = agent ?? new() { Instructions = Instructions } } });
 
+    private static AgentRunner Runner(OfficinaOptions options, IModelProvider model, Dictionary<string, ITool> tools, ISecretSource secrets) =>
+        new(options, new Dictionary<string, IModelProvider> { [ProviderOptions.ClaudeName] = model }, new InMemoryStorage(), tools, new Dictionary<string, IGate>(),
+            new Dictionary<string, ICheck>(), new Dictionary<string, IKnowledgeSource>(), new ScriptedHuman(), secrets, new FakeTimeProvider());
+
     private sealed class BrokenGate : IGate
     {
         public ValueTask<GateDecision> EvaluateAsync(GateContext context, CancellationToken ct) => throw new InvalidOperationException("broken");
+    }
+
+    /// <summary>A provider whose account is over its rate limit.</summary>
+    private sealed class FailingProvider : IModelProvider
+    {
+        public ProviderCapabilities Capabilities => ProviderCapabilities.None;
+
+        public IAsyncEnumerable<ModelEvent> StreamAsync(ModelRequest request, CancellationToken ct) => throw new ModelCallException(ModelFailure.RateLimited);
     }
 }

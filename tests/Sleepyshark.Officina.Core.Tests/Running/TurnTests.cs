@@ -1,4 +1,5 @@
 using Sleepyshark.Officina.Core.Configuration;
+using Sleepyshark.Officina.Core.Events;
 using Sleepyshark.Officina.Core.Extensibility;
 using Sleepyshark.Officina.Core.Messages;
 using Sleepyshark.Officina.Core.Running;
@@ -185,23 +186,24 @@ public class TurnTests
         Assert.Equal(3, result.Transcript.Length);
     }
 
-    // MSG-06, MDL-09.
+    // MSG-06, MDL-09, CLD-07: the claude provider ships the default model's prices: $4, $20, $0.20, $5 and $8 per million
+    // input, output, cache-read, five-minute and one-hour cache-write tokens.
     [Fact]
-    public async Task Usage_is_counted_by_kind_and_priced_with_the_configured_prices()
+    public async Task Usage_is_counted_by_kind_and_priced_from_the_shipped_table_with_cache_writes_by_lifetime()
     {
-        var kit = Kit(options: Priced(Default));
+        var kit = Kit();
         kit.Model.Reply(new UsageReported(new Usage(1000, 0, 0, 0)), new UsageReported(new Usage(0, 1000, 0, 0)), new Stopped(StopReason.Paused))
-            .Reply(new UsageReported(new Usage(0, 0, 2000, 1000)), new TextDelta("Done."), new Stopped(StopReason.Finished));
+            .Reply(new UsageReported(new Usage(0, 0, 2000, 1000, cacheWrite1h: 400)), new TextDelta("Done."), new Stopped(StopReason.Finished));
 
         var result = await kit.RunAsync(Agent, "work", Ct);
 
-        Assert.Equal(new Usage(1000, 1000, 2000, 1000), result.Statistics.Usage);
-        Assert.Equal((1m + 5m + (2 * 0.1m) + 1.25m) / 1000, result.Statistics.Cost);
+        Assert.Equal(new Usage(1000, 1000, 2000, 1000, cacheWrite1h: 400), result.Statistics.Usage);
+        Assert.Equal((4m + 20m + (2 * 0.2m) + (0.6m * 5m) + (0.4m * 8m)) / 1000, result.Statistics.Cost);
     }
 
-    // TOOL-13: a provider's own tool is audited after the fact and counts towards the budget.
+    // TOOL-13, EVT-01: a provider's own tool is audited and published after the fact, and counts towards the budget.
     [Fact]
-    public async Task A_tool_the_provider_ran_is_audited_and_counted_towards_the_budget()
+    public async Task A_tool_the_provider_ran_is_audited_published_and_counted_towards_the_budget()
     {
         var options = Default with
         {
@@ -216,6 +218,25 @@ public class TurnTests
         Assert.Equal((HandoffReason.BudgetExhausted, 1), (result.Handoff!.Reason, result.Statistics.ToolCalls));
         var entry = Assert.Single(kit.Storage.Audit.Entries);
         Assert.Equal(("web_search", "provider", "3 results"), (entry.Tool, entry.DecidedBy, entry.Detail));
+        var events = await kit.Storage.Events.ReadAsync(null, kit.Storage.Runs.Runs.Single().RunId, 0, Ct);
+        Assert.Equal(
+            [new ToolCallStarted("web_search", """{ "query": "x" }"""), new ToolCallEnded("web_search", null)],
+            events.Select(read => read.Payload).Where(payload => payload is ToolCallStarted or ToolCallEnded));
+    }
+
+    // MDL-06: a provider tool the agent's provider does not run fails validation.
+    [Fact]
+    public void A_provider_tool_the_provider_does_not_run_is_rejected()
+    {
+        var options = Default with
+        {
+            Tools = new Dictionary<string, ToolOptions> { ["search"] = new() { Source = "provider:web_search", Reason = "Tests only." } },
+            ToolSets = new Dictionary<string, IReadOnlyList<string>> { ["all"] = ["search"] },
+        };
+
+        var error = Assert.Single(Assert.Throws<ConfigurationException>(() => new TestKit(options)).Errors);
+
+        Assert.Equal(("tools.search.source", "provider \"claude\" does not run the tool \"web_search\"."), (error.Path, error.Problem));
     }
 
     // LOOP-07, TEST-14.
@@ -317,14 +338,14 @@ public class TurnTests
 
     private static ContentReceived Call(string tool, string arguments) => new(new ToolUseContent("call-0", tool, Args(arguments)));
 
-    /// <summary>The default model at $1, $5, $0.10 and $1.25 per million input, output, cache-read and cache-write tokens.</summary>
+    /// <summary>The default model at $1 and $5 per million input and output tokens.</summary>
     private static OfficinaOptions Priced(OfficinaOptions options) => options with
     {
         Providers = new Dictionary<string, ProviderOptions>
         {
             [ProviderOptions.ClaudeName] = ProviderOptions.Claude with
             {
-                Prices = new Dictionary<string, ModelPrice> { ["claude-opus-5-5"] = new() { Input = 1, Output = 5, CacheRead = 0.1m, CacheWrite = 1.25m } },
+                Prices = new Dictionary<string, ModelPrice> { ["claude-opus-5-5"] = new() { Input = 1, Output = 5 } },
             },
         },
     };
@@ -350,7 +371,7 @@ public class TurnTests
             }),
             ["test"] = new FakeTool(ToolKind.Read, run: (_, _) => ValueTask.FromResult(ToolResult.Success($"tests ran after {edits} edits"))),
         };
-        current = new TestKit(options with { Agents = agents }, tools);
+        current = new TestKit(options with { Agents = agents }, tools, capabilities: new() { ProviderTools = new HashSet<string> { "web_search" } });
         return current;
     }
 }

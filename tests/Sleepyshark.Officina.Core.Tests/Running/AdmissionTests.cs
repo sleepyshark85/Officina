@@ -189,7 +189,9 @@ public class AdmissionTests
         var fetch = byProvider ? new ToolOptions { Source = "provider:fetch", Reason = "Research." } : Extension("fetch");
         var options = Options(("fetch", fetch with { Untrusted = true }), ("post", Extension("post") with { Gates = ["untrusted"] }));
         options = options with { Gates = new Dictionary<string, GateOptions> { ["untrusted"] = new() { Use = GateOptions.UntrustedContentApproval } } };
-        var kit = new TestKit(options, new Dictionary<string, ITool> { ["fetch"] = new FakeTool(ToolKind.Read), ["post"] = new FakeTool(ToolKind.Write) });
+        var kit = new TestKit(
+            options, new Dictionary<string, ITool> { ["fetch"] = new FakeTool(ToolKind.Read), ["post"] = new FakeTool(ToolKind.Write) },
+            capabilities: new() { ProviderTools = new HashSet<string> { "fetch" } });
         kit.Model.CallTools(("post", "{}"));
         if (byProvider)
         {

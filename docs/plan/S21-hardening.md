@@ -6,7 +6,7 @@
 
 Prove the non-functional targets and the coding team's success rate.
 
-**Closes:** SCALE-01, SCALE-02, SCALE-03, LAT-01, LAT-02, SEC-03, TEST-30, TEST-31, TEST-33, HITL-07
+**Closes:** CLD-06, CLD-11, SCALE-01, SCALE-02, SCALE-03, LAT-01, LAT-02, SEC-03, TEST-30, TEST-31, TEST-33, HITL-07
 
 ## Acceptance criteria
 
@@ -19,3 +19,8 @@ Prove the non-functional targets and the coding team's success rate.
 
 - HITL-07 (a MAY: end users rate a result, linked to its run) moved here from S16: build it if time allows, or record
   it as not in v1.
+
+From S11, each a feature switch of the Claude provider:
+- CLD-06: native structured output (`output_config.format`, `strict` tools), compaction as the provider's
+  `IHistoryShortener` (HIST-01), clearing old tool results, task budgets and the server-side refusal fallback.
+- CLD-11: `ModelRequest.Batch` sent through Message Batches (MDL-10).

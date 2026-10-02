@@ -41,6 +41,8 @@ generated from the Options classes with the JSON Schema [`docs/officina.schema.j
 Everything else has a default. The API key is read from the `ANTHROPIC_API_KEY` environment
 variable unless you configure another secret.
 
+Until per-model capabilities arrive, `claude-haiku-4-5` rejects mid-conversation system messages (turn-scoped and operator messages), so a profile that uses it fails with `InvalidRequest`.
+
 ## Smallest configurations
 
 One agent, which runs on the default model profile (`claude-opus-5-5`):

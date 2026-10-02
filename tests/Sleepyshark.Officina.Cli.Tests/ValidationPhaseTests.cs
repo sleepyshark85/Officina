@@ -27,6 +27,19 @@ public sealed class ValidationPhaseTests : IDisposable
     }
 
     [Fact]
+    public void Binding_a_price_leaves_the_shipped_prices_of_the_next_options_unchanged()
+    {
+        folder.Write("sof.json", """{ "providers": { "claude": { "prices": { "my-model": { "input": 1 }, "claude-opus-5-5": { "input": 99 } } } } }""");
+
+        var bound = folder.Load().Options.Providers["claude"].Prices;
+
+        Assert.Equal(99m, bound["claude-opus-5-5"].Input);
+        Assert.Contains("my-model", bound.Keys);
+        Assert.Equal(4m, ProviderOptions.Claude.Prices["claude-opus-5-5"].Input);
+        Assert.DoesNotContain("my-model", ProviderOptions.Claude.Prices.Keys);
+    }
+
+    [Fact]
     public void Phase_1_parse_requires_sof_json()
     {
         var error = Assert.Single(folder.Load().Errors);

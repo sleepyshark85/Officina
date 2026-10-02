@@ -11,7 +11,7 @@ It lists the settings the code has today. Settings that later slices add are spe
 | `$schema` | text |  | The JSON Schema of the file, for editor completion. Files only. |  |
 | `formatVersion` | whole number | `1` | The configuration format version. Unknown versions are rejected. | `1` |
 | `project` | section | `{"values":{}}` | The project's identity, and values usable in placeholders. | `{"name":"invoice-api"}` |
-| `providers` | named entries | `{"claude":{"apiKey":{"secret":"ANTHROPIC_API_KEY"},"prices":{}}}` | Model providers, by name. | `{"claude":{"apiKey":{"secret":"ANTHROPIC_API_KEY"}}}` |
+| `providers` | named entries | `{"claude":{"apiKey":{"secret":"ANTHROPIC_API_KEY"},"prices":{"claude-fable-5-1":{"input":10,"output":50,"cacheRead":0.25,"cacheWrite5m":12.5,"cacheWrite1h":20},"claude-opus-5-5":{"input":4,"output":20,"cacheRead":0.2,"cacheWrite5m":5,"cacheWrite1h":8},"claude-opus-5":{"input":5,"output":25,"cacheRead":0.5,"cacheWrite5m":6.25,"cacheWrite1h":10},"claude-sonnet-5-5":{"input":2,"output":10,"cacheRead":0.2,"cacheWrite5m":2.5,"cacheWrite1h":4},"claude-haiku-4-5":{"input":1,"output":5,"cacheRead":0.1,"cacheWrite5m":1.25,"cacheWrite1h":2}}}}` | Model providers, by name. | `{"claude":{"apiKey":{"secret":"ANTHROPIC_API_KEY"}}}` |
 | `models` | named entries | `{"default":{"provider":"claude","model":"claude-opus-5-5","toolChoice":"auto","settings":{}}}` | Model profiles, by name. Agents refer to them by name. | `{"strong":{"effort":"high"}}` |
 | `agents` | named entries | `{}` | Agent definitions, by name. | `{"extractor":{"instructions":"Extract the invoice number."}}` |
 | `toolServers` | named entries | `{}` | External tool servers (MCP), by name. Tools use their tools with `mcp:<server>/<tool>` sources. | `{"github":{"command":"github-mcp-server","args":["stdio"]}}` |
@@ -38,7 +38,7 @@ It lists the settings the code has today. Settings that later slices add are spe
 | Setting | Allowed values | Default | Description | Example |
 |---|---|---|---|---|
 | `apiKey` | section |  | The provider's credential, as the name of a secret, which is read when it is used. | `{"secret":"ANTHROPIC_API_KEY"}` |
-| `prices` | named entries | `{}` | Prices per million tokens, by model id, for reporting cost and enforcing cost budgets. A model without a price costs nothing. | `{"claude-opus-5-5":{"input":4,"output":20,"cacheRead":0.2,"cacheWrite":5}}` |
+| `prices` | named entries | `{}` | Prices per million tokens, by model id, for reporting cost and enforcing cost budgets. Every model a profile uses needs one; the `claude` provider ships the prices of current models, and a configured price overrides the shipped values it sets. | `{"claude-opus-5-5":{"input":4,"output":20,"cacheRead":0.2,"cacheWrite5m":5,"cacheWrite1h":8}}` |
 
 ## `models.<name>`
 
@@ -101,6 +101,7 @@ It lists the settings the code has today. Settings that later slices add are spe
 | `receivesMaskedValues` | boolean | `false` | Whether masked values are restored in the tool's arguments, so it receives the real ones, such as a tool that sends an email. Its results are masked again. | `true` |
 | `untrusted` | boolean | `false` | Whether the tool's results are untrusted content, such as fetched web pages. An agent that has read them is marked, and gates can act on the mark. | `true` |
 | `reason` | text |  | Why a provider tool is enabled. Required for `provider:` tools. | `"The lead researches unfamiliar libraries."` |
+| `limits` | section |  | The limits the provider applies to a `provider:` tool, where it offers them. | `{"maxUses":5,"allowedDomains":["github.com"]}` |
 
 ## `gates.<name>`
 
@@ -178,7 +179,8 @@ It lists the settings the code has today. Settings that later slices add are spe
 | `input` | number, ≥ 0 | `0` | USD per million input tokens. | `4` |
 | `output` | number, ≥ 0 | `0` | USD per million output tokens. | `20` |
 | `cacheRead` | number, ≥ 0 | `0` | USD per million tokens read from the cache. | `0.2` |
-| `cacheWrite` | number, ≥ 0 | `0` | USD per million tokens written to the cache. | `5` |
+| `cacheWrite5m` | number, ≥ 0 | `0` | USD per million tokens written to the cache for five minutes. | `5` |
+| `cacheWrite1h` | number, ≥ 0 | `0` | USD per million tokens written to the cache for an hour. | `8` |
 
 ## `agents.<name>.context`
 
@@ -222,6 +224,13 @@ It lists the settings the code has today. Settings that later slices add are spe
 | Setting | Allowed values | Default | Description | Example |
 |---|---|---|---|---|
 | `iterationsWithoutProgress` | whole number, ≥ 1 | `3` | A turn ends in a handoff after this many tool-calling iterations in a row that only repeat earlier calls and get the same results. | `5` |
+
+## `tools.<name>.limits`
+
+| Setting | Allowed values | Default | Description | Example |
+|---|---|---|---|---|
+| `maxUses` | whole number, ≥ 1 |  | The most calls of the tool in one model call. Unset leaves it to the provider. | `5` |
+| `allowedDomains` | list | `[]` | The only domains the tool may reach, such as for a web search or fetch. Empty allows any. | `["learn.microsoft.com","github.com"]` |
 
 ## `gates.<name>.when`
 
