@@ -1,7 +1,8 @@
 # The coding team benchmark (TEST-31)
 
-Ten development goals for the coding team, each with a hidden acceptance test suite written before the team ever works on it.
-S21 runs the benchmark against the live model and measures it; this folder is the fixed set.
+Ten development goals for the coding team, each with a hidden acceptance test suite written before the team ever works on it,
+and the runner that scores the team on them against the live model. The live run is the owner's to start, as it costs money;
+it has not run yet.
 
 | Tier | Goal | What it is |
 |---|---|---|
@@ -44,7 +45,9 @@ python3 benchmark/bench.py --i-understand-unsandboxed-scoring                   
 python3 benchmark/report.py benchmark/results/<linux run> benchmark/results/<windows run>
 ```
 
-The report meets the target only with every goal run at least 3 times on both Linux and Windows. A run whose cost passes
+The report meets the target only with every goal run at least 3 times on both Linux and Windows. At the shipped prices of
+`claude-opus-5-5`, a run is estimated at about $5 (small), $20 (medium) and $50 (larger): about $600 a system, and it may be
+half or twice that. A run whose cost passes
 `--max-cost` (60 dollars), or that takes longer than `--timeout` (8 hours), is stopped and fails. A failed run's workspace is kept, its path in the run's
 JSON; a successful run's is removed.
 
@@ -54,8 +57,7 @@ JSON; a successful run's is removed.
 copies each to an empty folder and scores it as a run's baseline would be: each suite can be passed. It also checks that each
 suite fails against an empty workspace, which shows only that a suite needs a project, not that it tells a wrong solution from a
 right one. CI runs it on Linux and Windows when `benchmark/` changes, with the runner's own
-tests ([`tests/`](tests), against a stand-in for `sof`). Validating found that text sent to a program's standard input became
-CRLF on Windows, which the goals do not allow; the harness now sends it as bytes.
+tests ([`tests/`](tests), against a stand-in for `sof`).
 
 ## The hidden tests
 
