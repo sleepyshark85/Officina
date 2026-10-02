@@ -1,6 +1,6 @@
 # Officina — Requirements Specification
 
-Status: draft for review, revision 2 · 2026-09-30
+Status: revision 2 · 2026-09-30. v1 is built against it; [`docs/plan/README.md`](docs/plan/README.md) says what is left.
 
 ## 1. Purpose and scope
 
@@ -339,7 +339,7 @@ OUTPUT CHECKS (in order) → result, or revise (if the pattern allows), or hando
 | CTX-03 | MUST | Agents with the same definition, model slot and memory scope share an identical stable prefix, so they share the provider's cache. Tools are always presented in the same order. |
 | CTX-10 | MUST | History is **append-only**: nothing already sent to the model is edited, reordered or removed, except by history shortening (HIST). Editing earlier content breaks the cache from that point on, and on current Claude models it also invalidates the model's earlier reasoning. The volatile context is therefore delivered without editing earlier content. Where the provider offers turn-scoped content, which is shown for one model call and then cleared by the provider, a fresh copy is sent with each call. Otherwise the volatile context is appended after the newest content and kept, and later calls in the same turn append only what changed since it was last sent. |
 | CTX-11 | MUST | The core places cache boundaries at: **(a)** the end of the part of the prefix shared by every agent of the definition (tools, instructions, policies); **(b)** the end of project memory; and **(c)** the last cacheable block of history, so each model call reuses the cache for everything the previous call sent. The number of boundaries never exceeds the provider's limit. Cache lifetime is configurable per boundary where the provider supports it; for example, a longer lifetime for agents that often wait for approvals. Where the provider requires it, boundaries with longer lifetimes come before boundaries with shorter ones. |
-| CTX-04 | MUST | Retrieval is configurable as: none; **before the turn** (knowledge is fetched once and placed in section 4); or **as a tool** (the agent searches when it chooses). Both can be used together. |
+| CTX-04 | MUST | Retrieval is configurable as: none; **before the turn** (knowledge is fetched once and placed in the volatile context); or **as a tool** (the agent searches when it chooses). Both can be used together. |
 | CTX-05 | MUST | A knowledge source returns passages, their citations, and whether the question is covered, partly covered or not covered. "Not covered" can end the turn in a handoff (policy gap). Configurable. |
 | CTX-06 | MUST | History strategy is configurable: **none** (each request stands alone); **full**; **shortened** when long (HIST); or **last N turns**. |
 | CTX-07 | MUST | Facts are presented in a consistent order, each with its as-of time. Building the input reads the run record but never changes it. |
@@ -737,4 +737,9 @@ v1 does not include:
 
 **Open questions**
 
-None at revision 2.
+None at revision 2. Raised during the build, for the owner to decide at revision 3:
+
+- Readings of three MUSTs, which [`verification.md`](docs/plan/verification.md) records: CFG-01, CAP-01 and TASK-02.
+- Proposed as not in v1, with reasons in [S21](docs/plan/S21-hardening.md): CLD-11 (SHOULD), HITL-07 (MAY) and SEC-03 (MAY).
+- §4.3 lists masking as replaceable; the design keeps it in the core, not replaceable in v1.
+- The other gaps between these requirements and what is built are listed in the plan's open follow-ups.
