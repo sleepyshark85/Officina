@@ -191,26 +191,36 @@ public class TaskBoardTests
         Assert.StartsWith("Changed: t1 state Failed → Ready", await CallAsync(Reviewer, "update", """{ "id": "t1", "state": "ready", "reason": "Retry." }""", lead: true), StringComparison.Ordinal);
     }
 
-    // TASK-05: the submit tool's own time limit does not cut its checks short, nor make them run again; each check bounds its own time.
-    [Fact]
-    public async Task A_submits_checks_are_not_cut_short_by_the_tools_time_limit()
+    // TASK-05: a command check, which has its own timeout, is not cut short or run again by the submit tool's time limit; an
+    // application's check is bounded by that limit, and one that runs past it has failed.
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task A_submits_checks_are_bounded_by_their_own_limit(bool command)
     {
         var slow = new SlowCheck();
-        setup.Checks["slow"] = slow;
+        setup.Checks[command ? CheckOptions.CommandId("slow") : "slow"] = slow;
         var pipeline = setup.Create(options with
         {
             Tools = new Dictionary<string, ToolOptions>(options.Tools) { ["submit"] = options.Tools["submit"] with { Timeout = TimeSpan.FromSeconds(1) } },
-            Checks = new Dictionary<string, CheckOptions>(options.Checks) { ["slow"] = new() { Use = "extension:slow" } },
+            Checks = new Dictionary<string, CheckOptions>(options.Checks) { ["slow"] = command ? new() { Command = "dotnet test" } : new() { Use = "extension:slow" } },
+            Capabilities = options.Capabilities with { Workspace = new() { Enabled = true }, Sandbox = new() { Enabled = true } },
         });
         Assert.True((await pipeline.Board(Owner.Tenant, Context.RunId).AddAsync("t1", new() { Title = "Run the tests", Checks = ["slow"] }, "planned", Ct)).Accepted);
-        await RunAsync(pipeline, "claim", """{ "id": "t1" }""", Context);
+        var context = Context; // one for the agent, which a failed check marks as untrusted
+        await RunAsync(pipeline, "claim", """{ "id": "t1" }""", context);
 
-        var submitting = RunAsync(pipeline, "submit", """{ "id": "t1" }""", Context);
+        var submitting = RunAsync(pipeline, "submit", """{ "id": "t1" }""", context);
         await slow.Started.Task.WaitAsync(Ct);
         setup.Time.Advance(TimeSpan.FromMinutes(5)); // far past the tool's limit
-        slow.Release.SetResult(new(true, []));
+        if (command)
+        {
+            slow.Release.TrySetResult(new(true, [])); // a command check ends only by itself
+        }
 
-        Assert.Equal("Changed: t1 state InProgress → InReview, verified false → true.", (await submitting).Content);
+        Assert.Equal(
+            command ? "Changed: t1 state InProgress → InReview, verified false → true." : "check slow failed: timed out after 00:00:01. Changed: t1 failedAttempts 0 → 1.",
+            (await submitting).Content);
         Assert.Equal(1, slow.Runs);
     }
 
@@ -469,8 +479,9 @@ public class TaskBoardTests
         public async ValueTask<CheckResult> RunAsync(CheckContext context, CancellationToken ct)
         {
             Runs++;
+            var waiting = Release.Task.WaitAsync(ct); // waiting before it says so, so a cancellation that follows always ends it
             Started.TrySetResult();
-            return await Release.Task.WaitAsync(ct);
+            return await waiting;
         }
     }
 }

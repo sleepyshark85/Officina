@@ -44,7 +44,7 @@ public sealed record CapabilitiesOptions
 
     [Setting("The team: agents of several roles that work at once over the task board, led by one lead, with the `team.*` tools; agents use it through the `team` pattern. It needs the task board.",
         Example = """{ "enabled": true }""")]
-    public CapabilityOptions Team { get; init; } = new();
+    public TeamOptions Team { get; init; } = new();
 
     /// <summary>Every capability, by its name in configuration, and whether it is on.</summary>
     public IReadOnlyDictionary<string, bool> Switches() => new Dictionary<string, bool>

@@ -593,7 +593,7 @@ public sealed class AgentRunner
             return new AgentResult(AgentOutcome.Rejected, rejection, new TurnStatistics(0, 0, Usage.None, 0m, TimeSpan.Zero), [], [], [], []);
         }
 
-        var context = new ToolContext(work.RunId, name, work.Caller) { Masker = masker, TaskId = work.TaskId, Run = new() };
+        var context = new ToolContext(work.RunId, name, work.Caller) { Masker = masker, TaskId = work.TaskId, Run = new(), Helpers = new() };
         var steps = new Steps(Options, patterns, checks, Events, NewTurn, context, admitted, time, checkpointer.TakeAsync, new(pipeline, pipeline.Workspace, storage.Events, agentId => CancelOf(context.RunId, agentId), Members));
         var oneAtATime = turns.GetOrAdd(name, _ => new SemaphoreSlim(1, 1));
         using var stop = CancellationTokenSource.CreateLinkedTokenSource(ct, cancels.GetOrAdd(name, _ => new CancellationTokenSource()).Token);
@@ -614,7 +614,9 @@ public sealed class AgentRunner
                 await ResumeStateAsync(context, stop.Token).ConfigureAwait(false);
 
                 // INV-07: what the run spent before it died still counts against its budgets.
-                spent = Spent.Of(await storage.Events.ReadAsync(context.Caller.Tenant, context.RunId, 0, stop.Token).ConfigureAwait(false));
+                var before = await storage.Events.ReadAsync(context.Caller.Tenant, context.RunId, 0, stop.Token).ConfigureAwait(false);
+                spent = Spent.Of(before);
+                context.Helpers!.After(before);
             }
             else
             {
@@ -737,8 +739,11 @@ public sealed class AgentRunner
         var name = context.Agent;
         return new Turn(
             context, Options, gateway, pipeline, new RunRecord(storage.Records, context, time), pipeline.Board(context), pipeline.Memory(context), checks, knowledge, storage.Conversations,
-            shortening.GetValueOrDefault(name), Events, instructions, work, context.Instance is { } instance ? teams[context.RunId].Inboxes.GetOrAdd(instance, _ => new()) : Inbox(name),
-            token => WhilePausedAsync(context, token), budget, time);
+            shortening.GetValueOrDefault(name), Events, instructions, work,
+            context.HelperDepth > 0 ? new() // a helper reads only the work it is given
+                : context.Instance is { } instance ? teams[context.RunId].Inboxes.GetOrAdd(instance, _ => new()) : Inbox(name),
+            token => WhilePausedAsync(context, token), budget, time,
+            (helper, input, parent, token) => NewTurn(helper, work with { Input = input }, parent).RunAsync(token));
     }
 
     private IModelProvider Provider(string agentName)

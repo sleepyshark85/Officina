@@ -219,7 +219,12 @@ public sealed class TaskBoard
     /// Runs the checks of the agent's task in order, where the first that fails decides. The task is in review only if
     /// they all pass, whatever the agent says (TASK-05, INV-09); otherwise the attempt has failed.
     /// </summary>
-    internal async Task<(bool Accepted, string Text)> SubmitAsync(string id, IReadOnlyList<string> artifacts, IReadOnlyDictionary<string, ICheck> checks, CancellationToken ct)
+    /// <param name="id">The task.</param>
+    /// <param name="artifacts">What the work produced.</param>
+    /// <param name="checks">The application's and the host's checks, by id.</param>
+    /// <param name="limit">How long an application's check may take; a command check has its own <c>timeout</c>.</param>
+    /// <param name="ct">Cancels the submission.</param>
+    internal async Task<(bool Accepted, string Text)> SubmitAsync(string id, IReadOnlyList<string> artifacts, IReadOnlyDictionary<string, ICheck> checks, TimeSpan limit, CancellationToken ct)
     {
         var task = (await ReadAsync(ct).ConfigureAwait(false)).FirstOrDefault(task => task.Id == id);
         if (task?.State != InProgress || task.Assignee != context.AgentId)
@@ -236,7 +241,8 @@ public sealed class TaskBoard
                 return (false, $"check {name} no longer exists in the configuration.");
             }
 
-            var result = await checks[options.Checks[name].Id(name)].RunAsync(new CheckContext(directory, null, [], task), ct).ConfigureAwait(false);
+            var result = await RunCheckAsync(checks[options.Checks[name].Id(name)], options.Checks[name].Command is null ? limit : Timeout.InfiniteTimeSpan, new(directory, null, [], task), ct)
+                .ConfigureAwait(false);
             Telemetry.CheckEnded(context, name, result.Passed);
             await events.PublishAsync(context, new CheckRan(name, result.Passed, id), ct).ConfigureAwait(false);
             if (!result.Passed)
@@ -257,6 +263,22 @@ public sealed class TaskBoard
             return null;
         }, ct).ConfigureAwait(false);
         return (accepted, failed is null || !accepted ? text : $"{failed}. {text}");
+    }
+
+    /// <summary>Runs a check within a time limit; a check that does not end by it has failed, and is never run again for it.</summary>
+    private async Task<CheckResult> RunCheckAsync(ICheck check, TimeSpan limit, CheckContext context, CancellationToken ct)
+    {
+        using var timeout = new CancellationTokenSource(limit, time);
+        using var stop = CancellationTokenSource.CreateLinkedTokenSource(ct, timeout.Token);
+        try
+        {
+            // Waiting on the token too ends the check at its limit even if it ignores cancellation.
+            return await check.RunAsync(context, stop.Token).AsTask().WaitAsync(stop.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (timeout.IsCancellationRequested && !ct.IsCancellationRequested)
+        {
+            return new(false, [$"timed out after {limit}"]);
+        }
     }
 
     /// <summary>Records a review's outcome with its reasons. The reviewer is never the author (TASK-06).</summary>

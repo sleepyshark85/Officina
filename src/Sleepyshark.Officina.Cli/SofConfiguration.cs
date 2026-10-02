@@ -9,7 +9,9 @@ namespace Sleepyshark.Officina.Cli;
 /// <summary>
 /// The configuration the CLI runs with (CFG-04): <c>sof.json</c>, the optional <c>sof.&lt;environment&gt;.json</c>,
 /// <c>SOF__…</c> environment variables and command-line options, highest last, bound onto <see cref="OfficinaOptions"/>
-/// with Microsoft.Extensions.Configuration. Every load reads the files again, so a change applies to the next run
+/// with Microsoft.Extensions.Configuration. A file's <c>extends</c> puts presets and other files below it, and an agent's
+/// <c>extends</c> builds it on another agent (CFG-05, CFG-11). The files are merged first: objects key by key, and a list or a
+/// value in a higher file replaces the lower one's. Every load reads the files again, so a change applies to the next run
 /// without a rebuild (CFG-08).
 /// </summary>
 public sealed class SofConfiguration
@@ -44,13 +46,29 @@ public sealed class SofConfiguration
         IEnumerable<(string Path, string Value, string Option)> options)
     {
         ArgumentNullException.ThrowIfNull(variables);
-        var builder = new ConfigurationBuilder().SetBasePath(directory).AddJsonFile("sof.json");
-        var describe = new List<Func<string, string>> { _ => "sof.json" };
-        if (environment is { Length: > 0 })
+        var layers = new List<(string Source, JsonObject Json)>();
+        var mergeErrors = new List<ConfigurationError>();
+        var loaded = new HashSet<string>(StringComparer.Ordinal);
+        try
         {
-            builder.AddJsonFile($"sof.{environment}.json", optional: true);
-            describe.Add(_ => $"sof.{environment}.json");
+            ConfigurationFiles.Add(Path.Combine(directory, "sof.json"), "sof.json", layers, mergeErrors, loaded);
+            var overlay = Path.Combine(directory, $"sof.{environment}.json");
+            if (environment is { Length: > 0 } && File.Exists(overlay))
+            {
+                ConfigurationFiles.Add(overlay, $"sof.{environment}.json", layers, mergeErrors, loaded);
+            }
         }
+        catch (Exception exception) when (exception is JsonException or IOException)
+        {
+            var error = new ConfigurationError(
+                ValidationPhase.Parse, "", $"the configuration cannot be read: {exception.Message}", "Fix the file; comments and trailing commas are allowed.");
+            return new SofConfiguration(new OfficinaOptions(), [error], null, [_ => "sof.json"]);
+        }
+
+        var merged = ConfigurationFiles.Merge(layers.Select(layer => layer.Json));
+        mergeErrors.AddRange(ConfigurationFiles.ExtendAgents(merged));
+        var builder = new ConfigurationBuilder().AddJsonStream(new MemoryStream(System.Text.Encoding.UTF8.GetBytes(merged.ToJsonString())));
+        var describe = new List<Func<string, string>> { key => ConfigurationFiles.SourceOf(layers, key) };
 
         AddText(builder, describe, variables
             .Where(variable => variable.Key.StartsWith(VariablePrefix, StringComparison.Ordinal))
@@ -73,7 +91,7 @@ public sealed class SofConfiguration
             return new SofConfiguration(new OfficinaOptions(), [error], null, describe);
         }
 
-        var errors = new List<ConfigurationError>();
+        var errors = new List<ConfigurationError>(mergeErrors);
         OfficinaOptions bound;
         try
         {
@@ -86,10 +104,34 @@ public sealed class SofConfiguration
             bound = new OfficinaOptions();
         }
 
+        bound = ProtectExtended(bound, directory, loaded);
         var configuration = new SofConfiguration(bound, errors, root, describe);
         errors.AddRange(PlainTextSecrets(root).Select(error => error with { Location = configuration.Provided(error.Path) }));
         errors.AddRange(bound.Validate().Concat(WorkspaceHost.CapabilityErrors(bound)).Select(error => error with { Location = configuration.Provided(error.Path) }));
         return configuration;
+    }
+
+    /// <summary>
+    /// INV-10: the files <c>sof.json</c> extends hold definitions, permissions, budgets, rules and checks as much as it does, so
+    /// those in the workspace are read-only to agents, to their file tools and their commands alike, as <c>sof.json</c> is.
+    /// </summary>
+    private static OfficinaOptions ProtectExtended(OfficinaOptions options, string directory, HashSet<string> loaded)
+    {
+        var root = Path.GetFullPath(directory);
+        var extended = loaded
+            .Where(file => !file.StartsWith("preset:", StringComparison.Ordinal))
+            .Select(file => Path.GetRelativePath(root, file))
+            .Where(file => !file.StartsWith("..", StringComparison.Ordinal) && !Path.IsPathRooted(file)) // outside, agents cannot reach it
+            .Select(file => new ProtectedPath { Path = file.Replace('\\', '/'), Access = PathAccess.ReadOnly })
+            .Where(path => !WorkspaceOptions.FixedProtectedPaths.Contains(path))
+            .ToList();
+        if (extended.Count == 0)
+        {
+            return options;
+        }
+
+        var workspace = options.Capabilities.Workspace;
+        return options with { Capabilities = options.Capabilities with { Workspace = workspace with { ProtectedPaths = [.. workspace.ProtectedPaths, .. extended] } } };
     }
 
     /// <summary>Where a setting's value came from: the highest layer that sets it, or the code default.</summary>

@@ -25,7 +25,7 @@ namespace is its name.
 | `Sleepyshark.Officina.Mcp` | Mcp | Own MCP client for stdio and Streamable HTTP. Turns each server tool into a core tool. | Core | `toolServers` are configured |
 | `Sleepyshark.Officina.Providers.Claude` | Providers.Claude | The Claude provider: maps requests (§9), places cache markers, streams, classifies errors. The price table ships as the `claude` provider's default prices in Core's options | Core, Anthropic C# SDK | A `claude` provider is configured (the default) |
 | `Sleepyshark.Officina.Testing` | Testing | Test kit: scripted models, controllable clock, fake tools, in-memory workspace, sandbox and storage, record and replay (TEST-01, TEST-02) | Core | In tests, and by `sof config dry-run` (CFG-12) |
-| `Sleepyshark.Officina.Cli` | Cli | The coding team CLI: `init`, `run`, `resume`, `rollback`, `report`, `config`; loads configuration with Microsoft.Extensions.Configuration; approvals, questions, task board and cost views; the CLI human-interaction channel | Every project, Microsoft.Extensions.Configuration and System.CommandLine (Testing only for the scripted model of `config dry-run`); it receives the Anthropic SDK only transitively, through the Claude provider | — |
+| `Sleepyshark.Officina.Cli` | Cli | The coding team CLI: `init`, `run`, `resume`, `rollback`, `report`, `config`; loads configuration: merges the files and what they `extend` (the presets are embedded in Core), resolves agents' `extends`, then binds with Microsoft.Extensions.Configuration; approvals, questions, task board and cost views; the CLI human-interaction channel | Every project, Microsoft.Extensions.Configuration and System.CommandLine (Testing only for the scripted model of `config dry-run`); it receives the Anthropic SDK only transitively, through the Claude provider | — |
 | `Anthropic` (NuGet) | Anthropic SDK | The official Claude SDK | `Microsoft.Extensions.AI.Abstractions` (transitive) | With the Claude provider only |
 
 Dependency rules, enforced by the dependency check, which runs as a test in CI (TEST-32):
@@ -219,7 +219,19 @@ decides the outcome.
 - **Done means integrated.** Submitting runs the task's checks, and only if they pass is the task in review. The host
   integrates a task in review that is verified and approved, then marks it done; a conflict or a failed baseline check
   returns it to its author as a failed attempt (WS-03). The last failed attempt, or a used-up task budget, sends it to
-  the lead as failed (TASK-09).
+  the lead as failed (TASK-09). A change that adds conflict-marker lines (`<<<<<<< `, `>>>>>>> `) is a conflict, even in a
+  file that really holds them, such as documentation about git.
+- **The plan sign-off** (TEAM-10, HITL-04): with `planApproval` on, no task is dispatched until the owner approves the
+  lead's plan; a denial goes back to the lead to re-plan (it carries no reason: the owner explains with `tell lead …`), and no
+  answer hands the run off. The approval is a `planApproved`
+  event, so a resumed run does not ask again.
+- **Helpers** (TEAM-07) are nested turns: `team.start_helper` runs one of the agents the definition lists in `helpers`, as
+  `helper[parent.n]` with `n` numbered in the run, inside the parent's turn. Its spending counts against the parent's turn
+  budget, its permissions are within the parent's, it has no tool the parent does not, and it keeps the parent's task (so the
+  workspace write tools refuse it in that task's copy, TASK-06); depth and count are limited by
+  `capabilities.team.helperDepth` and `helperCount`.
+- **A human handoff** (EGR-04) is only explicit: `human.request_handoff` ends the turn in a handoff to a human with the
+  model's reason.
 
 ## 7. Workspace and sandbox
 

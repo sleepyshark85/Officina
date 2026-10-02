@@ -9,6 +9,7 @@ It lists the settings the code has today. Settings that later slices add are spe
 | Setting | Allowed values | Default | Description | Example |
 |---|---|---|---|---|
 | `$schema` | text |  | The JSON Schema of the file, for editor completion. Files only. |  |
+| `extends` | list |  | Presets, as `preset:<id>`, and other files, relative to this one, that this file builds on: each a layer below it, lowest first. A list or a value here replaces theirs. Files only. | `["preset:coding-team"]` |
 | `formatVersion` | whole number | `1` | The configuration format version. Unknown versions are rejected. | `1` |
 | `project` | section | `{"values":{}}` | The project's identity, and values usable in placeholders. | `{"name":"invoice-api"}` |
 | `providers` | named entries | `{"claude":{"apiKey":{"secret":"ANTHROPIC_API_KEY"},"prices":{"claude-fable-5-1":{"input":10,"output":50,"cacheRead":0.25,"cacheWrite5m":12.5,"cacheWrite1h":20},"claude-opus-5-5":{"input":4,"output":20,"cacheRead":0.2,"cacheWrite5m":5,"cacheWrite1h":8},"claude-opus-5":{"input":5,"output":25,"cacheRead":0.5,"cacheWrite5m":6.25,"cacheWrite1h":10},"claude-sonnet-5-5":{"input":2,"output":10,"cacheRead":0.2,"cacheWrite5m":2.5,"cacheWrite1h":4},"claude-haiku-4-5":{"input":1,"output":5,"cacheRead":0.1,"cacheWrite5m":1.25,"cacheWrite1h":2}},"timeout":"00:10:00","retry":{"maxAttempts":5,"initialDelay":"00:00:01","maxDelay":"00:01:00"}}}` | Model providers, by name. | `{"claude":{"apiKey":{"secret":"ANTHROPIC_API_KEY"}}}` |
@@ -24,7 +25,7 @@ It lists the settings the code has today. Settings that later slices add are spe
 | `run` | section | `{"budget":{"cost":25,"time":"08:00:00"},"permissionMode":"ask","approvalTimeout":"00:30:00","cancelWithin":"00:00:10"}` | Defaults for every run. | `{"permissionMode":"ask"}` |
 | `operations` | section | `{"telemetry":{"cacheHitWarning":0.7}}` | How the engine is operated. | `{"telemetry":{"cacheHitWarning":0.7}}` |
 | `storage` | section | `{"retention":{"audit":"365.00:00:00"}}` | What is stored, and for how long. | `{"unstoredEvents":["textGenerated"],"retention":{"events":"30.00:00:00"}}` |
-| `capabilities` | section | `{"conversationStore":{"enabled":false},"knowledge":{"enabled":false},"humanInteraction":{"enabled":false},"workspace":{"enabled":false,"protectedPaths":[],"baselineChecks":[],"keepWorkingCopies":false},"sandbox":{"enabled":false,"allowedHosts":[],"toolchains":[],"commandRules":[],"secrets":{}},"taskBoard":{"enabled":false,"maxAttempts":3,"budget":8},"projectMemory":{"enabled":false,"scope":"project","maxTokens":20000,"approveBy":"lead"},"checkpoints":{"enabled":false},"team":{"enabled":false}}` | Optional capabilities and their settings. All are off by default. | `{"conversationStore":{"enabled":true}}` |
+| `capabilities` | section | `{"conversationStore":{"enabled":false},"knowledge":{"enabled":false},"humanInteraction":{"enabled":false},"workspace":{"enabled":false,"protectedPaths":[],"baselineChecks":[],"keepWorkingCopies":false},"sandbox":{"enabled":false,"allowedHosts":[],"toolchains":[],"commandRules":[],"secrets":{}},"taskBoard":{"enabled":false,"maxAttempts":3,"budget":8},"projectMemory":{"enabled":false,"scope":"project","maxTokens":20000,"approveBy":"lead"},"checkpoints":{"enabled":false},"team":{"enabled":false,"helperDepth":2,"helperCount":4}}` | Optional capabilities and their settings. All are off by default. | `{"conversationStore":{"enabled":true}}` |
 
 ## `project`
 
@@ -67,6 +68,7 @@ It lists the settings the code has today. Settings that later slices add are spe
 | `tools` | list | `[]` | The tool sets, by name in `toolSets`, whose tools the agent is offered. The same tools are offered whoever the caller is. | `["files","issues"]` |
 | `toolDescriptionsOnDemand` | boolean | `false` | Whether the model is offered only the tools' names, and reads a tool's description and arguments with `describe_tool` when it needs them. For agents with many tools. | `true` |
 | `permissions` | list |  | Narrows the caller's permissions for this agent's tool calls: a permission counts only if the caller holds it and it is listed here. Unset keeps the caller's. | `["issues:write"]` |
+| `helpers` | list |  | The agent definitions, by name in `agents`, that this agent may start as helpers with `builtin:team.start_helper`, each for a piece of its work. Unset: none. | `["researcher"]` |
 | `maxParallelToolCalls` | whole number, ≥ 1 | `4` | The most tool calls from one reply that run at the same time, when every tool called is safe to run in parallel. | `4` |
 | `pattern` | section | `{"type":"toolLoop","steps":[],"next":[],"routes":{},"branches":[],"maxParallel":4,"combine":"all","checks":[],"maxRevisions":3,"maxReplans":2,"roles":{}}` | How the agent does its work: in a turn of its own, or in a pattern of steps. A pattern's steps draw on the agent's turn budget, and the agent's other settings apply to its own turns. Required. | `{"type":"router","routes":{"bug":{"agent":"developer"}}}` |
 | `context` | section | `{"operatingFacts":[],"historyCacheLifetime":"00:05:00","recordScope":"all","currentTask":true,"retrieval":{"beforeTurn":[],"handOffWhenNotCovered":false},"history":{"strategy":"none","shortening":"provider","lastTurns":10}}` | How the agent's model input is built. Required. | `{"operatingFacts":["Today is {{now:date}}."]}` |
@@ -174,7 +176,7 @@ It lists the settings the code has today. Settings that later slices add are spe
 | `taskBoard` | section | `{"enabled":false,"maxAttempts":3,"budget":8}` | The task board: tasks with dependencies, verification checks and review, which agents change through the `tasks.*` tools and the owner at any time. | `{"enabled":true,"maxAttempts":2}` |
 | `projectMemory` | section | `{"enabled":false,"scope":"project","maxTokens":20000,"approveBy":"lead"}` | Project memory: durable instructions, conventions and decisions in every agent's stable prefix, which agents change through the `memory.*` tools once the lead or the owner approves. | `{"enabled":true,"scope":"project","approveBy":"lead"}` |
 | `checkpoints` | section | `{"enabled":false}` | Checkpoints: saved states a run resumes from after a crash and the owner can roll back to, with the working copies restored together with the run's state. | `{"enabled":true,"at":["turn","integration"]}` |
-| `team` | section | `{"enabled":false}` | The team: agents of several roles that work at once over the task board, led by one lead, with the `team.*` tools; agents use it through the `team` pattern. It needs the task board. | `{"enabled":true}` |
+| `team` | section | `{"enabled":false,"helperDepth":2,"helperCount":4}` | The team: agents of several roles that work at once over the task board, led by one lead, with the `team.*` tools; agents use it through the `team` pattern. It needs the task board. | `{"enabled":true}` |
 
 ## `providers.<name>.apiKey`
 
@@ -356,7 +358,7 @@ It lists the settings the code has today. Settings that later slices add are spe
 | Setting | Allowed values | Default | Description | Example |
 |---|---|---|---|---|
 | `enabled` | boolean | `false` | Whether human interaction is on. | `true` |
-| `signOffs` | list |  | Where a run waits for the owner's sign-off: `runBudgetExceeded`, to go on past the run's budget, which otherwise ends the turn; and `irreversibleAction`, before every irreversible tool call, whatever the tool's `approval`. Unset means both. An empty list in a file counts as unset; to turn both off, set an empty list in code. | `["runBudgetExceeded"]` |
+| `signOffs` | list |  | Where a run waits for the owner's sign-off: `runBudgetExceeded`, to go on past the run's budget, which otherwise ends the turn; `irreversibleAction`, before every irreversible tool call, whatever the tool's `approval`; and `planApproval`, before a team's work starts on its lead's plan. Unset means the first two. An empty list in a file counts as unset; to turn both off, set an empty list in code. | `["runBudgetExceeded"]` |
 
 ## `capabilities.workspace`
 
@@ -400,6 +402,14 @@ It lists the settings the code has today. Settings that later slices add are spe
 |---|---|---|---|---|
 | `enabled` | boolean | `false` | Whether checkpoints are on. A run then takes one when it starts, and one at each point in `at`; the owner can take one at any time. A crashed run resumes from its last, and the owner can roll a run back to any. It needs the conversation store. | `true` |
 | `at` | list |  | Where a checkpoint is taken: `turn` after each turn, `step` after each step of a pattern, `integration` after each integration into the baseline. Unset means `turn`. An empty list in a file counts as unset. | `["turn","integration"]` |
+
+## `capabilities.team`
+
+| Setting | Allowed values | Default | Description | Example |
+|---|---|---|---|---|
+| `enabled` | boolean | `false` | Whether the team is on. | `true` |
+| `helperDepth` | whole number, ≥ 1 | `2` | How deep helpers may go: a helper of a helper is depth 2. | `1` |
+| `helperCount` | whole number, ≥ 1 | `4` | The most helpers one turn of an agent may start. | `2` |
 
 ## `agents.<name>.pattern.steps[]`
 

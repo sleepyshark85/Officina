@@ -23,8 +23,31 @@ public static partial class InstructionPlaceholders
         return options.Agents.SelectMany(agent =>
             (agent.Value.Instructions is null ? [] : Check(agent.Value.Instructions, $"agents.{agent.Key}.instructions", options.Project, agent.Key, agent.Value, null))
             .Concat((agent.Value.Context?.OperatingFacts ?? []).SelectMany((fact, index) =>
-                Check(fact, $"agents.{agent.Key}.context.operatingFacts[{index}]", options.Project, agent.Key, agent.Value, DateTimeOffset.UnixEpoch, Caller.Anonymous, ""))));
+                Check(fact, $"agents.{agent.Key}.context.operatingFacts[{index}]", options.Project, agent.Key, agent.Value, DateTimeOffset.UnixEpoch, Caller.Anonymous, ""))))
+            .Concat(options.Checks.Where(check => check.Value.Command is not null).SelectMany(check => CheckCommand(check.Value.Command!, $"checks.{check.Key}.command", options.Project)));
     }
+
+    /// <summary>
+    /// Fills a command check's placeholders, which may name only the project's values, such as
+    /// <c>{{project.values.testCommand}}</c>, so a preset names the project's commands without knowing them.
+    /// </summary>
+    public static string FillCommand(string command, ProjectOptions project) =>
+        Expression().Replace(command, placeholder => ProjectValue(placeholder, project) ?? throw new InvalidOperationException($"Placeholder {placeholder.Value} cannot be filled."));
+
+    private static IEnumerable<ConfigurationError> CheckCommand(string command, string path, ProjectOptions project) =>
+        Expression().Matches(command).Where(placeholder => ProjectValue(placeholder, project) is null).Select(placeholder => new ConfigurationError(
+            ValidationPhase.References, path, $"placeholder {placeholder.Value} cannot be filled; a command uses only the project's values.",
+            "Set the value it names: project.name or project.values.<name>."));
+
+    private static string? ProjectValue(Match placeholder, ProjectOptions project) =>
+        placeholder.Groups["namespace"].Value == "project" && placeholder.Groups["format"].Value.Length == 0
+            ? placeholder.Groups["name"].Value.Split('.') switch
+            {
+                ["name"] => project.Name,
+                ["values", var key] => project.Values.GetValueOrDefault(key),
+                _ => null,
+            }
+            : null;
 
     /// <summary>
     /// Fills the placeholders of instructions, or of an operating fact with the time <paramref name="now"/>, the

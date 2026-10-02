@@ -18,7 +18,8 @@ internal sealed class ToolSetup
 
     public static readonly Caller Owner = new("owner", "acme", new HashSet<string> { "issues:write" }, new Dictionary<string, string>());
 
-    public static readonly ToolContext Context = new("run-1", Agent, Owner);
+    /// <summary>A fresh context for each use, so no state of a run, such as its untrusted mark, leaks from one test to another.</summary>
+    public static ToolContext Context => new("run-1", Agent, Owner);
 
     public InMemoryStorage Storage { get; } = new();
 

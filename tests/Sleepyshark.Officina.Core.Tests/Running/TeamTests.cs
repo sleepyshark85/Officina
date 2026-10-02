@@ -350,6 +350,56 @@ public class TeamTests
         Assert.Empty(await workspace.SnapshotAsync(Ct)); // every task's copy went with its task
     }
 
+    // TEAM-07, TASK-06: a reviewer's helper keeps the reviewer's task, so it reads the author's copy and cannot change it; and a
+    // helper's id is numbered in the run, so the reviewer's helpers in two turns never share one.
+    [Fact]
+    public async Task A_reviewers_helper_cannot_change_the_authors_copy_and_helper_ids_never_repeat()
+    {
+        var workspace = new InMemoryWorkspace();
+        var kit = Kit(options => options with
+        {
+            Agents = new Dictionary<string, AgentDefinition>(options.Agents)
+            {
+                ["reviewer"] = options.Agents["reviewer"] with { Helpers = ["checker"] },
+                ["checker"] = new() { Instructions = "Check.", Tools = ["checker"] },
+            },
+            Tools = new Dictionary<string, ToolOptions>(options.Tools)
+            {
+                ["edit"] = new() { Source = $"extension:{WorkspaceTools.Write}", GateExemption = "Tests only." }, ["look"] = new() { Source = $"extension:{WorkspaceTools.Read}" },
+                ["helper"] = new() { Source = "builtin:team.start_helper" },
+            },
+            ToolSets = new Dictionary<string, IReadOnlyList<string>>(options.ToolSets)
+            {
+                ["developer"] = ["submit", "edit"], ["reviewer"] = ["review", "helper", "edit", "look"], ["checker"] = ["edit", "look"],
+            },
+            Capabilities = options.Capabilities with { Workspace = new() { Enabled = true } },
+        }, null, workspace: workspace);
+        Lead(kit, "You lead a team", Create("a", review: true), Create("b", review: true));
+        Lead(kit, "Every task is done").Reply("Done.");
+        foreach (var task in new[] { "a", "b" })
+        {
+            Work(kit, task).CallTools(("edit", $$"""{ "path": "{{task}}.txt", "content": "by the author" }""")).CallTools(("submit", $$"""{ "id": "{{task}}" }""")).Reply("Submitted.");
+            kit.Model.When(request => ScriptedModelProvider.WorkOf(request).StartsWith($"Review task {task},", StringComparison.Ordinal))
+                .CallTools(("helper", $$"""{ "agent": "checker", "work": "Check {{task}}." }"""))
+                .CallTools(("review", $$"""{ "id": "{{task}}", "approved": true, "reasons": "Checked." }""")).Reply("Approved.");
+            kit.Model.When(request => ScriptedModelProvider.WorkOf(request) == $"Check {task}.")
+                .CallTools(("look", $$"""{ "path": "{{task}}.txt" }""")).CallTools(("edit", $$"""{ "path": "{{task}}.txt", "content": "by the helper" }""")).Reply("Checked.");
+        }
+
+        var work = new Work("team", "Build it.") { Caller = Ann };
+        var result = await kit.Runner.RunAsync(work, Ct);
+
+        Assert.Equal(AgentOutcome.Completed, result.Outcome);
+        Assert.Equal(("by the author", "by the author"), (workspace.Files["a.txt"], workspace.Files["b.txt"]));
+        var helpers = kit.Model.Requests.SelectMany(request => request.History).SelectMany(message => message.Content).OfType<ToolResultContent>()
+            .Select(content => content.Text).Where(text => text.StartsWith("""<data source="tool:helper">""", StringComparison.Ordinal)).Distinct();
+        Assert.Equal(2, helpers.Count(text => text.Contains("did not complete: every tool call of the iteration was refused", StringComparison.Ordinal))); // its write
+        var events = await kit.Storage.Events.ReadAsync(null, work.RunId, 0, Ct);
+        Assert.Equal(
+            ["checker[reviewer[1].1]", "checker[reviewer[1].2]"],
+            events.Select(coreEvent => coreEvent.Agent).Where(agent => agent.StartsWith("checker", StringComparison.Ordinal)).Distinct().Order(StringComparer.Ordinal));
+    }
+
     // WS-08: a task's copy that cannot be removed is reported, and the team goes on; its integration's checkpoint is taken first.
     [Fact]
     public async Task A_working_copy_that_cannot_be_removed_is_reported_and_the_team_goes_on()
@@ -374,6 +424,55 @@ public class TeamTests
         var events = await kit.Storage.Events.ReadAsync(null, work.RunId, 0, Ct);
         Assert.Equal("the working copy of task a was not removed: the folder is in use", Assert.Single(events.Select(coreEvent => coreEvent.Payload).OfType<Warning>()).Text);
         Assert.Contains(events, coreEvent => coreEvent.Payload is CheckpointTaken { Point: CheckpointPoint.Integration });
+    }
+
+    // TEAM-10, HITL-04: with the sign-off on, no work starts until the owner approves the lead's plan; a denial sends it back to the lead.
+    [Fact]
+    public async Task No_work_starts_until_the_owner_approves_the_leads_plan()
+    {
+        var kit = Kit(options => options with
+        {
+            Capabilities = options.Capabilities with { HumanInteraction = new() { Enabled = true, SignOffs = [SignOff.PlanApproval] } },
+        }, null);
+        kit.Human.Answer(HumanAnswer.Deny).Answer(HumanAnswer.Approve);
+        Lead(kit, "You lead a team", Create("a"));
+        Lead(kit, "The owner did not approve your plan", Create("b"));
+        Lead(kit, "Every task is done").Reply("Done.");
+        Work(kit, "a").CallTools(("submit", """{ "id": "a" }""")).Reply("Submitted.");
+        Work(kit, "b").CallTools(("submit", """{ "id": "b" }""")).Reply("Submitted.");
+
+        var work = new Work("team", "Build it.") { Caller = Ann };
+        var result = await kit.Runner.RunAsync(work, Ct);
+
+        Assert.Equal(AgentOutcome.Completed, result.Outcome);
+        Assert.Equal([HumanRequestKind.SignOff, HumanRequestKind.SignOff], kit.Human.Requests.Select(request => request.Kind));
+        Assert.Contains("b Task b", kit.Human.Requests[1].Summary, StringComparison.Ordinal); // the changed plan
+        var events = await kit.Storage.Events.ReadAsync(null, work.RunId, 0, Ct);
+        var approved = Assert.Single(events, coreEvent => coreEvent.Payload is PlanApproved).Sequence;
+        Assert.All(events.Where(coreEvent => coreEvent.Payload is TaskStatusChanged { Status: TaskState.InProgress }), claimed => Assert.True(claimed.Sequence > approved));
+    }
+
+    // TEAM-10: an owner who does not answer within run.approvalTimeout hands the run off, and no work starts.
+    [Fact]
+    public async Task A_plan_the_owner_does_not_answer_hands_the_run_off()
+    {
+        var kit = Kit(options => options with
+        {
+            Capabilities = options.Capabilities with { HumanInteraction = new() { Enabled = true, SignOffs = [SignOff.PlanApproval] } },
+        }, new SilentHuman());
+        Lead(kit, "You lead a team", Create("a"));
+
+        var running = kit.Runner.RunAsync(new Work("team", "Build it.") { Caller = Ann }, Ct);
+        while (!kit.Time.Pending.Contains(TimeSpan.FromMinutes(30))) // the owner's deadline is set
+        {
+            await Task.Delay(10, Ct);
+        }
+
+        kit.Time.Advance(TimeSpan.FromMinutes(30));
+        var result = await running;
+
+        Assert.Equal((AgentOutcome.HandedOff, HandoffReason.ApprovalDeniedOrTimedOut), (result.Outcome, result.Handoff?.Reason));
+        Assert.DoesNotContain(kit.Model.Requests, request => ScriptedModelProvider.WorkOf(request).Contains("Do task a,", StringComparison.Ordinal));
     }
 
     // TEAM-05, TEAM-06: a message names its sender and recipient, is recorded, and reaches the recipient as data; only the team's agents receive one.
@@ -416,13 +515,21 @@ public class TeamTests
     }
 
     // RUN-04, TEST-12: a team resumes from its last checkpoint's board: the plan is not made again, and a task in progress goes back to its agent.
-    [Fact]
-    public async Task A_team_resumes_from_its_board_after_a_crash()
+    // TEAM-10: nor is a plan the owner approved before the crash approved again (the second process's owner has no answer to give).
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task A_team_resumes_from_its_board_after_a_crash(bool planApproval)
     {
+        Func<OfficinaOptions, OfficinaOptions> approval = options => !planApproval ? options : options with
+        {
+            Capabilities = options.Capabilities with { HumanInteraction = new() { Enabled = true, SignOffs = [SignOff.PlanApproval] } },
+        };
         var crashed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var bClaimed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var aDone = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var first = Kit(checkpoints: true);
+        var first = Kit(approval, null, checkpoints: true);
+        first.Human.Answer(HumanAnswer.Approve);
         hold = async (task, ct) =>
         {
             if (task == "a")
@@ -449,7 +556,7 @@ public class TeamTests
 
         // A new process: the same storage, a runner of its own.
         hold = (_, _) => Task.CompletedTask;
-        var second = Kit(checkpoints: true, storage: first.Storage);
+        var second = Kit(approval, null, checkpoints: true, storage: first.Storage);
         Work(second, "b").CallTools(("submit", """{ "id": "b" }""")).Reply("Submitted.");
         Lead(second, "Every task is done").Reply("Both done.");
         var result = await second.Runner.ResumeAsync(work.RunId, Ann, Ct);
@@ -458,6 +565,7 @@ public class TeamTests
         Assert.DoesNotContain(second.Model.Requests, request => ScriptedModelProvider.WorkOf(request).StartsWith("You lead a team", StringComparison.Ordinal));
         Assert.Contains("It came back to you", ScriptedModelProvider.WorkOf(second.Model.Requests[0]), StringComparison.Ordinal);
         Assert.All(await second.Runner.Board(null, work.RunId).ReadAsync(Ct), task => Assert.Equal(TaskState.Done, task.State));
+        Assert.Equal((planApproval ? 1 : 0, 0), (first.Human.Requests.Count, second.Human.Requests.Count));
 
         // The process that died never comes back; it is stopped only so the test leaves nothing running.
         await dies.CancelAsync();
@@ -634,6 +742,16 @@ public class TeamTests
                 Checkpoints = new() { Enabled = checkpoints }, ConversationStore = new() { Enabled = checkpoints },
             },
         };
+    }
+
+    /// <summary>An owner who never answers.</summary>
+    private sealed class SilentHuman : IHumanChannel
+    {
+        public async ValueTask<HumanAnswer> AskAsync(HumanRequest request, CancellationToken ct)
+        {
+            await Task.Delay(Timeout.Infinite, ct);
+            throw new InvalidOperationException("unreachable");
+        }
     }
 
     /// <summary>The owner, who answers yes once two requests wait, so both agents have asked before either goes on.</summary>

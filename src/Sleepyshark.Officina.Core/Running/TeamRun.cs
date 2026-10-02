@@ -83,6 +83,9 @@ internal sealed class TeamRun
         services.Members(team.RunId, members.Keys.ToHashSet(StringComparer.Ordinal));
         try
         {
+            // TEAM-10: the owner's approval of the plan, once given, holds across a restart.
+            var approved = !options.Capabilities.HumanInteraction.SignsOff(SignOff.PlanApproval)
+                || (await services.Log.ReadAsync(team.Caller.Tenant, team.RunId, 0, stop.Token).ConfigureAwait(false)).Any(coreEvent => coreEvent.Payload is PlanApproved);
             if ((await board.ReadAsync(stop.Token).ConfigureAwait(false)).Count == 0)
             {
                 await StartAsync(lead, PlanStep, null, PlanInput(), stop.Token).ConfigureAwait(false);
@@ -93,18 +96,32 @@ internal sealed class TeamRun
                 // One read, so the tasks and their history agree.
                 var history = await board.HistoryAsync(stop.Token).ConfigureAwait(false);
                 var tasks = TaskBoard.Current(history);
-                if (await IntegrateVerifiedAsync(board, tasks, stop.Token).ConfigureAwait(false))
+                if (!approved && tasks.Count > 0 && running.Count == 0)
                 {
-                    continue; // the board changed, so it is read again
+                    approved = await ApprovePlanAsync(tasks, stop.Token).ConfigureAwait(false) is var answer && answer == true;
+                    if (answer is null)
+                    {
+                        const string Detail = "the owner did not answer whether the lead's plan may go ahead";
+                        return new(StepOutcome.HandedOff, Detail, new Handoff(HandoffReason.ApprovalDeniedOrTimedOut, null, Detail, goal, [], null, ""));
+                    }
+
+                    continue;
                 }
 
-                await CloseCancelledAsync(tasks, stop.Token).ConfigureAwait(false);
-
-                await DispatchAsync(tasks, history, stop.Token).ConfigureAwait(false);
-                await ShowStatusesAsync(tasks, stop.Token).ConfigureAwait(false);
-                if (running.Count == 0 && await IdleAsync(tasks, history, stop.Token).ConfigureAwait(false) is { } ended)
+                if (approved || tasks.Count == 0)
                 {
-                    return ended;
+                    if (await IntegrateVerifiedAsync(board, tasks, stop.Token).ConfigureAwait(false))
+                    {
+                        continue; // the board changed, so it is read again
+                    }
+
+                    await CloseCancelledAsync(tasks, stop.Token).ConfigureAwait(false);
+                    await DispatchAsync(tasks, history, stop.Token).ConfigureAwait(false);
+                    await ShowStatusesAsync(tasks, stop.Token).ConfigureAwait(false);
+                    if (running.Count == 0 && await IdleAsync(tasks, history, stop.Token).ConfigureAwait(false) is { } ended)
+                    {
+                        return ended;
+                    }
                 }
 
                 var finished = await Task.WhenAny(running.Select(job => job.Running)).ConfigureAwait(false);
@@ -188,6 +205,32 @@ internal sealed class TeamRun
         }
 
         return changed;
+    }
+
+    /// <summary>
+    /// TEAM-10, HITL-04: the owner approves the lead's plan before work starts. A denial sends the plan back to the lead, who hears
+    /// what the owner told it in the meantime; no answer by the deadline stops the team.
+    /// </summary>
+    /// <returns>Whether the plan is approved; null when nobody answered.</returns>
+    private async Task<bool?> ApprovePlanAsync(IReadOnlyList<BoardTask> tasks, CancellationToken ct)
+    {
+        var owner = services.Pipeline.Owner;
+        var context = Member(lead, null, PlanStep);
+        var answer = await owner.AskAsync(context, owner.Request(context, HumanRequestKind.SignOff, $"Approve the lead's plan before work starts?\n{Board(tasks)}"), ct)
+            .ConfigureAwait(false);
+        if (answer is { Approved: true })
+        {
+            await steps.PublishAsync(context, new PlanApproved(), ct).ConfigureAwait(false);
+            return true;
+        }
+
+        if (answer is null)
+        {
+            return null;
+        }
+
+        await StartAsync(lead, PlanStep, null, ReplanInput(tasks), ct).ConfigureAwait(false);
+        return false;
     }
 
     /// <summary>Closes the working copy of each task that was cancelled after an agent took it: the task has ended.</summary>
@@ -448,6 +491,16 @@ internal sealed class TeamRun
 
         Goal:
         {goal}
+        """;
+
+    private string ReplanInput(IReadOnlyList<BoardTask> tasks) =>
+        $"""
+        The owner did not approve your plan. Change the board with tasks.create and tasks.update so the plan does what the owner asked, then end your turn; the owner is asked again.
+
+        Goal:
+        {goal}
+
+        {Labels.Data("board", Board(tasks))}
         """;
 
     private string FailedInput(IReadOnlyList<BoardTask> failed, IReadOnlyList<TaskChange> history, IReadOnlyList<BoardTask> tasks) =>

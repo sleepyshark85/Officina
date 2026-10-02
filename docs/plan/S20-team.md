@@ -1,6 +1,6 @@
 # S20 — Team
 
-**Milestone:** M6 · **Size:** M ×3 · **Depends on:** S13, S18, S19 · **Issue:** [#22](https://github.com/sleepyshark85/Officina/issues/22) · **Status:** doing
+**Milestone:** M6 · **Size:** M ×3 · **Depends on:** S13, S18, S19 · **Issue:** [#22](https://github.com/sleepyshark85/Officina/issues/22) · **Status:** done
 
 ## Goal
 
@@ -13,10 +13,11 @@ The lead, roles, parallel agents and the coding team preset.
 - [x] The scripted team simulation (TEST-29) passes offline: plan, parallel work, review, integration, forced restart, report.
   *(Part 2: `TeamSimulationTests`, on real git and SQLite.)*
 - [x] Agents never see each other's conversations; inter-agent messages are recorded and treated as data.
-- [ ] Helper agents respect depth, count, permission and budget limits. *(Part 3.)*
-- [ ] No agent can change any definition, permission, budget, rule or check (TEST-26). *(Part 3; part 1 leaves a task's checks, budget and review requirement to the owner, and the lead's authority to the team.)*
-- [ ] The three v1 presets ship. *(Part 3.)*
-- [ ] An agent definition can build on another one and override parts of it (the coding team roles share a base). *(Part 3.)*
+- [x] Helper agents respect depth, count, permission and budget limits. *(Part 3: `HelperTests`.)*
+- [x] No agent can change any definition, permission, budget, rule or check (TEST-26). *(Part 3: `TamperTests`, through `sof run`
+  on real git; part 1 leaves a task's checks, budget and review requirement to the owner, and the lead's authority to the team.)*
+- [x] The three v1 presets ship. *(Part 3: `ExtendsAndPresetTests`.)*
+- [x] An agent definition can build on another one and override parts of it (the coding team roles share a base). *(Part 3.)*
 
 ## Pieces
 
@@ -111,11 +112,16 @@ Part 2:
   whole team). The submit tool's own time limit does not apply to it, so a check is never cut short or run again by the
   pipeline. A failed check's findings, at submit or at integration, mark the run as having read untrusted content (SEC-04).
 - A change whose diff adds conflict markers (`<<<<<<< ` or `>>>>>>> ` lines) is still a conflict, so an author that submits
-  again without resolving, or a reviewer that approves it, never puts markers on the baseline (WS-03).
+  again without resolving, or a reviewer that approves it, never puts markers on the baseline (WS-03). A file that really
+  holds such lines, such as documentation about git, is refused as a conflict too; no case needs it yet.
 - Cleaning up never loses work: the integration checkpoint is taken before the copy is closed; a copy that cannot be removed is
   a `warning` event and the team goes on (the next run removes leftovers); a scratch folder the queue could not remove keeps the
   result, with a warning, and is removed before the next integration.
-- TASK-06: in a task's working copy only the task's assignee changes files (`workspace.*` writes); its reviewer reads them.
+- TASK-06: in a task's working copy only the task's assignee changes files with the `workspace.*` write tools; its reviewer
+  reads them. This holds for those tools only: a `sandbox.*` command runs in the copy too, and what it changes cannot be told
+  apart, so the reviewer of the coding team preset has no commands and no write tools (part 3). An application that gives a
+  reviewer commands gives it the means to change the author's copy. Outside a team the same check applies to work for a task:
+  an agent cannot change the task's copy until the task is claimed for it.
   `ToolCall.Definition` gives tools the agent's definition, which the sandbox's secrets are found by.
   `capabilities.workspace.baselineChecks` names the baseline's checks. What the sandbox set up for the scratch folder the
   baseline checks ran in is released before the folder goes.
@@ -129,7 +135,42 @@ Part 2:
   the pause is lifted. The flaky `TaskBoardTests.A_task_that_runs_out_of_budget_goes_back_to_the_lead` did not fail in 320 runs
   of it, 8 at a time, nor in 96 runs of its class; its cause is not found.
 
-Left to part 3: see Pieces.
+Part 3:
+- CFG-05, CFG-04: the CLI's loader merges the files before binding (`ConfigurationFiles`): a file's `extends` lists presets
+  (`preset:<id>`, embedded in Core) and other files, relative to it, each a layer below it once; objects merge key by key and a
+  list or value in a higher file replaces the lower one's. An agent's `extends` names another agent it builds on, resolved after
+  the files merge. Cycles, missing presets and missing agents are Merge-phase errors that `sof config validate` reports; the
+  `extends` keys are never bound. `sof config show --origin` names the preset, the extended file, or "inherited by agents.X
+  through extends". Environment variables and options are still bound by Microsoft.Extensions.Configuration.
+- CFG-11: `preset:coding-team` (masking off, ING-02; the sign-offs planApproval, runBudgetExceeded and irreversibleAction,
+  HITL-04; checks build and tests from `project.values`; roles built on a shared `coder`; the reviewer with no write tools and no
+  commands), `preset:tool-using-assistant` and `preset:single-call-extractor`. A check's `command` may use `project.name` and
+  `project.values.*` placeholders, validated like the instructions'.
+- TEAM-07: `agents.<name>.helpers` lists the agents it may start with `builtin:team.start_helper`; `capabilities.team.helperDepth`
+  (2) and `helperCount` (4 per turn) limit them. A helper is a nested turn, `helper[parent.n]`, with a fresh inbox and no history;
+  `n` is numbered in the run, and a resumed run goes on after its events' numbers, so an id never repeats in a run. Its spending
+  counts against the parent's turn budget, its permissions are within its parent's, and it has no tool its parent does not (a
+  validation error otherwise). It keeps the parent's task, so the `workspace.*` write tools refuse it in the task's working copy
+  (TASK-06), as they refuse a reviewer; a `sandbox.*` command is not refused, so a helper of a reviewer must have none, which the
+  rule on tools gives when the reviewer has none. A helper must work in turns with the `none` history strategy.
+- TEAM-10: `planApproval` asks the owner to approve the lead's plan before any task is dispatched; a denial goes back to the lead
+  to re-plan, no answer within `run.approvalTimeout` hands the run off, and the `planApproved` event keeps a resumed run from asking
+  again. A denial carries no reason; the owner says what to change with `tell lead <text>` at the `sof run` console.
+- EGR-04: `builtin:human.request_handoff` ends the turn in a handoff to a human (reason `policyGap`) with the model's reason. A team
+  agent's handoff already goes back to its lead, so `team.handoff` is not built (moved to S21, for a case).
+- From the part 2 review: a non-command check run at submit is bounded by the submit tool's own `timeout`, which the tool takes
+  when it is made (the submit tool is exempt from the pipeline's limit, so its command checks are never cut short).
+- TEST-26: `TamperTests` runs an agent with file, command and task tools through `sof run`: `sof.json` (definitions, permissions,
+  budgets, rules and checks), and every file in the workspace it extends, is read-only to its file tools and its commands, and a
+  task's checks and budget are not its to change. No tool has access to the configuration (INV-10). The loader adds the extended
+  files to `capabilities.workspace.protectedPaths` as read-only, so `sof config show` lists them.
+- TEST-31: [`benchmark/`](../../benchmark/README.md) holds ten goals (four small, four medium, two larger), each a paragraph with a
+  hidden acceptance test suite in Python's standard library that tests the built program from outside, and the `sof.json` every
+  run uses. S21 runs them against the live model, and checks each suite against a reference solution first.
+
+Moved to S21 from part 3:
+- `team.handoff`, if a case needs a team agent to hand off to anyone but its lead.
+- Running the TEST-31 benchmark against the live model.
 
 Moved to S21:
 - The per-run rate limit (ING-03) in a long-lived runner: no work joins a team's run from outside (its tasks are its own), so

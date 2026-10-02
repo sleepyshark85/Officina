@@ -29,6 +29,9 @@ public sealed record ToolResult
     /// <summary>The agent the call was routed to, or <see cref="Human"/>; the turn ends in a handoff to it.</summary>
     public string? RouteTo { get; }
 
+    /// <summary>Why the agent asks for a human, when it called the tool for it; the turn then ends in a handoff to a human (EGR-04).</summary>
+    internal string? HandOffToHuman { get; init; }
+
     /// <summary>Whether the content comes from outside the agents' control, such as a check's findings on code they wrote (SEC-04).</summary>
     internal bool Untrusted { get; init; }
 

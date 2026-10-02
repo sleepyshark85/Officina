@@ -36,6 +36,11 @@ public sealed record AgentDefinition
         Example = """["issues:write"]""")]
     public IReadOnlyList<string>? Permissions { get; init; }
 
+    // TEAM-07: no helper agents unless allowed.
+    [Setting("The agent definitions, by name in `agents`, that this agent may start as helpers with `builtin:team.start_helper`, each for a piece of its work. Unset: none.",
+        Example = """["researcher"]""")]
+    public IReadOnlyList<string>? Helpers { get; init; }
+
     [Setting("The most tool calls from one reply that run at the same time, when every tool called is safe to run in parallel.", Example = "4")]
     [Range(1, int.MaxValue, ErrorMessage = "must be at least 1.")]
     public int MaxParallelToolCalls { get; init; } = 4;

@@ -40,7 +40,7 @@ internal sealed record CatalogTool(string Name, ToolOptions Options, ITool? Impl
 internal sealed class ToolCatalog
 {
     /// <summary>The built-in tools, by the name <c>builtin:</c> sources use.</summary>
-    public static readonly IReadOnlyList<string> Builtins = [.. RecordTool.All.Keys, ArtifactTool.Name, AskOwnerTool.Name, .. TaskTool.Names, .. MemoryTool.All.Keys, MessageTool.Name];
+    public static readonly IReadOnlyList<string> Builtins = [.. RecordTool.All.Keys, ArtifactTool.Name, AskOwnerTool.Name, .. TaskTool.Names, .. MemoryTool.All.Keys, MessageTool.Name, HelperTool.Name, HandOffTool.Name];
 
     private readonly Dictionary<string, Dictionary<string, CatalogTool>> byAgent;
 
@@ -129,7 +129,9 @@ internal sealed class ToolCatalog
                 ArtifactTool.Name => new ArtifactTool(artifacts),
                 AskOwnerTool.Name => AskOwnerTool.Instance,
                 MessageTool.Name => MessageTool.Instance,
-                _ => RecordTool.All.GetValueOrDefault(builtin) ?? MemoryTool.All.GetValueOrDefault(builtin) ?? (ITool)TaskTool.Create(builtin, checks),
+                HelperTool.Name => HelperTool.Instance,
+                HandOffTool.Name => HandOffTool.Instance,
+                _ => RecordTool.All.GetValueOrDefault(builtin) ?? MemoryTool.All.GetValueOrDefault(builtin) ?? (ITool)TaskTool.Create(builtin, checks, tool.Timeout),
             };
         }
 

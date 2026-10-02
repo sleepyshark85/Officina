@@ -1,0 +1,24 @@
+{
+  "$schema": "../docs/officina.schema.json",
+  // The team every benchmark run uses: the coding team preset, on a .NET project.
+  "extends": ["preset:coding-team"],
+  "project": {
+    "name": "benchmark",
+    "values": { "buildCommand": "dotnet build", "testCommand": "dotnet test" }
+  },
+  // A list replaces the preset's, so its rules are repeated. Packages come from NuGet; any other command is asked about.
+  "capabilities": {
+    "sandbox": {
+      "allowedHosts": ["api.nuget.org", "*.nuget.org"],
+      "commandRules": [
+        { "match": "git status*", "action": "allow" },
+        { "match": "git diff*", "action": "allow" },
+        { "match": "git log*", "action": "allow" },
+        { "match": "git show*", "action": "allow" },
+        { "match": "git push*", "action": "deny" },
+        { "match": "git remote*", "action": "deny" },
+        { "match": "dotnet *", "action": "allow" }
+      ]
+    }
+  }
+}

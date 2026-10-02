@@ -6,7 +6,7 @@ public sealed record HumanInteractionOptions
     [Setting("Whether human interaction is on.", Example = "true")]
     public bool Enabled { get; init; }
 
-    [Setting("Where a run waits for the owner's sign-off: `runBudgetExceeded`, to go on past the run's budget, which otherwise ends the turn; and `irreversibleAction`, before every irreversible tool call, whatever the tool's `approval`. Unset means both. An empty list in a file counts as unset; to turn both off, set an empty list in code.",
+    [Setting("Where a run waits for the owner's sign-off: `runBudgetExceeded`, to go on past the run's budget, which otherwise ends the turn; `irreversibleAction`, before every irreversible tool call, whatever the tool's `approval`; and `planApproval`, before a team's work starts on its lead's plan. Unset means the first two. An empty list in a file counts as unset; to turn both off, set an empty list in code.",
         Example = """["runBudgetExceeded"]""")]
     public IReadOnlyList<SignOff>? SignOffs { get; init; }
 
@@ -19,4 +19,5 @@ public enum SignOff
 {
     RunBudgetExceeded,
     IrreversibleAction,
+    PlanApproval,
 }
