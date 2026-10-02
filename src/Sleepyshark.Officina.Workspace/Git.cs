@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text;
+using Sleepyshark.Officina.Core.Extensibility;
 
 namespace Sleepyshark.Officina.Workspace;
 

@@ -30,6 +30,8 @@ public sealed class AgentRunner
     private readonly Admission admission;
     private readonly ConcurrentDictionary<string, SemaphoreSlim> turns = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, ConcurrentQueue<(Sender From, string Text)>> inboxes = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, TaskCompletionSource> paused = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, CancellationTokenSource> cancels = new(StringComparer.Ordinal);
 
     /// <summary>Validates the configuration in full, with the application's tools, gates and checks; nothing runs if it has errors (CFG-06).</summary>
     /// <param name="options">The configuration, fixed for the runner's lifetime. A changed configuration needs a new runner (CFG-08).</param>
@@ -89,6 +91,13 @@ public sealed class AgentRunner
     /// <param name="runId">The run.</param>
     /// <exception cref="InvalidOperationException">The task board is off.</exception>
     public TaskBoard Board(string? tenant, string runId) => pipeline.Board(tenant, runId);
+
+    /// <summary>How write tool calls are decided (HITL-01). The owner may change it during a run; each agent's next call uses it.</summary>
+    public PermissionMode PermissionMode
+    {
+        get => pipeline.PermissionMode;
+        set => pipeline.PermissionMode = value;
+    }
 
     /// <summary>Runs a single request.</summary>
     /// <param name="agentName">The agent, by its name in <c>agents</c>.</param>
@@ -153,6 +162,35 @@ public sealed class AgentRunner
         }
 
         Inbox(agentName).Enqueue((from, text));
+    }
+
+    /// <summary>Pauses the agent before its next model call, until it is resumed (RUN-06). Other agents go on.</summary>
+    public void Pause(string agentName)
+    {
+        KnownAgent(agentName);
+        paused.TryAdd(agentName, new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously));
+    }
+
+    public void Resume(string agentName)
+    {
+        KnownAgent(agentName);
+        if (paused.TryRemove(agentName, out var gate))
+        {
+            gate.SetResult();
+        }
+    }
+
+    /// <summary>
+    /// Cancels the agent's turns, running or waiting to run (RUN-06). Each ends in a handoff within
+    /// <c>run.cancelWithin</c>. Work sent to the agent afterwards runs as usual.
+    /// </summary>
+    public void Cancel(string agentName)
+    {
+        KnownAgent(agentName);
+        if (cancels.TryRemove(agentName, out var cancel))
+        {
+            cancel.Cancel();
+        }
     }
 
     /// <summary>
@@ -220,25 +258,28 @@ public sealed class AgentRunner
         var record = new RunRecord(storage.Records, context, time);
         var turn = new Turn(
             context, Options, provider, pipeline, record, pipeline.Board(context), checks, knowledge, storage.Conversations, shortening.GetValueOrDefault(name), Events, instructions, admitted,
-            Inbox(name), time);
+            Inbox(name), token => paused.TryGetValue(name, out var gate) ? gate.Task.WaitAsync(token) : Task.CompletedTask, time);
         var oneAtATime = turns.GetOrAdd(name, _ => new SemaphoreSlim(1, 1));
+        using var stop = CancellationTokenSource.CreateLinkedTokenSource(ct, cancels.GetOrAdd(name, _ => new CancellationTokenSource()).Token);
         var entered = false;
         Activity? activity = null;
+        Task<AgentResult>? running = null;
         AgentResult result;
         try
         {
-            await oneAtATime.WaitAsync(ct).ConfigureAwait(false);
+            await oneAtATime.WaitAsync(stop.Token).ConfigureAwait(false);
             entered = true;
             activity = Telemetry.StartTurn(context); // after the wait, so the span covers the turn only
-            await storage.DeleteExpiredAsync(Options.Storage.Retention, time.GetUtcNow(), ct).ConfigureAwait(false);
+            await storage.DeleteExpiredAsync(Options.Storage.Retention, time.GetUtcNow(), stop.Token).ConfigureAwait(false);
             var started = new RunStarted(context.RunId, name, context.Caller.Id, time.GetUtcNow(), CoreVersion.Value, Options);
-            await storage.Runs.RecordStartAsync(context.Caller.Tenant, started, ct).ConfigureAwait(false);
-            await Events.PublishAsync(context, new TurnStarted(), ct).ConfigureAwait(false);
-            result = await turn.RunAsync(ct).ConfigureAwait(false);
+            await storage.Runs.RecordStartAsync(context.Caller.Tenant, started, stop.Token).ConfigureAwait(false);
+            await Events.PublishAsync(context, new TurnStarted(), stop.Token).ConfigureAwait(false);
+            running = turn.RunAsync(stop.Token);
+            result = await running.WaitAsync(stop.Token).ConfigureAwait(false);
         }
-        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        catch (OperationCanceledException) when (stop.IsCancellationRequested)
         {
-            result = turn.HandOff(HandoffReason.RequestedByHuman, "the turn was cancelled");
+            result = await CancelledAsync(turn, running, admitted).ConfigureAwait(false);
         }
         catch (Exception exception)
         {
@@ -267,5 +308,29 @@ public sealed class AgentRunner
         OfficinaLog.Log.TurnEnded(context.RunId, name, result.Outcome.ToString(), reason);
         activity?.Dispose();
         return result;
+    }
+
+    /// <summary>
+    /// RUN-06: a cancelled turn has <c>run.cancelWithin</c> to stop its model call and its tools, which stop their
+    /// sandboxed processes, and ends in a handoff. One still running then is left behind, so the owner never waits longer.
+    /// </summary>
+    private async Task<AgentResult> CancelledAsync(Turn turn, Task<AgentResult>? running, Work work)
+    {
+        try
+        {
+            await (running ?? Task.CompletedTask).WaitAsync(Options.Run.CancelWithin, time).ConfigureAwait(false);
+        }
+        catch (TimeoutException)
+        {
+            var detail = $"the turn was cancelled, and did not stop within {Options.Run.CancelWithin}";
+            return new AgentResult(AgentOutcome.HandedOff, detail, new TurnStatistics(0, 0, Usage.None, 0m, TimeSpan.Zero), [], [], [], [],
+                new Handoff(HandoffReason.RequestedByHuman, null, detail, work.Input, [], null, ""));
+        }
+        catch
+        {
+            // The turn stopped, as it should, with its cancellation.
+        }
+
+        return turn.HandOff(HandoffReason.RequestedByHuman, "the turn was cancelled");
     }
 }

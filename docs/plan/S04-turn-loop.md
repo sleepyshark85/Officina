@@ -26,5 +26,5 @@ Parts of the closed requirements need state that later slices add:
   decisions and citations in handoffs and results (EGR-01, EGR-02).
 - S07: one history shortening before "input too long" hands off (LOOP-03, HIST-04).
 - S09: the caller and a handoff flag arrive with the work (EGR-04); until then runs act for an anonymous caller.
-- S14: working-copy changes as progress (LOOP-07). S16: a tool the model calls to hand off to a human (EGR-04).
+- S14: working-copy changes as progress (LOOP-07). S20 (moved from S16): a tool the model calls to hand off to a human (EGR-04).
 - S18 and S19: the task and agent budget levels, and their hierarchy (COST-02, RUN-05).

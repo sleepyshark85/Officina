@@ -40,9 +40,13 @@ internal sealed class ToolSetup
 
     public Dictionary<string, ICheck> Checks { get; } = [];
 
-    /// <summary>A configuration whose agent <c>dev</c> is offered every tool given.</summary>
+    /// <summary>
+    /// A configuration whose agent <c>dev</c> is offered every tool given, in the <c>auto</c> permission mode, so the
+    /// rules alone decide; <c>PermissionModeTests</c> test the other modes.
+    /// </summary>
     public static OfficinaOptions Options(params (string Name, ToolOptions Tool)[] tools) => new()
     {
+        Run = new() { PermissionMode = PermissionMode.Auto },
         Agents = new Dictionary<string, AgentDefinition> { [Agent] = new() { Instructions = "Work.", Tools = ["all"] } },
         Tools = tools.ToDictionary(tool => tool.Name, tool => tool.Tool),
         ToolSets = new Dictionary<string, IReadOnlyList<string>> { ["all"] = [.. tools.Select(tool => tool.Name)] },

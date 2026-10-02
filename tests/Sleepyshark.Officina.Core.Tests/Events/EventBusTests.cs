@@ -121,7 +121,7 @@ public class EventBusTests
         var error = Assert.Single(new OfficinaOptions { Storage = new() { UnstoredEvents = ["text"] } }.Validate());
 
         Assert.Equal(("storage.unstoredEvents", "\"text\" is not a kind of event."), (error.Path, error.Problem));
-        Assert.StartsWith("Use one of: approvalAnswered, approvalRequested, ", error.Fix, StringComparison.Ordinal);
+        Assert.StartsWith("Use one of: cacheHitWarning, humanAnswered, humanAsked, ", error.Fix, StringComparison.Ordinal);
     }
 
     /// <summary>Starts a run whose tool call waits for <see cref="release"/>; its id is known once the tool is called.</summary>

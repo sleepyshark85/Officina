@@ -26,10 +26,8 @@ internal static class DryRunCommand
                 return code;
             }
 
-            var agents = configuration.Options.Agents;
-            if ((parse.GetValue(agent) ?? (agents.Count == 1 ? agents.Keys.Single() : null)) is not { } name || !agents.ContainsKey(name))
+            if (ConfigurationCommandOptions.Agent(parse.GetValue(agent), configuration.Options, host) is not { } name)
             {
-                host.Error.WriteLine($"error: name the agent to run with --agent, one of: {string.Join(", ", agents.Keys.Order(StringComparer.Ordinal))}.");
                 return ExitCodes.Usage;
             }
 

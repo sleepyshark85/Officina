@@ -18,6 +18,10 @@ public sealed record CapabilitiesOptions
         Example = """{ "enabled": true }""")]
     public CapabilityOptions Knowledge { get; init; } = new();
 
+    [Setting("Human interaction: the `builtin:human.ask_owner` tool, and sign-offs where the run waits for the owner.",
+        Example = """{ "enabled": true, "signOffs": ["runBudgetExceeded"] }""")]
+    public HumanInteractionOptions HumanInteraction { get; init; } = new();
+
     [Setting("The git workspace: a working copy per agent, and an integration queue into the baseline.",
         Example = """{ "enabled": true, "protectedPaths": [{ "path": "secrets/**", "access": "hidden" }] }""")]
     public WorkspaceOptions Workspace { get; init; } = new();
@@ -35,6 +39,7 @@ public sealed record CapabilitiesOptions
     {
         ["conversationStore"] = ConversationStore.Enabled,
         ["knowledge"] = Knowledge.Enabled,
+        ["humanInteraction"] = HumanInteraction.Enabled,
         ["workspace"] = Workspace.Enabled,
         ["sandbox"] = Sandbox.Enabled,
         ["taskBoard"] = TaskBoard.Enabled,

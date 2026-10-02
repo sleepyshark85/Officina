@@ -1,3 +1,4 @@
+using Sleepyshark.Officina.Core.Configuration;
 using System.CommandLine;
 
 namespace Sleepyshark.Officina.Cli;
@@ -38,10 +39,26 @@ internal sealed class ConfigurationCommandOptions
         }
 
         return SofConfiguration.Load(
-            Path.GetFullPath(parse.GetValue(directory) ?? ".", host.WorkingDirectory),
+            Directory(parse, host),
             parse.GetValue(environment) ?? host.Variables.GetValueOrDefault("SOF_ENVIRONMENT"),
             host.Variables,
             options);
+    }
+
+    /// <summary>The directory with <c>sof.json</c>.</summary>
+    public string Directory(ParseResult parse, SofEnvironment host) => Path.GetFullPath(parse.GetValue(directory) ?? ".", host.WorkingDirectory);
+
+    /// <summary>The agent to run: the one named, or the only one; null, with the error printed, when there is none.</summary>
+    public static string? Agent(string? named, OfficinaOptions options, SofEnvironment host)
+    {
+        var agents = options.Agents;
+        if ((named ?? (agents.Count == 1 ? agents.Keys.Single() : null)) is { } name && agents.ContainsKey(name))
+        {
+            return name;
+        }
+
+        host.Error.WriteLine($"error: name the agent to run with --agent, one of: {string.Join(", ", agents.Keys.Order(StringComparer.Ordinal))}.");
+        return null;
     }
 
     /// <summary>Prints every error; the exit code says whether there were any.</summary>

@@ -28,6 +28,7 @@ public class GovernanceTests
             Gates = new Dictionary<string, GateOptions> { ["ask"] = new() { Use = GateOptions.RequireApproval } },
             Knowledge = new Dictionary<string, KnowledgeOptions> { ["handbook"] = new() { Use = "extension:handbook" } },
             Capabilities = new() { Knowledge = new() { Enabled = true } },
+            Run = new() { PermissionMode = PermissionMode.Auto },
         };
         await using var servers = await ToolServers.ConnectAsync(options, ReferenceServer.Secrets(), TestContext.Current.CancellationToken);
         var storage = new InMemoryStorage();
@@ -51,7 +52,7 @@ public class GovernanceTests
             outcomes.Add(Assert.Single(await pipeline.RunAsync(new("run-1", "dev", caller), [request], TestContext.Current.CancellationToken)).Error);
         }
 
-        Assert.Equal([ToolErrorCategory.NotAuthorised, ToolErrorCategory.PolicyViolation, null], outcomes);
+        Assert.Equal([ToolErrorCategory.NotAuthorised, ToolErrorCategory.ApprovalDenied, null], outcomes);
         Assert.Equal(
             [
                 ("permissions", AuditOutcome.Denied),

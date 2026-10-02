@@ -85,6 +85,22 @@ public class KnowledgeTests
             result.Record.Select(entry => entry.Item));
     }
 
+    // ING-02: a masked source's quotes are recorded with their tokens.
+    [Fact]
+    public async Task A_masked_sources_passages_are_cited_with_their_tokens()
+    {
+        handbook = new FakeKnowledgeSource(Coverage.Covered, ("hb-1", "Write to ann@example.com."));
+        var options = Configure(new() { BeforeTurn = ["handbook"] });
+        var kit = new TestKit(
+            options with { Knowledge = new Dictionary<string, KnowledgeOptions> { ["handbook"] = new() { Use = "extension:Handbook", Mask = true } } },
+            knowledge: new Dictionary<string, IKnowledgeSource> { ["Handbook"] = handbook });
+        kit.Model.Reply("Done.");
+
+        var result = await kit.RunAsync(Agent, Work, Ct);
+
+        Assert.Equal(new Citation("hb-1", "knowledge:handbook", "hb-1", "Write to [email-1]."), Assert.Single(result.Record).Item);
+    }
+
     [Fact]
     public void A_knowledge_source_the_application_has_not_registered_is_reported()
     {

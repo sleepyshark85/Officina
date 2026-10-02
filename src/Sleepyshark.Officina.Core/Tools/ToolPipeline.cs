@@ -28,9 +28,9 @@ public sealed class ToolPipeline
     private readonly IStorage storage;
     private readonly IAuditLog audit;
     private readonly EventBus events;
-    private readonly IHumanChannel human;
     private readonly KnownSecrets secrets;
     private readonly TimeProvider time;
+    private volatile PermissionMode permissionMode;
 
     /// <param name="options">The configuration, fixed for the pipeline's lifetime, so no agent can change its own rules (INV-10).</param>
     /// <param name="tools">
@@ -73,10 +73,21 @@ public sealed class ToolPipeline
         this.storage = storage;
         audit = storage.Audit;
         this.events = events ?? throw new ArgumentNullException(nameof(events));
-        this.human = human ?? throw new ArgumentNullException(nameof(human));
         this.secrets = new KnownSecrets(secrets ?? throw new ArgumentNullException(nameof(secrets)));
         this.time = time ?? throw new ArgumentNullException(nameof(time));
+        Owner = new OwnerChannel(human ?? throw new ArgumentNullException(nameof(human)), events, options.Run.ApprovalTimeout, time);
+        permissionMode = options.Run.PermissionMode;
     }
+
+    /// <summary>How write tool calls are decided (HITL-01). The owner may change it during the run; the next call uses it.</summary>
+    public PermissionMode PermissionMode
+    {
+        get => permissionMode;
+        set => permissionMode = Enum.IsDefined(value) ? value : throw new ArgumentOutOfRangeException(nameof(value));
+    }
+
+    /// <summary>Who answers approvals, questions and sign-offs, by their deadline.</summary>
+    internal OwnerChannel Owner { get; }
 
     /// <summary>The tools an agent is offered, sorted by name. They never depend on the caller (TOOL-03).</summary>
     public IReadOnlyList<ToolDefinition> Offered(string agent) => catalog.Offered(agent);
@@ -148,38 +159,51 @@ public sealed class ToolPipeline
         var record = new RunRecord(storage.Records, context, time);
         var board = Board(context);
         var approved = false;
-        await foreach (var stop in StepsAsync(context, tool, arguments, record, board, ct).ConfigureAwait(false))
+        for (var checking = true; checking;)
         {
-            if (approved && stop.Action == PolicyAction.Ask)
+            checking = false;
+            await foreach (var stop in StepsAsync(context, tool, arguments, record, board, ct).ConfigureAwait(false))
             {
-                // One approval answers every ask; a later deny still stops the call.
-                continue;
-            }
+                if (approved && stop.Action == PolicyAction.Ask)
+                {
+                    // One approval answers every ask; a later deny still stops the call.
+                    continue;
+                }
 
-            Telemetry.Decided(activity, stop.DecidedBy, stop.Action.ToString());
-            await AuditAsync(context, tool, arguments, stop.DecidedBy, stop.Action switch
-            {
-                PolicyAction.Ask => AuditOutcome.Asked,
-                PolicyAction.Route => AuditOutcome.Routed,
-                _ => AuditOutcome.Denied,
-            }, ct).ConfigureAwait(false);
-            if (stop.Action == PolicyAction.Route)
-            {
-                return ToolResult.Routed(stop.RouteTo!, stop.Reason);
-            }
+                Telemetry.Decided(activity, stop.DecidedBy, stop.Action.ToString());
+                await AuditAsync(context, tool, arguments, stop.DecidedBy, stop.Action switch
+                {
+                    PolicyAction.Ask => AuditOutcome.Asked,
+                    PolicyAction.Route => AuditOutcome.Routed,
+                    _ => AuditOutcome.Denied,
+                }, ct).ConfigureAwait(false);
+                if (stop.Action == PolicyAction.Route)
+                {
+                    return ToolResult.Routed(stop.RouteTo!, stop.Reason);
+                }
 
-            if (stop.Action == PolicyAction.Deny)
-            {
-                return ToolResult.Failed(stop.Category, stop.Reason);
-            }
+                if (stop.Action == PolicyAction.Deny)
+                {
+                    return ToolResult.Failed(stop.Category, stop.Reason);
+                }
 
-            await events.PublishAsync(context, new ApprovalRequested(tool.Name, stop.Reason), ct).ConfigureAwait(false);
-            approved = (await human.AskAsync(new HumanRequest(context.Agent, tool.Name, arguments, stop.Reason), ct).ConfigureAwait(false)).Approved;
-            await events.PublishAsync(context, new ApprovalAnswered(tool.Name, approved), ct).ConfigureAwait(false);
-            if (!approved)
-            {
-                await AuditAsync(context, tool, arguments, "human", AuditOutcome.Denied, ct).ConfigureAwait(false);
-                return ToolResult.Failed(ToolErrorCategory.PolicyViolation, "approval denied");
+                // LOOP-12: only this call waits; the agent continues the same turn with the answer.
+                var answer = await Owner.AskAsync(
+                    context, Owner.Request(context, HumanRequestKind.Approval, stop.Reason) with { Tool = tool.Name, Arguments = arguments }, ct).ConfigureAwait(false);
+                if (answer is not { Approved: true })
+                {
+                    await AuditAsync(context, tool, arguments, "human", AuditOutcome.Denied, ct).ConfigureAwait(false);
+                    return ToolResult.Failed(ToolErrorCategory.ApprovalDenied, answer is null ? Owner.NoAnswer : null);
+                }
+
+                approved = true;
+                if (answer.ChangedArguments is { } changed)
+                {
+                    // HITL-02: a changed version goes through every step again; only a deny or a route can stop it now.
+                    arguments = changed.Clone();
+                    checking = true;
+                    break;
+                }
             }
         }
 
@@ -200,8 +224,10 @@ public sealed class ToolPipeline
         // Output the tool streams is published with known secrets removed (INV-06), and masked like its result.
         ValueTask PublishAsync(string line, CancellationToken token) =>
             events.PublishAsync(context, new ToolOutput(tool.Name, masker?.Mask(secrets.Remove(line)) ?? secrets.Remove(line)), token);
-        var (result, detail) = await InvokeAsync(
-            tool, new ToolCall(real ? context.Masker!.Restore(arguments) : arguments, context.Caller, key, secrets, record, board, PublishAsync), ct).ConfigureAwait(false);
+        var (result, detail) = tool.Implementation is AskOwnerTool
+            ? (await AskQuestionAsync(context, arguments, ct).ConfigureAwait(false), null)
+            : await InvokeAsync(
+                tool, new ToolCall(real ? context.Masker!.Restore(arguments) : arguments, context.Caller, key, secrets, record, board, PublishAsync), ct).ConfigureAwait(false);
         detail = detail is null || masker is null ? detail : masker.Mask(detail);
         if (tool.Options.Untrusted && result.Error is null)
         {
@@ -222,6 +248,11 @@ public sealed class ToolPipeline
         content = masker?.Mask(content) ?? content;
         result = result with { Artifacts = [.. result.Artifacts.Select(artifact => artifact with { Content = secrets.Remove(artifact.Content) })] };
         var max = tool.Options.MaxResultLength;
+        if (!JsonElement.DeepEquals(arguments, request.Arguments))
+        {
+            content = $"[The owner changed the arguments to {arguments.GetRawText()}]\n{content}";
+        }
+
         if (content.Length <= max)
         {
             return result with { Content = content };
@@ -230,6 +261,15 @@ public sealed class ToolPipeline
         var full = await storage.Artifacts.SaveAsync(context.Caller.Tenant, context.RunId, new Artifact($"{tool.Name} result", content), time.GetUtcNow(), ct)
             .ConfigureAwait(false);
         return result with { Content = $"{content[..max]}\n[Trimmed: the first {max} of {content.Length} characters. The full result is artifact {full}.]" };
+    }
+
+    /// <summary>HITL-06: the agent's question goes to the owner, and the answer is the result.</summary>
+    private async Task<ToolResult> AskQuestionAsync(ToolContext context, JsonElement arguments, CancellationToken ct)
+    {
+        var answer = await Owner.AskAsync(context, Owner.Request(context, HumanRequestKind.Question, AskOwnerTool.Question(arguments)), ct).ConfigureAwait(false);
+        return ToolResult.Success(answer is null ? $"The owner did not answer: {Owner.NoAnswer}."
+            : answer is { Approved: true, Text: { } text } ? text
+            : "The owner declined to answer.");
     }
 
     /// <summary>The checks before a call runs, in order (TOOL-05); each yields what it decides when it does not allow the call.</summary>
@@ -254,6 +294,7 @@ public sealed class ToolPipeline
             yield return new(PolicyAction.Deny, ToolErrorCategory.NotAuthorised, $"the caller does not hold the permission {missing}", "permissions");
         }
 
+        var allowedByRule = false;
         foreach (var (index, rule) in options.Policies.PermissionRules.Index())
         {
             if (rule.Tool == tool.Name && (rule.When?.Holds(arguments) ?? true))
@@ -263,8 +304,20 @@ public sealed class ToolPipeline
                     yield return new(rule.Action, ToolErrorCategory.NotAuthorised, rule.Reason ?? "a permission rule", $"policies.permissionRules[{index}]", rule.To);
                 }
 
+                allowedByRule = rule.Action == PolicyAction.Allow;
                 break;
             }
+        }
+
+        // HITL-01: the mode is read for each call, so a change applies to the next one.
+        var mode = PermissionMode;
+        if (tool.Kind == ToolKind.Write && mode == PermissionMode.ReadOnly)
+        {
+            yield return new(PolicyAction.Deny, ToolErrorCategory.NotAuthorised, "the run is read-only", "permissionMode");
+        }
+        else if (tool.Kind == ToolKind.Write && mode == PermissionMode.Ask && !allowedByRule)
+        {
+            yield return new(PolicyAction.Ask, ToolErrorCategory.PolicyViolation, "no permission rule allows this call", "permissionMode");
         }
 
         // 3. Gates for all tools, then the tool's own.
@@ -286,6 +339,10 @@ public sealed class ToolPipeline
         if (tool.Approval == Approval.Always)
         {
             yield return new(PolicyAction.Ask, ToolErrorCategory.PolicyViolation, "the tool needs approval", "approval");
+        }
+        else if (tool.Options.Irreversible && options.Capabilities.HumanInteraction.SignsOff(SignOff.IrreversibleAction))
+        {
+            yield return new(PolicyAction.Ask, ToolErrorCategory.PolicyViolation, "an irreversible action needs the owner's sign-off", "signOffs");
         }
     }
 

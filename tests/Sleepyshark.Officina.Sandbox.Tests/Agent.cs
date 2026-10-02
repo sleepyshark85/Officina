@@ -96,6 +96,7 @@ internal sealed class Agent : IAsyncDisposable
             ToolSets = new Dictionary<string, IReadOnlyList<string>> { ["all"] = [.. tools.Keys] },
             Gates = new Dictionary<string, GateOptions> { ["commands"] = new() { Use = $"extension:{CommandRules.Id}" } },
             Capabilities = new() { Sandbox = options, Workspace = new() { ProtectedPaths = [new() { Path = "secrets/**" }] } },
+            Run = new() { PermissionMode = PermissionMode.Auto },
         };
     }
 }

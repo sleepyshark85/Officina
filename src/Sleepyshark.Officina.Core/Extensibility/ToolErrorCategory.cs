@@ -7,6 +7,9 @@ public enum ToolErrorCategory
     InvalidArguments,
     NotAuthorised,
     PolicyViolation,
+
+    /// <summary>A human denied the call, or did not answer by the deadline (HITL-02).</summary>
+    ApprovalDenied,
     Timeout,
     Unavailable,
     Failed,

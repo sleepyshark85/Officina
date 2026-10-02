@@ -147,6 +147,11 @@ public sealed partial record OfficinaOptions : IValidatableObject
             errors = on.Contains("taskBoard") ? errors : errors.Append(Off($"tools.{name}.source", "taskBoard"));
         }
 
+        foreach (var (name, _) in Tools.Where(tool => tool.Value.BuiltinTool() == AskOwnerTool.Name && !on.Contains("humanInteraction")))
+        {
+            errors = errors.Append(Off($"tools.{name}.source", "humanInteraction"));
+        }
+
         foreach (var (name, agent) in Agents)
         {
             if (agent.Context?.History is { Strategy: not HistoryStrategy.None } && !on.Contains("conversationStore"))
@@ -199,11 +204,15 @@ public sealed partial record OfficinaOptions : IValidatableObject
                     "Say why the agents need it; the provider runs it without gates or approval."));
             }
 
-            if (tool.ProviderTool() is not null && (tool.MaskResults || tool.ReceivesMaskedValues))
+            if ((tool.ProviderTool() is not null || tool.BuiltinTool() is not null) && (tool.MaskResults || tool.ReceivesMaskedValues))
             {
-                // ING-02, ING-06: the provider runs the call and gives the model its result, so the core never sees either.
+                // ING-02, ING-06: the provider runs its tools and gives the model their results, so the core never sees either;
+                // the core's own tools work on what the model has seen, masked already.
                 errors = errors.Append(new(ValidationPhase.Tools, $"tools.{name}.{(tool.MaskResults ? "maskResults" : "receivesMaskedValues")}",
-                    "has no effect on a provider tool.", "Remove it; the provider runs the call, so the core cannot mask or restore its values."));
+                    tool.ProviderTool() is null ? "has no effect on a built-in tool." : "has no effect on a provider tool.",
+                    tool.ProviderTool() is null
+                        ? "Remove it; built-in tools work on what the agent has seen, which is masked already."
+                        : "Remove it; the provider runs the call, so the core cannot mask or restore its values."));
             }
         }
 
