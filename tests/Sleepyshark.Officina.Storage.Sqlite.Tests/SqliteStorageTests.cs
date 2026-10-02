@@ -43,7 +43,7 @@ public sealed class SqliteStorageTests : StorageContract, IDisposable
 
         var error = await Assert.ThrowsAsync<InvalidDataException>(() => CreateAsync());
 
-        Assert.Equal($"{File} holds data in format version 3, and this core reads format version 4 only.", error.Message);
+        Assert.Equal($"{File} holds data in format version 3, and this core reads format version 5 only.", error.Message);
     }
 
     // CFG-07, STO-01.

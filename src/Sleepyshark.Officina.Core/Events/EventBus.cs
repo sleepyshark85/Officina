@@ -8,7 +8,7 @@ using Sleepyshark.Officina.Core.Tools;
 namespace Sleepyshark.Officina.Core.Events;
 
 /// <summary>
-/// The live event stream of a runner (EVT-01, DESIGN.md §2). Each event gets the next sequence number and is stored before readers
+/// The live event stream of a runner (EVT-01, DESIGN.md §2). Each event gets its run's next sequence number and is stored before readers
 /// see it, unless its kind is configured not to be (EVT-05). Each reader has its own bounded queue; a reader that falls
 /// behind is detached and catches up from the stored events, so no reader ever slows an agent (EVT-03, EVT-04).
 /// </summary>
@@ -24,7 +24,7 @@ public sealed class EventBus
     private readonly SemaphoreSlim order = new(1, 1);
     private readonly Lock readersLock = new();
     private readonly List<Reader> readers = [];
-    private long sequence;
+    private readonly Dictionary<string, long> sequences = [];
 
     public EventBus(IEventLog log, StorageOptions options, TimeProvider time)
     {
@@ -81,12 +81,32 @@ public sealed class EventBus
         }
     }
 
+    /// <summary>
+    /// Makes the run's next event follow the last one stored, when the run starts again in a new process (RUN-04). Events a
+    /// crashed process published before it died keep their numbers, so readers that saw them catch up without a gap or a repeat.
+    /// </summary>
+    internal async ValueTask ContinueAsync(string? tenant, string runId, CancellationToken ct)
+    {
+        var stored = await log.ReadAsync(tenant, runId, 0, ct).ConfigureAwait(false);
+        await order.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            sequences[runId] = Math.Max(sequences.GetValueOrDefault(runId), stored.Count == 0 ? 0 : stored[^1].Sequence);
+        }
+        finally
+        {
+            order.Release();
+        }
+    }
+
     internal async ValueTask PublishAsync(ToolContext context, EventPayload payload, CancellationToken ct)
     {
         await order.WaitAsync(ct).ConfigureAwait(false);
         try
         {
-            var coreEvent = new CoreEvent(context.RunId, context.Agent, context.Step, ++sequence, time.GetUtcNow(), payload);
+            var next = sequences.GetValueOrDefault(context.RunId) + 1;
+            sequences[context.RunId] = next;
+            var coreEvent = new CoreEvent(context.RunId, context.Agent, context.Step, next, time.GetUtcNow(), payload);
             if (!unstored.Contains(payload.Kind))
             {
                 await log.AppendAsync(context.Caller.Tenant, coreEvent, ct).ConfigureAwait(false);

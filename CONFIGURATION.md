@@ -81,6 +81,7 @@ Presets arrive with the coding team; until then this is how the team will be set
 | `capabilities.sandbox.commandRules` | the preset's rules; anything unmatched is asked about | You want fewer or more prompts. An allow rule for an interpreter, such as `sh*` or `bash*`, allows every command. |
 | `capabilities.workspace.protectedPaths` | `.git`, `.env*` and `.sof/` hidden; `sof.json` and `sof.*.json` read-only | More files must stay out of reach |
 | `capabilities.humanInteraction.signOffs` | plan approval, run budget exceeded, irreversible action | You want more or fewer checkpoints with the owner |
+| `capabilities.checkpoints.at` | after each turn | You want one after each step of a pattern or each integration, as well |
 | `capabilities.team.maxParallelAgents` | 4 | Your machine or budget allows more or fewer |
 
 ## Defaults are the safe choice

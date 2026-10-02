@@ -1,5 +1,6 @@
 using System.Reflection;
 using System.Text.Json.Serialization;
+using Sleepyshark.Officina.Core.Checkpoints;
 using Sleepyshark.Officina.Core.Extensibility;
 using Sleepyshark.Officina.Core.Messages;
 using Sleepyshark.Officina.Core.Running;
@@ -34,6 +35,9 @@ public sealed record CoreEvent(string RunId, string Agent, string? Step, long Se
 [JsonDerivedType(typeof(HumanAsked), "humanAsked")]
 [JsonDerivedType(typeof(HumanAnswered), "humanAnswered")]
 [JsonDerivedType(typeof(StepEnded), "stepEnded")]
+[JsonDerivedType(typeof(CheckpointTaken), "checkpointTaken")]
+[JsonDerivedType(typeof(RunResumed), "runResumed")]
+[JsonDerivedType(typeof(RunRolledBack), "runRolledBack")]
 public abstract record EventPayload
 {
     private static readonly Dictionary<Type, string> Names = typeof(EventPayload).GetCustomAttributes<JsonDerivedTypeAttribute>()
@@ -91,3 +95,15 @@ public sealed record HumanAnswered(HumanRequestKind Request, bool Approved, bool
 
 /// <summary>A step of the agent's pattern ended (PAT-08); the reason is set when it was handed off or cancelled.</summary>
 public sealed record StepEnded(StepOutcome Outcome, HandoffReason? Reason) : EventPayload;
+
+/// <summary>The run took a checkpoint (RUN-03).</summary>
+public sealed record CheckpointTaken(int Number, CheckpointPoint Point) : EventPayload;
+
+/// <summary>
+/// The run started again after a crash or a restart, from a checkpoint (RUN-04). The calls whose outcome is unknown are flagged;
+/// an irreversible one is not run again (RUN-07).
+/// </summary>
+public sealed record RunResumed(int Checkpoint, IReadOnlyList<ToolEffect> Interrupted) : EventPayload;
+
+/// <summary>The run was rolled back to a checkpoint (RUN-08). The effects outside the core's state made since are listed; they are not undone.</summary>
+public sealed record RunRolledBack(int Checkpoint, IReadOnlyList<ToolEffect> NotUndone) : EventPayload;

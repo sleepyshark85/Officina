@@ -13,4 +13,7 @@ public interface IRecordStore
 
     /// <summary>A run's record, in revision order.</summary>
     ValueTask<IReadOnlyList<RecordEntry>> ReadAsync(string? tenant, string runId, CancellationToken ct);
+
+    /// <summary>Deletes the entries after a revision, when the run goes back to a checkpoint (RUN-08).</summary>
+    ValueTask TruncateAsync(string? tenant, string runId, long revision, CancellationToken ct);
 }

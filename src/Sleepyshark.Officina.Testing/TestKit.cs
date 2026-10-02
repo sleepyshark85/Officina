@@ -20,6 +20,8 @@ public sealed class TestKit
     /// <param name="shorteners">The application's history shorteners, by extension id.</param>
     /// <param name="human">The human; <see cref="Human"/>, who answers as scripted, when omitted.</param>
     /// <param name="patterns">The application's loop patterns, by extension id.</param>
+    /// <param name="workspace">The workspace whose working copies checkpoints save and restore.</param>
+    /// <param name="storage">The storage to use, such as the one an earlier kit left behind to resume its runs; new when omitted.</param>
     public TestKit(
         OfficinaOptions? options = null,
         IReadOnlyDictionary<string, ITool>? tools = null,
@@ -29,8 +31,11 @@ public sealed class TestKit
         IReadOnlyDictionary<string, IHistoryShortener>? shorteners = null,
         IReadOnlyDictionary<string, ICheck>? checks = null,
         IHumanChannel? human = null,
-        IReadOnlyDictionary<string, ILoopPattern>? patterns = null)
+        IReadOnlyDictionary<string, ILoopPattern>? patterns = null,
+        IWorkspace? workspace = null,
+        InMemoryStorage? storage = null)
     {
+        Storage = storage ?? new();
         options ??= new OfficinaOptions();
         Model = new() { Capabilities = capabilities ?? ProviderCapabilities.None };
         Runner = new AgentRunner(
@@ -45,13 +50,14 @@ public sealed class TestKit
             new InMemorySecretSource(Secrets),
             Time,
             shorteners,
-            patterns);
+            patterns,
+            workspace);
     }
 
     public ScriptedModelProvider Model { get; }
 
     /// <summary>The runs started so far with their configuration, their events, records and artifacts, and the audit log.</summary>
-    public InMemoryStorage Storage { get; } = new();
+    public InMemoryStorage Storage { get; }
 
     public ScriptedHuman Human { get; } = new();
 

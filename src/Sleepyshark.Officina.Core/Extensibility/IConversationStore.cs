@@ -14,6 +14,12 @@ public interface IConversationStore
 
     /// <summary>The conversation's turns in order, from its latest shortened turn.</summary>
     ValueTask<IReadOnlyList<ConversationTurn>> ReadAsync(string? tenant, string agent, string? owner, CancellationToken ct);
+
+    /// <summary>How many turns the conversation has stored, from its first, which a checkpoint records (RUN-03).</summary>
+    ValueTask<int> CountAsync(string? tenant, string agent, string? owner, CancellationToken ct);
+
+    /// <summary>Deletes the turns after the first <paramref name="count"/>, when a run goes back to a checkpoint (RUN-08).</summary>
+    ValueTask TruncateAsync(string? tenant, string agent, string? owner, int count, CancellationToken ct);
 }
 
 /// <summary>One turn of a conversation, as it was sent to the model.</summary>

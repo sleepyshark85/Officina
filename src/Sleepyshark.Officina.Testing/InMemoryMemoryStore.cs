@@ -16,4 +16,10 @@ public sealed class InMemoryMemoryStore : IMemoryStore
 
     public ValueTask<IReadOnlyList<MemoryChange>> ReadAsync(string? tenant, string scope, CancellationToken ct) =>
         ValueTask.FromResult<IReadOnlyList<MemoryChange>>([.. Rows.Where(tenant, change => change.Scope == scope).OrderBy(change => change.Revision)]);
+
+    public ValueTask TruncateAsync(string? tenant, string scope, long revision, CancellationToken ct)
+    {
+        Rows.RemoveAll((rowTenant, change) => rowTenant == tenant && change.Scope == scope && change.Revision > revision);
+        return ValueTask.CompletedTask;
+    }
 }

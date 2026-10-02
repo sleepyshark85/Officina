@@ -2,6 +2,7 @@ using System.Collections.Immutable;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Data.Sqlite;
+using Sleepyshark.Officina.Core.Checkpoints;
 using Sleepyshark.Officina.Core.Configuration;
 using Sleepyshark.Officina.Core.Events;
 using Sleepyshark.Officina.Core.Extensibility;
@@ -18,15 +19,15 @@ namespace Sleepyshark.Officina.Storage.Sqlite;
 /// every statement filters by it (SEC-02). The file carries the format version of what it holds, and a file in any
 /// other version is refused rather than misread (REL-04).
 /// </summary>
-public sealed class SqliteStorage : IStorage, IRunStore, IConversationStore, IEventLog, IAuditLog, IRecordStore, IArtifactStore, ITaskStore, IMemoryStore
+public sealed class SqliteStorage : IStorage, IRunStore, IConversationStore, IEventLog, IAuditLog, IRecordStore, IArtifactStore, ITaskStore, IMemoryStore, ICheckpointStore
 {
     /// <summary>The only format version this storage reads and writes.</summary>
-    public const int FormatVersion = 4;
+    public const int FormatVersion = 5;
 
     private const string Schema = """
         CREATE TABLE runs (
             run_id TEXT PRIMARY KEY, tenant TEXT, owner TEXT, agent TEXT NOT NULL, time INTEGER NOT NULL,
-            core_version TEXT NOT NULL, configuration TEXT NOT NULL);
+            core_version TEXT NOT NULL, configuration TEXT NOT NULL, input TEXT NOT NULL, trigger TEXT NOT NULL, task_id TEXT, status TEXT NOT NULL);
         CREATE INDEX runs_owner ON runs (tenant, owner);
         CREATE TABLE events (
             tenant TEXT, run_id TEXT NOT NULL, agent TEXT NOT NULL, step TEXT, sequence INTEGER NOT NULL,
@@ -54,6 +55,8 @@ public sealed class SqliteStorage : IStorage, IRunStore, IConversationStore, IEv
             tenant TEXT, scope TEXT NOT NULL, revision INTEGER NOT NULL, by TEXT NOT NULL, time INTEGER NOT NULL, action TEXT NOT NULL,
             proposal INTEGER NOT NULL, content TEXT, comment TEXT);
         CREATE UNIQUE INDEX memory_changes_scope ON memory_changes (COALESCE(tenant, ''), scope, revision);
+        CREATE TABLE checkpoints (
+            tenant TEXT, run_id TEXT NOT NULL, number INTEGER NOT NULL, time INTEGER NOT NULL, state TEXT NOT NULL, PRIMARY KEY (run_id, number));
         """;
 
     private const string Conversation = "tenant IS $tenant AND agent = $agent AND owner IS $owner";
@@ -81,6 +84,8 @@ public sealed class SqliteStorage : IStorage, IRunStore, IConversationStore, IEv
     ITaskStore IStorage.Tasks => this;
 
     IMemoryStore IStorage.Memory => this;
+
+    ICheckpointStore IStorage.Checkpoints => this;
 
     /// <summary>Opens the storage in a file, creating it if it does not exist.</summary>
     /// <exception cref="InvalidDataException">The file holds data in another format version.</exception>
@@ -111,10 +116,21 @@ public sealed class SqliteStorage : IStorage, IRunStore, IConversationStore, IEv
     {
         ArgumentNullException.ThrowIfNull(run);
         return ExecuteAsync(
-            "INSERT INTO runs VALUES ($run_id, $tenant, $owner, $agent, $time, $core_version, $configuration)", ct,
+            "INSERT INTO runs VALUES ($run_id, $tenant, $owner, $agent, $time, $core_version, $configuration, $input, $trigger, $task_id, $status)", ct,
             ("$run_id", run.RunId), ("$tenant", tenant), ("$owner", run.Owner), ("$agent", run.Agent), ("$time", run.Time.UtcTicks),
-            ("$core_version", run.CoreVersion), ("$configuration", JsonSerializer.Serialize(run.Configuration, ConfigurationJson.Options)));
+            ("$core_version", run.CoreVersion), ("$configuration", JsonSerializer.Serialize(run.Configuration, ConfigurationJson.Options)),
+            ("$input", run.Input), ("$trigger", run.Trigger.ToString()), ("$task_id", run.TaskId), ("$status", RunStatus.Running.ToString()));
     }
+
+    public ValueTask RecordStatusAsync(string? tenant, string runId, RunStatus status, CancellationToken ct) =>
+        ExecuteAsync(
+            "UPDATE runs SET status = $status WHERE tenant IS $tenant AND run_id = $run_id", ct,
+            ("$status", status.ToString()), ("$tenant", tenant), ("$run_id", runId));
+
+    async ValueTask<StoredRun?> IRunStore.ReadAsync(string? tenant, string runId, CancellationToken ct) =>
+        (await QueryAsync(
+            "SELECT * FROM runs WHERE tenant IS $tenant AND run_id = $run_id", row => new StoredRun(ReadRun(row), Enum.Parse<RunStatus>(row.GetString(row.GetOrdinal("status")))), ct,
+            ("$tenant", tenant), ("$run_id", runId)).ConfigureAwait(false)).FirstOrDefault();
 
     public ValueTask AppendAsync(string? tenant, CoreEvent coreEvent, CancellationToken ct)
     {
@@ -167,6 +183,11 @@ public sealed class SqliteStorage : IStorage, IRunStore, IConversationStore, IEv
             "SELECT * FROM record WHERE tenant IS $tenant AND run_id = $run_id ORDER BY revision", ReadRecordEntry, ct,
             ("$tenant", tenant), ("$run_id", runId)).ConfigureAwait(false);
 
+    public ValueTask TruncateAsync(string? tenant, string runId, long revision, CancellationToken ct) =>
+        ExecuteAsync(
+            "DELETE FROM record WHERE tenant IS $tenant AND run_id = $run_id AND revision > $revision", ct,
+            ("$tenant", tenant), ("$run_id", runId), ("$revision", revision));
+
     public async ValueTask<bool> TryAppendAsync(string? tenant, TaskChange change, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(change);
@@ -184,6 +205,11 @@ public sealed class SqliteStorage : IStorage, IRunStore, IConversationStore, IEv
         await QueryAsync(
             "SELECT * FROM task_changes WHERE tenant IS $tenant AND run_id = $run_id ORDER BY revision", ReadTaskChange, ct,
             ("$tenant", tenant), ("$run_id", runId)).ConfigureAwait(false);
+
+    ValueTask ITaskStore.TruncateAsync(string? tenant, string runId, long revision, CancellationToken ct) =>
+        ExecuteAsync(
+            "DELETE FROM task_changes WHERE tenant IS $tenant AND run_id = $run_id AND revision > $revision", ct,
+            ("$tenant", tenant), ("$run_id", runId), ("$revision", revision));
 
     async ValueTask<bool> IMemoryStore.TryAppendAsync(string? tenant, MemoryChange change, CancellationToken ct)
     {
@@ -203,6 +229,30 @@ public sealed class SqliteStorage : IStorage, IRunStore, IConversationStore, IEv
         await QueryAsync(
             "SELECT * FROM memory_changes WHERE tenant IS $tenant AND scope = $scope ORDER BY revision", ReadMemoryChange, ct,
             ("$tenant", tenant), ("$scope", scope)).ConfigureAwait(false);
+
+    ValueTask IMemoryStore.TruncateAsync(string? tenant, string scope, long revision, CancellationToken ct) =>
+        ExecuteAsync(
+            "DELETE FROM memory_changes WHERE tenant IS $tenant AND scope = $scope AND revision > $revision", ct,
+            ("$tenant", tenant), ("$scope", scope), ("$revision", revision));
+
+    public ValueTask AppendAsync(string? tenant, Checkpoint checkpoint, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(checkpoint);
+        return ExecuteAsync(
+            "INSERT INTO checkpoints VALUES ($tenant, $run_id, $number, $time, $state)", ct,
+            ("$tenant", tenant), ("$run_id", checkpoint.RunId), ("$number", checkpoint.Number), ("$time", checkpoint.Time.UtcTicks),
+            ("$state", JsonSerializer.Serialize(checkpoint, StoredJson)));
+    }
+
+    async ValueTask<IReadOnlyList<Checkpoint>> ICheckpointStore.ReadAsync(string? tenant, string runId, CancellationToken ct) =>
+        await QueryAsync(
+            "SELECT * FROM checkpoints WHERE tenant IS $tenant AND run_id = $run_id ORDER BY number", ReadCheckpoint, ct,
+            ("$tenant", tenant), ("$run_id", runId)).ConfigureAwait(false);
+
+    public ValueTask TruncateAsync(string? tenant, string runId, int number, CancellationToken ct) =>
+        ExecuteAsync(
+            "DELETE FROM checkpoints WHERE tenant IS $tenant AND run_id = $run_id AND number > $number", ct,
+            ("$tenant", tenant), ("$run_id", runId), ("$number", number));
 
     public async ValueTask<long> SaveAsync(string? tenant, string runId, Artifact artifact, DateTimeOffset time, CancellationToken ct)
     {
@@ -239,7 +289,9 @@ public sealed class SqliteStorage : IStorage, IRunStore, IConversationStore, IEv
         var memory = await QueryAsync(
             "SELECT * FROM memory_changes WHERE tenant IS $tenant AND scope = $scope ORDER BY revision", ReadMemoryChange, ct,
             ("$tenant", tenant), ("$scope", ProjectMemory.OwnerScope(owner))).ConfigureAwait(false);
-        return new OwnerData(runs, events, audit, conversations, record, artifacts, tasks, memory);
+        var checkpoints = await QueryAsync(
+            $"SELECT * FROM checkpoints WHERE tenant IS $tenant AND run_id IN ({OwnerRuns}) ORDER BY run_id, number", ReadCheckpoint, ct, parameters).ConfigureAwait(false);
+        return new OwnerData(runs, events, audit, conversations, record, artifacts, tasks, memory, checkpoints);
     }
 
     public ValueTask AppendAsync(string? tenant, ConversationTurn turn, CancellationToken ct)
@@ -250,6 +302,17 @@ public sealed class SqliteStorage : IStorage, IRunStore, IConversationStore, IEv
             ("$tenant", tenant), ("$owner", turn.Owner), ("$agent", turn.Agent), ("$time", turn.Time.UtcTicks), ("$shortened", turn.Shortened),
             ("$messages", JsonSerializer.Serialize(turn.Messages, StoredJson)), ("$prefix_memory", turn.PrefixMemory), ("$seen_memory", turn.SeenMemory));
     }
+
+    public async ValueTask<int> CountAsync(string? tenant, string agent, string? owner, CancellationToken ct) =>
+        (await QueryAsync(
+            $"SELECT COUNT(*) FROM conversations WHERE {Conversation}", row => row.GetInt32(0), ct, ("$tenant", tenant), ("$agent", agent), ("$owner", owner)).ConfigureAwait(false))[0];
+
+    public ValueTask TruncateAsync(string? tenant, string agent, string? owner, int count, CancellationToken ct) =>
+        ExecuteAsync(
+            $"""
+            DELETE FROM conversations WHERE {Conversation}
+            AND position NOT IN (SELECT position FROM conversations WHERE {Conversation} ORDER BY position LIMIT $count)
+            """, ct, ("$tenant", tenant), ("$agent", agent), ("$owner", owner), ("$count", count));
 
     public async ValueTask<IReadOnlyList<ConversationTurn>> ReadAsync(string? tenant, string agent, string? owner, CancellationToken ct) =>
         await QueryAsync(
@@ -265,6 +328,7 @@ public sealed class SqliteStorage : IStorage, IRunStore, IConversationStore, IEv
             DELETE FROM record WHERE tenant IS $tenant AND run_id IN ({OwnerRuns});
             DELETE FROM artifacts WHERE tenant IS $tenant AND run_id IN ({OwnerRuns});
             DELETE FROM task_changes WHERE tenant IS $tenant AND run_id IN ({OwnerRuns});
+            DELETE FROM checkpoints WHERE tenant IS $tenant AND run_id IN ({OwnerRuns});
             DELETE FROM runs WHERE tenant IS $tenant AND owner = $owner;
             DELETE FROM conversations WHERE tenant IS $tenant AND owner = $owner;
             DELETE FROM memory_changes WHERE tenant IS $tenant AND scope = $scope;
@@ -288,6 +352,8 @@ public sealed class SqliteStorage : IStorage, IRunStore, IConversationStore, IEv
             ("record", retention.RunRecords, "DELETE FROM record WHERE run_id IN (SELECT run_id FROM record GROUP BY run_id HAVING MAX(time) < $record);"),
             ("tasks", retention.TaskBoards,
                 "DELETE FROM task_changes WHERE run_id IN (SELECT run_id FROM task_changes GROUP BY run_id HAVING MAX(time) < $tasks);"),
+            ("checkpoints", retention.RunRecords,
+                "DELETE FROM checkpoints WHERE run_id IN (SELECT run_id FROM checkpoints GROUP BY run_id HAVING MAX(time) < $checkpoints);"),
         ];
         var expired = kinds.Where(kind => kind.Period is not null).ToList();
 
@@ -300,7 +366,14 @@ public sealed class SqliteStorage : IStorage, IRunStore, IConversationStore, IEv
     private static RunStarted ReadRun(SqliteDataReader row) => new(
         row.GetString(row.GetOrdinal("run_id")), row.GetString(row.GetOrdinal("agent")), Text(row, "owner"), Time(row),
         row.GetString(row.GetOrdinal("core_version")),
-        JsonSerializer.Deserialize<OfficinaOptions>(row.GetString(row.GetOrdinal("configuration")), ConfigurationJson.Options)!);
+        JsonSerializer.Deserialize<OfficinaOptions>(row.GetString(row.GetOrdinal("configuration")), ConfigurationJson.Options)!)
+    {
+        Input = row.GetString(row.GetOrdinal("input")),
+        Trigger = Enum.Parse<Trigger>(row.GetString(row.GetOrdinal("trigger"))),
+        TaskId = Text(row, "task_id"),
+    };
+
+    private static Checkpoint ReadCheckpoint(SqliteDataReader row) => JsonSerializer.Deserialize<Checkpoint>(row.GetString(row.GetOrdinal("state")), StoredJson)!;
 
     private static CoreEvent ReadEvent(SqliteDataReader row) => new(
         row.GetString(row.GetOrdinal("run_id")), row.GetString(row.GetOrdinal("agent")), Text(row, "step"),

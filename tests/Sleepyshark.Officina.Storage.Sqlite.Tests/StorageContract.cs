@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Text.Json;
 using Microsoft.Extensions.Time.Testing;
 using Sleepyshark.Officina.Core;
+using Sleepyshark.Officina.Core.Checkpoints;
 using Sleepyshark.Officina.Core.Configuration;
 using Sleepyshark.Officina.Core.Events;
 using Sleepyshark.Officina.Core.Extensibility;
@@ -260,6 +261,76 @@ public abstract class StorageContract
         Assert.Single((await storage.ExportAsync("acme", "ann", Ct)).Runs);
     }
 
+    // RUN-01, RUN-04.
+    [Fact]
+    public async Task A_run_keeps_its_status_and_the_work_it_was_given_so_that_a_crashed_run_can_start_again()
+    {
+        var storage = await CreateAsync();
+        await storage.Runs.RecordStartAsync("acme", Run("run-1", "ann") with { Input = "Fix bug 7.", Trigger = Trigger.LongRunning, TaskId = "t1" }, Ct);
+        await storage.Runs.RecordStartAsync("acme", Run("run-2", "ann"), Ct);
+
+        var started = Assert.IsType<StoredRun>(await storage.Runs.ReadAsync("acme", "run-1", Ct));
+        await storage.Runs.RecordStatusAsync("acme", "run-2", RunStatus.Completed, Ct);
+
+        Assert.Equal((RunStatus.Running, "Fix bug 7.", Trigger.LongRunning, "t1"), (started.Status, started.Started.Input, started.Started.Trigger, started.Started.TaskId));
+        Assert.Equal(RunStatus.Completed, (await storage.Runs.ReadAsync("acme", "run-2", Ct))!.Status);
+        Assert.Null(await storage.Runs.ReadAsync("other", "run-1", Ct));
+        Assert.Null(await storage.Runs.ReadAsync("acme", "run-3", Ct));
+    }
+
+    // RUN-03.
+    [Fact]
+    public async Task Checkpoints_are_read_in_order_and_those_after_a_number_are_deleted()
+    {
+        var storage = await CreateAsync();
+        foreach (var number in new[] { 1, 0, 2 })
+        {
+            await storage.Checkpoints.AppendAsync("acme", Saved("run-1", number), Ct);
+        }
+
+        await storage.Checkpoints.AppendAsync("acme", Saved("run-2", 0), Ct);
+
+        Assert.Equal([0, 1, 2], (await storage.Checkpoints.ReadAsync("acme", "run-1", Ct)).Select(checkpoint => checkpoint.Number));
+        Assert.Equal(Saved("run-1", 2).Workspace, (await storage.Checkpoints.ReadAsync("acme", "run-1", Ct))[2].Workspace);
+        Assert.Equal(new Dictionary<string, int> { ["extractor"] = 3 }, (await storage.Checkpoints.ReadAsync("acme", "run-1", Ct))[0].Conversations);
+        Assert.Empty(await storage.Checkpoints.ReadAsync("other", "run-1", Ct));
+
+        await storage.Checkpoints.TruncateAsync("acme", "run-1", 0, Ct);
+
+        Assert.Equal([0], (await storage.Checkpoints.ReadAsync("acme", "run-1", Ct)).Select(checkpoint => checkpoint.Number));
+        Assert.Single(await storage.Checkpoints.ReadAsync("acme", "run-2", Ct));
+    }
+
+    // RUN-08: going back deletes what came after a position, and only there.
+    [Fact]
+    public async Task Going_back_deletes_the_conversation_record_board_and_memory_after_a_position()
+    {
+        var storage = await CreateAsync();
+        foreach (var revision in new[] { 1, 2, 3 })
+        {
+            await storage.Records.TryAppendAsync("acme", Fact("run-1", revision), Ct);
+            await storage.Records.TryAppendAsync("acme", Fact("run-2", revision), Ct);
+            await storage.Tasks.TryAppendAsync("acme", Change("run-1", revision), Ct);
+            await storage.Memory.TryAppendAsync("acme", Proposed("project:x", revision), Ct);
+            await storage.Conversations.AppendAsync("acme", Turn("ann", Message.User($"turn {revision}")), Ct);
+        }
+
+        await storage.Conversations.AppendAsync("acme", Turn("bob", Message.User("bob")), Ct);
+
+        await storage.Records.TruncateAsync("acme", "run-1", 1, Ct);
+        await storage.Tasks.TruncateAsync("acme", "run-1", 2, Ct);
+        await storage.Memory.TruncateAsync("acme", "project:x", 0, Ct);
+        await storage.Conversations.TruncateAsync("acme", "extractor", "ann", 1, Ct);
+
+        Assert.Equal([1L], (await storage.Records.ReadAsync("acme", "run-1", Ct)).Select(entry => entry.Revision));
+        Assert.Equal(3, (await storage.Records.ReadAsync("acme", "run-2", Ct)).Count);
+        Assert.Equal([1L, 2], (await storage.Tasks.ReadAsync("acme", "run-1", Ct)).Select(change => change.Revision));
+        Assert.Empty(await storage.Memory.ReadAsync("acme", "project:x", Ct));
+        Assert.Equal(1, await storage.Conversations.CountAsync("acme", "extractor", "ann", Ct));
+        Assert.Equal(1, await storage.Conversations.CountAsync("acme", "extractor", "bob", Ct));
+        Assert.Equal(0, await storage.Conversations.CountAsync("other", "extractor", "ann", Ct));
+    }
+
     // PRIV-02, TEST-18.
     [Fact]
     public async Task An_owners_data_is_exported_on_request()
@@ -278,6 +349,7 @@ public abstract class StorageContract
         Assert.Equal([Fact("run-1", 1)], export.Records);
         Assert.Equal([new Artifact("run-1 result", "full text")], export.Artifacts);
         Assert.Equal(Json(Change("run-1", 1)), Json([.. export.Tasks]));
+        Assert.Equal([("run-1", 0)], export.Checkpoints.Select(checkpoint => (checkpoint.RunId, checkpoint.Number)));
     }
 
     // PRIV-02, TEST-18.
@@ -295,6 +367,7 @@ public abstract class StorageContract
         Assert.Empty(await storage.Conversations.ReadAsync("acme", "extractor", "ann", Ct));
         Assert.Empty(await storage.Records.ReadAsync("acme", "run-1", Ct));
         Assert.Empty(await storage.Tasks.ReadAsync("acme", "run-1", Ct));
+        Assert.Empty(await storage.Checkpoints.ReadAsync("acme", "run-1", Ct));
         Assert.Equal([Entry("run-1", AuditOutcome.Intent)], await storage.Audit.ReadAsync("acme", "run-1", Ct));
         Assert.Single((await storage.ExportAsync("acme", "bob", Ct)).Runs);
 
@@ -312,6 +385,7 @@ public abstract class StorageContract
         await StoreRunAsync(storage, "acme", "long", "ann");
         await storage.Records.TryAppendAsync("acme", Fact("long", 2, Start.AddDays(20)), Ct);
         await storage.Tasks.TryAppendAsync("acme", Change("long", 2, Start.AddDays(20)), Ct);
+        await storage.Checkpoints.AppendAsync("acme", Saved("long", 1) with { Time = Start.AddDays(20) }, Ct);
         await StoreRunAsync(storage, "acme", "new", "ann", Start.AddDays(20));
         var retention = new RetentionOptions
         {
@@ -329,7 +403,11 @@ public abstract class StorageContract
         Assert.Equal([("long", 1L), ("long", 2L), ("new", 1L)], export.Records.Select(entry => (entry.RunId, entry.Revision)).Order());
         Assert.Equal(["new result"], export.Artifacts.Select(artifact => artifact.Name));
         Assert.Equal([("long", 1L), ("long", 2L), ("new", 1L)], export.Tasks.Select(change => (change.RunId, change.Revision)).Order());
+        Assert.Equal(["long", "long", "new"], export.Checkpoints.Select(checkpoint => checkpoint.RunId).Order());
     }
+
+    protected static Checkpoint Saved(string runId, int number, DateTimeOffset? time = null) =>
+        new(runId, number, time ?? Start, CheckpointPoint.Turn, new Dictionary<string, int> { ["extractor"] = 3 }, 4, 5, 6, 7, [new CopySnapshot("run-dev", "dev", "abc123")]);
 
     protected static RunStarted Run(string runId, string? owner, DateTimeOffset? time = null) =>
         new(runId, "extractor", owner, time ?? Start, CoreVersion.Value, new OfficinaOptions());
@@ -368,13 +446,14 @@ public abstract class StorageContract
         await storage.Artifacts.SaveAsync(tenant, runId, new($"{runId} result", "full text"), time ?? Start, Ct);
         await storage.Tasks.TryAppendAsync(tenant, Change(runId, 1, time), Ct);
         await storage.Memory.TryAppendAsync(tenant, Proposed($"owner:{owner}", 1), Ct);
+        await storage.Checkpoints.AppendAsync(tenant, Saved(runId, 0, time), Ct);
     }
 
     /// <summary>How many items an export of the owner's data holds.</summary>
     private static async Task<int> CountAsync(IStorage storage, string? tenant, string owner)
     {
         var data = await storage.ExportAsync(tenant, owner, Ct);
-        return data.Runs.Count + data.Events.Count + data.Audit.Count + data.Conversations.Count + data.Records.Count + data.Artifacts.Count + data.Tasks.Count + data.Memory.Count;
+        return data.Runs.Count + data.Events.Count + data.Audit.Count + data.Conversations.Count + data.Records.Count + data.Artifacts.Count + data.Tasks.Count + data.Memory.Count + data.Checkpoints.Count;
     }
 
     private static JsonElement Args => JsonDocument.Parse("""{ "path": "a.cs" }""").RootElement;

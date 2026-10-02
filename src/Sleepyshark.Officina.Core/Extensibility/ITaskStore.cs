@@ -13,4 +13,7 @@ public interface ITaskStore
 
     /// <summary>A run's board, as its changes in revision order.</summary>
     ValueTask<IReadOnlyList<TaskChange>> ReadAsync(string? tenant, string runId, CancellationToken ct);
+
+    /// <summary>Deletes the changes after a revision, when the run goes back to a checkpoint (RUN-08).</summary>
+    ValueTask TruncateAsync(string? tenant, string runId, long revision, CancellationToken ct);
 }

@@ -16,4 +16,7 @@ public interface IMemoryStore
 
     /// <summary>A scope's changes in revision order.</summary>
     ValueTask<IReadOnlyList<MemoryChange>> ReadAsync(string? tenant, string scope, CancellationToken ct);
+
+    /// <summary>Deletes the changes after a revision, when a run goes back to a checkpoint that recorded it (RUN-08).</summary>
+    ValueTask TruncateAsync(string? tenant, string scope, long revision, CancellationToken ct);
 }

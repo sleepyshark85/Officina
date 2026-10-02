@@ -16,4 +16,10 @@ public sealed class InMemoryRecordStore : IRecordStore
 
     public ValueTask<IReadOnlyList<RecordEntry>> ReadAsync(string? tenant, string runId, CancellationToken ct) =>
         ValueTask.FromResult<IReadOnlyList<RecordEntry>>([.. Rows.Where(tenant, entry => entry.RunId == runId).OrderBy(entry => entry.Revision)]);
+
+    public ValueTask TruncateAsync(string? tenant, string runId, long revision, CancellationToken ct)
+    {
+        Rows.RemoveAll((rowTenant, entry) => rowTenant == tenant && entry.RunId == runId && entry.Revision > revision);
+        return ValueTask.CompletedTask;
+    }
 }

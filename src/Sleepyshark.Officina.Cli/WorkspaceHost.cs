@@ -21,11 +21,13 @@ internal sealed partial class WorkspaceHost : IAsyncDisposable
     private readonly OfficinaOptions options;
     private readonly ISandbox? sandbox;
     private readonly string runId;
+    private readonly bool leaveWorkingCopies;
     private readonly ConcurrentDictionary<string, Lazy<Task<Hold>>> holds = new(StringComparer.Ordinal);
 
-    private WorkspaceHost(GitWorkspace workspace, OfficinaOptions options, ISandbox? sandbox, string runId, string root)
+    private WorkspaceHost(GitWorkspace workspace, OfficinaOptions options, ISandbox? sandbox, string runId, string root, bool leaveWorkingCopies)
     {
         this.workspace = workspace;
+        this.leaveWorkingCopies = leaveWorkingCopies;
         this.options = options;
         this.sandbox = sandbox;
         this.runId = runId;
@@ -55,11 +57,26 @@ internal sealed partial class WorkspaceHost : IAsyncDisposable
     /// <summary>The integration queue's length and waiting time (WS-09).</summary>
     public IntegrationQueueStatus Queue => workspace.Queue;
 
-    /// <summary>Opens the workspace in <paramref name="root"/>, after checking that the machine can sandbox commands when they are on.</summary>
+    /// <summary>The workspace whose working copies checkpoints save and restore (RUN-04).</summary>
+    public IWorkspace Workspace => workspace;
+
+    /// <summary>
+    /// Opens the workspace in <paramref name="root"/>, after checking that the machine can sandbox commands when they are on, and
+    /// removes what a run that died left in it.
+    /// </summary>
+    /// <param name="options">The configuration.</param>
+    /// <param name="root">The project's directory.</param>
+    /// <param name="runId">The run that holds the workspace.</param>
+    /// <param name="sandbox">What runs commands; null when the sandbox is off.</param>
+    /// <param name="time">The clock.</param>
+    /// <param name="keepLeftover">Whether a working copy's branch, named by its task, is kept because its run can resume (RUN-04).</param>
+    /// <param name="leaveWorkingCopies">Whether the working copies are left in place when the host is disposed, because the run goes on.</param>
+    /// <param name="ct">Cancels opening.</param>
     /// <exception cref="InvalidOperationException">The sandbox is on and this machine cannot provide it; nothing runs unsandboxed (SBX-07).</exception>
     /// <exception cref="WorkspaceException">The workspace cannot be opened.</exception>
     public static async Task<WorkspaceHost> OpenAsync(
-        OfficinaOptions options, string root, string runId, ISandbox? sandbox, TimeProvider time, CancellationToken ct)
+        OfficinaOptions options, string root, string runId, ISandbox? sandbox, TimeProvider time, Func<string, Task<bool>> keepLeftover, bool leaveWorkingCopies,
+        CancellationToken ct)
     {
         if (sandbox?.Probe() is { } problem)
         {
@@ -69,7 +86,8 @@ internal sealed partial class WorkspaceHost : IAsyncDisposable
         var workspace = await GitWorkspace.OpenAsync(root, runId, options.Capabilities.Workspace, new Dictionary<string, ICheck>(), time, ct).ConfigureAwait(false);
         try
         {
-            return new WorkspaceHost(workspace, options, sandbox, runId, root);
+            await workspace.RemoveLeftoversAsync(keepLeftover, ct).ConfigureAwait(false);
+            return new WorkspaceHost(workspace, options, sandbox, runId, root, leaveWorkingCopies);
         }
         catch
         {
@@ -108,6 +126,12 @@ internal sealed partial class WorkspaceHost : IAsyncDisposable
     {
         // One failing disposal must not leave the others' processes, worktrees or the run lock behind.
         var failures = new List<Exception>();
+        if (leaveWorkingCopies)
+        {
+            workspace.Dispose();
+            return;
+        }
+
         foreach (var hold in holds.Values)
         {
             try
@@ -124,6 +148,19 @@ internal sealed partial class WorkspaceHost : IAsyncDisposable
                 {
                     await workspace.CloseWorkingCopyAsync(copy).ConfigureAwait(false);
                 }
+            }
+            catch (Exception exception)
+            {
+                failures.Add(exception);
+            }
+        }
+
+        // Working copies a restore brought back that no agent has used since.
+        foreach (var copy in workspace.OpenCopies)
+        {
+            try
+            {
+                await workspace.CloseWorkingCopyAsync(copy).ConfigureAwait(false);
             }
             catch (Exception exception)
             {

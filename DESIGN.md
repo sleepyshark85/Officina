@@ -219,7 +219,7 @@ decides the outcome.
 
 | Concern | Design |
 |---|---|
-| Baseline and working copies | The baseline is a git branch. Each working copy is a `git worktree` on `agent/<task>`. The core uses the git CLI, because libgit2's worktree support is limited. |
+| Baseline and working copies | The baseline is a git branch. Each working copy is a `git worktree` on `agent/<task>`. The core uses the git CLI, because libgit2's worktree support is limited. A run that dies leaves its worktrees behind; the next run to hold the workspace removes them, and the branches of runs that cannot resume. |
 | Integration (WS-09) | A single queue per workspace. Each change is rebased onto the current baseline in a scratch worktree, then the baseline checks run, then the baseline fast-forwards. A failure or conflict goes back to the task. |
 | Edit safety (WS-07) | The core keeps a content hash for each agent and file at read time. An edit whose hash no longer matches fails. |
 | Linux sandbox | bubblewrap (user namespaces). Only the working copy and toolchains are mounted, and the network namespace is empty. Allowed traffic goes through a host-side filtering proxy reached over a Unix socket in `$XDG_RUNTIME_DIR` (socket paths are limited to 108 bytes), bind-mounted into the sandbox and forwarded by socat. Limits use cgroups v2 through `systemd-run --user`. Stopping a command kills bubblewrap, which ends its PID namespace and everything in it. |
@@ -234,11 +234,23 @@ decides the outcome.
   artifacts (text rows, such as the full text of a trimmed tool result), task board changes (keyed by run and revision),
   memory, checkpoints, events, audit.
 - **Checkpoints are cheap because history is append-only.** A checkpoint stores:
-  - the message count of each conversation;
-  - the revisions of the record, the task board and memory;
-  - the commit SHA of each working copy (uncommitted changes are committed as WIP first).
-- **Rollback (RUN-08)** truncates to those positions and resets the worktrees. The restored
-  history is byte-identical to what was sent earlier, so it is still valid for the provider.
+  - the number of stored turns of each conversation;
+  - the revisions of the record and the task board, and the position in memory's log;
+  - the commit of each working copy (uncommitted changes are committed as a checkpoint commit on its branch first);
+  - the number of audit entries, so a rollback can list the effects made since.
+
+  A run takes one when it starts, then where `capabilities.checkpoints.at` says (after each turn by default), and on demand.
+- **Rollback (RUN-08)** truncates each store to those positions and resets the worktrees, opening again any that are gone, from
+  their branch or from the commit alone, and removing any that did not exist then. The restored history is byte-identical to
+  what was sent earlier, so it is still valid for the provider, and memory's revision goes back with it, so a conversation's
+  prefix revision and the revision it was told of stay valid. Events and the audit log are history and are never truncated; the
+  rollback is an event, and it lists the write-tool attempts made since that are outside the core's state (everything but the
+  built-in tools and the `workspace.*` tools). Integration squashes the checkpoint commits into the change's one commit.
+- **Resume (RUN-04)** is a rollback to the run's last checkpoint, then the run's work starts again on the restored state, with the
+  event numbering continued from the stored log. A run whose process died is still `running` in the store, which is how resume
+  finds it. Write-tool intents without an outcome are flagged in a `runResumed` event (RUN-07), and an irreversible call is not
+  repeated, because its intent is already in the audit log (TOOL-10): it goes to a human. Patterns do not resume part-way: the
+  steps run again from the first, on the state the checkpoint holds.
 
 ![Crash and resume](docs/diagrams/resume.svg)
 

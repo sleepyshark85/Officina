@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using Sleepyshark.Officina.Core.Checkpoints;
 using Sleepyshark.Officina.Core.Configuration;
 using Sleepyshark.Officina.Core.Events;
 using Sleepyshark.Officina.Core.Extensibility;
@@ -22,6 +23,7 @@ namespace Sleepyshark.Officina.Core.Running;
 /// <param name="run">The run, and the agent it is for.</param>
 /// <param name="work">The work, as admission passed it.</param>
 /// <param name="time">The clock for the run's elapsed time.</param>
+/// <param name="checkpoint">Takes a checkpoint of the run if its configuration asks for one at the point (RUN-03).</param>
 internal sealed class Steps(
     OfficinaOptions options,
     IReadOnlyDictionary<string, ILoopPattern> patterns,
@@ -30,7 +32,8 @@ internal sealed class Steps(
     Func<ToolContext, Work, Budget, Turn> newTurn,
     ToolContext run,
     Work work,
-    TimeProvider time)
+    TimeProvider time,
+    Func<ToolContext, CheckpointPoint, CancellationToken, Task<Checkpoint?>> checkpoint)
 {
     private static readonly Dictionary<string, ILoopPattern> BuiltIn = new(StringComparer.Ordinal)
     {
@@ -74,6 +77,10 @@ internal sealed class Steps(
             result = step.Pattern is { IsTurn: false } nested ? await RunPatternAsync(context, nested, input, budget, ct).ConfigureAwait(false)
                 : agent is { Pattern.IsTurn: false } ? await RunPatternAsync(context, agent.Pattern, input, budget.Draw("pattern's", agent.Budget.Turn), ct).ConfigureAwait(false)
                 : await RunTurnAsync(context, input, budget, ct).ConfigureAwait(false);
+            if (!ct.IsCancellationRequested)
+            {
+                await checkpoint(context, CheckpointPoint.Step, ct).ConfigureAwait(false);
+            }
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
@@ -157,6 +164,11 @@ internal sealed class Steps(
 
         run.ReadUntrusted |= context.ReadUntrusted;
         turns.Enqueue(result);
+        if (!ct.IsCancellationRequested)
+        {
+            await checkpoint(context, CheckpointPoint.Turn, ct).ConfigureAwait(false);
+        }
+
         var outcome = result.Outcome switch
         {
             AgentOutcome.Completed => StepOutcome.Completed,

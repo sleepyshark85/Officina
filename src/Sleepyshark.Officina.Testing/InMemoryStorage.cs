@@ -24,6 +24,8 @@ public sealed class InMemoryStorage : IStorage
 
     public InMemoryMemoryStore Memory { get; } = new();
 
+    public InMemoryCheckpointStore Checkpoints { get; } = new();
+
     IRunStore IStorage.Runs => Runs;
 
     IConversationStore IStorage.Conversations => Conversations;
@@ -40,6 +42,8 @@ public sealed class InMemoryStorage : IStorage
 
     IMemoryStore IStorage.Memory => Memory;
 
+    ICheckpointStore IStorage.Checkpoints => Checkpoints;
+
     public ValueTask<OwnerData> ExportAsync(string? tenant, string owner, CancellationToken ct)
     {
         var runs = Runs.Rows.Where(tenant, run => run.Owner == owner);
@@ -48,7 +52,8 @@ public sealed class InMemoryStorage : IStorage
             runs, Events.Rows.Where(tenant, coreEvent => ids.Contains(coreEvent.RunId)), Audit.Rows.Where(tenant, entry => ids.Contains(entry.RunId)),
             Conversations.Rows.Where(tenant, turn => turn.Owner == owner), Records.Rows.Where(tenant, entry => ids.Contains(entry.RunId)),
             [.. Artifacts.Rows.Where(tenant, row => ids.Contains(row.RunId)).Select(row => row.Artifact)], Tasks.Rows.Where(tenant, change => ids.Contains(change.RunId)),
-            Memory.Rows.Where(tenant, change => change.Scope == ProjectMemory.OwnerScope(owner))));
+            Memory.Rows.Where(tenant, change => change.Scope == ProjectMemory.OwnerScope(owner)),
+            Checkpoints.Rows.Where(tenant, checkpoint => ids.Contains(checkpoint.RunId))));
     }
 
     public ValueTask DeleteAsync(string? tenant, string owner, CancellationToken ct)
@@ -58,6 +63,7 @@ public sealed class InMemoryStorage : IStorage
         Records.Rows.RemoveAll((rowTenant, entry) => rowTenant == tenant && ids.Contains(entry.RunId));
         Artifacts.Rows.RemoveAll((rowTenant, row) => rowTenant == tenant && ids.Contains(row.RunId));
         Tasks.Rows.RemoveAll((rowTenant, change) => rowTenant == tenant && ids.Contains(change.RunId));
+        Checkpoints.Rows.RemoveAll((rowTenant, checkpoint) => rowTenant == tenant && ids.Contains(checkpoint.RunId));
         Memory.Rows.RemoveAll((rowTenant, change) => rowTenant == tenant && change.Scope == ProjectMemory.OwnerScope(owner));
         Runs.Rows.RemoveAll((rowTenant, run) => rowTenant == tenant && ids.Contains(run.RunId));
         Conversations.Rows.RemoveAll((rowTenant, turn) => rowTenant == tenant && turn.Owner == owner);
@@ -78,6 +84,10 @@ public sealed class InMemoryStorage : IStorage
         Records.Rows.RemoveAll((_, entry) => now - changed[entry.RunId] > retention.RunRecords);
         var boards = Tasks.Rows.All.GroupBy(change => change.RunId).ToDictionary(run => run.Key, run => run.Max(change => change.Time));
         Tasks.Rows.RemoveAll((_, change) => now - boards[change.RunId] > retention.TaskBoards);
+
+        // Checkpoints are the run record's state, so they last as long as it does.
+        var saved = Checkpoints.Rows.All.GroupBy(checkpoint => checkpoint.RunId).ToDictionary(run => run.Key, run => run.Max(checkpoint => checkpoint.Time));
+        Checkpoints.Rows.RemoveAll((_, checkpoint) => now - saved[checkpoint.RunId] > retention.RunRecords);
         return ValueTask.CompletedTask;
     }
 }
