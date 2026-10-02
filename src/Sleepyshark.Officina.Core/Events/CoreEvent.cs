@@ -25,6 +25,7 @@ public sealed record CoreEvent(string RunId, string Agent, string? Step, long Se
 [JsonDerivedType(typeof(TurnEnded), "turnEnded")]
 [JsonDerivedType(typeof(TextGenerated), "textGenerated")]
 [JsonDerivedType(typeof(ModelCallEnded), "modelCallEnded")]
+[JsonDerivedType(typeof(ModelFallback), "modelFallback")]
 [JsonDerivedType(typeof(CacheHitWarning), "cacheHitWarning")]
 [JsonDerivedType(typeof(ToolCallStarted), "toolCallStarted")]
 [JsonDerivedType(typeof(ToolCallEnded), "toolCallEnded")]
@@ -56,6 +57,13 @@ public sealed record TextGenerated(string Text) : EventPayload;
 
 /// <summary>A model call ended, with what it used and cost.</summary>
 public sealed record ModelCallEnded(StopReason Stop, Usage Usage, decimal Cost) : EventPayload;
+
+/// <summary>The model gateway served a call with a fallback profile because the one before it stayed unavailable (MDL-04).</summary>
+/// <param name="Profile">The fallback's name in <c>models</c>.</param>
+/// <param name="Provider">Its provider.</param>
+/// <param name="Model">Its model.</param>
+/// <param name="Failure">Why the profile before it was given up on.</param>
+public sealed record ModelFallback(string Profile, string Provider, string Model, ModelFailure Failure) : EventPayload;
 
 /// <summary>A model call read less of its input from the cache than configured (COST-01).</summary>
 public sealed record CacheHitWarning(CacheWarning Warning) : EventPayload;

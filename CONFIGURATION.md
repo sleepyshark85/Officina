@@ -41,7 +41,7 @@ generated from the Options classes with the JSON Schema [`docs/officina.schema.j
 Everything else has a default. The API key is read from the `ANTHROPIC_API_KEY` environment
 variable unless you configure another secret.
 
-Until per-model capabilities arrive, `claude-haiku-4-5` rejects mid-conversation system messages (turn-scoped and operator messages), so a profile that uses it fails with `InvalidRequest`.
+Some Claude models (`claude-haiku-4-5`, the Sonnet 5 models) take no system message in the middle of a conversation. The provider knows which, so the volatile context goes into the history for them, but a message from an operator sent during a turn is still a system message, and such a model rejects it with `InvalidRequest`.
 
 ## Smallest configurations
 
@@ -71,7 +71,7 @@ Presets arrive with the coding team; until then this is how the team will be set
 | Setting | Default | Change it when |
 |---|---|---|
 | `agents.<name>.model` | `claude-opus-5-5` at the provider's default effort | A role needs a different model or effort |
-| `models.<name>` | one profile, `default` | You want named profiles or fallbacks |
+| `models.<name>` | one profile, `default` | You want named profiles, or fallbacks for when a model is unavailable |
 | `agents.<name>.tools` | no tools | The agent should act |
 | `tools.<name>.approval` | `always` for irreversible tools, otherwise `never` | A tool needs human sign-off |
 | `toolServers` | none | You use MCP tool servers |

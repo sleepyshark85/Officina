@@ -20,3 +20,18 @@ public sealed record UsageReported(Usage Usage) : ModelEvent;
 
 /// <summary>Why the model stopped; the last event of a call. A call that ends without one stopped for an unknown reason.</summary>
 public sealed record Stopped(StopReason Reason) : ModelEvent;
+
+/// <summary>
+/// The model gateway is trying again after a failure partway through a reply (REL-01): everything before this event is
+/// void, and the reply starts over. Usage already reported was spent and stays counted.
+/// </summary>
+public sealed record ReplyRestarted : ModelEvent;
+
+/// <summary>
+/// The model gateway moved to a fallback profile because the one before it stayed unavailable (MDL-04). The events that
+/// follow are the fallback's.
+/// </summary>
+/// <param name="Name">The fallback's name in <c>models</c>.</param>
+/// <param name="Profile">The fallback.</param>
+/// <param name="Failure">Why the profile before it was given up on.</param>
+public sealed record FallbackUsed(string Name, Configuration.ModelProfile Profile, ModelFailure Failure) : ModelEvent;

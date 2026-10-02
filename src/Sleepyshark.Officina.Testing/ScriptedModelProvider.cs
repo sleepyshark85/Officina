@@ -20,6 +20,8 @@ public sealed class ScriptedModelProvider : IModelProvider, IHistoryShortener
 
     public ProviderCapabilities Capabilities { get; init; } = ProviderCapabilities.None;
 
+    public ProviderCapabilities CapabilitiesOf(string model) => Capabilities;
+
     /// <summary>The requests received so far, in order.</summary>
     public IReadOnlyList<ModelRequest> Requests
     {
@@ -49,6 +51,16 @@ public sealed class ScriptedModelProvider : IModelProvider, IHistoryShortener
         }
 
         return this;
+    }
+
+    /// <summary>
+    /// Adds a call that fails with this failure (MDL-05), after streaming these events if there are any, as an error that
+    /// arrives mid-stream does.
+    /// </summary>
+    public ScriptedModelProvider Fail(ModelFailure failure, TimeSpan? retryAfter = null, params ModelEvent[] streamedFirst)
+    {
+        ArgumentNullException.ThrowIfNull(streamedFirst);
+        return Reply([.. streamedFirst, new Failing(new ModelCallException(failure, retryAfter: retryAfter))]);
     }
 
     /// <summary>Adds a reply that asks for these tool calls, each with its arguments as JSON.</summary>
@@ -105,7 +117,14 @@ public sealed class ScriptedModelProvider : IModelProvider, IHistoryShortener
         {
             await Task.Yield();
             ct.ThrowIfCancellationRequested();
+            if (modelEvent is Failing failing)
+            {
+                throw failing.Exception;
+            }
+
             yield return modelEvent;
         }
     }
+
+    private sealed record Failing(ModelCallException Exception) : ModelEvent;
 }

@@ -275,7 +275,7 @@ public class HistoryTests
     /// <summary>A provider without a mechanism of its own to shorten history.</summary>
     private sealed class Unshortening : IModelProvider
     {
-        public ProviderCapabilities Capabilities => ProviderCapabilities.None;
+        public ProviderCapabilities CapabilitiesOf(string model) => ProviderCapabilities.None;
 
         public IAsyncEnumerable<ModelEvent> StreamAsync(ModelRequest request, CancellationToken ct) => throw new NotSupportedException();
     }

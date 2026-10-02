@@ -28,4 +28,8 @@ public sealed record ModelProfile
 
     [Setting("Any other setting the provider declares for the model, such as a temperature, as text.", Example = """{ "temperature": "0.2" }""")]
     public IReadOnlyDictionary<string, string> Settings { get; init; } = new Dictionary<string, string>();
+
+    [Setting("Other profiles, by name in `models`, to use in order when this one stays unavailable or overloaded after its retries. Each is offered the same tools as the slot, so it must support them. A fallback's own fallbacks are not used. Using one is recorded.",
+        Example = """["fast"]""")]
+    public IReadOnlyList<string> Fallbacks { get; init; } = [];
 }

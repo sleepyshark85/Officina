@@ -37,6 +37,7 @@ public sealed partial record OfficinaOptions : IValidatableObject
         foreach (var (name, provider) in Providers)
         {
             errors = errors.Concat(Names([name], "providers")).Concat(Annotations(provider, $"providers.{name}"))
+                .Concat(Annotations(provider.Retry, $"providers.{name}.retry"))
                 .Concat(provider.ApiKey is null ? [] : Annotations(provider.ApiKey, $"providers.{name}.apiKey"))
                 .Concat(provider.Prices.SelectMany(price => Annotations(price.Value, $"providers.{name}.prices.{price.Key}")));
         }
@@ -44,7 +45,7 @@ public sealed partial record OfficinaOptions : IValidatableObject
         foreach (var (name, profile) in Models)
         {
             errors = errors.Concat(Names([name], "models")).Concat(Annotations(profile, $"models.{name}")).Concat(ProviderExists(name, profile))
-                .Concat(Priced(name, profile));
+                .Concat(Priced(name, profile)).Concat(Fallbacks(name, profile));
         }
 
         foreach (var (name, agent) in Agents)
@@ -388,6 +389,13 @@ public sealed partial record OfficinaOptions : IValidatableObject
         profile.Provider is null || Providers.ContainsKey(profile.Provider)
             ? []
             : [Missing($"models.{name}.provider", "provider", profile.Provider, "providers", Providers.Keys)];
+
+    /// <summary>MDL-04: a fallback is another profile.</summary>
+    private IEnumerable<ConfigurationError> Fallbacks(string name, ModelProfile profile) =>
+        References($"models.{name}.fallbacks", "model profile", profile.Fallbacks.Where(fallback => fallback != name), "models", Models.Keys)
+            .Concat(profile.Fallbacks.Contains(name)
+                ? [new ConfigurationError(ValidationPhase.References, $"models.{name}.fallbacks", "a profile cannot be its own fallback.", "Name another profile.")]
+                : []);
 
     /// <summary>MDL-09: cost budgets always exist (INV-07), so each model needs a price to be counted against them.</summary>
     private IEnumerable<ConfigurationError> Priced(string name, ModelProfile profile) =>

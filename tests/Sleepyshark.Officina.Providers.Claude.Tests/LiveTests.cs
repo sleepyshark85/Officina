@@ -38,7 +38,7 @@ public sealed class LiveTests
     [Fact]
     public Task The_recorded_turn_replays_offline_exactly() => AssertTurnAsync(HttpRecording.Replay(Recording), "test-key");
 
-    private static async Task AssertTurnAsync(HttpClient http, string key)
+    private static async Task AssertTurnAsync(HttpMessageHandler http, string key)
     {
         var ct = TestContext.Current.CancellationToken;
         var secrets = new KnownSecrets(new InMemorySecretSource(new Dictionary<string, string> { ["ANTHROPIC_API_KEY"] = key }));

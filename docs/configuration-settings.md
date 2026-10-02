@@ -11,8 +11,8 @@ It lists the settings the code has today. Settings that later slices add are spe
 | `$schema` | text |  | The JSON Schema of the file, for editor completion. Files only. |  |
 | `formatVersion` | whole number | `1` | The configuration format version. Unknown versions are rejected. | `1` |
 | `project` | section | `{"values":{}}` | The project's identity, and values usable in placeholders. | `{"name":"invoice-api"}` |
-| `providers` | named entries | `{"claude":{"apiKey":{"secret":"ANTHROPIC_API_KEY"},"prices":{"claude-fable-5-1":{"input":10,"output":50,"cacheRead":0.25,"cacheWrite5m":12.5,"cacheWrite1h":20},"claude-opus-5-5":{"input":4,"output":20,"cacheRead":0.2,"cacheWrite5m":5,"cacheWrite1h":8},"claude-opus-5":{"input":5,"output":25,"cacheRead":0.5,"cacheWrite5m":6.25,"cacheWrite1h":10},"claude-sonnet-5-5":{"input":2,"output":10,"cacheRead":0.2,"cacheWrite5m":2.5,"cacheWrite1h":4},"claude-haiku-4-5":{"input":1,"output":5,"cacheRead":0.1,"cacheWrite5m":1.25,"cacheWrite1h":2}}}}` | Model providers, by name. | `{"claude":{"apiKey":{"secret":"ANTHROPIC_API_KEY"}}}` |
-| `models` | named entries | `{"default":{"provider":"claude","model":"claude-opus-5-5","toolChoice":"auto","settings":{}}}` | Model profiles, by name. Agents refer to them by name. | `{"strong":{"effort":"high"}}` |
+| `providers` | named entries | `{"claude":{"apiKey":{"secret":"ANTHROPIC_API_KEY"},"prices":{"claude-fable-5-1":{"input":10,"output":50,"cacheRead":0.25,"cacheWrite5m":12.5,"cacheWrite1h":20},"claude-opus-5-5":{"input":4,"output":20,"cacheRead":0.2,"cacheWrite5m":5,"cacheWrite1h":8},"claude-opus-5":{"input":5,"output":25,"cacheRead":0.5,"cacheWrite5m":6.25,"cacheWrite1h":10},"claude-sonnet-5-5":{"input":2,"output":10,"cacheRead":0.2,"cacheWrite5m":2.5,"cacheWrite1h":4},"claude-haiku-4-5":{"input":1,"output":5,"cacheRead":0.1,"cacheWrite5m":1.25,"cacheWrite1h":2}},"retry":{"maxAttempts":5,"initialDelay":"00:00:01","maxDelay":"00:01:00"}}}` | Model providers, by name. | `{"claude":{"apiKey":{"secret":"ANTHROPIC_API_KEY"}}}` |
+| `models` | named entries | `{"default":{"provider":"claude","model":"claude-opus-5-5","toolChoice":"auto","settings":{},"fallbacks":[]}}` | Model profiles, by name. Agents refer to them by name. | `{"strong":{"effort":"high"}}` |
 | `agents` | named entries | `{}` | Agent definitions, by name. | `{"extractor":{"instructions":"Extract the invoice number."}}` |
 | `toolServers` | named entries | `{}` | External tool servers (MCP), by name. Tools use their tools with `mcp:<server>/<tool>` sources. | `{"github":{"command":"github-mcp-server","args":["stdio"]}}` |
 | `tools` | named entries | `{}` | Tools, by the name the model sees. | `{"create_issue":{"source":"extension:Acme.CreateIssue","gates":["issue-dedupe"]}}` |
@@ -39,6 +39,8 @@ It lists the settings the code has today. Settings that later slices add are spe
 |---|---|---|---|---|
 | `apiKey` | section |  | The provider's credential, as the name of a secret, which is read when it is used. | `{"secret":"ANTHROPIC_API_KEY"}` |
 | `prices` | named entries | `{}` | Prices per million tokens, by model id, for reporting cost and enforcing cost budgets. Every model a profile uses needs one; the `claude` provider ships the prices of current models, and a configured price overrides the shipped values it sets. | `{"claude-opus-5-5":{"input":4,"output":20,"cacheRead":0.2,"cacheWrite5m":5,"cacheWrite1h":8}}` |
+| `retry` | section | `{"maxAttempts":5,"initialDelay":"00:00:01","maxDelay":"00:01:00"}` | How failed calls are retried, for every agent that calls this provider. | `{"maxAttempts":5,"initialDelay":"00:00:01"}` |
+| `maxConcurrentCalls` | whole number, ≥ 1 |  | The most calls to this provider in flight at once, across all agents: the account's share of the provider's rate limit. Calls over it wait their turn, the team lead's first. Unset means no limit. | `8` |
 
 ## `models.<name>`
 
@@ -50,6 +52,7 @@ It lists the settings the code has today. Settings that later slices add are spe
 | `maxOutputTokens` | whole number, ≥ 1 |  | The most tokens one reply may have. Unset uses the provider's default. | `64000` |
 | `toolChoice` | `"auto"`, `"none"` | `"auto"` | Whether the model may call tools. | `"auto"` |
 | `settings` | named entries | `{}` | Any other setting the provider declares for the model, such as a temperature, as text. | `{"temperature":"0.2"}` |
+| `fallbacks` | list | `[]` | Other profiles, by name in `models`, to use in order when this one stays unavailable or overloaded after its retries. Each is offered the same tools as the slot, so it must support them. A fallback's own fallbacks are not used. Using one is recorded. | `["fast"]` |
 
 ## `agents.<name>`
 
@@ -183,6 +186,14 @@ It lists the settings the code has today. Settings that later slices add are spe
 | `cacheRead` | number, ≥ 0 | `0` | USD per million tokens read from the cache. | `0.2` |
 | `cacheWrite5m` | number, ≥ 0 | `0` | USD per million tokens written to the cache for five minutes. | `5` |
 | `cacheWrite1h` | number, ≥ 0 | `0` | USD per million tokens written to the cache for an hour. | `8` |
+
+## `providers.<name>.retry`
+
+| Setting | Allowed values | Default | Description | Example |
+|---|---|---|---|---|
+| `maxAttempts` | whole number, ≥ 1 | `5` | How many times a call is made in all, the first included, when it fails as transient or rate-limited. 1 means no retries. When the attempts are used up, the next fallback is tried. | `5` |
+| `initialDelay` | time span (`hh:mm:ss` or `d.hh:mm:ss`) | `"00:00:01"` | How long to wait before the first retry, as `hh:mm:ss`. Each retry waits twice as long as the one before, up to `maxDelay`. If the provider asks for a longer wait, that is used instead. | `"00:00:01"` |
+| `maxDelay` | time span (`hh:mm:ss` or `d.hh:mm:ss`) | `"00:01:00"` | The longest wait the progression reaches, as `hh:mm:ss`. A wait the provider asks for is not cut short by it. | `"00:01:00"` |
 
 ## `agents.<name>.pattern`
 

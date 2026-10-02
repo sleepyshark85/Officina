@@ -23,10 +23,18 @@ public sealed class ModelCallException : Exception
 
     /// <param name="failure">What kind of failure it is.</param>
     /// <param name="innerException">The provider's own exception.</param>
-    public ModelCallException(ModelFailure failure, Exception? innerException = null)
-        : base($"The model call failed: {failure}.", innerException) => Failure = failure;
+    /// <param name="retryAfter">How long the provider asks callers to wait before the next call; null when it does not say.</param>
+    public ModelCallException(ModelFailure failure, Exception? innerException = null, TimeSpan? retryAfter = null)
+        : base($"The model call failed: {failure}.", innerException)
+    {
+        Failure = failure;
+        RetryAfter = retryAfter;
+    }
 
     public ModelFailure Failure { get; }
+
+    /// <summary>How long the provider asks callers to wait before the next call (REL-01); null when it does not say.</summary>
+    public TimeSpan? RetryAfter { get; }
 }
 
 public enum ModelFailure

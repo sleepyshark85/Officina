@@ -3,6 +3,7 @@ using Sleepyshark.Officina.Core.Configuration;
 using Sleepyshark.Officina.Core.Extensibility;
 using Sleepyshark.Officina.Core.Messages;
 using Sleepyshark.Officina.Core.Tools;
+using Sleepyshark.Officina.Testing;
 using static Sleepyshark.Officina.Providers.Claude.Tests.Recordings;
 
 namespace Sleepyshark.Officina.Providers.Claude.Tests;
@@ -139,6 +140,31 @@ public sealed class ClaudeProviderTests : IDisposable
         var failure = await Assert.ThrowsAsync<ModelCallException>(() => AnswerAsync(200, $"[{Start}, {Error("overloaded_error", "Overloaded")}]"));
 
         Assert.Equal(ModelFailure.Transient, failure.Failure);
+    }
+
+    // REL-01: the response's Retry-After is the failure's, for the model gateway to respect.
+    [Fact]
+    public async Task A_wait_the_response_asks_for_comes_with_the_failure()
+    {
+        await File.WriteAllTextAsync(temporary, $$"""[{ "status": 429, "retryAfter": 7, "response": {{Error("rate_limit_error", "Slow down.")}} }]""", TestContext.Current.CancellationToken);
+        using var provider = Replay(temporary);
+
+        var failure = await Assert.ThrowsAsync<ModelCallException>(() => StreamAsync(provider, new ModelRequest(Profile, [], "Answer.", [Message.User("Hi.")], [])));
+
+        Assert.Equal((ModelFailure.RateLimited, TimeSpan.FromSeconds(7)), (failure.Failure, failure.RetryAfter));
+    }
+
+    // MDL-06: Haiku 4.5 and Sonnet 5 take no system message in the middle of a conversation.
+    [Theory]
+    [InlineData("claude-opus-5-5", true)]
+    [InlineData("claude-fable-5-1", true)]
+    [InlineData("claude-sonnet-5-5", false)]
+    [InlineData("claude-haiku-4-5", false)]
+    public void Capabilities_depend_on_the_model(string model, bool turnScoped)
+    {
+        using var provider = new ClaudeProvider(ProviderOptions.Claude, new InMemorySecretSource(new Dictionary<string, string>()));
+
+        Assert.Equal((4, turnScoped), (provider.CapabilitiesOf(model).CacheBoundaries, provider.CapabilitiesOf(model).TurnScopedMessages));
     }
 
     // CLD-08, HIST-04: so the turn shortens the history.

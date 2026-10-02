@@ -288,7 +288,7 @@ public class HumanInteractionTests
     {
         public TaskCompletionSource Called { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        public ProviderCapabilities Capabilities => ProviderCapabilities.None;
+        public ProviderCapabilities CapabilitiesOf(string model) => ProviderCapabilities.None;
 
         public async IAsyncEnumerable<ModelEvent> StreamAsync(ModelRequest request, [EnumeratorCancellation] CancellationToken ct)
         {

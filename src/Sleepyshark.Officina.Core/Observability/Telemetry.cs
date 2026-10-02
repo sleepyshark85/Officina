@@ -24,6 +24,7 @@ public static class Telemetry
     private static readonly Counter<long> Iterations = Meter.CreateCounter<long>("officina.iterations", "{iteration}", "Model calls of turns.");
     private static readonly Counter<long> ToolCalls = Meter.CreateCounter<long>("officina.tool.calls", "{call}", "Tool calls, by outcome.");
     private static readonly Counter<long> Handoffs = Meter.CreateCounter<long>("officina.handoffs", "{handoff}", "Turns handed off, by reason.");
+    private static readonly Counter<long> Fallbacks = Meter.CreateCounter<long>("officina.fallbacks", "{fallback}", "Model calls served by a fallback profile.");
     private static readonly Counter<long> Checks = Meter.CreateCounter<long>("officina.checks", "{check}", "Checks run, by whether they passed.");
 
     internal static Activity? StartTurn(ToolContext context) => Start($"invoke_agent {context.Agent}", ActivityKind.Internal, context, "invoke_agent");
@@ -99,6 +100,16 @@ public static class Telemetry
         {
             Handoffs.Add(1, new TagList { { "gen_ai.agent.name", context.Agent }, { "officina.handoff.reason", handoffReason } });
         }
+    }
+
+    /// <summary>The model gateway moved to a fallback profile (MDL-04, OBS-02).</summary>
+    internal static void FallbackUsed(Activity? activity, ToolContext context, string provider, string model, string failure)
+    {
+        activity?.SetTag("gen_ai.request.model", model).SetTag("officina.fallback.reason", failure);
+        Fallbacks.Add(1, new TagList
+        {
+            { "gen_ai.provider.name", provider }, { "gen_ai.request.model", model }, { "gen_ai.agent.name", context.Agent }, { "officina.fallback.reason", failure },
+        });
     }
 
     /// <summary>An output check ran; its pass rate is the share that passed (OBS-02).</summary>
