@@ -214,6 +214,7 @@ public class TaskBoardTests
         var refused = (await RunAsync(without, "submit", """{ "id": "t1" }""", Context)).Content;
 
         Assert.Contains("check tests no longer exists in the configuration.", refused, StringComparison.Ordinal);
+        Assert.Equal(TaskState.InProgress, (await TaskAsync("t1")).State);
     }
 
     // The work's task must be on the board.
