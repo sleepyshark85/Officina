@@ -33,3 +33,6 @@ MUSTs still to verify; S21 is not done while any is listed here.
 | Requirement | Waits for |
 |---|---|
 | TEST-31 | The live benchmark run, on Linux and Windows, which the owner starts (S21 part 1). Its goals, suites, references and runner are tested offline |
+| CFG-17 | A gap: nothing detects the build and test commands (there is no `sof init`). Tests name CFG-17 only for its safe defaults. The owner decides: build detection, or change the requirement |
+| TASK-08 | A gap for `sof`: the core's `TaskBoard` lets the owner add and change tasks, but `sof`'s console only shows the board. The owner decides: add console commands, or accept the core API |
+| STO-01 | A gap: artifacts are rows in the SQLite file, not files on disk. The owner decides: store them as files, or change the requirement |

@@ -742,4 +742,5 @@ None at revision 2. Raised during the build, for the owner to decide at revision
 - Readings of three MUSTs, which [`verification.md`](docs/plan/verification.md) records: CFG-01, CAP-01 and TASK-02.
 - Proposed as not in v1, with reasons in [S21](docs/plan/S21-hardening.md): CLD-11 (SHOULD), HITL-07 (MAY) and SEC-03 (MAY).
 - §4.3 lists masking as replaceable; the design keeps it in the core, not replaceable in v1.
-- The other gaps between these requirements and what is built are listed in the plan's open follow-ups.
+- Three MUSTs are not met as written, which [`verification.md`](docs/plan/verification.md) lists as pending: CFG-17 (no
+  command detection), TASK-08 (`sof` cannot change tasks; the core can) and STO-01 (artifacts are SQLite rows, not files).

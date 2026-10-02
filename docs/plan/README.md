@@ -7,8 +7,8 @@ Slices `REQUIREMENTS.md` (revision 2) into deliverable work.
 Last updated 2026-10-02.
 
 - **Done:** every slice, S00a to S20, and S21's five parts. S21 stays `doing` only for the live TEST-31 benchmark run, its
-  last acceptance criterion. `check_coverage.py` passes; `check_verification.py` lists TEST-31 as pending and three
-  readings for the owner.
+  last acceptance criterion. `check_coverage.py` passes; `check_verification.py` lists TEST-31 and three MUST gaps
+  (CFG-17, TASK-08, STO-01) as pending, and three readings for the owner.
 - **For the owner, next:**
   1. Run the live benchmark on Linux and Windows: a pilot first, then the full set, then `report.py` over both
      ([`benchmark/`](../../benchmark/README.md)). It is estimated at about $1,200 for both systems.
@@ -20,11 +20,14 @@ Last updated 2026-10-02.
      result of its own (S21 part 5).
   5. Confirm the readings of CFG-01, CAP-01 and TASK-02 ([`verification.md`](verification.md)), or change them at
      revision 3, with the other questions in REQUIREMENTS.md §13.
-  6. Sign off the M0 design review of `REQUIREMENTS.md`, `CONFIGURATION.md` and `DESIGN.md`.
+  6. Decide the three MUST gaps in [`verification.md`](verification.md): CFG-17 (`sof` does not detect the build and
+     test commands), TASK-08 (`sof`'s console cannot change tasks) and STO-01 (artifacts are SQLite rows, not files).
+     Build each, or change it at revision 3. The configuration reference §17 keeps their spec.
+  7. Sign off the M0 design review of `REQUIREMENTS.md`, `CONFIGURATION.md` and `DESIGN.md`.
 - **Open follow-ups**, each waiting for a case or for the owner:
-  - Requirements not fully met by `sof`: it does not detect the build and test commands (CFG-17; there is no
-    `sof init`); its console shows the task board but cannot add, edit, reprioritise, reassign or cancel tasks, which
-    the core's `TaskBoard` can (TASK-08); and artifacts are rows in the SQLite file, not files on disk (STO-01).
+  - Flaky test: `ModelGatewayTests.A_fallback_serves_the_call_when_the_primary_stays_unavailable_and_the_switch_is_recorded`
+    listens with a process-wide `MeterListener`, so it can hear the fallbacks of `HistoryTests` running in parallel.
+    Filter on a model only it uses, or run it in a non-parallel collection (a separate PR).
   - Masking: tokens are numbered per run, but history is kept across runs, so validation refuses a history strategy
     other than `none` for an agent with a `receivesMaskedValues` tool while masking is on. Keeping the token table with
     the conversation would lift that. Tokens from before a crash are not restored on resume.

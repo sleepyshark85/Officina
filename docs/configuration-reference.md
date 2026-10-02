@@ -6,10 +6,26 @@ setting, with its default and an example, is in the generated [settings referenc
 Schema [`officina.schema.json`](officina.schema.json) (CFG-15, DOC-01). Where this page and the settings reference differ,
 the settings reference is right: it is generated from the code.
 
-**Not built in v1** (S21 records why): file includes (`{ "file": … }`), size values, a provider `type` other than its
-name, `baseUrl`, Message Batches (CLD-11), the condition roots `checks.<name>`, `outcome`, `stopReason` and `task`,
-per-agent `capabilities` and `policies`, settings for gates and knowledge sources, loading extension assemblies from
-configuration, and `sof init`.
+**Not built in v1.** For the open MUSTs below, §17 keeps the spec. The rest wait for a known case (principle 13) unless a
+reason is given:
+
+- Spec kept in §17: per-agent `capabilities` and `policies` (CFG-01, CAP-01, readings for the owner), `sof init` with
+  command detection (CFG-17), and `operations.storage` with an artifacts folder (STO-01).
+- `baseUrl`, Message Batches (CLD-11) and the condition roots `checks.<name>`, `outcome` and `stopReason`: S21 records
+  why. The `task` root: S18 records why.
+- `operations.secrets.source`: `sof` reads environment variables. `operations.events.store` and `storeModelText`:
+  replaced by `storage.unstoredEvents`. `operations.telemetry.traces`, `metrics` and `logContent`: telemetry is always
+  produced, the host picks exporters, and content is never logged.
+- `capabilities.workspace.type`, `root` and `baseline`: the workspace is the git repository's top folder and its checked-out
+  branch.
+- `set:` and `builtin:` entries in tool sets: a tool set lists names in `tools`.
+- The built-in gates `requires-record`, `requires-check-passed`, `requires-task-status` (S18 records why), `route-to` and
+  `rate-limit`; gates and knowledge sources have no `settings`. Edit safety is the workspace's own, not a gate.
+- File includes (`{ "file": … }`), size values, a provider `type` other than its name, and loading extension assemblies
+  from configuration (hosts register extensions in code).
+
+Renamed from earlier drafts: `run.entry` is `sof run --agent`, `budget.agent` is `budget.total`, and `budget.task` is
+`capabilities.taskBoard.budget`.
 
 ---
 
@@ -478,10 +494,10 @@ Only these change during a run, through the host's run control (the `sof run` co
 | What | How in `sof` |
 |---|---|
 | `run.permissionMode` | `mode <name>`. Changes gate decisions only; the tools offered never change (TOOL-03) |
-| Going past the run budget | The `runBudgetExceeded` sign-off |
+| Going past the run budget | The `runBudgetExceeded` sign-off: approved, the run goes on with another budget of the same size |
 | Owner messages | `tell <agent> <text>`, delivered at the agent's next iteration (HITL-03) |
 | Approvals, answers and sign-offs | `approve`, `deny`, `change`, `answer` (HITL-02, HITL-04) |
-| Pausing, resuming and cancelling | `pause`, `resume`, `cancel` (RUN-06) |
+| Pausing, resuming and cancelling | `pause`, `resume`, `cancel`; Ctrl+C also cancels the run cleanly (RUN-06) |
 
 No agent can change any setting (INV-10). Built-in tools cannot, extension tools get no access to configuration, and the
 configuration files are read-only to agents' file tools and commands. A command could still create a new one, such as
@@ -543,6 +559,9 @@ Dependencies checked at validation (CAP-03):
 | `humanInteraction` | `human.ask_owner`; `projectMemory.approveBy: owner` |
 | `sandbox` | `checks.<name>.command` |
 | `knowledge` | any `knowledge` source |
+
+`sof`'s own extensions need their capabilities too: the `workspace.*` tools need `workspace`, and the `sandbox.*` tools and
+the `sandbox.commandRules` gate need `sandbox`.
 
 ---
 
@@ -765,3 +784,18 @@ An application using the coding team needs only:
 | ING-01…06 | §10 |
 | SBX-01…05, WS-02, WS-05, WS-08, MEM-04, MEM-05 | §9 |
 | STO-01, PRIV-01, EVT-05, OBS-01…03 | §12 |
+
+---
+
+## 17. Not built in v1: spec for open requirements
+
+Kept so the shape is known if the owner decides to build them at revision 3.
+
+- **Per-agent capabilities and policies (CFG-01, CAP-01).** An agent's `capabilities` lists which of the enabled
+  capabilities it uses, such as `["workspace", "sandbox", "taskBoard"]`; unset, it uses all. Listing one that is not
+  enabled is a CAP-03 error. An agent's `policies`, such as `{ "gates": ["tests-first"] }`, adds gates for all its tools.
+- **`sof init` (CFG-17).** Writes the coding team's `sof.json`, asking only for the build and test commands, and detects
+  them where the project already has them, for example in a `.csproj` or `package.json`.
+- **`operations.storage` (STO-01).** `{ "type": "builtin:sqlite", "path": ".sof/state.db", "artifacts": ".sof/artifacts" }`:
+  `builtin:sqlite`, `builtin:memory` or `extension:<id>`, with artifacts as files in their own folder, kept in the
+  project directory unless configured otherwise.
