@@ -92,6 +92,23 @@ public sealed partial class ConfigCommandTests : IDisposable
             error);
     }
 
+    // The model provider runs its own tools, so sof run does not ask them for a gate; validate agrees.
+    [Fact]
+    public async Task Validate_does_not_ask_a_provider_tool_for_a_gate()
+    {
+        sof.Write("sof.json", """
+            {
+              "agents": { "a": { "instructions": "Search.", "tools": ["all"] } },
+              "tools": { "web": { "source": "provider:web_search", "kind": "write", "reason": "The model searches the web itself." } },
+              "toolSets": { "all": ["web"] }
+            }
+            """);
+
+        var (_, _, error) = await sof.RunAsync("config", "validate");
+
+        Assert.DoesNotContain("no gate", error, StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task Validate_accepts_a_valid_configuration()
     {

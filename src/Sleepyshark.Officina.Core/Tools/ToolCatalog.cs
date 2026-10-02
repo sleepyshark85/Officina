@@ -201,7 +201,7 @@ internal sealed class ToolCatalog
     /// <param name="options">The configuration, which has no other errors.</param>
     /// <param name="tools">The application's tools, by id, which <c>extension:</c> sources name; only their descriptors are read.</param>
     internal static IReadOnlyList<ConfigurationError> MissingGates(OfficinaOptions options, IReadOnlyDictionary<string, ITool> tools) =>
-        [.. options.Tools.Select(tool => MissingGate(new CatalogTool(
+        [.. options.Tools.Where(tool => tool.Value.ProviderTool() is null).Select(tool => MissingGate(new CatalogTool(
             tool.Key, tool.Value,
             tool.Value.BuiltinTool() is { } builtin ? Builtin(builtin, tool.Value, new Dictionary<string, ICheck>(), null!) // only the descriptor is read
                 : tool.Value.ExtensionId() is { } id ? tools.GetValueOrDefault(id) : null,

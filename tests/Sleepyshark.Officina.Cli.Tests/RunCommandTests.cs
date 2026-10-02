@@ -100,6 +100,21 @@ public sealed class RunCommandTests : IDisposable
         Assert.Contains("Cancelled", report, StringComparison.OrdinalIgnoreCase);
     }
 
+    // Ctrl+C while the run is still starting ends with one line, not a stack trace.
+    [Fact]
+    public async Task Ctrl_C_before_the_run_has_started_says_so_and_exits_as_not_completed()
+    {
+        using var ctrlC = new CancellationTokenSource();
+        await ctrlC.CancelAsync();
+        sof.Cancel = ctrlC.Token;
+
+        var (exitCode, output, error) = await sof.RunAsync("run", "--input", "Pick a database.");
+
+        Assert.Equal(ExitCodes.NotCompleted, exitCode);
+        Assert.Equal("cancelled before the run started.\n", error);
+        Assert.DoesNotContain("Run ", output, StringComparison.Ordinal);
+    }
+
     // The process ends this long after Ctrl+C, so the run has its whole run.cancelWithin to stop; System.CommandLine's default is 2 seconds.
     [Fact]
     public void The_process_waits_for_a_cancelled_run_for_as_long_as_the_run_may_take()

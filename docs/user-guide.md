@@ -117,7 +117,7 @@ While it runs, type these at the console. Numbers come from `status`.
 | `memory`, `memory approve <n> [reason]`, `memory reject <n> <reason>` | Review project memory proposals |
 
 **To stop a run, press Ctrl+C or type `cancel`.** Both stop it cleanly: the run has `run.cancelWithin` (10 seconds by
-default) to stop, is recorded as cancelled, and its report prints.
+default) to stop, is recorded as cancelled, and its report prints. A second Ctrl+C does not end the process sooner.
 
 Exit codes: 0 done; 1 configuration errors, or a failure while starting; 2 usage error; 3 the run ended without
 completing (handed off, rejected or failed).
