@@ -1,6 +1,6 @@
 # S16 — Human interaction and CLI
 
-**Milestone:** M5 · **Size:** M · **Depends on:** S04, S08 · **Issue:** [#18](https://github.com/sleepyshark85/Officina/issues/18) · **Status:** doing (part 1 done; S16b left)
+**Milestone:** M5 · **Size:** M · **Depends on:** S04, S08 · **Issue:** [#18](https://github.com/sleepyshark85/Officina/issues/18) · **Status:** done
 
 ## Goal
 
@@ -17,6 +17,7 @@ The owner in the loop, through the `sof` CLI.
 - [x] The CLI shows each agent's status, what waits for the owner, and the cost so far.
 - [x] Cancellation stops everything within the configured time.
 - [x] The test kit has an in-memory workspace behind `IWorkspace`, the interface the `workspace.*` tools use (TEST-01, moved from S15).
+- [x] `sof run` connects the tool servers and the Claude provider, and gives each agent a working copy and sandbox tools when their capabilities are on.
 
 ## Notes
 
@@ -27,13 +28,21 @@ The owner in the loop, through the `sof` CLI.
   needs no sign-off by default (HITL-04), and a tool's `approval` covers it when wanted.
 - The pause and cancel controls act per agent on the runner (`Pause`, `Resume`, `Cancel`); the host's cancellation
   token cancels the whole run. A cancelled turn that does not stop within `run.cancelWithin` is left behind.
-- The `workspace.*` tools (read, search, edit, write) live in Core over `IWorkingCopy`, so the test kit's
-  `InMemoryWorkspace` drives them; `IWorkspace` has only opening and closing working copies until S18 (integration)
+- The `workspace.*` tools (read, search, edit, write, delete and move) live in Core over `IWorkingCopy`, so the test kit's
+  `InMemoryWorkspace` drives them; `IWorkspace` has only opening and closing working copies until S20 (integration)
   and S19 (snapshots) need more.
 - HITL-07 (a MAY: rating results) moved to S21.
 
-Left to S16b (part 2, a second pull request that closes #18): wiring the workspace, sandbox and tool servers into `sof run` —
-connecting the tool servers, a working copy and `SandboxTools` per agent disposed when it ends (SBX-03), the sandbox
-tools and command rules gate as built-ins, probing the sandbox once at startup (SBX-07), the workspace and sandbox tools
-only when their capability is on (CAP-02), `workspace.delete_file` and `workspace.move_file`, `baselineChecks` naming
-checks (WS-02), and showing the integration queue (WS-09).
+Part 2 (S16b) wired `sof run`:
+- It connects the tool servers and registers the Claude provider, reading their secrets through the runner's `KnownSecrets`, so they
+  are removed from what tools return (INV-06).
+- With the workspace on, it opens the git workspace and registers the `workspace.*` tools (now with `delete_file` and `move_file`). With
+  the sandbox on, it also registers the `sandbox.*` tools and the `extension:sandbox.commandRules` gate. They are `extension:` ids
+  that `sof` registers, not `builtin:` ones, and a tool or gate of a capability that is off is an error (CAP-02).
+- Each agent gets a working copy and its own `SandboxTools` when it first calls one of those tools (`ToolCall.Agent` tells a shared tool
+  which agent called). They end with the run (SBX-03). The machine's sandbox is probed once, before the workspace opens, and a machine
+  that cannot sandbox stops the command (SBX-07).
+- `status` shows the integration queue's length and longest wait (WS-09). The capability check (CAP-02) is part of loading the
+  configuration, so `config validate` reports it too (CFG-06).
+- Moved to S20, which integrates: the CLI's board view (TASK-08), the command checks, and `capabilities.workspace.baselineChecks` (WS-02).
+  Moved to S21: `config dry-run` with the `workspace.*` and `sandbox.*` tools (CFG-12).

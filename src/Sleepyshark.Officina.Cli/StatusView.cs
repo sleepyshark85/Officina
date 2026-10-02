@@ -1,4 +1,5 @@
 using Sleepyshark.Officina.Core.Events;
+using Sleepyshark.Officina.Workspace;
 
 namespace Sleepyshark.Officina.Cli;
 
@@ -7,7 +8,8 @@ namespace Sleepyshark.Officina.Cli;
 /// happens; <see cref="Print"/> shows everything at a glance, with what waits for the owner.
 /// </summary>
 /// <param name="output">Where the lines go.</param>
-internal sealed class StatusView(TextWriter output)
+/// <param name="queue">The integration queue's length and waiting time, when the workspace is on (WS-09).</param>
+internal sealed class StatusView(TextWriter output, Func<IntegrationQueueStatus>? queue = null)
 {
     private readonly Dictionary<string, string> doing = new(StringComparer.Ordinal);
     private decimal cost;
@@ -43,7 +45,7 @@ internal sealed class StatusView(TextWriter output)
     }
 
     /// <summary>Every agent's status, what waits for the owner, and the cost so far.</summary>
-    public void Print(OwnerQueue queue)
+    public void Print(OwnerQueue owner)
     {
         lock (doing)
         {
@@ -52,9 +54,14 @@ internal sealed class StatusView(TextWriter output)
                 output.WriteLine($"{agent}: {now}");
             }
 
-            foreach (var (number, request) in queue.Waiting)
+            foreach (var (number, request) in owner.Waiting)
             {
                 output.WriteLine($"waiting for you: #{number} {OwnerQueue.Describe(request)}");
+            }
+
+            if (queue?.Invoke() is { } integration)
+            {
+                output.WriteLine($"integration queue: {integration.Length} waiting, longest wait {integration.LongestWait:hh\\:mm\\:ss}");
             }
 
             output.WriteLine($"cost so far: ${cost:0.00}");

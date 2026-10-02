@@ -1,6 +1,7 @@
 using System.Threading.Channels;
 using Microsoft.Extensions.Time.Testing;
 using Sleepyshark.Officina.Core.Extensibility;
+using Sleepyshark.Officina.Testing;
 
 namespace Sleepyshark.Officina.Cli.Tests;
 
@@ -15,6 +16,8 @@ internal sealed class Sof : IDisposable
     public Dictionary<string, string> Variables { get; } = [];
 
     public Dictionary<string, IModelProvider> Providers { get; } = [];
+
+    public FakeSandbox? Sandbox { get; set; }
 
     public FakeTimeProvider Time { get; } = new();
 
@@ -34,7 +37,7 @@ internal sealed class Sof : IDisposable
     {
         using var error = new StringWriter();
         var start = Out.ToString().Length;
-        var host = new SofEnvironment(Out, error, Directory, Variables) { In = In, Providers = Providers, Time = Time };
+        var host = new SofEnvironment(Out, error, Directory, Variables) { In = In, Providers = Providers, Sandbox = Sandbox, Time = Time };
         var exitCode = await SofCommandLine.RunAsync(args, host);
         return (exitCode, Out.ToString()[start..].ReplaceLineEndings("\n"), error.ToString().ReplaceLineEndings("\n"));
     }
@@ -43,7 +46,27 @@ internal sealed class Sof : IDisposable
     {
         Out.Dispose();
         In.Dispose();
+
+        // Git makes its object files read-only, which stops Windows deleting them.
+        foreach (var file in System.IO.Directory.EnumerateFiles(Directory, "*", new EnumerationOptions { RecurseSubdirectories = true, AttributesToSkip = 0 }))
+        {
+            File.SetAttributes(file, FileAttributes.Normal);
+        }
+
         System.IO.Directory.Delete(Directory, recursive: true);
+    }
+
+    /// <summary>Makes the directory a real git repository with <c>main</c> checked out and everything in it committed.</summary>
+    public Sof Commit()
+    {
+        foreach (var arguments in new[] { "init --initial-branch=main", "config user.name owner", "config user.email owner@example.com", "add --all", "commit -m Start" })
+        {
+            using var git = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("git", arguments) { WorkingDirectory = Directory, RedirectStandardOutput = true })!;
+            git.StandardOutput.ReadToEnd();
+            git.WaitForExit();
+        }
+
+        return this;
     }
 
     /// <summary>Output that a test can wait on until it shows some text.</summary>

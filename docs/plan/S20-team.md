@@ -21,4 +21,8 @@ The lead, roles, parallel agents and the coding team preset.
 
 Remove the "the team pattern cannot run yet" stub (S13), and run `samples/team` in `SampleTests` (TEST-06).
 
+From earlier slices: add the CLI's board view (TASK-08, from S18); the command checks integration needs and the
+`capabilities.workspace.baselineChecks` setting that names them (WS-02, from S06 and S16); a working copy per task, disposed
+when the task ends (from S16); and a working copy of their own for fan-out branches of one agent that change files.
+
 Write the TEST-31 benchmark goals and their hidden tests during this slice.

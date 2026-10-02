@@ -74,6 +74,34 @@ public sealed class InMemoryWorkspace : IWorkspace
             }
         }
 
+        public Task DeleteAsync(string path, CancellationToken ct)
+        {
+            lock (files)
+            {
+                _ = Unchanged(path) ?? throw new WorkspaceException($"{path} does not exist.");
+                files.Remove(path);
+                seen.Remove(path);
+                return Task.CompletedTask;
+            }
+        }
+
+        public Task MoveAsync(string path, string newPath, CancellationToken ct)
+        {
+            lock (files)
+            {
+                var text = Unchanged(path) ?? throw new WorkspaceException($"{path} does not exist.");
+                if (files.ContainsKey(newPath))
+                {
+                    throw new WorkspaceException($"{newPath} already exists.");
+                }
+
+                files.Remove(path);
+                seen.Remove(path);
+                seen[newPath] = files[newPath] = text;
+                return Task.CompletedTask;
+            }
+        }
+
         /// <summary>The file's text, which must be what the agent last saw; null when there is no such file.</summary>
         private string? Unchanged(string path) =>
             !files.TryGetValue(path, out var text) ? null

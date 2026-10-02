@@ -3,6 +3,8 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Sleepyshark.Officina.Cli\Sleepyshark.Officina.Cli.csproj" />
     <ProjectReference Include="..\..\src\Sleepyshark.Officina.Testing\Sleepyshark.Officina.Testing.csproj" />
+    <!-- Tool servers are a system boundary (DESIGN.md §11): the tests start this one as a separate process. -->
+    <ProjectReference Include="..\Sleepyshark.Officina.Mcp.TestServer\Sleepyshark.Officina.Mcp.TestServer.csproj" />
   </ItemGroup>
 
   <ItemGroup>

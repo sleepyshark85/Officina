@@ -17,4 +17,8 @@ namespace Sleepyshark.Officina.Core.Extensibility;
 /// <param name="Output">Publishes a line of the tool's output as it is produced, as an event, with known secrets removed.</param>
 public sealed record ToolCall(
     JsonElement Arguments, Caller Caller, string IdempotencyKey, ISecretSource Secrets, RunRecord Record, TaskBoard? Board,
-    Func<string, CancellationToken, ValueTask> Output);
+    Func<string, CancellationToken, ValueTask> Output)
+{
+    /// <summary>The agent that makes the call, set by the host's pipeline, so a tool shared by agents can act for each (such as in its own working copy).</summary>
+    public string Agent { get; init; } = "";
+}

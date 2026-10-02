@@ -87,7 +87,7 @@ It lists the settings the code has today. Settings that later slices add are spe
 
 | Setting | Allowed values | Default | Description | Example |
 |---|---|---|---|---|
-| `source` | text |  | Where the tool comes from: `extension:<id>` for a tool the application registers, `mcp:<server>/<tool>` for a tool of a server in `toolServers`, `knowledge:<name>` to search a source in `knowledge`, `provider:<name>` for a tool the model provider runs itself, or `builtin:<name>` for a built-in tool: `record.propose_fact`, `record.propose_finding`, `record.propose_decision` and `record.cite` propose changes to the run record, and `artifact.page` reads an artifact, such as a trimmed result in full. Required. | `"extension:Acme.CreateIssue"` |
+| `source` | text |  | Where the tool comes from: `extension:<id>` for a tool the application registers (`sof` registers `workspace.read_file`, `workspace.search`, `workspace.edit_file`, `workspace.write_file`, `workspace.delete_file` and `workspace.move_file` when the workspace is on, and `sandbox.run`, `sandbox.start_process`, `sandbox.read_process_output` and `sandbox.stop_process` when the sandbox is on), `mcp:<server>/<tool>` for a tool of a server in `toolServers`, `knowledge:<name>` to search a source in `knowledge`, `provider:<name>` for a tool the model provider runs itself, or `builtin:<name>` for a built-in tool: `record.propose_fact`, `record.propose_finding`, `record.propose_decision` and `record.cite` propose changes to the run record, and `artifact.page` reads an artifact, such as a trimmed result in full. Required. | `"extension:Acme.CreateIssue"` |
 | `kind` | `"read"`, `"write"` |  | `write` for a tool that changes something. Unset uses the tool's declaration, and `write` for a tool server's tools; a tool that declares itself `write` stays `write`. | `"write"` |
 | `permissions` | list | `[]` | Permissions the caller must hold to call the tool. | `["issues:write"]` |
 | `gates` | list | `[]` | The tool's own gates, by name in `gates`. They run after the gates for all tools. | `["issue-dedupe"]` |
@@ -108,7 +108,7 @@ It lists the settings the code has today. Settings that later slices add are spe
 
 | Setting | Allowed values | Default | Description | Example |
 |---|---|---|---|---|
-| `use` | text |  | What the gate runs: `builtin:require-approval` or `builtin:deny`, which act when `when` holds; `builtin:untrusted-content-approval`, which asks when `when` holds and the agent has read untrusted content; or `extension:<id>` for a gate the application registers. Required. | `"builtin:require-approval"` |
+| `use` | text |  | What the gate runs: `builtin:require-approval` or `builtin:deny`, which act when `when` holds; `builtin:untrusted-content-approval`, which asks when `when` holds and the agent has read untrusted content; or `extension:<id>` for a gate the application registers (`sof` registers `extension:sandbox.commandRules`, the sandbox's command rules, when the sandbox is on). Required. | `"builtin:require-approval"` |
 | `when` | section |  | For the built-in gates: the condition over the tool's arguments under which the gate acts. Unset means always. | `{"field":"args.branch","in":["main","master"]}` |
 
 ## `policies`

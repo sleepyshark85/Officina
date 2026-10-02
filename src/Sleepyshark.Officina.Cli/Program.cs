@@ -7,5 +7,4 @@ foreach (DictionaryEntry variable in Environment.GetEnvironmentVariables())
     variables[(string)variable.Key] = (string?)variable.Value ?? "";
 }
 
-// The Claude provider (S11) joins Providers when it is built.
 return await SofCommandLine.RunAsync(args, new SofEnvironment(Console.Out, Console.Error, Environment.CurrentDirectory, variables) { In = Console.In });

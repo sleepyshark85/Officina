@@ -15,5 +15,8 @@ public sealed record SofEnvironment(TextWriter Out, TextWriter Error, string Wor
     /// <summary>The model providers <c>sof run</c> can use, by their name in <c>providers</c>.</summary>
     public IReadOnlyDictionary<string, IModelProvider> Providers { get; init; } = new Dictionary<string, IModelProvider>();
 
+    /// <summary>Where commands run; the machine's own sandbox when null (SBX-07).</summary>
+    public ISandbox? Sandbox { get; init; }
+
     public TimeProvider Time { get; init; } = TimeProvider.System;
 }

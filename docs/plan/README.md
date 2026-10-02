@@ -6,13 +6,12 @@ Status: draft · 2026-10-01 · slices `REQUIREMENTS.md` (revision 2) into delive
 
 Last updated 2026-10-02.
 
-- **Done:** M0 spikes S00a and S00b; M1 slices S01 (walking skeleton) and S02 (configuration); S03 (tool pipeline); S04 (turn loop); S05 (context and caching); S06 (run record and output); S07 (history and conversation store); S08 (events, storage and observability); S09 (triggers and admission); S10 (MCP and knowledge); S11 (Claude provider); S13 (loop patterns); S14 (git workspace); S15 (sandbox); S18 (task board); S16 part 1 (human interaction).
+- **Done:** M0 spikes S00a and S00b; M1 slices S01 (walking skeleton) and S02 (configuration); S03 (tool pipeline); S04 (turn loop); S05 (context and caching); S06 (run record and output); S07 (history and conversation store); S08 (events, storage and observability); S09 (triggers and admission); S10 (MCP and knowledge); S11 (Claude provider); S13 (loop patterns); S14 (git workspace); S15 (sandbox); S16 (human interaction and CLI); S18 (task board).
 - **Waiting:** the M0 design review sign-off on `REQUIREMENTS.md`, `CONFIGURATION.md` and `DESIGN.md`.
-- **Doing:** S16, part 2 (S16b): wiring the workspace, sandbox and tool servers into `sof run` (see the follow-ups).
-- **Next:** S16b, then S12 (model gateway) and S17.
+- **Next:** S12 (model gateway) and S17 (project memory).
 - **Open follow-ups:**
   - S02 kept a `formatVersion` check, though only version 1 exists. Consider removing the setting
-    until a version 2 exists (principle 13). S06 keeps `output.schema` as JSON text, and S13 too; when S16 wants the
+    until a version 2 exists (principle 13). S06 keeps `output.schema` as JSON text, and S13 too; if a later slice wants the
     reference's `{ "file": … }` form, that is a format change.
   - S02 rejects a plain-text `apiKey`, because the binder would otherwise skip it silently and
     fall back to the default secret reference. Kept on purpose.
@@ -20,8 +19,6 @@ Last updated 2026-10-02.
     `checks.<name>`, `outcome` and `stopReason` (configuration reference §6, marked not built) wait for a case that needs them.
   - The configuration binder adds a file's items to a list setting's default instead of replacing it, so
     `storage.unstoredEvents` set in a file keeps `textGenerated`. S06 made `context.record` unset by default to avoid it.
-  - S16b builds the Claude provider and the tool servers in `sof run` with the runner's `KnownSecrets`, so the API key
-    and the servers' `env` and `headers` are removed from what tools return (INV-06).
   - S07 left the run record (S06), memory (S17) and tasks (S18) to join the shortening test (HIST-03, TEST-15);
     S21 makes the Claude provider an `IHistoryShortener` (CLD-06); the capability slices (S16–S20) add their switches and
     dependencies to `CapabilitiesOptions`. Its Notes list the rest.
@@ -31,15 +28,17 @@ Last updated 2026-10-02.
     (S06, S07, S09, S12, S16, S17, S19, S20); S13 added steps.
   - S11 moved MDL-05 to S12, which retries classified failures, and CLD-06 and CLD-11 (the Claude provider's feature
     switches and Message Batches) to S21. Its Notes list the rest.
-  - S16b wires the workspace, sandbox and tool servers into `sof run`: it connects the tool servers; gives each agent
-    its working copy and its `SandboxTools`, disposed when the agent, task or run ends (SBX-03); wires the sandbox
-    tools and the command rules gate as built-ins; probes the sandbox once at startup (SBX-07); offers the workspace
-    and sandbox tools only when their capability is on (CAP-02); adds `workspace.delete_file` and
-    `workspace.move_file`; lets `capabilities.workspace.baselineChecks` name checks from `checks` (WS-02); and shows
-    the integration queue (WS-09).
   - S20 also adds pausing the whole run (RUN-06); S16 pauses one agent at a time.
-  - S20 adds the plan-approval sign-off and the model's tool to hand off to a human (EGR-04). S18 and S19 add
-    integration and snapshots to `IWorkspace`.
+  - S20 (from S16): `sof run` gives each agent one working copy, named `<run>-<agent>`, opened when the agent first
+    calls a `workspace.*` or `sandbox.*` tool and disposed when the run ends. S20 gives each task its own and disposes it
+    when the task ends. Nothing integrates in `sof run` before then, so the CLI shows an empty integration queue.
+  - S20 (from S16, S18 and S06): the CLI's board view (TASK-08); the command checks integration needs and the
+    `capabilities.workspace.baselineChecks` setting that names them (WS-02). Fan-out branches of one agent share that
+    agent's working copy while they run at the same time; S20 gives branches their own when they change files.
+  - S21 (from S16): `sof config dry-run` cannot run a configuration that uses the `workspace.*` or `sandbox.*` tools. It
+    should register them over the test kit's `InMemoryWorkspace` and `FakeSandbox` (CFG-12).
+  - S20 adds the plan-approval sign-off and the model's tool to hand off to a human (EGR-04). S20 adds
+    integration and S19 snapshots to `IWorkspace`.
   - S21 (from S16): when a cancelled turn outlives `run.cancelWithin`, the agent's lock is released, so its next turn
     can overlap with the left-behind one, and the left-behind turn reports zero cost.
   - S19 cleans up what the Windows sandbox leaves outside a cleaned-up working copy: its AppContainer
@@ -117,7 +116,7 @@ A slice is **done** when:
 | [S13](S13-loop-patterns.md) | Loop patterns | M4 | M | S04, S06 | [#15](https://github.com/sleepyshark85/Officina/issues/15) | done |
 | [S14](S14-git-workspace.md) | Git workspace | M5 | M | S03 | [#16](https://github.com/sleepyshark85/Officina/issues/16) | done |
 | [S15](S15-sandbox.md) | Sandbox | M5 | M ×2 | S00a, S14 | [#17](https://github.com/sleepyshark85/Officina/issues/17) | done |
-| [S16](S16-human-interaction-cli.md) | Human interaction and CLI | M5 | M | S04, S08 | [#18](https://github.com/sleepyshark85/Officina/issues/18) | doing |
+| [S16](S16-human-interaction-cli.md) | Human interaction and CLI | M5 | M | S04, S08 | [#18](https://github.com/sleepyshark85/Officina/issues/18) | done |
 | [S17](S17-project-memory.md) | Project memory | M5 | S | S05, S16 | [#19](https://github.com/sleepyshark85/Officina/issues/19) | todo |
 | [S18](S18-task-board.md) | Task board | M6 | M | S06, S08 | [#20](https://github.com/sleepyshark85/Officina/issues/20) | done |
 | [S19](S19-checkpoints-long-runs.md) | Checkpoints and long runs | M6 | M | S08, S14 | [#21](https://github.com/sleepyshark85/Officina/issues/21) | todo |

@@ -97,11 +97,17 @@ public sealed class RunCommandTests : IDisposable
     [Fact]
     public async Task A_provider_this_build_does_not_have_is_reported()
     {
-        sof.Providers.Clear();
+        sof.Write("sof.json", """
+            {
+              "providers": { "other": { "prices": { "m": { "input": 1 } } } },
+              "models": { "default": { "provider": "other", "model": "m" } },
+              "agents": { "dev": { "instructions": "Work." } }
+            }
+            """);
 
         var (exitCode, _, error) = await sof.RunAsync("run", "--input", "Go.");
 
-        Assert.Equal((ExitCodes.Usage, "error: provider \"claude\" is not available in this build of sof.\n"), (exitCode, error));
+        Assert.Equal((ExitCodes.Usage, "error: provider \"other\" is not available in this build of sof.\n"), (exitCode, error));
     }
 
     private static ContentReceived Call(string tool, string arguments) =>
