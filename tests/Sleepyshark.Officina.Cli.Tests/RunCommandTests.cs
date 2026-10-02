@@ -42,6 +42,8 @@ public sealed class RunCommandTests : IDisposable
 
         var run = sof.RunAsync("run", "--input", "Pick a database.");
         await sof.Out.WaitForAsync("#1 dev asks to run note", Ct);
+        // The status view applies the run's events as it reads them, which may be just after the request is printed.
+        await sof.Out.WaitForAsync("[dev] waits for you: Approval note", Ct);
         sof.In.Type("status");
         await sof.Out.WaitForAsync("cost so far: $1.50", Ct);
         sof.In.Type("approve 1");

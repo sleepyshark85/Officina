@@ -82,21 +82,25 @@ listing runs) and the S02 notes stay in the plan's follow-ups.
 ## Part 2: load, latency, coverage and verification
 
 `tests/Sleepyshark.Officina.Load.Tests` runs the real runner against the scripted model, one test at a time; CI runs it in a
-step of its own after the other tests, and it prints what it measured. Measured on the development machine:
+step of its own after the other tests, and it prints what it measured. Measured on the development machine, and on CI's
+Linux and Windows runners where they differ much:
 
 | Requirement | Test | Target | Measured |
 |---|---|---|---|
 | LAT-01 | 50 turns of 20 model calls, each asking for a tool that reads or one that writes behind a gate, storage in memory; the time inside the model provider taken out of each iteration | p95 < 5 ms | p95 0.15 ms, p99 0.22 ms |
 | LAT-02 | 100 replies whose first text is timed from the provider handing it over to the caller reading the run's events, on SQLite | < 50 ms (p95 and p99 asserted) | p95 0.06 ms |
-| TEST-30, storage | The LAT-01 turns on SQLite with the conversation store on; each write timed | reported | an event, an audit entry or a conversation turn: p50 5.7 ms, p95 6.3 ms; an iteration with its writes: p50 20 ms |
-| SCALE-02 | One team run on SQLite: the lead plans 500 tasks, 8 developers take them, the first 8 held until all 8 work at once | 8 at once, 500 done | 8 at once, 500 done in 87 s (174 ms a task, 7,031 events) |
-| SCALE-03 | The same run keeps its pace: the last 100 tasks take at most half as long again as the second 100 | steady | 15.5 s against 14.8 s |
+| TEST-30, storage | The LAT-01 turns on SQLite with the conversation store on; each write timed | reported | a write (an event, an audit entry or a conversation turn), p50: 5.7 ms here, 1.4 ms on CI's Linux, 25 ms on CI's Windows; an iteration with its writes, p50: 20 ms, 5.6 ms, 100 ms |
+| SCALE-02 | One team run: the lead plans 500 tasks, 8 developers take them, the first 8 held until all 8 work at once; storage in memory | 8 at once, 500 done | 8 at once, 500 done in 9 s (18 ms a task, 7,031 events). On SQLite: 87 s here, 82 s on CI's Linux, 331 s on CI's Windows |
+| SCALE-03 | The same run keeps its pace: the last 100 tasks take at most half as long again as the second 100 | steady | 1.13 s against 1.11 s; on SQLite the pace varied with the disk by up to 60% on CI, with no trend in the core |
 | SCALE-01 | 1,000 callers' conversations with one agent, started at once, then each a second turn whose history is restored from the conversation store | all complete, restored | 2,000 turns in 0.7 s, in memory |
 
 - What the numbers say: the core's own time is far below its targets; SQLite's writes dominate a run's time. Each write opens a
   connection of its own (pooling is off, so nothing keeps the file open) and syncs, about 6 ms here, of which about 1 ms is the
-  sync: a held connection would cut a write to about a quarter. No requirement sets a target for it, and a model call takes
-  seconds, so it is reported, not changed (principle 13). The owner may set a target if `sof`'s overhead matters.
+  sync: a held connection would cut a write to about a quarter. On Windows a write takes 25 ms, so a run of 500 tasks spends five
+  and a half minutes in storage, against hours of model calls. No requirement sets a target for it, so it is reported, not
+  changed (principle 13); the owner may set one if `sof`'s overhead on Windows matters. The scale tests use storage in memory, so
+  they measure the core, are steady on CI, and take seconds; the first version ran SCALE-02 on SQLite, and on CI its pace check
+  failed once on the disk's variance alone.
 - SCALE-01 is a SHOULD for the document Q&A application after v1. Turns of one agent run one at a time (LOOP-02), so its
   conversations are served in turn; serving them at once is that application's work. SCALE-03's 48 hours are not run: the test
   measures the pace over a long run's worth of work, 1,000 model calls and 7,000 events, and the heap after it.

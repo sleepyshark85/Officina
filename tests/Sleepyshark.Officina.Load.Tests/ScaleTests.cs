@@ -5,7 +5,6 @@ using Sleepyshark.Officina.Core.Events;
 using Sleepyshark.Officina.Core.Extensibility;
 using Sleepyshark.Officina.Core.Running;
 using Sleepyshark.Officina.Core.Tasks;
-using Sleepyshark.Officina.Storage.Sqlite;
 using Sleepyshark.Officina.Testing;
 
 namespace Sleepyshark.Officina.Load.Tests;
@@ -19,7 +18,8 @@ public class ScaleTests
     // SCALE-02, TEST-30: one run supports at least 8 agents working at once and 500 tasks on one developer machine. The lead plans
     // 500 tasks; 8 developers take them, the first 8 held until all 8 work at once, and each submits its task, which its checks
     // pass, so it is done. SCALE-03 (a SHOULD): as the run goes on, it keeps its pace; the last 100 tasks take no longer than half
-    // as much again as the second 100. The run is SQLite's, as with `sof`.
+    // as much again as the second 100. Storage is in memory, so this measures the core: SQLite's writes, which a run of `sof`
+    // adds, are measured on their own (LatencyTests), as TEST-30 asks.
     [Fact]
     public async Task One_run_supports_8_agents_working_at_once_and_500_tasks_at_a_steady_pace()
     {
@@ -54,34 +54,26 @@ public class ScaleTests
                 .CallTools(("hold", "{}"), ("submit", $$"""{ "id": "t{{n}}" }""")).Reply("Submitted.");
         }
 
-        var folder = Directory.CreateTempSubdirectory("officina-load-");
-        try
-        {
-            var storage = await SqliteStorage.OpenAsync(Path.Combine(folder.FullName, "sof.db"), Ct);
-            var runner = Measure.Runner(Team(Agents), model, storage, tools);
-            var work = new Work("team", "Build it.");
-            var started = Stopwatch.GetTimestamp();
-            var result = await runner.RunAsync(work, Ct);
-            var seconds = Measure.Milliseconds(Stopwatch.GetTimestamp() - started) / 1000;
+        var storage = new InMemoryStorage();
+        var runner = Measure.Runner(Team(Agents), model, storage, tools);
+        var work = new Work("team", "Build it.");
+        var started = Stopwatch.GetTimestamp();
+        var result = await runner.RunAsync(work, Ct);
+        var seconds = Measure.Milliseconds(Stopwatch.GetTimestamp() - started) / 1000;
 
-            Assert.Equal((AgentOutcome.Completed, "All done."), (result.Outcome, result.Output));
-            var tasks = await runner.Board(null, work.RunId).ReadAsync(Ct);
-            Assert.Equal(Tasks, tasks.Count(task => task.State == TaskState.Done));
-            var events = await ((IStorage)storage).Events.ReadAsync(null, work.RunId, 0, Ct);
-            var peak = Peak(events);
-            var done = events.Where(e => e.Payload is TaskStatusChanged { Status: TaskState.Done }).Select(e => e.Time).Order().ToList();
-            var (second, last) = ((done[199] - done[100]).TotalSeconds, (done[^1] - done[^100]).TotalSeconds);
-            Measure.Write(string.Create(CultureInfo.InvariantCulture,
-                $"SCALE-02: {Tasks} tasks done by {Agents} developers, at most {peak} at once, in {seconds:0.0} s ({seconds * 1000 / Tasks:0.0} ms a task), {events.Count} events, {model.Requests.Count} model calls"));
-            Measure.Write(string.Create(CultureInfo.InvariantCulture,
-                $"SCALE-03: the second 100 tasks took {second:0.0} s, the last 100 {last:0.0} s; managed heap {GC.GetTotalMemory(forceFullCollection: true) / 1024 / 1024} MB at the end"));
-            Assert.Equal(Agents, peak);
-            Assert.True(last <= 1.5 * second + 1, "The run slowed down as it went on.");
-        }
-        finally
-        {
-            folder.Delete(recursive: true);
-        }
+        Assert.Equal((AgentOutcome.Completed, "All done."), (result.Outcome, result.Output));
+        var tasks = await runner.Board(null, work.RunId).ReadAsync(Ct);
+        Assert.Equal(Tasks, tasks.Count(task => task.State == TaskState.Done));
+        var events = await storage.Events.ReadAsync(null, work.RunId, 0, Ct);
+        var peak = Peak(events);
+        var done = events.Where(e => e.Payload is TaskStatusChanged { Status: TaskState.Done }).Select(e => e.Time).Order().ToList();
+        var (second, last) = ((done[199] - done[100]).TotalSeconds, (done[^1] - done[^100]).TotalSeconds);
+        Measure.Write(string.Create(CultureInfo.InvariantCulture,
+            $"SCALE-02: {Tasks} tasks done by {Agents} developers, at most {peak} at once, in {seconds:0.0} s ({seconds * 1000 / Tasks:0.0} ms a task), {events.Count} events, {model.Requests.Count} model calls"));
+        Measure.Write(string.Create(CultureInfo.InvariantCulture,
+            $"SCALE-03: the second 100 tasks took {second:0.00} s, the last 100 {last:0.00} s; managed heap {GC.GetTotalMemory(forceFullCollection: true) / 1024 / 1024} MB at the end"));
+        Assert.Equal(Agents, peak);
+        Assert.True(last <= 1.5 * second + 0.5, "The run slowed down as it went on.");
     }
 
     // SCALE-01 (a SHOULD, for the document Q&A application after v1), TEST-30: one process holds 1,000 concurrent short
