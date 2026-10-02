@@ -28,6 +28,8 @@ public sealed record CoreEvent(string RunId, string Agent, string? Step, long Se
 [JsonDerivedType(typeof(ModelCallEnded), "modelCallEnded")]
 [JsonDerivedType(typeof(ModelFallback), "modelFallback")]
 [JsonDerivedType(typeof(CacheHitWarning), "cacheHitWarning")]
+[JsonDerivedType(typeof(BudgetWarning), "budgetWarning")]
+[JsonDerivedType(typeof(CheckRan), "checkRan")]
 [JsonDerivedType(typeof(ToolCallStarted), "toolCallStarted")]
 [JsonDerivedType(typeof(ToolCallEnded), "toolCallEnded")]
 [JsonDerivedType(typeof(ToolOutput), "toolOutput")]
@@ -59,8 +61,13 @@ public sealed record TurnEnded(AgentOutcome Outcome, HandoffReason? Reason) : Ev
 /// <summary>Model text, as it is generated (MDL-07).</summary>
 public sealed record TextGenerated(string Text) : EventPayload;
 
-/// <summary>A model call ended, with what it used and cost.</summary>
-public sealed record ModelCallEnded(StopReason Stop, Usage Usage, decimal Cost) : EventPayload;
+/// <summary>A model call ended, with what it used and cost, and the model and task they are counted under (RUN-10).</summary>
+/// <param name="Stop">Why the call stopped.</param>
+/// <param name="Usage">What it used.</param>
+/// <param name="Cost">What it cost, in USD.</param>
+/// <param name="Model">The model that served it, which is a fallback's when the gateway used one.</param>
+/// <param name="Task">The task the work is for, if any.</param>
+public sealed record ModelCallEnded(StopReason Stop, Usage Usage, decimal Cost, string? Model = null, string? Task = null) : EventPayload;
 
 /// <summary>The model gateway served a call with a fallback profile because the one before it stayed unavailable (MDL-04).</summary>
 /// <param name="Profile">The fallback's name in <c>models</c>.</param>
@@ -71,6 +78,15 @@ public sealed record ModelFallback(string Profile, string Provider, string Model
 
 /// <summary>A model call read less of its input from the cache than configured (COST-01).</summary>
 public sealed record CacheHitWarning(CacheWarning Warning) : EventPayload;
+
+/// <summary>A budget is nearly used up: it has used the share of one of its limits that the warning is set at (EVT-01, RUN-05).</summary>
+/// <param name="Level">Whose budget: the run's, the agent's, the pattern's, the turn's or the task's.</param>
+/// <param name="Limit">Which limit: iteration, tool-call, token, cost or time.</param>
+/// <param name="Used">The share of the limit used, such as 0.8.</param>
+public sealed record BudgetWarning(string Level, string Limit, double Used) : EventPayload;
+
+/// <summary>A check ran, on an agent's output or a task's work, and passed or failed (RUN-11).</summary>
+public sealed record CheckRan(string Check, bool Passed, string? Task = null) : EventPayload;
 
 /// <summary>A tool call reached the tool pipeline. Known secrets are removed from the arguments (INV-06).</summary>
 public sealed record ToolCallStarted(string Tool, string Arguments) : EventPayload;

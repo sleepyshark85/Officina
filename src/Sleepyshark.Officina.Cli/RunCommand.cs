@@ -2,6 +2,7 @@ using System.CommandLine;
 using System.Text.Json;
 using Sleepyshark.Officina.Core.Configuration;
 using Sleepyshark.Officina.Core.Extensibility;
+using Sleepyshark.Officina.Core.Reports;
 using Sleepyshark.Officina.Core.Running;
 using Sleepyshark.Officina.Core.Tools;
 using Sleepyshark.Officina.Mcp;
@@ -64,13 +65,25 @@ internal static class RunCommand
         var options = configuration.Options;
         var directory = shared.Directory(parse, host);
         var state = Directory.CreateDirectory(Path.Combine(directory, WorkspaceOptions.StateFolder)).FullName;
+
+        // RUN-04: a run is held by one process at a time, so a run that is still going is not resumed or rolled back from another.
+        FileStream? held;
+        try
+        {
+            held = new FileStream(Path.Combine(state, $"{runId}.lock"), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None, 1, FileOptions.DeleteOnClose);
+        }
+        catch (IOException)
+        {
+            host.Error.WriteLine($"error: run {runId} is held by another process, so it is still running.");
+            return ExitCodes.Invalid;
+        }
+
+        await using var _ = held;
         if (existing)
         {
             // RUN-04: a run that is stored has the agent it was started with.
-            var stored = await ((IStorage)await SqliteStorage.OpenAsync(Path.Combine(state, "sof.db"), ct)).Runs.ReadAsync(null, runId, ct);
-            if (stored is null)
+            if (await StoredRunAsync(state, runId, host, ct) is not { } stored)
             {
-                host.Error.WriteLine($"error: there is no run {runId}.");
                 return ExitCodes.Invalid;
             }
 
@@ -130,12 +143,35 @@ internal static class RunCommand
             host.Error.WriteLine($"warning: cleanup after the run failed, so some of it is left behind: {string.Join("; ", exception.InnerExceptions.Select(inner => inner.Message))}");
             return ran;
         }
-        catch (Exception exception) when (starting && exception is ConfigurationException or WorkspaceException or InvalidOperationException or KeyNotFoundException or IOException or HttpRequestException)
+        catch (Exception exception) when (starting && exception is ConfigurationException or WorkspaceException or InvalidOperationException or InvalidDataException or KeyNotFoundException or IOException or HttpRequestException)
         {
             // Only what stops the run from starting; a failure during the run is not a configuration error.
             host.Error.WriteLine($"error: {exception.Message}");
             return ExitCodes.Invalid;
         }
+    }
+
+    /// <summary>
+    /// A stored run, read from the project's database; null, with the error printed, when there is none or the database is in another format.
+    /// </summary>
+    internal static async Task<StoredRun?> StoredRunAsync(string state, string runId, SofEnvironment host, CancellationToken ct)
+    {
+        var database = Path.Combine(state, "sof.db");
+        try
+        {
+            if (File.Exists(database) && await ((IStorage)await SqliteStorage.OpenAsync(database, ct)).Runs.ReadAsync(null, runId, ct) is { } stored)
+            {
+                return stored;
+            }
+
+            host.Error.WriteLine($"error: there is no run {runId}.");
+        }
+        catch (InvalidDataException exception)
+        {
+            host.Error.WriteLine($"error: {exception.Message}");
+        }
+
+        return null;
     }
 
     /// <summary>A run's id is a GUID, and the first part of its working copies' names (<see cref="WorkspaceHost"/>).</summary>
@@ -158,6 +194,12 @@ internal static class RunCommand
         output.WriteLine();
         output.WriteLine($"{name}: {result.Outcome}{(result.Handoff is { } handoff ? $" ({handoff.Reason}: {handoff.Detail})" : "")}, cost ${result.Statistics.Cost:0.00}");
         output.WriteLine(result.Output);
+        if (await RunReport.BuildAsync(session.Storage, null, session.RunId, CancellationToken.None) is { } report)
+        {
+            output.WriteLine();
+            output.Write(report.ToText()); // RUN-11
+        }
+
         return result.Outcome == AgentOutcome.Completed ? ExitCodes.Success : ExitCodes.NotCompleted;
     }
 

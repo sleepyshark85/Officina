@@ -50,6 +50,18 @@ internal sealed class TenantRows<T>
         }
     }
 
+    /// <summary>Removes the rows at the indexes that <paramref name="choose"/> picks from all the rows, in one step.</summary>
+    public void RemoveAt(Func<IReadOnlyList<(string? Tenant, T Item)>, IEnumerable<int>> choose)
+    {
+        lock (gate)
+        {
+            foreach (var index in choose(rows).Distinct().OrderDescending())
+            {
+                rows.RemoveAt(index);
+            }
+        }
+    }
+
     public void RemoveAll(Func<string?, T, bool> match)
     {
         lock (gate)

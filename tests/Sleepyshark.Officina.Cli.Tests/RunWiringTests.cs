@@ -56,7 +56,7 @@ public sealed class RunWiringTests : IDisposable
         var (exitCode, output, error) = await run;
 
         Assert.Equal((ExitCodes.Success, ""), (exitCode, error));
-        Assert.EndsWith("Done.\n", output, StringComparison.Ordinal);
+        Assert.Contains("Done.\n", output, StringComparison.Ordinal);
         var results = model.Requests[^1].History.SelectMany(message => message.Content).OfType<ToolResultContent>().Select(content => content.Text).ToList();
         Assert.Contains(results, text => text.Contains("hi", StringComparison.Ordinal));
         Assert.Contains(results, text => text.Contains("built\n[exit code 0]", StringComparison.Ordinal));

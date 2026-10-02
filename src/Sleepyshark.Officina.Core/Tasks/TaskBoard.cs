@@ -215,6 +215,7 @@ public sealed class TaskBoard
 
             var result = await checks[options.Checks[name].ExtensionId()!].RunAsync(new CheckContext(null, null, [], task), ct).ConfigureAwait(false);
             Telemetry.CheckEnded(context, name, result.Passed);
+            await events.PublishAsync(context, new CheckRan(name, result.Passed, id), ct).ConfigureAwait(false);
             if (!result.Passed)
             {
                 failed = $"check {name} failed: {string.Join("; ", result.Findings)}";

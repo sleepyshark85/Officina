@@ -75,7 +75,9 @@ internal sealed class Checkpointer(OfficinaOptions options, IStorage storage, IW
 
     /// <summary>
     /// Refuses to go back when another run has written to a conversation since the checkpoint: the conversation is shared,
-    /// and removing only this run's turns would change the prefix the other run's turns were built on.
+    /// and removing only this run's turns would change the prefix the other run's turns were built on. This check gives the
+    /// refusal before anything changes; the store's truncation repeats it as one step with the deletion, so a turn written
+    /// after this check is kept (and a rollback that finds it stops).
     /// </summary>
     /// <exception cref="InvalidOperationException">Another run's turns come after the checkpoint's.</exception>
     public async Task EnsureNoOtherRunsAsync(ToolContext context, Checkpoint to, CancellationToken ct)
@@ -105,7 +107,13 @@ internal sealed class Checkpointer(OfficinaOptions options, IStorage storage, IW
             var notUndone = Outside(Effects(audit.Skip(to.Audit)));
             foreach (var (name, count) in to.Conversations)
             {
-                await storage.Conversations.TruncateAsync(tenant, name, context.Caller.Id, count, ct).ConfigureAwait(false);
+                await storage.Conversations.TruncateAsync(tenant, name, context.Caller.Id, count, runId, ct).ConfigureAwait(false);
+                if (await storage.Conversations.CountAsync(tenant, name, context.Caller.Id, ct).ConfigureAwait(false) > count)
+                {
+                    // Another run wrote to the conversation after the check above; the store left its turns alone.
+                    throw new InvalidOperationException($"Another run has written to {name}'s conversation since checkpoint {to.Number}, so run {runId} cannot go back without removing its turns.");
+                }
+
             }
 
             await storage.Records.TruncateAsync(tenant, runId, to.Record, ct).ConfigureAwait(false);

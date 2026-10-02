@@ -317,6 +317,23 @@ public abstract class StorageContract
         Assert.Equal(0, await storage.Conversations.CountOtherRunsAfterAsync("other", "extractor", "ann", 0, "run-3", Ct));
     }
 
+    // RUN-08: the check for other runs' turns and the deletion are one step, so a turn another run wrote is never removed.
+    [Fact]
+    public async Task Going_back_leaves_the_conversation_alone_when_another_run_wrote_after_the_position()
+    {
+        var storage = await CreateAsync();
+        foreach (var run in new[] { "run-1", "run-2", "run-1" })
+        {
+            await storage.Conversations.AppendAsync("acme", Turn("ann", Message.User(run)) with { RunId = run }, Ct);
+        }
+
+        await storage.Conversations.TruncateAsync("acme", "extractor", "ann", 1, "run-1", Ct);
+        Assert.Equal(3, await storage.Conversations.CountAsync("acme", "extractor", "ann", Ct));
+
+        await storage.Conversations.TruncateAsync("acme", "extractor", "ann", 2, "run-1", Ct);
+        Assert.Equal(2, await storage.Conversations.CountAsync("acme", "extractor", "ann", Ct));
+    }
+
     // RUN-08: going back deletes what came after a position, and only there.
     [Fact]
     public async Task Going_back_deletes_the_conversation_record_and_board_after_a_position()
@@ -327,14 +344,14 @@ public abstract class StorageContract
             await storage.Records.TryAppendAsync("acme", Fact("run-1", revision), Ct);
             await storage.Records.TryAppendAsync("acme", Fact("run-2", revision), Ct);
             await storage.Tasks.TryAppendAsync("acme", Change("run-1", revision), Ct);
-            await storage.Conversations.AppendAsync("acme", Turn("ann", Message.User($"turn {revision}")), Ct);
+            await storage.Conversations.AppendAsync("acme", Turn("ann", Message.User($"turn {revision}")) with { RunId = "run-1" }, Ct);
         }
 
         await storage.Conversations.AppendAsync("acme", Turn("bob", Message.User("bob")), Ct);
 
         await storage.Records.TruncateAsync("acme", "run-1", 1, Ct);
         await storage.Tasks.TruncateAsync("acme", "run-1", 2, Ct);
-        await storage.Conversations.TruncateAsync("acme", "extractor", "ann", 1, Ct);
+        await storage.Conversations.TruncateAsync("acme", "extractor", "ann", 1, "run-1", Ct);
 
         Assert.Equal([1L], (await storage.Records.ReadAsync("acme", "run-1", Ct)).Select(entry => entry.Revision));
         Assert.Equal(3, (await storage.Records.ReadAsync("acme", "run-2", Ct)).Count);

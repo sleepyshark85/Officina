@@ -50,7 +50,7 @@ internal sealed class Steps(
     /// <summary>The run's work, as admission passed it.</summary>
     public string RunInput => work.Input;
 
-    /// <summary>Does the agent's work: its turn, or its pattern, whose budget is the agent's turn budget drawn from the run's.</summary>
+    /// <summary>Does the agent's work: its turn, or its pattern, whose budget is the agent's turn budget drawn from the agent's.</summary>
     public Task<StepResult> RunAsync(Budget budget, CancellationToken ct)
     {
         started = time.GetTimestamp();
@@ -101,7 +101,7 @@ internal sealed class Steps(
     public async Task<string?> CheckAsync(ToolContext context, IReadOnlyList<string> names, string output, CancellationToken ct)
     {
         var failed = await Turn.FailedCheckAsync(
-            context, names.Select(name => (name, checks[options.Checks[name].ExtensionId()!])), output, [.. turns.SelectMany(turn => turn.Artifacts)], ct).ConfigureAwait(false);
+            context, events, names.Select(name => (name, checks[options.Checks[name].ExtensionId()!])), output, [.. turns.SelectMany(turn => turn.Artifacts)], ct).ConfigureAwait(false);
 
         // A check sees the artifacts as tools produced them, so its findings are masked before a model sees them (ING-02).
         return failed is null ? null : context.Masker?.Mask(failed) ?? failed;

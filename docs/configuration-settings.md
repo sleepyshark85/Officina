@@ -72,7 +72,7 @@ It lists the settings the code has today. Settings that later slices add are spe
 | `context` | section | `{"operatingFacts":[],"historyCacheLifetime":"00:05:00","recordScope":"all","currentTask":true,"retrieval":{"beforeTurn":[],"handOffWhenNotCovered":false},"history":{"strategy":"none","shortening":"provider","lastTurns":10}}` | How the agent's model input is built. Required. | `{"operatingFacts":["Today is {{now:date}}."]}` |
 | `output` | section | `{"format":"text","attempts":2,"checks":[],"onCheckFailure":"handoff"}` | What the output must be before a turn completes with it. Required. | `{"format":"structured","schema":"{ \u0022type\u0022: \u0022object\u0022 }"}` |
 | `stopWhen` | section | `{"finished":true,"checksPass":false}` | When a turn is complete. They combine: the first that holds completes the turn. Required. | `{"finished":false,"finishTool":"submit_report"}` |
-| `budget` | section | `{"turn":{"iterations":50,"toolCalls":200,"tokens":3000000,"cost":5,"time":"00:45:00"}}` | The agent's budgets. They can be high, but they cannot be removed or unlimited. Required. | `{"turn":{"iterations":50,"cost":5}}` |
+| `budget` | section | `{"turn":{"iterations":50,"toolCalls":200,"tokens":3000000,"cost":5,"time":"00:45:00"},"total":{"toolCalls":10000,"tokens":100000000,"cost":25,"time":"08:00:00"}}` | The agent's budgets. They can be high, but they cannot be removed or unlimited. Required. | `{"turn":{"iterations":50,"cost":5}}` |
 | `stall` | section | `{"iterationsWithoutProgress":3}` | When a turn has stalled. Required. | `{"iterationsWithoutProgress":5}` |
 | `handOffOnPolicyGap` | boolean | `true` | Whether a turn ends in a handoff for a policy gap when every tool call of an iteration is refused. With `false`, the refusals go back to the model. | `false` |
 
@@ -259,6 +259,7 @@ It lists the settings the code has today. Settings that later slices add are spe
 | Setting | Allowed values | Default | Description | Example |
 |---|---|---|---|---|
 | `turn` | section | `{"iterations":50,"toolCalls":200,"tokens":3000000,"cost":5,"time":"00:45:00"}` | The limits of each turn, checked before every model call. A turn that reaches one ends in a handoff. Required. | `{"iterations":50,"cost":5}` |
+| `total` | section | `{"toolCalls":10000,"tokens":100000000,"cost":25,"time":"08:00:00"}` | The limits of all the agent's turns in a run together, checked before every model call. An agent that reaches one ends its turn in a handoff; the run's budget is above it. Required. | `{"cost":10,"time":"04:00:00"}` |
 
 ## `agents.<name>.stall`
 
@@ -312,6 +313,7 @@ It lists the settings the code has today. Settings that later slices add are spe
 |---|---|---|---|---|
 | `perOwner` | section |  | The limit for each owner. Anonymous callers share one. No limit when unset. | `{"permits":20,"window":"01:00:00"}` |
 | `perTenant` | section |  | The limit for each tenant. Callers without a tenant share one. No limit when unset. | `{"permits":500,"window":"01:00:00"}` |
+| `perRun` | section |  | The limit for each run: how many work items may join one run, such as a run that resumes or a team's tasks. A new run's first work item counts as one. No limit when unset. | `{"permits":100,"window":"01:00:00"}` |
 
 ## `run.budget`
 
@@ -441,6 +443,15 @@ It lists the settings the code has today. Settings that later slices add are spe
 | `tokens` | whole number, ≥ 1 | `3000000` | The most tokens a turn may use: input, output, cache reads and cache writes together. | `3000000` |
 | `cost` | number, > 0 | `5` | The most a turn may spend, in USD. | `5` |
 | `time` | time span (`hh:mm:ss` or `d.hh:mm:ss`) | `"00:45:00"` | The longest a turn may take, as `hh:mm:ss`. | `"00:45:00"` |
+
+## `agents.<name>.budget.total`
+
+| Setting | Allowed values | Default | Description | Example |
+|---|---|---|---|---|
+| `toolCalls` | whole number, ≥ 1 | `10000` | The most tool calls the agent's turns may make, including tools the provider runs itself. | `10000` |
+| `tokens` | whole number, ≥ 1 | `100000000` | The most tokens the agent's turns may use: input, output, cache reads and cache writes together. | `100000000` |
+| `cost` | number, > 0 | `25` | The most the agent's turns may spend, in USD. | `25` |
+| `time` | time span (`hh:mm:ss` or `d.hh:mm:ss`) | `"08:00:00"` | The longest the agent's turns may take, as `hh:mm:ss` or `d.hh:mm:ss`. | `"08:00:00"` |
 
 ## `policies.rateLimits.perOwner`
 

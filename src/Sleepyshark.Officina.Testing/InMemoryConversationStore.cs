@@ -29,10 +29,13 @@ public sealed class InMemoryConversationStore : IConversationStore
     public ValueTask<int> CountOtherRunsAfterAsync(string? tenant, string agent, string? owner, int count, string runId, CancellationToken ct) =>
         ValueTask.FromResult(Rows.Where(tenant, turn => turn.Agent == agent && turn.Owner == owner).Skip(count).Count(turn => turn.RunId != runId));
 
-    public ValueTask TruncateAsync(string? tenant, string agent, string? owner, int count, CancellationToken ct)
+    public ValueTask TruncateAsync(string? tenant, string agent, string? owner, int count, string runId, CancellationToken ct)
     {
-        var position = 0;
-        Rows.RemoveAll((rowTenant, turn) => rowTenant == tenant && turn.Agent == agent && turn.Owner == owner && ++position > count);
+        Rows.RemoveAt(rows =>
+        {
+            var after = Enumerable.Range(0, rows.Count).Where(i => rows[i].Tenant == tenant && rows[i].Item.Agent == agent && rows[i].Item.Owner == owner).Skip(count).ToList();
+            return after.Any(i => rows[i].Item.RunId != runId) ? [] : after;
+        });
         return ValueTask.CompletedTask;
     }
 }
