@@ -55,6 +55,25 @@ internal sealed class RealSandbox(ISandbox sandbox) : IDisposable
     }
 
     /// <summary>
+    /// SBX-01: how long the same single-threaded work takes with two cores and with half a core, which the test output reports. Half a
+    /// core gives it half the processor time of the one core it can use, so it takes about twice as long.
+    /// </summary>
+    public async Task<(TimeSpan Two, TimeSpan Half)> TimeWorkAsync(string work)
+    {
+        var times = new List<TimeSpan>();
+        foreach (var cpus in new[] { 2.0, 0.5 })
+        {
+            var started = System.Diagnostics.Stopwatch.GetTimestamp();
+            var (output, exitCode) = await RunAsync(work, limits: SandboxLimits.Default with { Cpus = cpus });
+            Assert.True(exitCode == 0, output);
+            times.Add(System.Diagnostics.Stopwatch.GetElapsedTime(started));
+        }
+
+        TestContext.Current.TestOutputHelper?.WriteLine($"The work took {times[0].TotalSeconds:0.00} s with 2 cores and {times[1].TotalSeconds:0.00} s with half a core.");
+        return (times[0], times[1]);
+    }
+
+    /// <summary>
     /// An HTTP server on the host's loopback, which a sandbox can reach only through the proxy. Its reply ends only when it
     /// closes the connection, so the client sees it end only if every hop passes the close on.
     /// </summary>

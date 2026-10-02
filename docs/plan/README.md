@@ -18,8 +18,9 @@ Last updated 2026-10-02.
   Part 4 closed the core follow-ups: a task's tokens, tool calls and time (RUN-05), step agents' own budgets, `config validate`
   reporting what `sof run` refuses, `config dry-run` with the workspace and sandbox, masking tokens refused in memory proposals, and
   a turn left behind keeping its agent's lock.
-- **Next:** S21 part 5, the sandbox follow-ups (the CPU limit on both systems, HTTPS through the proxy, the Windows tests as a
-  standard user).
+  Part 5 tested the CPU limit on both systems and HTTPS through the proxy, and prepared the Windows tests as a standard user.
+- **Waiting for the owner:** the live TEST-31 benchmark run on Linux and Windows (S21's last acceptance criterion), adding the
+  standard-user Windows tests to CI, and confirming the items S21 proposes as not in v1.
 - **Open follow-ups:** every item below that names S21 is triaged in [S21](S21-hardening.md): built in one of its parts, or
   proposed as not in v1 for the owner to confirm.
   - After S20 (fix): integration refuses a change that adds, changes or removes a protected path, since a command can create a

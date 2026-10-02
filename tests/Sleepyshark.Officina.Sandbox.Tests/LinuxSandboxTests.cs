@@ -104,6 +104,28 @@ public sealed class LinuxSandboxTests : IDisposable
         Assert.Contains("[Network: refused example.com, which is not an allowed host.]", output, StringComparison.Ordinal);
     }
 
+    // HTTPS goes through the proxy as a CONNECT tunnel, which carries whatever the client sends; the proxy checks only its host.
+    [Fact(Skip = LinuxOnly, SkipUnless = nameof(OnLinux))]
+    public async Task The_proxy_tunnels_connections_to_allowed_hosts_only()
+    {
+        using var server = new Server();
+
+        var (output, _) = await real.RunAsync($"curl -sS -m 10 -p http://127.0.0.1:{server.Port}/; curl -sS -m 10 -p http://example.com/", ["127.0.0.1"]);
+
+        Assert.Contains(Server.Greeting, output, StringComparison.Ordinal);
+        Assert.Contains("403", output, StringComparison.Ordinal);
+        Assert.Contains("[Network: refused example.com, which is not an allowed host.]", output, StringComparison.Ordinal);
+    }
+
+    // SBX-01: the processor limit holds, as a hard cap.
+    [Fact(Skip = LinuxOnly, SkipUnless = nameof(OnLinux))]
+    public async Task A_command_gets_no_more_processor_time_than_its_limit()
+    {
+        var (two, half) = await real.TimeWorkAsync("i=0; while [ $i -lt 2000000 ]; do i=$((i+1)); done");
+
+        Assert.True(half >= two * 1.5, $"Half a core took {half}, two cores {two}.");
+    }
+
     [Fact(Skip = LinuxOnly, SkipUnless = nameof(OnLinux))]
     public async Task A_command_over_its_memory_limit_is_killed()
     {
