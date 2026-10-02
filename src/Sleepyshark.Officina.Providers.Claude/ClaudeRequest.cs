@@ -12,7 +12,7 @@ using CoreRole = Sleepyshark.Officina.Core.Messages.Role;
 namespace Sleepyshark.Officina.Providers.Claude;
 
 /// <summary>
-/// Maps a model request to the Claude API (DESIGN.md §9, CLD-03): the tools, then the instructions as the system block,
+/// Maps a model request to the Claude API (DESIGN.md §9, CLD-03): the tools, then the instructions and project memory as system blocks,
 /// then the history as messages. Each cache boundary becomes a cache marker with its lifetime, and system messages in
 /// the history become mid-conversation system messages, which a turn-scoped one asks Claude to clear at the next user
 /// message. Optional fields are left out, never sent as null.
@@ -37,14 +37,19 @@ internal static class ClaudeRequest
         var profile = request.Profile;
         var markers = request.CacheBoundaries.ToDictionary(boundary => boundary.After, boundary => Marker(boundary.Lifetime));
         var cached = markers.ContainsKey(CachePoint.History) ? LastCacheable(request.History) : null;
-        var instructions = new BetaTextBlockParam { Text = request.Instructions };
+        var system = new List<BetaTextBlockParam> { Block(request.Instructions, markers.GetValueOrDefault(CachePoint.Instructions)) };
+        if (request.Memory.Length > 0)
+        {
+            system.Add(Block(request.Memory, markers.GetValueOrDefault(CachePoint.Memory)));
+        }
+
         var parameters = new MessageCreateParams
         {
             Model = profile.Model,
             MaxTokens = profile.MaxOutputTokens ?? DefaultMaxTokens,
             Tools = [.. request.Tools.Select(Tool)],
             ToolChoice = profile.ToolChoice == ToolChoice.None ? new BetaToolChoiceNone() : new BetaToolChoiceAuto(),
-            System = new List<BetaTextBlockParam> { markers.TryGetValue(CachePoint.Instructions, out var marker) ? instructions with { CacheControl = marker } : instructions },
+            System = system,
             Messages = [.. request.History.Select((message, index) => Message(message, index == cached?.Message ? (cached.Value.Block, markers[CachePoint.History]) : null))],
         };
         if (profile.Effort is not null)
@@ -71,6 +76,9 @@ internal static class ClaudeRequest
 
         return MessageCreateParams.FromRawUnchecked(parameters.RawHeaderData, parameters.RawQueryData, body);
     }
+
+    private static BetaTextBlockParam Block(string text, BetaCacheControlEphemeral? marker) =>
+        marker is null ? new BetaTextBlockParam { Text = text } : new BetaTextBlockParam { Text = text, CacheControl = marker };
 
     /// <summary>Claude keeps a cache for five minutes or an hour; a lifetime longer than five minutes gets the hour.</summary>
     private static BetaCacheControlEphemeral Marker(TimeSpan lifetime) => new() { Ttl = lifetime > TimeSpan.FromMinutes(5) ? Ttl.Ttl1h : Ttl.Ttl5m };

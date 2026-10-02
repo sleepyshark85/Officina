@@ -8,8 +8,9 @@ namespace Sleepyshark.Officina.Core.Extensibility;
 
 /// <summary>
 /// The storage extension point (STO-01): one store per kind of data, and the rules across them (PRIV-01, PRIV-02).
-/// Everything stored carries its tenant, and every read and write is limited to one tenant (SEC-02). The slices that
-/// store memory and checkpoints add their stores.
+/// Everything stored carries its tenant, and every read and write is limited to one tenant (SEC-02). The slice that
+/// stores checkpoints adds its store. Memory is a project's, an owner's or a tenant's and outlives runs, so it is not
+/// deleted with an owner's runs or expired.
 /// </summary>
 public interface IStorage
 {
@@ -26,6 +27,8 @@ public interface IStorage
     IArtifactStore Artifacts { get; }
 
     ITaskStore Tasks { get; }
+
+    IMemoryStore Memory { get; }
 
     /// <summary>Everything stored about an owner's runs and conversations, for an export on request (PRIV-02).</summary>
     ValueTask<OwnerData> ExportAsync(string? tenant, string owner, CancellationToken ct);

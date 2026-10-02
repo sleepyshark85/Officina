@@ -22,4 +22,7 @@ public interface IConversationStore
 /// <param name="Time">When the turn ended.</param>
 /// <param name="Messages">The turn's messages, in which every tool request has its result.</param>
 /// <param name="Shortened">Whether the history was shortened in this turn, so it holds the whole conversation.</param>
-public sealed record ConversationTurn(string Agent, string? Owner, DateTimeOffset Time, ImmutableArray<Message> Messages, bool Shortened);
+/// <param name="PrefixMemory">The memory revision in the conversation's prefix, which is the same in every turn of the conversation (MEM-03).</param>
+/// <param name="SeenMemory">The memory revision the conversation has been told of: its prefix, and the changes appended to the history since.</param>
+public sealed record ConversationTurn(
+    string Agent, string? Owner, DateTimeOffset Time, ImmutableArray<Message> Messages, bool Shortened, long PrefixMemory = 0, long SeenMemory = 0);

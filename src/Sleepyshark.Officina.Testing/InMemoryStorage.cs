@@ -21,6 +21,8 @@ public sealed class InMemoryStorage : IStorage
 
     public InMemoryTaskStore Tasks { get; } = new();
 
+    public InMemoryMemoryStore Memory { get; } = new();
+
     IRunStore IStorage.Runs => Runs;
 
     IConversationStore IStorage.Conversations => Conversations;
@@ -34,6 +36,8 @@ public sealed class InMemoryStorage : IStorage
     IArtifactStore IStorage.Artifacts => Artifacts;
 
     ITaskStore IStorage.Tasks => Tasks;
+
+    IMemoryStore IStorage.Memory => Memory;
 
     public ValueTask<OwnerData> ExportAsync(string? tenant, string owner, CancellationToken ct)
     {

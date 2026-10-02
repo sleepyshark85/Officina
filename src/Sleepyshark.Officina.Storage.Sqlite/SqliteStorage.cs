@@ -5,6 +5,7 @@ using Microsoft.Data.Sqlite;
 using Sleepyshark.Officina.Core.Configuration;
 using Sleepyshark.Officina.Core.Events;
 using Sleepyshark.Officina.Core.Extensibility;
+using Sleepyshark.Officina.Core.Memory;
 using Sleepyshark.Officina.Core.Messages;
 using Sleepyshark.Officina.Core.Records;
 using Sleepyshark.Officina.Core.Running;
@@ -17,10 +18,10 @@ namespace Sleepyshark.Officina.Storage.Sqlite;
 /// every statement filters by it (SEC-02). The file carries the format version of what it holds, and a file in any
 /// other version is refused rather than misread (REL-04).
 /// </summary>
-public sealed class SqliteStorage : IStorage, IRunStore, IConversationStore, IEventLog, IAuditLog, IRecordStore, IArtifactStore, ITaskStore
+public sealed class SqliteStorage : IStorage, IRunStore, IConversationStore, IEventLog, IAuditLog, IRecordStore, IArtifactStore, ITaskStore, IMemoryStore
 {
     /// <summary>The only format version this storage reads and writes.</summary>
-    public const int FormatVersion = 3;
+    public const int FormatVersion = 4;
 
     private const string Schema = """
         CREATE TABLE runs (
@@ -38,7 +39,7 @@ public sealed class SqliteStorage : IStorage, IRunStore, IConversationStore, IEv
         CREATE INDEX audit_run ON audit (tenant, run_id);
         CREATE TABLE conversations (
             position INTEGER PRIMARY KEY, tenant TEXT, owner TEXT, agent TEXT NOT NULL, time INTEGER NOT NULL,
-            shortened INTEGER NOT NULL, messages TEXT NOT NULL);
+            shortened INTEGER NOT NULL, messages TEXT NOT NULL, prefix_memory INTEGER NOT NULL, seen_memory INTEGER NOT NULL);
         CREATE INDEX conversations_owner ON conversations (tenant, owner, agent);
         CREATE TABLE record (
             tenant TEXT, run_id TEXT NOT NULL, revision INTEGER NOT NULL, agent TEXT NOT NULL, time INTEGER NOT NULL, item TEXT NOT NULL, task TEXT,
@@ -49,6 +50,10 @@ public sealed class SqliteStorage : IStorage, IRunStore, IConversationStore, IEv
         CREATE TABLE task_changes (
             tenant TEXT, run_id TEXT NOT NULL, revision INTEGER NOT NULL, by TEXT NOT NULL, time INTEGER NOT NULL, what TEXT NOT NULL,
             reason TEXT NOT NULL, tasks TEXT NOT NULL, PRIMARY KEY (run_id, revision));
+        CREATE TABLE memory_changes (
+            tenant TEXT, scope TEXT NOT NULL, revision INTEGER NOT NULL, by TEXT NOT NULL, time INTEGER NOT NULL, action TEXT NOT NULL,
+            proposal INTEGER NOT NULL, content TEXT, comment TEXT);
+        CREATE UNIQUE INDEX memory_changes_scope ON memory_changes (COALESCE(tenant, ''), scope, revision);
         """;
 
     private const string Conversation = "tenant IS $tenant AND agent = $agent AND owner IS $owner";
@@ -74,6 +79,8 @@ public sealed class SqliteStorage : IStorage, IRunStore, IConversationStore, IEv
     IArtifactStore IStorage.Artifacts => this;
 
     ITaskStore IStorage.Tasks => this;
+
+    IMemoryStore IStorage.Memory => this;
 
     /// <summary>Opens the storage in a file, creating it if it does not exist.</summary>
     /// <exception cref="InvalidDataException">The file holds data in another format version.</exception>
@@ -178,6 +185,25 @@ public sealed class SqliteStorage : IStorage, IRunStore, IConversationStore, IEv
             "SELECT * FROM task_changes WHERE tenant IS $tenant AND run_id = $run_id ORDER BY revision", ReadTaskChange, ct,
             ("$tenant", tenant), ("$run_id", runId)).ConfigureAwait(false);
 
+    async ValueTask<bool> IMemoryStore.TryAppendAsync(string? tenant, MemoryChange change, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(change);
+
+        // The unique index on (tenant, scope, revision) lets only the first of two changes with the same revision in.
+        var added = await QueryAsync(
+            "INSERT INTO memory_changes VALUES ($tenant, $scope, $revision, $by, $time, $action, $proposal, $content, $comment) ON CONFLICT DO NOTHING RETURNING revision",
+            row => row.GetInt64(0), ct,
+            ("$tenant", tenant), ("$scope", change.Scope), ("$revision", change.Revision), ("$by", change.By), ("$time", change.Time.UtcTicks),
+            ("$action", change.Action.ToString()), ("$proposal", change.Proposal),
+            ("$content", change.Content is null ? null : JsonSerializer.Serialize(change.Content, StoredJson)), ("$comment", change.Comment)).ConfigureAwait(false);
+        return added.Count == 1;
+    }
+
+    async ValueTask<IReadOnlyList<MemoryChange>> IMemoryStore.ReadAsync(string? tenant, string scope, CancellationToken ct) =>
+        await QueryAsync(
+            "SELECT * FROM memory_changes WHERE tenant IS $tenant AND scope = $scope ORDER BY revision", ReadMemoryChange, ct,
+            ("$tenant", tenant), ("$scope", scope)).ConfigureAwait(false);
+
     public async ValueTask<long> SaveAsync(string? tenant, string runId, Artifact artifact, DateTimeOffset time, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(artifact);
@@ -217,9 +243,9 @@ public sealed class SqliteStorage : IStorage, IRunStore, IConversationStore, IEv
     {
         ArgumentNullException.ThrowIfNull(turn);
         return ExecuteAsync(
-            "INSERT INTO conversations (tenant, owner, agent, time, shortened, messages) VALUES ($tenant, $owner, $agent, $time, $shortened, $messages)", ct,
+            "INSERT INTO conversations (tenant, owner, agent, time, shortened, messages, prefix_memory, seen_memory) VALUES ($tenant, $owner, $agent, $time, $shortened, $messages, $prefix_memory, $seen_memory)", ct,
             ("$tenant", tenant), ("$owner", turn.Owner), ("$agent", turn.Agent), ("$time", turn.Time.UtcTicks), ("$shortened", turn.Shortened),
-            ("$messages", JsonSerializer.Serialize(turn.Messages, StoredJson)));
+            ("$messages", JsonSerializer.Serialize(turn.Messages, StoredJson)), ("$prefix_memory", turn.PrefixMemory), ("$seen_memory", turn.SeenMemory));
     }
 
     public async ValueTask<IReadOnlyList<ConversationTurn>> ReadAsync(string? tenant, string agent, string? owner, CancellationToken ct) =>
@@ -279,7 +305,8 @@ public sealed class SqliteStorage : IStorage, IRunStore, IConversationStore, IEv
 
     private static ConversationTurn ReadTurn(SqliteDataReader row) => new(
         row.GetString(row.GetOrdinal("agent")), Text(row, "owner"), Time(row),
-        JsonSerializer.Deserialize<ImmutableArray<Message>>(row.GetString(row.GetOrdinal("messages")), StoredJson), row.GetBoolean(row.GetOrdinal("shortened")));
+        JsonSerializer.Deserialize<ImmutableArray<Message>>(row.GetString(row.GetOrdinal("messages")), StoredJson), row.GetBoolean(row.GetOrdinal("shortened")),
+        row.GetInt64(row.GetOrdinal("prefix_memory")), row.GetInt64(row.GetOrdinal("seen_memory")));
 
     private static AuditEntry ReadAuditEntry(SqliteDataReader row) => new(
         row.GetString(row.GetOrdinal("run_id")), row.GetString(row.GetOrdinal("agent")), Text(row, "caller"), row.GetString(row.GetOrdinal("tool")),
@@ -294,6 +321,11 @@ public sealed class SqliteStorage : IStorage, IRunStore, IConversationStore, IEv
         row.GetString(row.GetOrdinal("run_id")), row.GetInt64(row.GetOrdinal("revision")), row.GetString(row.GetOrdinal("by")), Time(row),
         row.GetString(row.GetOrdinal("what")), row.GetString(row.GetOrdinal("reason")),
         JsonSerializer.Deserialize<List<BoardTask>>(row.GetString(row.GetOrdinal("tasks")), StoredJson)!);
+
+    private static MemoryChange ReadMemoryChange(SqliteDataReader row) => new(
+        row.GetString(row.GetOrdinal("scope")), row.GetInt64(row.GetOrdinal("revision")), row.GetString(row.GetOrdinal("by")), Time(row),
+        Enum.Parse<MemoryAction>(row.GetString(row.GetOrdinal("action"))), row.GetInt64(row.GetOrdinal("proposal")),
+        Text(row, "content") is { } content ? JsonSerializer.Deserialize<MemoryProposal>(content, StoredJson) : null, Text(row, "comment"));
 
     private static Artifact ReadArtifact(SqliteDataReader row) => new(row.GetString(row.GetOrdinal("name")), row.GetString(row.GetOrdinal("content")));
 

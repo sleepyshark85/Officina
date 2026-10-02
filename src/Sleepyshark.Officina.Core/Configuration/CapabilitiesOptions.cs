@@ -34,6 +34,10 @@ public sealed record CapabilitiesOptions
         Example = """{ "enabled": true, "maxAttempts": 2 }""")]
     public TaskBoardOptions TaskBoard { get; init; } = new();
 
+    [Setting("Project memory: durable instructions, conventions and decisions in every agent's stable prefix, which agents change through the `memory.*` tools once the lead or the owner approves.",
+        Example = """{ "enabled": true, "scope": "project", "approveBy": "lead" }""")]
+    public ProjectMemoryOptions ProjectMemory { get; init; } = new();
+
     /// <summary>Every capability, by its name in configuration, and whether it is on.</summary>
     public IReadOnlyDictionary<string, bool> Switches() => new Dictionary<string, bool>
     {
@@ -43,6 +47,7 @@ public sealed record CapabilitiesOptions
         ["workspace"] = Workspace.Enabled,
         ["sandbox"] = Sandbox.Enabled,
         ["taskBoard"] = TaskBoard.Enabled,
+        ["projectMemory"] = ProjectMemory.Enabled,
     };
 }
 

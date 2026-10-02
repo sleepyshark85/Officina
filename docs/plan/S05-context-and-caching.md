@@ -29,5 +29,5 @@ Moved to the slices that add the state they need:
   volatile context holds the operating facts, in their configured order.
 
 Left to later slices:
-- S17: project memory in the prefix, boundary ②, and the TEST-09 case that a memory change does not edit a running
+- S17 (done): project memory in the prefix, boundary ②, and the TEST-09 case that a memory change does not edit a running
   conversation's prefix.

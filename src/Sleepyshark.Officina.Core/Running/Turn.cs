@@ -6,6 +6,7 @@ using Json.Schema;
 using Sleepyshark.Officina.Core.Configuration;
 using Sleepyshark.Officina.Core.Events;
 using Sleepyshark.Officina.Core.Extensibility;
+using Sleepyshark.Officina.Core.Memory;
 using Sleepyshark.Officina.Core.Messages;
 using Sleepyshark.Officina.Core.Observability;
 using Sleepyshark.Officina.Core.Records;
@@ -42,6 +43,7 @@ internal sealed class Turn
     private readonly ToolPipeline tools;
     private readonly RunRecord record;
     private readonly TaskBoard? board;
+    private readonly ProjectMemory? memory;
     private readonly JsonSchema? outputSchema;
     private readonly CitationRule citations;
     private readonly IReadOnlyList<(string Name, ICheck Check)> checks;
@@ -61,6 +63,8 @@ internal sealed class Turn
     private readonly List<Artifact> artifacts = [];
     private IReadOnlyList<RecordEntry> entries = [];
     private BoardTask? task;
+    private long prefixMemory;
+    private long seenMemory;
     private List<ToolUseContent> pending = [];
     private long? started;
     private int iterations;
@@ -77,6 +81,7 @@ internal sealed class Turn
     /// <param name="tools">The tool pipeline built from <paramref name="options"/>.</param>
     /// <param name="record">The run record, which the volatile context and the citation rule read.</param>
     /// <param name="board">The task board, which holds the work's task; null when it is off.</param>
+    /// <param name="memory">Project memory, which the prefix holds and changes reach the conversation from; null when it is off.</param>
     /// <param name="checks">The application's checks, by extension id.</param>
     /// <param name="knowledge">The application's knowledge sources, by extension id.</param>
     /// <param name="conversations">Where the agent's conversation is kept, when its history strategy keeps one.</param>
@@ -95,6 +100,7 @@ internal sealed class Turn
         ToolPipeline tools,
         RunRecord record,
         TaskBoard? board,
+        ProjectMemory? memory,
         IReadOnlyDictionary<string, ICheck> checks,
         IReadOnlyDictionary<string, IKnowledgeSource> knowledge,
         IConversationStore conversations,
@@ -121,6 +127,7 @@ internal sealed class Turn
         this.tools = tools;
         this.record = record;
         this.board = board;
+        this.memory = memory;
         outputSchema = agent.Output.Format == OutputFormat.Structured ? JsonSchema.FromText(agent.Output.Schema!) : null;
         citations = agent.Output.Citations ?? (options.Capabilities.Knowledge.Enabled ? CitationRule.Resolve : CitationRule.Off);
         this.checks = [.. agent.Output.Checks.Select(name => (name, checks[options.Checks[name].ExtensionId()!]))];
@@ -140,12 +147,15 @@ internal sealed class Turn
     {
         started = time.GetTimestamp();
         var history = agent.Context.History;
+        IReadOnlyList<ConversationTurn> earlier = [];
         if (history.Strategy != HistoryStrategy.None)
         {
-            var earlier = await conversations.ReadAsync(context.Caller.Tenant, context.Agent, context.Caller.Id, ct).ConfigureAwait(false);
+            earlier = await conversations.ReadAsync(context.Caller.Tenant, context.Agent, context.Caller.Id, ct).ConfigureAwait(false);
             conversation.Continue((history.Strategy == HistoryStrategy.LastTurns ? earlier.TakeLast(history.LastTurns) : earlier).SelectMany(turn => turn.Messages));
         }
 
+        // A window of the last turns is not append-only, so its prefix starts afresh each turn.
+        await StartMemoryAsync(history.Strategy == HistoryStrategy.LastTurns ? null : (earlier.Count > 0 ? earlier[^1] : null), ct).ConfigureAwait(false);
         conversation.Add(Message.User(work));
         var result = await RunTurnAsync(ct).ConfigureAwait(false);
         if (task is not null && cost > 0)
@@ -156,7 +166,7 @@ internal sealed class Turn
         if (history.Strategy != HistoryStrategy.None)
         {
             var messages = conversation.Shortened ? conversation.History : conversation.CurrentTurn;
-            var turn = new ConversationTurn(context.Agent, context.Caller.Id, time.GetUtcNow(), messages, conversation.Shortened);
+            var turn = new ConversationTurn(context.Agent, context.Caller.Id, time.GetUtcNow(), messages, conversation.Shortened, prefixMemory, seenMemory);
             await conversations.AppendAsync(context.Caller.Tenant, turn, ct).ConfigureAwait(false);
         }
 
@@ -192,6 +202,7 @@ internal sealed class Turn
                 conversation.Add(Labels.From(message.From, Mask(message.Text)));
             }
 
+            await AnnounceMemoryAsync(ct).ConfigureAwait(false);
             var request = conversation.Next(Facts()) with { Batch = batch };
             StopReason stop;
             try
@@ -293,9 +304,46 @@ internal sealed class Turn
             return HandOff(HandoffReason.ProviderFailure, $"the input is too long for the model, and shortening it failed: {exception.GetType().Name}");
         }
 
-        return conversation.Shorten(shortened) is { } problem
-            ? HandOff(HandoffReason.ProviderFailure, $"the input is too long for the model, and the shortened history {problem}")
-            : null;
+        if (conversation.Shorten(shortened) is { } problem)
+        {
+            return HandOff(HandoffReason.ProviderFailure, $"the input is too long for the model, and the shortened history {problem}");
+        }
+
+        // The shortened history may have lost the messages that told of memory changes, so they are told again.
+        seenMemory = prefixMemory;
+        return null;
+    }
+
+    /// <summary>
+    /// Puts project memory into the prefix, as of the revision the conversation started with (MEM-01). A conversation
+    /// that continues keeps that revision, so its prefix is never edited; a new one starts with the memory as it is now (MEM-03).
+    /// </summary>
+    private async Task StartMemoryAsync(ConversationTurn? last, CancellationToken ct)
+    {
+        if (memory is null)
+        {
+            return;
+        }
+
+        var state = await memory.ReadAsync(ct).ConfigureAwait(false);
+        (prefixMemory, seenMemory) = last is null ? (state.Revision, state.Revision) : (last.PrefixMemory, last.SeenMemory);
+        conversation.UseMemory(state.Text(prefixMemory));
+    }
+
+    /// <summary>MEM-03: changes approved since the conversation was last told reach it as an appended operator message, before the next call.</summary>
+    private async Task AnnounceMemoryAsync(CancellationToken ct)
+    {
+        if (memory is null)
+        {
+            return;
+        }
+
+        var state = await memory.ReadAsync(ct).ConfigureAwait(false);
+        if (state.Revision > seenMemory)
+        {
+            conversation.Add(Labels.From(Sender.Operator, $"Project memory changed:\n{ProjectMemory.Lines(state.Entries.Where(entry => entry.Revision > seenMemory))}"));
+            seenMemory = state.Revision;
+        }
     }
 
     /// <summary>Reads the run record and the work's task, which the volatile context and the budget read.</summary>

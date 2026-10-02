@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Sleepyshark.Officina.Core.Memory;
 using Sleepyshark.Officina.Core.Records;
 using Sleepyshark.Officina.Core.Tasks;
 
@@ -21,4 +22,7 @@ public sealed record ToolCall(
 {
     /// <summary>The agent that makes the call, set by the host's pipeline, so a tool shared by agents can act for each (such as in its own working copy).</summary>
     public string Agent { get; init; } = "";
+
+    /// <summary>Project memory as the agent acts on it; null when project memory is off.</summary>
+    public ProjectMemory? Memory { get; init; }
 }

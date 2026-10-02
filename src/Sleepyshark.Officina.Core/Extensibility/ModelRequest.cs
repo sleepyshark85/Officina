@@ -6,8 +6,8 @@ using Sleepyshark.Officina.Core.Tools;
 namespace Sleepyshark.Officina.Core.Extensibility;
 
 /// <summary>
-/// One model call, laid out as DESIGN.md §3 describes (CTX-01): the stable prefix (the tools, then the instructions),
-/// then the history, which ends with the volatile context.
+/// One model call, laid out as DESIGN.md §3 describes (CTX-01): the stable prefix (the tools, the instructions, then
+/// project memory), then the history, which ends with the volatile context.
 /// </summary>
 /// <param name="Profile">The model profile.</param>
 /// <param name="Tools">The tools the agent is offered, sorted by name (TOOL-03).</param>
@@ -31,6 +31,12 @@ public sealed record ModelRequest(
     public bool Batch { get; init; }
 
     /// <summary>
+    /// Project memory as it was when the conversation started, empty when there is none (MEM-01). It never changes within a
+    /// conversation: later changes join the history as operator messages (MEM-03).
+    /// </summary>
+    public string Memory { get; init; } = "";
+
+    /// <summary>
     /// Whether this request starts with exactly the content of <paramref name="previous"/>: the same prefix, and its
     /// history followed only by new messages (CTX-10). Cache boundaries may move.
     /// </summary>
@@ -40,6 +46,7 @@ public sealed record ModelRequest(
         return Profile == previous.Profile
             && Tools.SequenceEqual(previous.Tools)
             && Instructions == previous.Instructions
+            && Memory == previous.Memory
             && History.Length >= previous.History.Length
             && History.Take(previous.History.Length).SequenceEqual(previous.History);
     }
@@ -54,6 +61,9 @@ public enum CachePoint
 {
     /// <summary>The end of the instructions: the part every agent of the definition on the model slot shares.</summary>
     Instructions,
+
+    /// <summary>The end of project memory: the part shared by every agent of the definition on the model slot and memory scope.</summary>
+    Memory,
 
     /// <summary>The last block of history the provider can cache. A turn-scoped message is not one.</summary>
     History,

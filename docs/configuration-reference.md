@@ -297,7 +297,7 @@ Built-in tool packs (TOOL-01) are only offered when their capability is on (CAP-
 - **`record.*`:** `propose_fact`, `propose_finding`, `propose_decision`, `cite` (REC-02).
 - **`tasks.*`:** `create`, `update`, `claim`, `submit_for_review`, `review` (TASK).
 - **`team.*`:** `message`, `start_helper`, `handoff`.
-- **`memory.*`:** `propose_change`.
+- **`memory.*`:** `propose_change`, and `review`, for the lead to approve or reject a proposal (MEM-03).
 - **`human.*`:** `ask_owner`, `request_handoff` (HITL-06, EGR-04).
 - **`artifact.*`:** `page` (TOOL-09).
 - **`control.*`:** `finish`, the designated finish tool (LOOP-05).

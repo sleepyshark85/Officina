@@ -82,7 +82,7 @@ prefix. They are built once, when a conversation starts, and never change for th
 |---|---|---|---|---|---|
 | 1 | Tool definitions | Name, description and input schema of each tool the model slot offers, sorted by name | The slot's tool sets and the enabled capabilities (TOOL-03); MCP tool lists read at startup | Only for new conversations, after a configuration change or a tool server's list changes | `tools` |
 | 2 | Instructions and policies | The agent's instructions, with placeholders filled from project and agent values only; output format rules; how content from tools, documents and other agents is labelled as data (INV-08) | The agent definition | Only for new conversations, after a configuration change | First `system` block, then boundary ① |
-| 3 | Project memory | Conventions, how to build and test, architecture summary, project-wide decisions (MEM-01, MEM-02) | The memory store, read when the conversation starts | Only for new conversations. Running conversations receive approved changes as appended operator messages instead (MEM-03). | Second `system` block, then boundary ② |
+| 3 | Project memory | Conventions, how to build and test, architecture summary, project-wide decisions (MEM-01, MEM-02) | The memory store, as of the revision the conversation started with | Only for new conversations. Running conversations receive approved changes as appended operator messages instead (MEM-03). | Second `system` block, then boundary ② |
 | 4 | History | Everything said so far: each turn's work, labelled with its sender; the model's replies, including reasoning blocks exactly as received (MSG-02); tool calls and their trimmed results; messages received during a turn (CTX-08); operator messages; shortening summaries | The conversation store | Grows by appending only. Earlier content is changed only by history shortening (HIST). | `messages`, then boundary ③ on the last cacheable block |
 | 5 | Volatile context | Facts with source and as-of time, in a stable order (CTX-07); passages retrieved before the turn, with citation ids; findings and decisions; the current task's status and acceptance criteria; operating facts such as the caller and the date (CTX-09) | Run record, task board, knowledge sources and host, rebuilt for every call (LOOP-10) | Every call | A turn-scoped mid-conversation `system` message; where unsupported, a text block after the tool results (CTX-10) |
 
@@ -97,6 +97,17 @@ The three cache boundaries (CTX-11):
 Claude allows at most four boundaries and requires longer lifetimes before shorter ones; this
 layout uses three. A prefix shorter than the model's minimum cacheable size simply isn't cached.
 Cache reads and writes are measured on every call, and a low hit rate raises a warning (COST-01).
+
+**Project memory (MEM).** Memory is a log of proposals and of the decisions on them, kept per scope
+(project, owner or tenant) with optimistic revisions like the run record (CONC-01). Only approved
+entries are memory; a decision that replaces another says so, and a replaced entry leaves memory but
+stays in the log. The lead (through `memory.review`) or the owner (asked at the proposal) approves,
+as configured. A conversation records the memory revision of its prefix and the revision it has been
+told of. Before each call, changes approved since are appended as one operator message, so the
+prefix never changes; after shortening, which may drop that message, they are told again. When a
+change would take memory past its size limit it stays proposed, and agents propose a condensed
+version that replaces several entries with one. Only the owner approves that, and the replaced
+entries stay in the log, so nothing is dropped silently (MEM-05).
 
 How each call is assembled:
 

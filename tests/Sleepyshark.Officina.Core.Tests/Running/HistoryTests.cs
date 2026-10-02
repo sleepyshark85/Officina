@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.Extensions.Time.Testing;
 using Sleepyshark.Officina.Core.Configuration;
 using Sleepyshark.Officina.Core.Extensibility;
+using Sleepyshark.Officina.Core.Memory;
 using Sleepyshark.Officina.Core.Messages;
 using Sleepyshark.Officina.Core.Running;
 using Sleepyshark.Officina.Testing;
@@ -170,9 +171,9 @@ public class HistoryTests
         Assert.Equal(["1", "", "", "one", "2"], result.Transcript.Select(Text));
     }
 
-    // HIST-03, TEST-15: S17 adds memory.
+    // HIST-03, TEST-15.
     [Fact]
-    public async Task Shortening_leaves_the_stored_runs_events_audit_entries_and_task_boards_as_they_were()
+    public async Task Shortening_leaves_the_stored_runs_events_audit_entries_task_boards_and_memory_as_they_were()
     {
         var kit = Kit(new() { Strategy = HistoryStrategy.Shortened });
         kit.Model.CallTools(("edit", """{ "path": "a.cs" }""")).Reply("one").Reply(TooLong).Reply("two");
@@ -180,7 +181,9 @@ public class HistoryTests
         var first = new Work(Agent, "1") { Caller = Owner, TaskId = "t1" };
         await kit.Runner.Board(Owner.Tenant, first.RunId).AddAsync("t1", new() { Title = "Edit a.cs" }, "planned", Ct);
         await kit.Runner.RunAsync(first, Ct);
+        await AddMemoryAsync(kit);
         var before = await kit.Storage.ExportAsync(Owner.Tenant, Owner.Id!, Ct);
+        var memory = await kit.Runner.Memory(Owner).ReadAsync(Ct);
 
         await kit.Runner.RunAsync(Agent, "2", Owner, Ct);
 
@@ -191,6 +194,38 @@ public class HistoryTests
         Assert.Equal(before.Audit, after.Audit);
         Assert.NotEmpty(before.Tasks);
         Assert.Equal(JsonSerializer.Serialize(before.Tasks), JsonSerializer.Serialize(after.Tasks));
+        Assert.Equal(JsonSerializer.Serialize(memory.Log), JsonSerializer.Serialize((await kit.Runner.Memory(Owner).ReadAsync(Ct)).Log));
+        Assert.Equal("", kit.Model.Requests[^1].Memory); // the conversation began without memory, and is told of it instead
+        Assert.Contains(kit.Model.Requests[^1].History, message => message.Role == Role.System);
+    }
+
+    // MEM-03, HIST-03: shortening may drop the earlier message that told of a change, so the next call tells again.
+    [Fact]
+    public async Task Memory_changes_are_told_again_after_the_history_is_shortened()
+    {
+        var kit = Kit(new() { Strategy = HistoryStrategy.Shortened });
+        await AddMemoryAsync(kit);
+        kit.Model.Reply("one").Reply("two").Reply(TooLong).Reply("three").Shorten(history => [Message.User("Summary: 1 and 2 are done."), history[^1]]);
+        await kit.Runner.RunAsync(Agent, "1", Owner, Ct);
+        await kit.Runner.Memory(Owner).ProposeAsync(new(MemoryKind.Note, "style", "Spaces, not tabs."), Ct);
+        Assert.True((await kit.Runner.Memory(Owner).ApproveAsync(2, null, Ct)).Accepted);
+        await kit.Runner.RunAsync(Agent, "2", Owner, Ct);
+
+        var result = await kit.Runner.RunAsync(Agent, "3", Owner, Ct);
+
+        var told = "<message from=\"operator\">\nProject memory changed:\n- note #2 style: Spaces, not tabs.\n</message>";
+        var requests = kit.Model.Requests;
+        Assert.Equal((AgentOutcome.Completed, 4), (result.Outcome, requests.Count));
+        Assert.Equal([told], requests[2].History.Where(message => message.Role == Role.System).Select(Text));
+        Assert.Equal(["Summary: 1 and 2 are done.", "3", told], requests[3].History.Select(Text));
+        Assert.Equal(requests[0].Memory, requests[3].Memory);
+    }
+
+    private static async Task AddMemoryAsync(TestKit kit)
+    {
+        var memory = kit.Runner.Memory(Owner);
+        await memory.ProposeAsync(new(MemoryKind.Note, "build", "Run dotnet test."), Ct);
+        await memory.ApproveAsync(1, null, Ct);
     }
 
     // HIST-01.
@@ -231,7 +266,7 @@ public class HistoryTests
         return options with
         {
             Agents = new Dictionary<string, AgentDefinition> { [Agent] = options.Agents[Agent] with { Context = new() { History = history } } },
-            Capabilities = new() { ConversationStore = new() { Enabled = true }, TaskBoard = new() { Enabled = true } },
+            Capabilities = new() { ConversationStore = new() { Enabled = true }, TaskBoard = new() { Enabled = true }, ProjectMemory = new() { Enabled = true } },
         };
     }
 
