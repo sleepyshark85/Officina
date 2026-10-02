@@ -1,6 +1,6 @@
 # Officina — Configuration
 
-Status: draft for M0 design review · 2026-09-30 · companion to `REQUIREMENTS.md` (revision 2)
+Companion to `REQUIREMENTS.md` (revision 2). Describes what is built in v1.
 
 ## How it works
 
@@ -23,14 +23,14 @@ Status: draft for M0 design review · 2026-09-30 · companion to `REQUIREMENTS.m
 - **An agent definition can build on another** with `"extends": "<agent>"`: it inherits every setting it does
   not set itself, with the same rule for lists. The coding team's roles share a base this way (CFG-05).
 - **To see what is in effect,** run `sof config show --origin`. It lists every setting with its effective
-  value and the file, variable or option it came from, down to "code default, core 1.2.0" (CFG-04).
-- **Everything is validated before anything runs** (CFG-06). `sof config validate` checks a
-  file without running it. A value of the wrong type is reported one at a time.
+  value and the file, variable or option it came from, down to "code default, core 0.1.0" (CFG-04).
+- **Everything is validated before anything runs** (CFG-06). `sof config validate` checks the
+  configuration without running it. A value of the wrong type is reported one at a time.
 
-The full list of settings is in [`docs/configuration-reference.md`](docs/configuration-reference.md).
-The settings implemented so far are in [`docs/configuration-settings.md`](docs/configuration-settings.md),
-generated from the Options classes with the JSON Schema [`docs/officina.schema.json`](docs/officina.schema.json)
-(CFG-15, DOC-01).
+How the settings fit together (patterns, conditions, merging, validation, presets) is in the
+[configuration reference](docs/configuration-reference.md). Every setting, with its default and an example, is in the
+[settings reference](docs/configuration-settings.md), generated from the Options classes with the JSON Schema
+[`docs/officina.schema.json`](docs/officina.schema.json) (CFG-15, DOC-01).
 
 ## What you must specify (CFG-17)
 
@@ -39,12 +39,15 @@ generated from the Options classes with the JSON Schema [`docs/officina.schema.j
 | Every agent | `instructions` | Only the application knows the job |
 | Every write tool | `gates`, or a `gateExemption` with a reason | INV-04 forbids a default |
 | Every application tool, gate, check or knowledge source | its `source` and any settings it declares as required | It is the application's own code |
-| Coding team | `project.values.buildCommand` and `testCommand` | Project-specific. `sof init` detects them, so usually you only confirm them. |
+| Coding team | `project.values.buildCommand` and `testCommand` | Project-specific. |
 
 Everything else has a default. The API key is read from the `ANTHROPIC_API_KEY` environment
 variable unless you configure another secret.
 
-Only some Claude models (Opus 5 and 4.8, Fable 5, Mythos 5 and Sonnet 5.5) take a system message in the middle of a conversation; the others, such as `claude-haiku-4-5` and Sonnet 5, do not. The provider knows which, so the volatile context goes into the history for them, but a message from an operator sent during a turn is still a system message, and such a model rejects it with `InvalidRequest`.
+Only some Claude models (Opus 5 and 4.8, Fable 5, Mythos 5 and Sonnet 5.5) take a system message in the middle of a
+conversation. For the others, such as `claude-haiku-4-5` and Sonnet 5, the provider appends the volatile context to the
+history instead, and sends operator messages and memory changes as user messages that start `Message from the operator:`.
+No setting is needed.
 
 ## Smallest configurations
 
@@ -82,7 +85,7 @@ The coding team:
 | `capabilities.sandbox.allowedHosts` | none (network off) | Builds download packages |
 | `capabilities.sandbox.commandRules` | the preset's rules; anything unmatched is asked about | You want fewer or more prompts. An allow rule for an interpreter, such as `sh*` or `bash*`, allows every command. |
 | `capabilities.workspace.protectedPaths` | `.git`, `.env*` and `.sof/` hidden; `sof.json` and `sof.*.json` read-only | More files must stay out of reach |
-| `capabilities.humanInteraction.signOffs` | plan approval, run budget exceeded, irreversible action | You want more or fewer checkpoints with the owner |
+| `capabilities.humanInteraction.signOffs` | run budget exceeded and irreversible action; the coding team adds plan approval | You want more or fewer checkpoints with the owner |
 | `capabilities.checkpoints.at` | after each turn | You want one after each step of a pattern or each integration, as well |
 | `agents.<team>.pattern.maxParallel` | 4, the lead included | Your machine or budget allows more or fewer agents at once |
 
