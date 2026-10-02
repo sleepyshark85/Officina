@@ -112,6 +112,39 @@ public class HistoryTests
             payload => payload is ModelCallEnded { Cost: 4m, Model: "claude-opus-5-5" });
     }
 
+    // HIST-01: the summary call may be served by a fallback, so a fallback that cannot summarize as the model does is found at start-up.
+    [Fact]
+    public void A_fallback_that_cannot_summarize_is_a_configuration_error()
+    {
+        var options = Configure(new() { Strategy = HistoryStrategy.Shortened });
+        options = options with
+        {
+            Models = new Dictionary<string, ModelProfile>
+            {
+                [ModelProfile.DefaultName] = options.Models[ModelProfile.DefaultName] with { Fallbacks = ["backup"] },
+                ["backup"] = new() { Provider = "other", Model = "x" },
+            },
+            Providers = new Dictionary<string, ProviderOptions>(options.Providers) { ["other"] = new() { Prices = new Dictionary<string, ModelPrice> { ["x"] = new() { Input = 1, Output = 1 } } } },
+        };
+
+        var error = Assert.Throws<ConfigurationException>(() => new TestKit(options, Tools(), capabilities: new() { Summarizes = true }));
+
+        Assert.Contains(error.Errors, problem => problem.Problem.StartsWith("fallback \"backup\" of model \"default\" cannot summarize", StringComparison.Ordinal));
+    }
+
+    // HIST-01: only the provider's own content is a summary; a reply of text in its place does not shorten the history.
+    [Fact]
+    public async Task Text_in_place_of_a_summary_does_not_shorten_the_history()
+    {
+        var kit = new TestKit(Configure(new() { Strategy = HistoryStrategy.Shortened }), Tools(), capabilities: new() { Summarizes = true });
+        kit.Model.Reply("one").Reply(TooLong).Reply("I cannot summarize this.");
+        await kit.RunAsync(Agent, "1", Ct);
+
+        var result = await kit.RunAsync(Agent, "2", Ct);
+
+        Assert.Equal("the input is too long for the model, and the model gave no summary of the earlier turns", result.Handoff!.Detail);
+    }
+
     // HIST-01, REL-01, COST-02: when the model summarizes a conversation itself, the summary is a model call through the gateway, so a
     // failed one is retried, and it is paid and stored. The summary, an assistant message of the provider's content, takes the earlier
     // turns' place before the current turn, and the operator's messages it summarized are told again after it.

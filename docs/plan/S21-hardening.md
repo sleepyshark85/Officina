@@ -142,7 +142,9 @@ Linux and Windows runners where they differ much:
   the streamed block (`compaction_delta` pieces of its summary and opaque content, then its signature) takes the earlier turns' place
   as an assistant message of its own, first, as documented. The operator's messages and memory changes it summarized are told again
   after it, as the API says they stop applying. Haiku has no compaction, so an agent that has the provider shorten its history on
-  Haiku is a configuration error at start-up. A fallback model without a price is warned of. `IHistoryShortener` returns a
+  Haiku is a configuration error at start-up, and so is a fallback of the agent's model that cannot summarize as it does (another
+  provider, or a model without compaction), as the summary call may be served by it. Only the provider's own content is taken as
+  the summary; text in its place is not. A fallback model without a price is warned of, in the summary call too. `IHistoryShortener` returns a
   `ShortenedHistory` with what its own model call used, which the turn spends the same way.
 - S12: a model without mid-conversation system messages gets the operator's (and memory changes) as a user message starting
   `Message from the operator:`. Every retry of a model call is a `modelCallRetried` event, so a reader knows the text before it in the

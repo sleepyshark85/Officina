@@ -485,7 +485,17 @@ public sealed class AgentRunner
             var id = agent.Context.History.ExtensionId();
             var model = options.Models[agent.Model].Model;
             var summarizes = id is null && providers.GetValueOrDefault(provider) is { } own && own.CapabilitiesOf(model).Summarizes;
-            if ((id is null ? (summarizes ? ProviderSummary.Instance : providers.GetValueOrDefault(provider) as IHistoryShortener) : shorteners.GetValueOrDefault(id)) is { } shortener)
+            // The summary call may be served by a fallback, whose summary must be one the provider reads back: the same provider's.
+            var unable = summarizes
+                ? options.Models[agent.Model].Fallbacks.FirstOrDefault(fallback => options.Models[fallback] is var profile
+                    && (profile.Provider != provider || !providers[provider].CapabilitiesOf(profile.Model).Summarizes))
+                : null;
+            if (unable is not null)
+            {
+                errors.Add(new(ValidationPhase.Provider, path, $"fallback \"{unable}\" of model \"{agent.Model}\" cannot summarize the history as \"{model}\" does.",
+                    "Use fallbacks of the same provider that summarize, or extension:<id> for a shortener the application registers."));
+            }
+            else if ((id is null ? (summarizes ? ProviderSummary.Instance : providers.GetValueOrDefault(provider) as IHistoryShortener) : shorteners.GetValueOrDefault(id)) is { } shortener)
             {
                 found[name] = shortener;
             }

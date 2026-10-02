@@ -410,6 +410,15 @@ internal sealed class Turn
         return null;
     }
 
+    /// <summary>COST-02: a fallback without a price costs nothing in the budgets, which is told.</summary>
+    private async Task WarnUnpricedAsync(ModelProfile served, CancellationToken ct)
+    {
+        if (Price(served) is null)
+        {
+            await events.PublishAsync(context, new Warning($"Model {served.Model} has no price, so what it uses costs nothing in the budgets. Add its price to providers.{served.Provider}.prices."), ct).ConfigureAwait(false);
+        }
+    }
+
     /// <summary>
     /// HIST-01: the provider's own shortening. The model summarizes the earlier turns, in a call through the model gateway like any
     /// other, paid and stored like one, whether or not a summary comes back; the summary, an assistant message of the provider's own
@@ -439,6 +448,7 @@ internal sealed class Turn
                         break;
                     case FallbackUsed fallback:
                         served = fallback.Profile;
+                        await WarnUnpricedAsync(served, ct).ConfigureAwait(false);
                         break;
                     case UsageReported reported:
                         var spent = Price(served)?.Cost(reported.Usage) ?? 0m;
@@ -462,7 +472,8 @@ internal sealed class Turn
             await events.PublishAsync(context, new ModelCallEnded(stop, callUsage, callCost, served.Model, context.TaskId), CancellationToken.None).ConfigureAwait(false);
         }
 
-        return summary.OfType<ProviderContent>().Any() ? new ShortenedHistory([new Message(Role.Assistant, summary), .. request.History[request.TurnStart..]]) : null;
+        // Only the provider's own content is a summary: text or a tool call in its place is not.
+        return summary.Count > 0 && summary.All(content => content is ProviderContent) ? new ShortenedHistory([new Message(Role.Assistant, summary), .. request.History[request.TurnStart..]]) : null;
     }
 
     /// <summary>
@@ -727,10 +738,7 @@ internal sealed class Turn
                     // MDL-04: later events, and so the cost, are the fallback's.
                     served = fallback.Profile;
                     price = Price(served);
-                    if (price is null)
-                    {
-                        await events.PublishAsync(context, new Warning($"Model {served.Model} has no price, so what it uses costs nothing in the budgets. Add its price to providers.{served.Provider}.prices."), ct).ConfigureAwait(false);
-                    }
+                    await WarnUnpricedAsync(served, ct).ConfigureAwait(false);
 
                     Telemetry.FallbackUsed(activity, context, served.Provider, served.Model, fallback.Failure.ToString());
                     await events.PublishAsync(context, new ModelFallback(fallback.Name, served.Provider, served.Model, fallback.Failure), ct).ConfigureAwait(false);
