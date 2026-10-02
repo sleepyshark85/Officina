@@ -10,6 +10,8 @@
     <PackageReference Include="Microsoft.Extensions.Configuration.Binder" />
     <PackageReference Include="Microsoft.Extensions.Configuration.Json" />
     <PackageReference Include="System.CommandLine" />
+    <!-- The chat session's line editor: completion, suggestions and history at a terminal. -->
+    <PackageReference Include="RadLine" />
     <!-- The team simulation (TEST-29) wires a run as sof does, with the workspace host. -->
     <InternalsVisibleTo Include="Sleepyshark.Officina.Cli.Tests" />
   </ItemGroup>

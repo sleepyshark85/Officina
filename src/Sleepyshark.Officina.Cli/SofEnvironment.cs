@@ -30,6 +30,9 @@ public sealed record SofEnvironment(TextWriter Out, TextWriter Error, string Wor
     /// <summary>Whether the command runs inside a chat session, typed after a <c>/</c>: the session handles the signals, and holds the console.</summary>
     internal bool InSession { get; init; }
 
+    /// <summary>The interactive terminal, where a chat session reads lines with a line editor; null elsewhere, and in tests.</summary>
+    internal TerminalScreen? Terminal { get; init; }
+
     /// <summary>The process's own signals, for <see cref="Signals"/>.</summary>
     public static IDisposable ProcessSignals(Action<PosixSignal> handler) => new Registrations(
         [.. new[] { PosixSignal.SIGINT, PosixSignal.SIGTERM }.Select(signal => PosixSignalRegistration.Create(signal, context =>
