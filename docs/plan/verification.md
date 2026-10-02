@@ -28,7 +28,7 @@ requirement changes at revision 3.
 
 ## Pending
 
-MUSTs still to verify; S21 is not done while any is listed here.
+MUSTs still to verify. S21 waits only on TEST-31; the other rows are gaps for the owner to decide on.
 
 | Requirement | Waits for |
 |---|---|
