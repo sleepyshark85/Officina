@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using System.Threading.Channels;
 using Microsoft.Extensions.Time.Testing;
 using Sleepyshark.Officina.Core.Extensibility;
@@ -6,11 +7,14 @@ using Sleepyshark.Officina.Testing;
 namespace Sleepyshark.Officina.Cli.Tests;
 
 /// <summary>
-/// Runs the real <c>sof</c> command line in-process, in a real temporary directory. The owner at the console, the model
-/// providers and the clock are stand-ins.
+/// Runs the real <c>sof</c> command line in-process, in a real temporary directory. The owner at the console, the signals
+/// they send, the model providers and the clock are stand-ins.
 /// </summary>
 internal sealed class Sof : IDisposable
 {
+    private readonly List<Owner> consoles = [];
+    private Action<PosixSignal>? signalled;
+
     public string Directory { get; } = System.IO.Directory.CreateTempSubdirectory("officina-cli-").FullName;
 
     public Dictionary<string, string> Variables { get; } = [];
@@ -28,7 +32,20 @@ internal sealed class Sof : IDisposable
     public Console Out { get; } = new();
 
     /// <summary>What the owner types; nothing by default.</summary>
-    public Owner In { get; } = new();
+    public Owner In { get; private set; } = new();
+
+    /// <summary>
+    /// A new console for the next command. A command that read the old one may have left a read waiting on it, as a process
+    /// leaves its console read to end with it, and that read would take the next line.
+    /// </summary>
+    public void NewConsole()
+    {
+        consoles.Add(In);
+        In = new();
+    }
+
+    /// <summary>Stands in for a signal from the terminal, such as Ctrl+C, to a command that takes signals over (<c>sof chat</c>).</summary>
+    public void Press(PosixSignal signal) => (signalled ?? throw new InvalidOperationException("No command takes signals now.")).Invoke(signal);
 
     public Sof Write(string relativePath, string text)
     {
@@ -40,7 +57,15 @@ internal sealed class Sof : IDisposable
     {
         using var error = new StringWriter();
         var start = Out.ToString().Length;
-        var host = new SofEnvironment(Out, error, Directory, Variables) { In = In, Providers = Providers, Sandbox = Sandbox, Time = Time };
+        var host = new SofEnvironment(Out, error, Directory, Variables)
+        {
+            In = In, Providers = Providers, Sandbox = Sandbox, Time = Time,
+            Signals = handler =>
+            {
+                signalled = handler;
+                return new Registration(() => signalled = null);
+            },
+        };
         var exitCode = await SofCommandLine.RunAsync(args, host, Cancel);
         return (exitCode, Out.ToString()[start..].ReplaceLineEndings("\n"), error.ToString().ReplaceLineEndings("\n"));
     }
@@ -49,6 +74,7 @@ internal sealed class Sof : IDisposable
     {
         Out.Dispose();
         In.Dispose();
+        consoles.ForEach(console => console.Dispose());
 
         // Git makes its object files read-only, which stops Windows deleting them.
         foreach (var file in System.IO.Directory.EnumerateFiles(Directory, "*", new EnumerationOptions { RecurseSubdirectories = true, AttributesToSkip = 0 }))
@@ -70,6 +96,11 @@ internal sealed class Sof : IDisposable
         }
 
         return this;
+    }
+
+    private sealed class Registration(Action dispose) : IDisposable
+    {
+        public void Dispose() => dispose();
     }
 
     /// <summary>Output that a test can wait on until it shows some text.</summary>
@@ -115,7 +146,7 @@ internal sealed class Sof : IDisposable
                     next = written.Task;
                 }
 
-                await next.WaitAsync(ct);
+                try { await next.WaitAsync(TimeSpan.FromSeconds(10), ct); } catch (TimeoutException) { throw new TimeoutException($"waiting for {text}:\n{ToString()}"); }
             }
         }
 

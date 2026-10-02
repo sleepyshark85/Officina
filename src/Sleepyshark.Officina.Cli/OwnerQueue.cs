@@ -9,10 +9,14 @@ namespace Sleepyshark.Officina.Cli;
 /// queue up until their deadline (HITL-05).
 /// </summary>
 /// <param name="output">Where each request is shown as it arrives.</param>
-internal sealed class OwnerQueue(TextWriter output) : IHumanChannel
+/// <param name="prefix">What the owner types before a command: nothing in <c>sof run</c>, a slash in <c>sof chat</c>.</param>
+internal sealed class OwnerQueue(TextWriter output, string prefix = "") : IHumanChannel
 {
     private readonly ConcurrentDictionary<int, (HumanRequest Request, TaskCompletionSource<HumanAnswer> Answer)> waiting = new();
     private int numbered;
+
+    /// <summary>Where requests and everything else for the owner are shown.</summary>
+    public TextWriter Output => output;
 
     /// <summary>What waits for the owner now, by number.</summary>
     public IEnumerable<(int Number, HumanRequest Request)> Waiting =>
@@ -63,10 +67,10 @@ internal sealed class OwnerQueue(TextWriter output) : IHumanChannel
         return entry.Answer.TrySetResult(answer) ? null : "error: nothing waits for you with that number.";
     }
 
-    public static string Describe(HumanRequest request) => request.Kind switch
+    public string Describe(HumanRequest request) => request.Kind switch
     {
-        HumanRequestKind.Approval => $"{request.Agent} asks to run {request.Tool} {request.Arguments?.GetRawText()}: {request.Summary}. Answer with approve, deny or change.",
-        HumanRequestKind.Question => $"{request.Agent} asks: {request.Summary} Answer with answer or deny.",
-        _ => $"{request.Agent} needs your sign-off: {request.Summary} Answer with approve or deny.",
+        HumanRequestKind.Approval => $"{request.Agent} asks to run {request.Tool} {request.Arguments?.GetRawText()}: {request.Summary}. Answer with {prefix}approve, {prefix}deny or {prefix}change.",
+        HumanRequestKind.Question => $"{request.Agent} asks: {request.Summary} Answer with {prefix}answer or {prefix}deny.",
+        _ => $"{request.Agent} needs your sign-off: {request.Summary} Answer with {prefix}approve or {prefix}deny.",
     };
 }

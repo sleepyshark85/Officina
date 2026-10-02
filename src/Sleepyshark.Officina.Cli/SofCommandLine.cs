@@ -3,7 +3,7 @@ using Sleepyshark.Officina.Core.Configuration;
 
 namespace Sleepyshark.Officina.Cli;
 
-/// <summary>The <c>sof</c> command line: <c>run</c>, <c>resume</c>, <c>rollback</c>, <c>report</c>, <c>config show</c>, <c>config validate</c> and <c>config dry-run</c>.</summary>
+/// <summary>The <c>sof</c> command line: <c>run</c>, <c>chat</c>, <c>resume</c>, <c>rollback</c>, <c>report</c>, <c>config show</c>, <c>config validate</c> and <c>config dry-run</c>.</summary>
 public static class SofCommandLine
 {
     /// <summary>How long after <c>run.cancelWithin</c> the process is given to record a cancelled run, print its report and clean up.</summary>
@@ -23,7 +23,8 @@ public static class SofCommandLine
             ValidateCommand.Create(shared, host),
             DryRunCommand.Create(shared, host),
         };
-        var root = new RootCommand("sof - the Officina coding team CLI.") { config, RunCommand.Create(shared, host), ResumeCommand.CreateResume(shared, host), ResumeCommand.CreateRollback(shared, host), ResumeCommand.CreateReport(shared, host) };
+        var chat = ChatCommand.Create(shared, host);
+        var root = new RootCommand("sof - the Officina coding team CLI.") { config, RunCommand.Create(shared, host), chat, ResumeCommand.CreateResume(shared, host), ResumeCommand.CreateRollback(shared, host), ResumeCommand.CreateReport(shared, host) };
 
         var parse = root.Parse([.. args]);
         if (parse.Errors.Count > 0)
@@ -38,13 +39,14 @@ public static class SofCommandLine
         }
 
         // Ctrl+C cancels the run, which has run.cancelWithin to stop. System.CommandLine ends the process after its termination
-        // timeout (2 seconds unless set), so that must outlast the run's.
+        // timeout (2 seconds unless set), so that must outlast the run's. sof chat handles the signals itself, as Ctrl+C there
+        // cancels the reply and keeps the session; it keeps the same timeout once the session is ending.
         var configuration = new InvocationConfiguration
         {
             Output = host.Out,
             Error = host.Error,
             EnableDefaultExceptionHandler = false,
-            ProcessTerminationTimeout = TerminationTimeout(shared.Load(parse, host).Options),
+            ProcessTerminationTimeout = parse.CommandResult.Command == chat && host.Signals is not null ? null : TerminationTimeout(shared.Load(parse, host).Options),
         };
         return parse.InvokeAsync(configuration, cancel);
     }

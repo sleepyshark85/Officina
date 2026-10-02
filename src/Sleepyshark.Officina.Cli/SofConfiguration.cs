@@ -138,6 +138,10 @@ public sealed class SofConfiguration
     /// <param name="path">The setting, such as <c>run.budget.cost</c>.</param>
     public string SourceOf(string path) => Provided(path) ?? $"code default, core {CoreVersion.Value}";
 
+    /// <summary>Whether a layer sets the setting, rather than leaving it to its code default.</summary>
+    /// <param name="path">The setting, such as <c>run.budget.cost</c>.</param>
+    public bool Sets(string path) => Provided(path) is not null;
+
     /// <summary>Every effective setting, defaults included, with its value as JSON.</summary>
     public IReadOnlyList<(string Path, string Value)> Settings()
     {
