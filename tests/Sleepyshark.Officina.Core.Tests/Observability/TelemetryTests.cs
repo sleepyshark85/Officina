@@ -6,6 +6,7 @@ using Sleepyshark.Officina.Core.Configuration;
 using Sleepyshark.Officina.Core.Extensibility;
 using Sleepyshark.Officina.Core.Messages;
 using Sleepyshark.Officina.Core.Observability;
+using Sleepyshark.Officina.Core.Running;
 using Sleepyshark.Officina.Testing;
 using static Sleepyshark.Officina.Core.Tests.Tools.ToolSetup;
 
@@ -56,6 +57,7 @@ public sealed class TelemetryTests : IDisposable
         {
             Policies = new() { PermissionRules = [new() { Tool = "edit", Action = PolicyAction.Deny }] },
             Agents = new Dictionary<string, AgentDefinition> { [Observed] = options.Agents[Agent] with { HandOffOnPolicyGap = false } },
+            Capabilities = new() { TaskBoard = new() { Enabled = true } },
         };
         kit = new TestKit(options, new Dictionary<string, ITool> { ["read"] = read, ["edit"] = new FakeTool(ToolKind.Write) });
         kit.Model.CallTools(("read", $$"""{"path":"{{Content}}"}"""))
@@ -105,7 +107,9 @@ public sealed class TelemetryTests : IDisposable
         kit.Model.Reply(new Stopped(StopReason.Refused));
 
         await RunAsync();
-        await RunAsync(); // handed off
+        var work = new Work(Observed, Content) { TaskId = "t1" };
+        await kit.Runner.Board(null, work.RunId).AddAsync("t1", new() { Title = "Observe" }, "planned", Ct);
+        await kit.Runner.RunAsync(work, Ct); // handed off
 
         var mine = measurements.Where(measurement => (string?)measurement.Tags.GetValueOrDefault("gen_ai.agent.name") == Observed).ToList();
         Assert.Equal(
@@ -118,6 +122,7 @@ public sealed class TelemetryTests : IDisposable
             && (string?)measurement.Tags["gen_ai.operation.name"] == "chat" && (string?)measurement.Tags["gen_ai.provider.name"] == "claude");
         Assert.Contains(mine, measurement => measurement.Name == "officina.tool.calls" && (string?)measurement.Tags["officina.tool.outcome"] == "Failed");
         Assert.Contains(mine, measurement => measurement.Name == "officina.handoffs" && (string?)measurement.Tags["officina.handoff.reason"] == "ProviderRefusal");
+        Assert.Contains(mine, measurement => measurement.Name == "officina.cost" && (string?)measurement.Tags.GetValueOrDefault("officina.task.id") == "t1");
     }
 
     // OBS-03, TOOL-08.

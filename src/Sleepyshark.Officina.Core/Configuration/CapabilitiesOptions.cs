@@ -26,6 +26,10 @@ public sealed record CapabilitiesOptions
         Example = """{ "enabled": true, "allowedHosts": ["api.nuget.org"] }""")]
     public SandboxOptions Sandbox { get; init; } = new();
 
+    [Setting("The task board: tasks with dependencies, verification checks and review, which agents change through the `tasks.*` tools and the owner at any time.",
+        Example = """{ "enabled": true, "maxAttempts": 2 }""")]
+    public TaskBoardOptions TaskBoard { get; init; } = new();
+
     /// <summary>Every capability, by its name in configuration, and whether it is on.</summary>
     public IReadOnlyDictionary<string, bool> Switches() => new Dictionary<string, bool>
     {
@@ -33,6 +37,7 @@ public sealed record CapabilitiesOptions
         ["knowledge"] = Knowledge.Enabled,
         ["workspace"] = Workspace.Enabled,
         ["sandbox"] = Sandbox.Enabled,
+        ["taskBoard"] = TaskBoard.Enabled,
     };
 }
 

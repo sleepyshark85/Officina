@@ -6,6 +6,7 @@ using Sleepyshark.Officina.Core.Extensibility;
 using Sleepyshark.Officina.Core.Messages;
 using Sleepyshark.Officina.Core.Observability;
 using Sleepyshark.Officina.Core.Records;
+using Sleepyshark.Officina.Core.Tasks;
 using Sleepyshark.Officina.Core.Tools;
 
 namespace Sleepyshark.Officina.Core.Running;
@@ -70,14 +71,7 @@ public sealed class AgentRunner
         this.storage = storage;
         this.time = time;
         Events = new EventBus(storage.Events, options.Storage, time);
-        pipeline = new ToolPipeline(options, tools, gates, knowledge, storage, Events, human, secrets, time);
-        var unregistered = options.Checks.Where(check => !checks.ContainsKey(check.Value.ExtensionId()!))
-            .Select(check => ToolCatalog.Unregistered($"checks.{check.Key}.use", "check", check.Value.ExtensionId()!)).ToList();
-        if (unregistered.Count > 0)
-        {
-            throw new ConfigurationException(unregistered);
-        }
-
+        pipeline = new ToolPipeline(options, tools, gates, knowledge, checks, storage, Events, human, secrets, time);
         this.checks = checks;
         this.knowledge = knowledge;
         shortening = Shortening(options, providers, shorteners ?? new Dictionary<string, IHistoryShortener>());
@@ -90,6 +84,12 @@ public sealed class AgentRunner
     /// <summary>What the runs do, live and from the start of each stored run (EVT-01, EVT-03).</summary>
     public EventBus Events { get; }
 
+    /// <summary>A run's task board, as the owner or the host changes it (TASK-08, WS-03).</summary>
+    /// <param name="tenant">The run's tenant.</param>
+    /// <param name="runId">The run.</param>
+    /// <exception cref="InvalidOperationException">The task board is off.</exception>
+    public TaskBoard Board(string? tenant, string runId) => pipeline.Board(tenant, runId);
+
     /// <summary>Runs a single request.</summary>
     /// <param name="agentName">The agent, by its name in <c>agents</c>.</param>
     /// <param name="input">The work.</param>
@@ -101,11 +101,25 @@ public sealed class AgentRunner
     /// <summary>Runs one work item, however it arrived.</summary>
     /// <param name="work">The work.</param>
     /// <param name="ct">Cancels the run, which then ends in a handoff.</param>
-    public Task<AgentResult> RunAsync(Work work, CancellationToken ct = default)
+    /// <exception cref="ArgumentException">The work is for a task, and the task board is off or has no such task.</exception>
+    public async Task<AgentResult> RunAsync(Work work, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(work);
         KnownAgent(work.Agent);
-        return RunCoreAsync(work, ct);
+        if (work.TaskId is not null)
+        {
+            if (!Options.Capabilities.TaskBoard.Enabled)
+            {
+                throw new ArgumentException("The work is for a task, but the task board is off.", nameof(work));
+            }
+
+            if (!(await Board(work.Caller.Tenant, work.RunId).ReadAsync(ct).ConfigureAwait(false)).Any(task => task.Id == work.TaskId))
+            {
+                throw new ArgumentException($"The work is for task {work.TaskId}, which is not on the board.", nameof(work));
+            }
+        }
+
+        return await RunCoreAsync(work, ct).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -201,11 +215,11 @@ public sealed class AgentRunner
             return new AgentResult(AgentOutcome.Rejected, rejection, new TurnStatistics(0, 0, Usage.None, 0m, TimeSpan.Zero), [], [], [], []);
         }
 
-        var context = new ToolContext(work.RunId, name, work.Caller) { Masker = masker };
+        var context = new ToolContext(work.RunId, name, work.Caller) { Masker = masker, TaskId = work.TaskId };
         var instructions = InstructionPlaceholders.Fill(agent.Instructions, Options.Project, name, agent);
         var record = new RunRecord(storage.Records, context, time);
         var turn = new Turn(
-            context, Options, provider, pipeline, record, checks, knowledge, storage.Conversations, shortening.GetValueOrDefault(name), Events, instructions, admitted,
+            context, Options, provider, pipeline, record, pipeline.Board(context), checks, knowledge, storage.Conversations, shortening.GetValueOrDefault(name), Events, instructions, admitted,
             Inbox(name), time);
         var oneAtATime = turns.GetOrAdd(name, _ => new SemaphoreSlim(1, 1));
         var entered = false;

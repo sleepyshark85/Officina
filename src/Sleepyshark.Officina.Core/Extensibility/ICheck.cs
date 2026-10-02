@@ -1,9 +1,11 @@
+using Sleepyshark.Officina.Core.Tasks;
+
 namespace Sleepyshark.Officina.Core.Extensibility;
 
 /// <summary>
 /// A check of work, such as a build or the tests. Only its result decides; nothing an agent says overrides it (INV-09).
-/// The integration queue runs the baseline checks (WS-02), and a turn its output checks (OUT-03); task checks use it
-/// from S18.
+/// The integration queue runs the baseline checks (WS-02), a turn its output checks (OUT-03), and the task board a
+/// submitted task's verification checks (TASK-05).
 /// </summary>
 public interface ICheck
 {
@@ -17,7 +19,8 @@ public interface ICheck
 /// </param>
 /// <param name="Output">For an output check, the output.</param>
 /// <param name="Artifacts">For an output check, the artifacts the turn produced (OUT-05).</param>
-public sealed record CheckContext(string? Directory, string? Output, IReadOnlyList<Artifact> Artifacts);
+/// <param name="Task">For a verification check, the task submitted.</param>
+public sealed record CheckContext(string? Directory, string? Output, IReadOnlyList<Artifact> Artifacts, BoardTask? Task = null);
 
 /// <summary>The result of a check.</summary>
 /// <param name="Passed">Whether the work passed.</param>

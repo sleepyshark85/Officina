@@ -9,6 +9,7 @@ using Sleepyshark.Officina.Core.Extensibility;
 using Sleepyshark.Officina.Core.Messages;
 using Sleepyshark.Officina.Core.Observability;
 using Sleepyshark.Officina.Core.Records;
+using Sleepyshark.Officina.Core.Tasks;
 using Sleepyshark.Officina.Core.Tools;
 using OutputFormat = Sleepyshark.Officina.Core.Configuration.OutputFormat;
 
@@ -39,6 +40,7 @@ internal sealed class Turn
     private readonly ModelPrice? price;
     private readonly ToolPipeline tools;
     private readonly RunRecord record;
+    private readonly TaskBoard? board;
     private readonly JsonSchema? outputSchema;
     private readonly CitationRule citations;
     private readonly IReadOnlyList<(string Name, ICheck Check)> checks;
@@ -55,6 +57,7 @@ internal sealed class Turn
     private readonly List<string> retrieved = [];
     private readonly List<Artifact> artifacts = [];
     private IReadOnlyList<RecordEntry> entries = [];
+    private BoardTask? task;
     private List<ToolUseContent> pending = [];
     private long? started;
     private int iterations;
@@ -70,6 +73,7 @@ internal sealed class Turn
     /// <param name="provider">The provider of the agent's model profile.</param>
     /// <param name="tools">The tool pipeline built from <paramref name="options"/>.</param>
     /// <param name="record">The run record, which the volatile context and the citation rule read.</param>
+    /// <param name="board">The task board, which holds the work's task; null when it is off.</param>
     /// <param name="checks">The application's checks, by extension id.</param>
     /// <param name="knowledge">The application's knowledge sources, by extension id.</param>
     /// <param name="conversations">Where the agent's conversation is kept, when its history strategy keeps one.</param>
@@ -85,6 +89,7 @@ internal sealed class Turn
         IModelProvider provider,
         ToolPipeline tools,
         RunRecord record,
+        TaskBoard? board,
         IReadOnlyDictionary<string, ICheck> checks,
         IReadOnlyDictionary<string, IKnowledgeSource> knowledge,
         IConversationStore conversations,
@@ -107,6 +112,7 @@ internal sealed class Turn
         this.provider = provider;
         this.tools = tools;
         this.record = record;
+        this.board = board;
         outputSchema = agent.Output.Format == OutputFormat.Structured ? JsonSchema.FromText(agent.Output.Schema!) : null;
         citations = agent.Output.Citations ?? (options.Capabilities.Knowledge.Enabled ? CitationRule.Resolve : CitationRule.Off);
         this.checks = [.. agent.Output.Checks.Select(name => (name, checks[options.Checks[name].ExtensionId()!]))];
@@ -132,6 +138,11 @@ internal sealed class Turn
 
         conversation.Add(Message.User(work));
         var result = await RunTurnAsync(ct).ConfigureAwait(false);
+        if (task is not null && cost > 0)
+        {
+            await board!.ChargeAsync(cost, ct).ConfigureAwait(false); // TASK-09
+        }
+
         if (history.Strategy != HistoryStrategy.None)
         {
             var messages = conversation.Shortened ? conversation.History : conversation.CurrentTurn;
@@ -154,7 +165,7 @@ internal sealed class Turn
             return notCovered;
         }
 
-        entries = await record.ReadAsync(ct).ConfigureAwait(false);
+        await ReadStateAsync(ct).ConfigureAwait(false);
 
         while (true)
         {
@@ -274,7 +285,14 @@ internal sealed class Turn
             : null;
     }
 
-    /// <summary>Which limit of the turn's or the run's budget is used up, if any (LOOP-06, COST-02).</summary>
+    /// <summary>Reads the run record and the work's task, which the volatile context and the budget read.</summary>
+    private async Task ReadStateAsync(CancellationToken ct)
+    {
+        entries = await record.ReadAsync(ct).ConfigureAwait(false);
+        task = board?.TaskId is { } id ? (await board.ReadAsync(ct).ConfigureAwait(false)).FirstOrDefault(task => task.Id == id) : null;
+    }
+
+    /// <summary>Which limit of the turn's, its task's or the run's budget is used up, if any (LOOP-06, COST-02).</summary>
     private string? Exhausted()
     {
         var turn = agent.Budget.Turn;
@@ -284,6 +302,7 @@ internal sealed class Turn
             : usage.Total >= turn.Tokens ? "turn's token"
             : cost >= turn.Cost ? "turn's cost"
             : elapsed >= turn.Time ? "turn's time"
+            : task is not null && task.Spent + cost >= task.Budget ? "task's cost"
             : cost >= runBudget.Cost ? "run's cost"
             : elapsed >= runBudget.Time ? "run's time"
             : null;
@@ -291,16 +310,18 @@ internal sealed class Turn
 
     /// <summary>
     /// The volatile context for this call, in the order of CTX-01: the record's facts, the passages retrieved before the
-    /// turn, the record's other entries, then the agent's operating facts, filled for this call (CTX-09). Each part of the
-    /// record is in revision order, so it only grows (CTX-07). The agent sees the kinds of entry it is configured to (REC-06).
+    /// turn, the record's other entries, the work's task, then the agent's operating facts, filled for this call (CTX-09).
+    /// Each part of the record is in revision order, so it only grows (CTX-07). The agent sees the kinds of entry it is
+    /// configured to, and only its task's when its scope is the task (REC-06).
     /// </summary>
     private List<string> Facts()
     {
         var now = time.GetUtcNow();
         var kinds = agent.Context.Record ?? DefaultKinds;
-        var shown = entries.Where(entry => kinds.Contains(entry.Item.Kind)).ToList();
+        var shown = entries.Where(entry => kinds.Contains(entry.Item.Kind) && (agent.Context.RecordScope == RecordScope.All || entry.Task == context.TaskId)).ToList();
         return [.. Record(shown.Where(entry => entry.Item is Fact)), .. retrieved, .. Record(shown.Where(entry => entry.Item is not Fact)),
-            .. agent.Context.OperatingFacts.Select(fact => InstructionPlaceholders.Fill(fact, project, context.Agent, agent, now, context.Caller))];
+            .. task is not null && agent.Context.CurrentTask ? [Labels.Data("task", TaskBoard.Describe(task))] : Array.Empty<string>(),
+            .. agent.Context.OperatingFacts.Select(fact => InstructionPlaceholders.Fill(fact, project, context.Agent, agent, now, context.Caller, context.RunId, task))];
 
         // Entries come from tools and documents, so they are labelled as data (INV-08).
         IEnumerable<string> Record(IEnumerable<RecordEntry> part) =>
@@ -489,7 +510,7 @@ internal sealed class Turn
         var requests = pending.Select(call => new ToolRequest(call.Name, call.Arguments)).ToList();
         var results = await tools.RunAsync(context, requests, ct).ConfigureAwait(false);
         artifacts.AddRange(results.SelectMany(result => result.Artifacts));
-        entries = await record.ReadAsync(ct).ConfigureAwait(false);
+        await ReadStateAsync(ct).ConfigureAwait(false);
         conversation.Add(new Message(
             Role.User, pending.Zip(results, (call, result) => new ToolResultContent(call.Id, Labels.Data($"tool:{call.Name}", result.Content), result.Error is not null))));
         pending = [];

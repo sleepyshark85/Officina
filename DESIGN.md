@@ -16,8 +16,8 @@ namespace is its name.
 
 | Project | Box in the diagram | What it contains | Depends on | Loaded when |
 |---|---|---|---|---|
-| `Sleepyshark.Officina.Core` | Core | Options classes and validation; admission; turn engine; built-in loop patterns; context builder; conversation history and its shortening, kept through `IStorage.Conversations`; tool pipeline; run record; budgets; events; audit; extension interfaces (§4); built-in `record.*`, `control.*` and `artifact.*` tools; knowledge retrieval and its tools | .NET base library and a JSON Schema validator only | Always |
-| `Sleepyshark.Officina.Team` | Capabilities | Team pattern, lead role support, task board, helper agents; `tasks.*` and `team.*` tools | Core | `team` or `taskBoard` is on |
+| `Sleepyshark.Officina.Core` | Core | Options classes and validation; admission; turn engine; built-in loop patterns; context builder; conversation history and its shortening, kept through `IStorage.Conversations`; tool pipeline; run record; budgets; events; audit; extension interfaces (§4); built-in `record.*`, `control.*` and `artifact.*` tools; knowledge retrieval and its tools; the task board and its `tasks.*` tools, kept through `IStorage.Tasks` | .NET base library and a JSON Schema validator only | Always |
+| `Sleepyshark.Officina.Team` | Capabilities | Team pattern, lead role support, helper agents; `team.*` tools | Core | `team` is on |
 | `Sleepyshark.Officina.Workspace` | Capabilities | Git-backed workspace: baseline, working copies, integration queue, edit safety; `workspace.*` tools | Core; the git CLI at run time | `workspace` is on |
 | `Sleepyshark.Officina.Sandbox` | Capabilities | Linux sandbox (bubblewrap, cgroups v2) and Windows sandbox (AppContainer, Job Objects); filtering network proxy; `sandbox.*` tools | Core | `sandbox` is on |
 | `Sleepyshark.Officina.Capabilities` | Capabilities | Human interaction, project memory, checkpoints; `human.*` and `memory.*` tools | Core | Each part when its capability is on |
@@ -189,6 +189,16 @@ decides the outcome.
 
 <sub>[Open the HTML version](docs/diagrams/task-states.html)</sub>
 
+- **The board** is a run's, in Core, because gates and tools read it (TOOL-06). It is kept as changes keyed by
+  (run, revision), written with optimistic revisions like the record (§2). Each change holds the tasks it changed,
+  who changed them, what changed and why (TASK-07). Its rules are checked on the board after every change: the
+  transitions in the diagram, which are fixed in code (TASK-02), dependencies that exist and form no cycle (TASK-03),
+  and done only for a task whose checks passed and, if it requires one, whose review approved it (TASK-05, TASK-06).
+- **Done means integrated.** Submitting runs the task's checks, and only if they pass is the task in review. The host
+  integrates a task in review that is verified and approved, then marks it done; a conflict or a failed baseline check
+  returns it to its author as a failed attempt (WS-03). The last failed attempt, or a used-up task budget, sends it to
+  the lead as failed (TASK-09).
+
 ## 7. Workspace and sandbox
 
 | Concern | Design |
@@ -205,7 +215,7 @@ decides the outcome.
 
 - **Storage.** SQLite in WAL mode. Tables: runs (with the resolved configuration, CFG-07),
   conversations (append-only, a row per turn), record entries (keyed by run and revision),
-  artifacts (text rows, such as the full text of a trimmed tool result), tasks and task history,
+  artifacts (text rows, such as the full text of a trimmed tool result), task board changes (keyed by run and revision),
   memory, checkpoints, events, audit.
 - **Checkpoints are cheap because history is append-only.** A checkpoint stores:
   - the message count of each conversation;

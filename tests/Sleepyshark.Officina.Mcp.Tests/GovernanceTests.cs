@@ -37,6 +37,7 @@ public class GovernanceTests
             new Dictionary<string, ITool>(servers.Tools) { ["lookup"] = new FakeTool(ToolKind.Read) },
             new Dictionary<string, IGate>(),
             new Dictionary<string, IKnowledgeSource> { ["handbook"] = new FakeKnowledgeSource(Coverage.Covered, ("hb-1", "x")) },
+            new Dictionary<string, ICheck>(),
             storage,
             new EventBus(new InMemoryEventLog(), options.Storage, new FakeTimeProvider()),
             human,

@@ -2,6 +2,7 @@ using Json.Schema;
 using Sleepyshark.Officina.Core.Configuration;
 using Sleepyshark.Officina.Core.Extensibility;
 using Sleepyshark.Officina.Core.Records;
+using Sleepyshark.Officina.Core.Tasks;
 
 namespace Sleepyshark.Officina.Core.Tools;
 
@@ -38,7 +39,7 @@ internal sealed record CatalogTool(string Name, ToolOptions Options, ITool? Impl
 internal sealed class ToolCatalog
 {
     /// <summary>The built-in tools, by the name <c>builtin:</c> sources use.</summary>
-    public static readonly IReadOnlyList<string> Builtins = [.. RecordTool.All.Keys, ArtifactTool.Name];
+    public static readonly IReadOnlyList<string> Builtins = [.. RecordTool.All.Keys, ArtifactTool.Name, .. TaskTool.Names];
 
     private readonly Dictionary<string, Dictionary<string, CatalogTool>> byAgent;
 
@@ -47,7 +48,7 @@ internal sealed class ToolCatalog
     /// <exception cref="ConfigurationException">The configuration has errors.</exception>
     public static ToolCatalog Create(
         OfficinaOptions options, IReadOnlyDictionary<string, ITool> tools, IReadOnlyDictionary<string, IGate> gates, IReadOnlyDictionary<string, IKnowledgeSource> knowledge,
-        IArtifactStore artifacts)
+        IReadOnlyDictionary<string, ICheck> checks, IArtifactStore artifacts)
     {
         var errors = options.Validate().ToList();
         var catalog = new Dictionary<string, CatalogTool>();
@@ -55,7 +56,7 @@ internal sealed class ToolCatalog
         {
             foreach (var (name, tool) in options.Tools)
             {
-                catalog[name] = Join(name, tool, Implementation(name, tool, options, tools, knowledge, artifacts, errors), errors);
+                catalog[name] = Join(name, tool, Implementation(name, tool, options, tools, knowledge, checks, artifacts, errors), errors);
             }
 
             errors.AddRange(options.Knowledge
@@ -65,6 +66,9 @@ internal sealed class ToolCatalog
             errors.AddRange(options.Gates
                 .Where(gate => gate.Value.ExtensionId() is { } id && !gates.ContainsKey(id))
                 .Select(gate => Unregistered($"gates.{gate.Key}.use", "gate", gate.Value.ExtensionId()!)));
+            errors.AddRange(options.Checks
+                .Where(check => !checks.ContainsKey(check.Value.ExtensionId()!))
+                .Select(check => Unregistered($"checks.{check.Key}.use", "check", check.Value.ExtensionId()!)));
             errors.AddRange(catalog.Values.Where(tool => tool.Schema is not null).SelectMany(tool => Conditions(tool, options)));
         }
 
@@ -112,11 +116,11 @@ internal sealed class ToolCatalog
     /// <summary>What runs a tool's calls; null for a provider tool, or one that is missing.</summary>
     private static ITool? Implementation(
         string name, ToolOptions tool, OfficinaOptions options, IReadOnlyDictionary<string, ITool> tools, IReadOnlyDictionary<string, IKnowledgeSource> knowledge,
-        IArtifactStore artifacts, List<ConfigurationError> errors)
+        IReadOnlyDictionary<string, ICheck> checks, IArtifactStore artifacts, List<ConfigurationError> errors)
     {
         if (tool.BuiltinTool() is { } builtin)
         {
-            return builtin == ArtifactTool.Name ? new ArtifactTool(artifacts) : RecordTool.All[builtin];
+            return builtin == ArtifactTool.Name ? new ArtifactTool(artifacts) : RecordTool.All.GetValueOrDefault(builtin) ?? TaskTool.Create(builtin, checks);
         }
 
         if (tool.KnowledgeSource() is { } source)

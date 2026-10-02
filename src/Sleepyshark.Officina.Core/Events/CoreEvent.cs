@@ -3,6 +3,7 @@ using System.Text.Json.Serialization;
 using Sleepyshark.Officina.Core.Extensibility;
 using Sleepyshark.Officina.Core.Messages;
 using Sleepyshark.Officina.Core.Running;
+using Sleepyshark.Officina.Core.Tasks;
 
 namespace Sleepyshark.Officina.Core.Events;
 
@@ -30,6 +31,7 @@ public sealed record CoreEvent(string RunId, string Agent, string? Step, long Se
 [JsonDerivedType(typeof(ToolOutput), "toolOutput")]
 [JsonDerivedType(typeof(ApprovalRequested), "approvalRequested")]
 [JsonDerivedType(typeof(ApprovalAnswered), "approvalAnswered")]
+[JsonDerivedType(typeof(TaskStatusChanged), "taskStatusChanged")]
 public abstract record EventPayload
 {
     private static readonly Dictionary<Type, string> Names = typeof(EventPayload).GetCustomAttributes<JsonDerivedTypeAttribute>()
@@ -69,3 +71,6 @@ public sealed record ToolOutput(string Tool, string Line) : EventPayload;
 public sealed record ApprovalRequested(string Tool, string Reason) : EventPayload;
 
 public sealed record ApprovalAnswered(string Tool, bool Approved) : EventPayload;
+
+/// <summary>A task on the run's board has a new status (TASK-02).</summary>
+public sealed record TaskStatusChanged(string Task, TaskState Status) : EventPayload;

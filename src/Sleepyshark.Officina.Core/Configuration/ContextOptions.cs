@@ -22,6 +22,15 @@ public sealed record ContextOptions
         Example = """["fact", "decision"]""")]
     public IReadOnlyList<string>? Record { get; init; }
 
+    // REC-06.
+    [Setting("`all`: the agent sees the run record's entries of the kinds in `record`. `task`: only those made for the task it works on.",
+        Example = "\"task\"")]
+    public RecordScope RecordScope { get; init; } = RecordScope.All;
+
+    // CTX-01.
+    [Setting("Whether the volatile context shows the status and acceptance criteria of the task the agent works on.", Example = "false")]
+    public bool CurrentTask { get; init; } = true;
+
     [Setting("Knowledge retrieved before each turn.", Example = """{ "beforeTurn": ["handbook"], "handOffWhenNotCovered": true }""")]
     [Required(ErrorMessage = Messages.Required)]
     public RetrievalOptions Retrieval { get; init; } = new();
@@ -52,6 +61,12 @@ public sealed record HistoryOptions
 
     /// <summary>The id of the application's shortener, for an <c>extension:</c> shortening.</summary>
     public string? ExtensionId() => ToolOptions.After(Shortening, "extension:");
+}
+
+public enum RecordScope
+{
+    All,
+    Task,
 }
 
 public enum HistoryStrategy

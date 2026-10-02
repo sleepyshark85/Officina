@@ -500,12 +500,8 @@ PAT-02). Data moves only through declared `input` and `output` (PAT-04).
 
 ```jsonc
 "context": {
-  "sections": {                       // CTX-01 part 3; the order is fixed
-    "facts": true,
-    "retrievedKnowledge": true,
-    "findings": true,
-    "taskStatus": true
-  },
+  "record": ["fact", "finding", "decision"],  // REC-06, CTX-01: the run record entries the agent sees; unset is this list
+  "currentTask": true,                // CTX-01: the status and acceptance criteria of the task the agent works on
   "history": { "strategy": "shortened", "shortening": "provider", "lastTurns": null },  // CTX-06, HIST-01
   "retrieval": {                      // CTX-04, CTX-05; as a tool, see §5.8
     "beforeTurn": ["handbook"],
@@ -604,7 +600,7 @@ object with `"enabled"` plus its own settings.
   },
   "checkpoints": { "at": ["turn", "integration"] },                 // RUN-03; also "step", "tool"
   "team":        { "maxParallelAgents": 4, "helperDepth": 2, "helperCount": 4 },
-  "taskBoard":   { "maxAttempts": 3, "requireReview": true, "transitions": "default" },
+  "taskBoard":   { "maxAttempts": 3, "budget": 8 },                // TASK-09; the transitions are fixed (TASK-02), and each task says whether it needs a review
   "workspace": {
     "type": "builtin:git",
     "root": ".",

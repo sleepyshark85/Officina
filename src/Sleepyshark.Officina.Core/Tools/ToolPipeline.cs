@@ -9,6 +9,7 @@ using Sleepyshark.Officina.Core.Events;
 using Sleepyshark.Officina.Core.Extensibility;
 using Sleepyshark.Officina.Core.Observability;
 using Sleepyshark.Officina.Core.Records;
+using Sleepyshark.Officina.Core.Tasks;
 
 namespace Sleepyshark.Officina.Core.Tools;
 
@@ -38,7 +39,11 @@ public sealed class ToolPipeline
     /// </param>
     /// <param name="gates">The application's gates, by the id that <c>extension:&lt;id&gt;</c> gates name.</param>
     /// <param name="knowledge">The application's knowledge sources, by the id that <c>extension:&lt;id&gt;</c> sources name.</param>
-    /// <param name="storage">Where every write-tool attempt is audited, the run record is kept, and trimmed results are kept in full.</param>
+    /// <param name="checks">The application's checks, by the id that <c>extension:&lt;id&gt;</c> checks name.</param>
+    /// <param name="storage">
+    /// Where every write-tool attempt is audited, the run record and the task board are kept, and trimmed results are
+    /// kept in full.
+    /// </param>
     /// <param name="events">Where tool calls and approvals are published.</param>
     /// <param name="human">Who approves calls that need approval.</param>
     /// <param name="secrets">Where tools read credentials.</param>
@@ -49,6 +54,7 @@ public sealed class ToolPipeline
         IReadOnlyDictionary<string, ITool> tools,
         IReadOnlyDictionary<string, IGate> gates,
         IReadOnlyDictionary<string, IKnowledgeSource> knowledge,
+        IReadOnlyDictionary<string, ICheck> checks,
         IStorage storage,
         EventBus events,
         IHumanChannel human,
@@ -59,8 +65,9 @@ public sealed class ToolPipeline
         ArgumentNullException.ThrowIfNull(tools);
         ArgumentNullException.ThrowIfNull(gates);
         ArgumentNullException.ThrowIfNull(knowledge);
+        ArgumentNullException.ThrowIfNull(checks);
         ArgumentNullException.ThrowIfNull(storage);
-        catalog = ToolCatalog.Create(options, tools, gates, knowledge, storage.Artifacts);
+        catalog = ToolCatalog.Create(options, tools, gates, knowledge, checks, storage.Artifacts);
         this.options = options;
         this.gates = gates;
         this.storage = storage;
@@ -73,6 +80,16 @@ public sealed class ToolPipeline
 
     /// <summary>The tools an agent is offered, sorted by name. They never depend on the caller (TOOL-03).</summary>
     public IReadOnlyList<ToolDefinition> Offered(string agent) => catalog.Offered(agent);
+
+    /// <summary>A run's task board, as the owner or the host changes it (TASK-08, WS-03).</summary>
+    /// <exception cref="InvalidOperationException">The task board is off.</exception>
+    public TaskBoard Board(string? tenant, string runId) =>
+        Board(new ToolContext(runId, TaskBoard.Owner, Caller.Anonymous with { Tenant = tenant }), owner: true)
+        ?? throw new InvalidOperationException("The task board is off. Set capabilities.taskBoard.enabled to true.");
+
+    /// <summary>The run's task board as the agent of <paramref name="context"/> acts on it; null when the task board is off.</summary>
+    internal TaskBoard? Board(ToolContext context, bool owner = false) =>
+        options.Capabilities.TaskBoard.Enabled ? new TaskBoard(storage.Tasks, context, options, events, time, owner) : null;
 
     /// <summary>
     /// Runs the calls of one model reply. When every tool called is safe to run in parallel they run at the same time, up
@@ -129,8 +146,9 @@ public sealed class ToolPipeline
 
         var arguments = request.Arguments;
         var record = new RunRecord(storage.Records, context, time);
+        var board = Board(context);
         var approved = false;
-        await foreach (var stop in StepsAsync(context, tool, arguments, record, ct).ConfigureAwait(false))
+        await foreach (var stop in StepsAsync(context, tool, arguments, record, board, ct).ConfigureAwait(false))
         {
             if (approved && stop.Action == PolicyAction.Ask)
             {
@@ -183,7 +201,7 @@ public sealed class ToolPipeline
         ValueTask PublishAsync(string line, CancellationToken token) =>
             events.PublishAsync(context, new ToolOutput(tool.Name, masker?.Mask(secrets.Remove(line)) ?? secrets.Remove(line)), token);
         var (result, detail) = await InvokeAsync(
-            tool, new ToolCall(real ? context.Masker!.Restore(arguments) : arguments, context.Caller, key, secrets, record, PublishAsync), ct).ConfigureAwait(false);
+            tool, new ToolCall(real ? context.Masker!.Restore(arguments) : arguments, context.Caller, key, secrets, record, board, PublishAsync), ct).ConfigureAwait(false);
         detail = detail is null || masker is null ? detail : masker.Mask(detail);
         if (tool.Options.Untrusted && result.Error is null)
         {
@@ -216,7 +234,7 @@ public sealed class ToolPipeline
 
     /// <summary>The checks before a call runs, in order (TOOL-05); each yields what it decides when it does not allow the call.</summary>
     private async IAsyncEnumerable<Stop> StepsAsync(
-        ToolContext context, CatalogTool tool, JsonElement arguments, RunRecord record, [EnumeratorCancellation] CancellationToken ct)
+        ToolContext context, CatalogTool tool, JsonElement arguments, RunRecord record, TaskBoard? board, [EnumeratorCancellation] CancellationToken ct)
     {
         // 1. Arguments (MSG-07).
         var validation = tool.Schema!.Evaluate(arguments, new EvaluationOptions { OutputFormat = Json.Schema.OutputFormat.List });
@@ -254,7 +272,7 @@ public sealed class ToolPipeline
         {
             var gate = options.Gates[name];
             var decision = gate.ExtensionId() is { } id
-                ? await gates[id].EvaluateAsync(new GateContext(context.Agent, tool.Name, arguments, context.Caller, context.ReadUntrusted, record), ct).ConfigureAwait(false)
+                ? await gates[id].EvaluateAsync(new GateContext(context.Agent, tool.Name, arguments, context.Caller, context.ReadUntrusted, record, board), ct).ConfigureAwait(false)
                 : gate.When?.Holds(arguments) == false || (gate.Use == GateOptions.UntrustedContentApproval && !context.ReadUntrusted) ? GateDecision.Allow
                 : gate.Use == GateOptions.Deny ? GateDecision.Deny($"gate {name}")
                 : GateDecision.Ask($"gate {name}");

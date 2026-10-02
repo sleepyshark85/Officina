@@ -19,6 +19,8 @@ public sealed class InMemoryStorage : IStorage
 
     public InMemoryArtifactStore Artifacts { get; } = new();
 
+    public InMemoryTaskStore Tasks { get; } = new();
+
     IRunStore IStorage.Runs => Runs;
 
     IConversationStore IStorage.Conversations => Conversations;
@@ -31,6 +33,8 @@ public sealed class InMemoryStorage : IStorage
 
     IArtifactStore IStorage.Artifacts => Artifacts;
 
+    ITaskStore IStorage.Tasks => Tasks;
+
     public ValueTask<OwnerData> ExportAsync(string? tenant, string owner, CancellationToken ct)
     {
         var runs = Runs.Rows.Where(tenant, run => run.Owner == owner);
@@ -38,7 +42,7 @@ public sealed class InMemoryStorage : IStorage
         return ValueTask.FromResult(new OwnerData(
             runs, Events.Rows.Where(tenant, coreEvent => ids.Contains(coreEvent.RunId)), Audit.Rows.Where(tenant, entry => ids.Contains(entry.RunId)),
             Conversations.Rows.Where(tenant, turn => turn.Owner == owner), Records.Rows.Where(tenant, entry => ids.Contains(entry.RunId)),
-            [.. Artifacts.Rows.Where(tenant, row => ids.Contains(row.RunId)).Select(row => row.Artifact)]));
+            [.. Artifacts.Rows.Where(tenant, row => ids.Contains(row.RunId)).Select(row => row.Artifact)], Tasks.Rows.Where(tenant, change => ids.Contains(change.RunId))));
     }
 
     public ValueTask DeleteAsync(string? tenant, string owner, CancellationToken ct)
@@ -47,6 +51,7 @@ public sealed class InMemoryStorage : IStorage
         Events.Rows.RemoveAll((rowTenant, coreEvent) => rowTenant == tenant && ids.Contains(coreEvent.RunId));
         Records.Rows.RemoveAll((rowTenant, entry) => rowTenant == tenant && ids.Contains(entry.RunId));
         Artifacts.Rows.RemoveAll((rowTenant, row) => rowTenant == tenant && ids.Contains(row.RunId));
+        Tasks.Rows.RemoveAll((rowTenant, change) => rowTenant == tenant && ids.Contains(change.RunId));
         Runs.Rows.RemoveAll((rowTenant, run) => rowTenant == tenant && ids.Contains(run.RunId));
         Conversations.Rows.RemoveAll((rowTenant, turn) => rowTenant == tenant && turn.Owner == owner);
         return ValueTask.CompletedTask;
@@ -61,9 +66,11 @@ public sealed class InMemoryStorage : IStorage
         Audit.Rows.RemoveAll((_, entry) => now - entry.Time > retention.Audit);
         Artifacts.Rows.RemoveAll((_, row) => now - row.Time > retention.Artifacts);
 
-        // A record is deleted whole, once its last change is older than the period, so it is never trimmed (REC-05).
+        // A record or a board is deleted whole, once its last change is older than the period, so it is never trimmed (REC-05).
         var changed = Records.Rows.All.GroupBy(entry => entry.RunId).ToDictionary(run => run.Key, run => run.Max(entry => entry.Time));
         Records.Rows.RemoveAll((_, entry) => now - changed[entry.RunId] > retention.RunRecords);
+        var boards = Tasks.Rows.All.GroupBy(change => change.RunId).ToDictionary(run => run.Key, run => run.Max(change => change.Time));
+        Tasks.Rows.RemoveAll((_, change) => now - boards[change.RunId] > retention.TaskBoards);
         return ValueTask.CompletedTask;
     }
 }

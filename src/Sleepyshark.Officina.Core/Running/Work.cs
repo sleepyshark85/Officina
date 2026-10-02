@@ -19,6 +19,9 @@ public sealed record Work(string Agent, string Input)
     /// </summary>
     public bool HandOffToHuman { get; init; }
 
+    /// <summary>The task on the run's task board that the work is for, if any.</summary>
+    public string? TaskId { get; init; }
+
     /// <summary>
     /// The id of the run the work starts, known before it starts, so a reader can follow the run's events from its start.
     /// A copy made with <c>with</c> keeps it, so make a new work item for new work.

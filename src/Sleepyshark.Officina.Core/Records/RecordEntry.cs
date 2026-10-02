@@ -12,7 +12,8 @@ namespace Sleepyshark.Officina.Core.Records;
 /// <param name="Agent">The agent that proposed it; a decision's author.</param>
 /// <param name="Time">When it was accepted; a decision's or a citation's date.</param>
 /// <param name="Item">What was added.</param>
-public sealed record RecordEntry(string RunId, long Revision, string Agent, DateTimeOffset Time, RecordItem Item);
+/// <param name="Task">The task the agent worked on, if any; an agent can be limited to its task's entries (REC-06).</param>
+public sealed record RecordEntry(string RunId, long Revision, string Agent, DateTimeOffset Time, RecordItem Item, string? Task = null);
 
 /// <summary>What an entry adds. Each kind has a name, which configuration uses to choose what an agent sees (REC-06).</summary>
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "kind")]

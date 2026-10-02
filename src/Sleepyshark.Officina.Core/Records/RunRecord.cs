@@ -13,6 +13,7 @@ public sealed partial class RunRecord
     private readonly IRecordStore store;
     private readonly string? tenant;
     private readonly string agent;
+    private readonly string? task;
     private readonly TimeProvider time;
     private readonly Masker? masker;
 
@@ -25,6 +26,7 @@ public sealed partial class RunRecord
         tenant = context.Caller.Tenant;
         RunId = context.RunId;
         agent = context.Agent;
+        task = context.TaskId;
         this.time = time;
         masker = context.Masker;
     }
@@ -58,7 +60,7 @@ public sealed partial class RunRecord
                 return (true, $"Already in the record: {Describe(same, entries)}");
             }
 
-            var added = new RecordEntry(RunId, entries.Count == 0 ? 1 : entries[^1].Revision + 1, agent, time.GetUtcNow(), item);
+            var added = new RecordEntry(RunId, entries.Count == 0 ? 1 : entries[^1].Revision + 1, agent, time.GetUtcNow(), item, task);
             if (await store.TryAppendAsync(tenant, added, ct).ConfigureAwait(false))
             {
                 return (true, $"Recorded: {Describe(added, [.. entries, added])}");
