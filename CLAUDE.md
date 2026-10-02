@@ -6,10 +6,10 @@ the coding team CLI, `sof`. Sleepyshark is the organization: projects are `Sleep
 ## Where things are
 
 - `REQUIREMENTS.md`: what to build (requirement IDs such as `TOOL-05`), with the decisions in §13.
-- `DESIGN.md`: how it is built. `CONFIGURATION.md`: the configuration guide.
+- `DESIGN.md`: how it is built. `CONFIGURATION.md`: the configuration guide. `docs/user-guide.md`: setting up and using `sof`.
 - `docs/plan/README.md`: the master plan. **Its Status section says what is done and what is next.**
   Each slice has a file in `docs/plan/` and a GitHub issue.
-- `docs/spikes/`: findings from the sandbox and Claude SDK spikes.
+- `docs/spikes/`: findings from the sandbox and Claude SDK spikes. `benchmark/`: the TEST-31 coding team benchmark.
 
 ## How we work
 
@@ -36,5 +36,6 @@ the coding team CLI, `sof`. Sleepyshark is the organization: projects are `Sleep
 - Build and test: `dotnet build` and `dotnet test` (CI runs both on Linux and Windows).
 - Regenerate the configuration schema and settings reference:
   `OFFICINA_UPDATE_GENERATED=1 dotnet test --filter GeneratedDocumentationTests`.
-- Requirement coverage: `python3 docs/plan/check_coverage.py`.
+- Requirement coverage: `python3 docs/plan/check_coverage.py`. MUST verification:
+  `python3 docs/plan/check_verification.py` (it exits 1 while anything is pending).
 - Rebuild the design diagrams: `cd docs/diagrams && python3 generate.py . && python3 export_svg.py .`.
