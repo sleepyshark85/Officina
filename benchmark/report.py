@@ -3,7 +3,8 @@
     python3 benchmark/report.py <results folder>... [--target 0.9]
 
 Reads every run's JSON that bench.py wrote and prints a Markdown report. Exits with 1 when the success rate over all the runs
-is below the target (90%, the M7 milestone), or a goal has fewer than 3 runs on a system.
+is below the target (90%, the M7 milestone), or when any goal has fewer than 3 restarted runs on Linux or on Windows: TEST-31
+asks for every goal on both.
 """
 
 import argparse
@@ -13,7 +14,10 @@ import os
 import statistics
 import sys
 
+from scoring import goals
+
 MINIMUM_RUNS = 3
+SYSTEMS = ("Linux", "Windows")
 
 
 def load(folders):
@@ -39,18 +43,20 @@ def line(name, runs):
             f"{sum(run['declined'] for run in runs)} |")
 
 
-def summarise(runs, target):
-    """The report's Markdown and whether the benchmark met its target."""
-    systems = sorted({run["os"] for run in runs})
+def summarise(runs, target, required_goals=None, required_systems=SYSTEMS):
+    """The report's Markdown and whether the benchmark met its target: the rate, with every required goal run on every required system."""
+    required_goals = list(required_goals if required_goals is not None else goals())
+    systems = sorted({run["os"] for run in runs} | set(required_systems))
     out = ["# Coding team benchmark (TEST-31)", ""]
     header = ["| | Runs | Succeeded | Rate | Mean cost | Total cost | Mean minutes | Mean sign-offs | Declined |", "|---|---|---|---|---|---|---|---|---|"]
     problems = []
     for system in systems:
         mine = [run for run in runs if run["os"] == system]
         out += [f"## {system}", "", *header]
-        for goal in sorted({run["goal"] for run in mine}):
+        for goal in sorted({run["goal"] for run in mine} | set(required_goals)):
             of_goal = [run for run in mine if run["goal"] == goal]
-            out.append(line(goal, of_goal))
+            if of_goal:
+                out.append(line(goal, of_goal))
             if len(of_goal) < MINIMUM_RUNS:
                 problems.append(f"{goal} has {len(of_goal)} runs on {system}; it needs {MINIMUM_RUNS}.")
             if any(not run["restarted"] for run in of_goal):
@@ -59,7 +65,7 @@ def summarise(runs, target):
             of_tier = [run for run in mine if run["tier"] == tier]
             if of_tier:
                 out.append(line(f"**{tier}**", of_tier))
-        out += [line(f"**all on {system}**", mine), ""]
+        out += [line(f"**all on {system}**", mine) if mine else f"| **all on {system}** | 0 | | | | | | | |", ""]
     overall = rate(runs)
     met = overall >= target and not problems
     out += ["## Result", "", f"{sum(run['success'] for run in runs)} of {len(runs)} runs succeeded: {overall:.0%}, against a target of {target:.0%}."]
@@ -74,6 +80,8 @@ def summarise(runs, target):
 
 
 def why(run):
+    if run.get("timedOut"):
+        return "stopped at its timeout"
     if run.get("stoppedForCost"):
         return f"stopped at ${run['cost']:.2f}, past the cost cap"
     if not run["restarted"]:

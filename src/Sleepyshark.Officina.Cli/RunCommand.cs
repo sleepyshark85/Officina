@@ -1,4 +1,5 @@
 using System.CommandLine;
+using System.Globalization;
 using System.Text.Json;
 using Sleepyshark.Officina.Core.Configuration;
 using Sleepyshark.Officina.Core.Extensibility;
@@ -194,7 +195,8 @@ internal static class RunCommand
         await watching;
 
         output.WriteLine();
-        output.WriteLine($"{name}: {result.Outcome}{(result.Handoff is { } handoff ? $" ({handoff.Reason}: {handoff.Detail})" : "")}, cost ${result.Statistics.Cost:0.00}");
+        output.WriteLine(string.Create(
+            CultureInfo.InvariantCulture, $"{name}: {result.Outcome}{(result.Handoff is { } handoff ? $" ({handoff.Reason}: {handoff.Detail})" : "")}, cost ${result.Statistics.Cost:0.00}"));
         output.WriteLine(result.Output);
         if (await RunReport.BuildAsync(session.Storage, null, session.RunId, CancellationToken.None) is { } report)
         {
@@ -275,7 +277,7 @@ internal static class RunCommand
         var tasks = await runner.Board(null, runId).ReadAsync(ct);
         return tasks.Count == 0 ? "the board is empty.\n" : string.Concat(tasks.Select(task =>
             $"{task.Id} {task.Title}: {task.State}{(task.Assignee is { } assignee ? $", with {assignee}" : "")}{(task.Role is { } role ? $", role {role}" : "")}"
-            + $"{(task.DependsOn.Count > 0 ? $", depends on {string.Join(", ", task.DependsOn)}" : "")}, priority {task.Priority}, ${task.Spent:0.00} of ${task.Budget:0.00}\n"));
+            + string.Create(CultureInfo.InvariantCulture, $"{(task.DependsOn.Count > 0 ? $", depends on {string.Join(", ", task.DependsOn)}" : "")}, priority {task.Priority}, ${task.Spent:0.00} of ${task.Budget:0.00}\n")));
     }
 
     /// <summary>

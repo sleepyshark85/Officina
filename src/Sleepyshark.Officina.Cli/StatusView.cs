@@ -1,3 +1,4 @@
+using System.Globalization;
 using Sleepyshark.Officina.Core.Events;
 using Sleepyshark.Officina.Workspace;
 
@@ -37,7 +38,8 @@ internal sealed class StatusView(TextWriter output, Func<IntegrationQueueStatus>
             if (coreEvent.Payload is ModelCallEnded call)
             {
                 cost += call.Cost;
-                output.WriteLine($"[{coreEvent.Agent}] model call: {call.Usage.Total} tokens, ${call.Cost:0.00}; cost so far ${cost:0.00}");
+                // Costs are written the same in every culture, so whatever reads the console reads them alike.
+                output.WriteLine(string.Create(CultureInfo.InvariantCulture, $"[{coreEvent.Agent}] model call: {call.Usage.Total} tokens, ${call.Cost:0.00}; cost so far ${cost:0.00}"));
             }
 
             if (now is not null)
@@ -68,7 +70,7 @@ internal sealed class StatusView(TextWriter output, Func<IntegrationQueueStatus>
                 output.WriteLine($"integration queue: {integration.Length} waiting, longest wait {integration.LongestWait:hh\\:mm\\:ss}");
             }
 
-            output.WriteLine($"cost so far: ${cost:0.00}");
+            output.WriteLine(string.Create(CultureInfo.InvariantCulture, $"cost so far: ${cost:0.00}"));
         }
     }
 }

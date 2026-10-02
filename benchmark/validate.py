@@ -1,10 +1,11 @@
-"""Validates the hidden test suites against the reference solutions, so a failed benchmark run is the team's, not the suite's.
+"""Validates the hidden test suites against the reference solutions: each suite can be passed by a solution of its goal.
 
     python3 benchmark/validate.py [goal ...]
 
 Each goal's reference solution, in `reference/<goal>`, is copied to an empty folder outside the repository, as a team's workspace
-would be, and scored as a run's baseline is: its own build and tests, then every hidden test. The hidden tests must also fail
-against an empty workspace, so that no suite passes by itself. The references are written from
+would be, and scored as a run's baseline is: its own build and tests, then every hidden test. As a cheap sanity check, each suite
+must also fail against an empty workspace; that shows only that it needs a project, not that each test tells a wrong solution
+from a right one. The references are written from
 the goal paragraphs alone and are never given to the team: a run's workspace is a new repository holding only `sof.json`.
 Exits with 1 when any reference fails.
 """

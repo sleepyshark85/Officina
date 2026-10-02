@@ -1,7 +1,7 @@
 """Runs the coding team benchmark (TEST-31): each goal, several times, each run from an empty repository with one forced restart.
 
-    python3 benchmark/bench.py [--goals s1-word-count,m1-todo-api] [--runs 3] [--max-cost 60] [--seed 1] [--results <folder>]
-                               [--sof "<command>"]
+    python3 benchmark/bench.py --i-understand-unsandboxed-scoring [--goals s1-word-count,m1-todo-api] [--runs 3]
+                               [--max-cost 60] [--timeout 28800] [--seed 1] [--results <folder>] [--sof "<command>"]
 
 It runs the live model, so it costs money: ANTHROPIC_API_KEY must be set (`sof` reads it). Without --sof it builds `sof` from this
 repository first. A run:
@@ -16,7 +16,11 @@ repository first. A run:
    and tests, then the goal's hidden tests (scoring.py).
 
 A run succeeds when it was restarted once, its baseline passes its own checks and every hidden test, and its only human inputs
-were sign-offs. A run whose cost passes --max-cost is stopped and fails. Each run's result is written as JSON, with the console
+were sign-offs. A run whose cost passes --max-cost, or that runs longer than --timeout seconds, is stopped and fails.
+
+Scoring builds and runs the team's code outside any sandbox, as the user who runs this script: the team's commands run in sof's
+sandbox, but the build, the tests and the hidden suites run here. Run the benchmark in a throwaway VM or user account, which is
+why it asks for --i-understand-unsandboxed-scoring. Each run's result is written as JSON, with the console
 log beside it, to the results folder; report.py summarises one or more results folders.
 """
 
@@ -33,6 +37,7 @@ import subprocess
 import sys
 import stat
 import tempfile
+import threading
 import time
 
 from scoring import BENCHMARK, goal_text, goals, score, tier
@@ -44,7 +49,7 @@ GIT = ["git", "-c", "user.name=benchmark", "-c", "user.email=benchmark@localhost
 RESTART_BEFORE = {"small": 8, "medium": 16, "larger": 24}
 
 REQUEST = re.compile(r"^#(\d+) (\S+) (needs your sign-off|asks to run|asks:)")
-COST = re.compile(r"cost so far \$(\d+(?:\.\d+)?)")
+COST = re.compile(r"cost so far \$(\d+(?:[.,]\d+)?)")  # sof writes invariant costs; a comma is read too
 MODEL_CALL = re.compile(r"^\[\S+\] model call: ")
 
 
@@ -68,22 +73,30 @@ def new_workspace(goal):
 class Console:
     """One `sof` process at the console: answers what waits for the owner and counts model calls and cost from its lines."""
 
-    def __init__(self, sof, args, workspace, log, state, kill_at, max_cost):
+    def __init__(self, sof, args, workspace, log, state, kill_at, max_cost, deadline):
         self.state, self.kill_at, self.max_cost = state, kill_at, max_cost
         self.log = log
         self.killed = None
+        # A resumed run shows its stored events again, its earlier model calls too, which are counted already.
+        self.replayed = 0 if kill_at is not None else state["modelCalls"]
         self.process = subprocess.Popen(
             [*sof, *args], cwd=workspace, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
             text=True, encoding="utf-8", errors="replace", bufsize=1)
+        self.timer = threading.Timer(max(0.0, deadline - time.monotonic()), self.stop, ["timeout"])
+        self.timer.daemon = True
 
     def run(self):
-        """Reads the console until the process ends; returns its exit code."""
-        with self.process:
-            for line in self.process.stdout:
-                self.log.write(line)
-                self.log.flush()
-                self.take(line.rstrip("\n"))
-            return self.process.wait()
+        """Reads the console until the process ends, or is killed at the run's deadline; returns its exit code."""
+        self.timer.start()
+        try:
+            with self.process:
+                for line in self.process.stdout:
+                    self.log.write(line)
+                    self.log.flush()
+                    self.take(line.rstrip("\n"))
+                return self.process.wait()
+        finally:
+            self.timer.cancel()
 
     def take(self, line):
         if self.killed:
@@ -101,10 +114,13 @@ class Console:
                 state["declined"] += 1
                 self.answer(f"deny {number}")
         if MODEL_CALL.match(line):
-            state["modelCalls"] += 1
             cost = COST.search(line)
             if cost:
-                state["cost"] = max(state["cost"], float(cost.group(1)))
+                state["cost"] = max(state["cost"], float(cost.group(1).replace(",", ".")))
+            if self.replayed > 0:
+                self.replayed -= 1
+                return
+            state["modelCalls"] += 1
             if self.kill_at is not None and state["modelCalls"] >= self.kill_at and not state["restarted"]:
                 self.stop("restart")
             elif state["cost"] > self.max_cost:
@@ -153,23 +169,24 @@ def report(sof, workspace, run_id):
     return found
 
 
-def run_once(sof, goal, number, results, rng, max_cost):
+def run_once(sof, goal, number, results, rng, max_cost, timeout=8 * 3600):
     """One run of a goal: from an empty repository, with a forced restart; writes and returns its result."""
     workspace = new_workspace(goal)
     kill_at = rng.randint(2, RESTART_BEFORE[tier(goal)])
     state = {"runId": None, "signOffs": 0, "declined": 0, "modelCalls": 0, "cost": 0.0, "restarted": False}
     started = time.monotonic()
+    deadline = started + timeout
     exits = []
-    stopped_for_cost = False
     with open(os.path.join(results, f"{goal}-{number}.log"), "w", encoding="utf-8") as log:
-        console = Console(sof, ["run", "--input", goal_text(goal)], workspace, log, state, kill_at, max_cost)
+        console = Console(sof, ["run", "--input", goal_text(goal)], workspace, log, state, kill_at, max_cost, deadline)
         exits.append(console.run())
         if console.killed == "restart" and state["runId"] is not None:
             state["restarted"] = True
             log.write(f"\n--- killed after model call {state['modelCalls']}; resuming ---\n")
-            console = Console(sof, ["resume", state["runId"]], workspace, log, state, None, max_cost)
+            console = Console(sof, ["resume", state["runId"]], workspace, log, state, None, max_cost, deadline)
             exits.append(console.run())
         stopped_for_cost = console.killed == "cost"
+        timed_out = console.killed == "timeout"
     seconds = time.monotonic() - started
 
     found = report(sof, workspace, state["runId"])
@@ -178,12 +195,13 @@ def run_once(sof, goal, number, results, rng, max_cost):
         subprocess.run([*GIT, "clone", "-q", workspace, baseline], check=True)
         scored = score(goal, baseline)
 
-    success = state["restarted"] and not stopped_for_cost and scored["passed"]
+    success = state["restarted"] and not stopped_for_cost and not timed_out and scored["passed"]
     if success:
         remove(workspace)  # a failed run's workspace is kept, to look into
     result = {
         "goal": goal, "tier": tier(goal), "run": number, "os": platform.system(), "runId": state["runId"], "workspace": workspace,
         "restartAfterModelCall": kill_at, "restarted": state["restarted"], "exitCodes": exits, "stoppedForCost": stopped_for_cost,
+        "timedOut": timed_out,
         "humanInputs": state["signOffs"], "declined": state["declined"],
         "cost": found.get("cost", state["cost"]), "modelCalls": found.get("modelCalls", state["modelCalls"]), "tokens": found.get("tokens"),
         "wallSeconds": round(seconds), "runningSeconds": found.get("runningSeconds"), "status": found.get("status"), "outcome": found.get("outcome"),
@@ -201,10 +219,16 @@ def main(argv):
     parser.add_argument("--goals", default=",".join(goals()), help="the goals to run, comma-separated (default: all)")
     parser.add_argument("--runs", type=int, default=3, help="runs of each goal (default: 3)")
     parser.add_argument("--max-cost", type=float, default=60.0, help="stops a run whose cost passes this many dollars (default: 60)")
+    parser.add_argument("--timeout", type=float, default=8 * 3600, help="stops a run that takes longer, in seconds (default: 8 hours)")
+    parser.add_argument("--i-understand-unsandboxed-scoring", action="store_true",
+                        help="scoring builds and runs the team's code outside any sandbox; run the benchmark in a throwaway VM or account")
     parser.add_argument("--seed", type=int, default=None, help="seeds the restart points, to repeat a set of runs")
     parser.add_argument("--results", default=None, help="the folder for the results (default: benchmark/results/<time>-<os>)")
     parser.add_argument("--sof", default=None, help="the command that runs sof (default: build it from this repository)")
     options = parser.parse_args(argv)
+    if not options.i_understand_unsandboxed_scoring:
+        parser.error("scoring builds and runs the team's code outside any sandbox, as you. Run the benchmark in a throwaway VM or "
+                     "user account, and pass --i-understand-unsandboxed-scoring.")
 
     selected = [goal for goal in options.goals.split(",") if goal]
     unknown = [goal for goal in selected if goal not in goals()]
@@ -219,7 +243,7 @@ def main(argv):
     outcomes = []
     for goal in selected:
         for number in range(1, options.runs + 1):
-            result = run_once(sof, goal, number, results, rng, options.max_cost)
+            result = run_once(sof, goal, number, results, rng, options.max_cost, options.timeout)
             outcomes.append(result["success"])
             print(f"{goal} run {number}: {'success' if result['success'] else 'failure'}, ${result['cost']:.2f}, "
                   f"{result['wallSeconds']}s, {result['humanInputs']} sign-offs, {result['declined']} declined", flush=True)

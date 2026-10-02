@@ -67,8 +67,8 @@ listing runs) and the S02 notes stay in the plan's follow-ups.
   baseline passes its own build and tests and every hidden test. [`report.py`](../../benchmark/report.py) sums the results by goal,
   tier and system, and checks 90% with at least 3 restarted runs of each goal on each system.
 - [`benchmark/reference/`](../../benchmark/reference) holds a solution for each goal, written from its paragraph alone, and
-  [`validate.py`](../../benchmark/validate.py) scores each as a run's baseline in an empty folder, and checks that every suite
-  fails against an empty workspace. All ten pass on Linux. A CI job runs it on Linux and Windows, with the runner's own tests
+  [`validate.py`](../../benchmark/validate.py) scores each as a run's baseline in an empty folder, so each suite can be passed, and
+  checks, as a sanity check only, that every suite fails against an empty workspace. All ten pass on Linux. A CI job runs it on Linux and Windows, with the runner's own tests
   against a stand-in for `sof` (`benchmark/tests/`), which restarts a run, answers its sign-off and declines its command.
 - Validating found a harness bug: Python's text mode turns each newline sent to a program's standard input into CRLF on Windows,
   which `wc`'s byte count and the CSV's quoted line break would see. The harness now sends bytes. No test changed what it checks.

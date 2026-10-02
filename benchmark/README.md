@@ -33,21 +33,27 @@ A run succeeds when it was restarted once and its baseline passes its own checks
 are the sign-offs. Each goal runs at least 3 times, on Linux and on Windows. [`report.py`](report.py) sums the results by goal,
 tier and system, and checks the 90% target (M7).
 
+**Run it in a throwaway VM or user account.** The team's commands run in `sof`'s sandbox, but scoring builds and runs the
+team's code outside any sandbox, as you: its build, its tests and the hidden suites, with access to your home folder. So
+`bench.py` asks for `--i-understand-unsandboxed-scoring`.
+
 ```sh
-export ANTHROPIC_API_KEY=...                                  # the runs call the live model and cost money
-python3 benchmark/bench.py --goals s1-word-count --runs 1     # a pilot run
-python3 benchmark/bench.py                                    # every goal, 3 runs each
+export ANTHROPIC_API_KEY=...         # the runs call the live model and cost money
+python3 benchmark/bench.py --i-understand-unsandboxed-scoring --goals s1-word-count --runs 1    # a pilot run
+python3 benchmark/bench.py --i-understand-unsandboxed-scoring                                  # every goal, 3 runs each
 python3 benchmark/report.py benchmark/results/<linux run> benchmark/results/<windows run>
 ```
 
-A run whose cost passes `--max-cost` (60 dollars) is stopped and fails. A failed run's workspace is kept, its path in the run's
+The report meets the target only with every goal run at least 3 times on both Linux and Windows. A run whose cost passes
+`--max-cost` (60 dollars), or that takes longer than `--timeout` (8 hours), is stopped and fails. A failed run's workspace is kept, its path in the run's
 JSON; a successful run's is removed.
 
 ## The reference solutions
 
 [`reference/`](reference) holds a solution for each goal, written from its paragraph alone. [`validate.py`](validate.py)
-copies each to an empty folder and scores it as a run's baseline would be, and checks that the hidden tests fail against an
-empty workspace, so a failed run is the team's and not the suite's. CI runs it on Linux and Windows, with the runner's own
+copies each to an empty folder and scores it as a run's baseline would be: each suite can be passed. It also checks that each
+suite fails against an empty workspace, which shows only that a suite needs a project, not that it tells a wrong solution from a
+right one. CI runs it on Linux and Windows when `benchmark/` changes, with the runner's own
 tests ([`tests/`](tests), against a stand-in for `sof`). Validating found that text sent to a program's standard input became
 CRLF on Windows, which the goals do not allow; the harness now sends it as bytes.
 

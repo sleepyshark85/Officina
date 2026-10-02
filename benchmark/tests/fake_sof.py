@@ -1,8 +1,10 @@
 """A stand-in for `sof` at the console, so the benchmark runner is tested without the live model.
 
 It speaks sof's console lines (`run <id>`, numbered requests, `model call:` lines with the cost so far) and reads the owner's
-answers. A run makes 10 model calls, asking for the plan's sign-off first and for a command at the third; a resumed run goes on
-from the calls it had made. At the end it commits the folder that FAKE_SOF_SOLUTION names, if any, as the team's work.
+answers. A run makes 10 model calls, asking for the plan's sign-off first and for a command at the third; a resumed run shows the
+calls it had made again, as sof replays a run's stored events, and goes on from them. At the end it commits the folder that
+FAKE_SOF_SOLUTION names, if any, as the team's work. FAKE_SOF_HANG makes it hang after the sign-off; FAKE_SOF_NO_REPORT makes
+`report` fail.
 """
 
 import json
@@ -11,6 +13,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import uuid
 
 CALLS = 10
@@ -41,19 +44,27 @@ def ask(number, text, expected):
         sys.exit(3)
 
 
+def model_call(call):
+    print(f"[developer[1]] model call: 1000 tokens, $0.10; cost so far ${call * 0.1:.2f}", flush=True)
+
+
 def work(state):
     print(f"run {state['id']}", flush=True)
+    for call in range(1, state["calls"] + 1):
+        model_call(call)
     if not state["planApproved"]:
         ask(1, "lead needs your sign-off: Approve the lead's plan. Answer with approve or deny.", "approve 1")
         state["planApproved"] = True
         save(state)
+    if os.environ.get("FAKE_SOF_HANG"):
+        time.sleep(3600)
     while state["calls"] < CALLS:
         call = state["calls"] + 1
         if call == 3:
             ask(2, 'developer[1] asks to run run_command {"command": "ls"}: ls. Answer with approve, deny or change.', "deny 2")
         state["calls"] = call
         save(state)  # before the line, so a kill right after it does not repeat the call
-        print(f"[developer[1]] model call: 1000 tokens, $0.10; cost so far ${call * 0.1:.2f}", flush=True)
+        model_call(call)
     solution = os.environ.get("FAKE_SOF_SOLUTION")
     if solution:
         shutil.copytree(solution, os.getcwd(), dirs_exist_ok=True, ignore=shutil.ignore_patterns("bin", "obj"))
@@ -75,6 +86,8 @@ def main(args):
         save(state)
         return work(state)
     if args[:1] == ["report"]:
+        if os.environ.get("FAKE_SOF_NO_REPORT"):
+            return 1
         state = load(args[1])
         print(f"Run {state['id']}: Completed, Completed")
         print(f"Agent team, started 2030-01-01 00:00:00Z, running 0:00:02, resumed {state['resumes']} times")
