@@ -84,7 +84,7 @@ public sealed class RunCommandTests : IDisposable
         var run = sof.RunAsync("run", "--input", "Pick a database.");
         await sof.Out.WaitForAsync("#1 dev asks to run note", Ct);
         sof.In.Type("answer 1 no, don't");
-        await sof.Out.WaitForAsync("error: #1 is dev asks to run note", Ct);
+        await sof.Out.WaitForAsync("error: #1 is not a question.", Ct);
         sof.In.Type("status");
         await sof.Out.WaitForAsync("waiting for you: #1 dev asks to run note", Ct);
         sof.In.Type("approve 1");

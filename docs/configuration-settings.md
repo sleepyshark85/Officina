@@ -21,10 +21,10 @@ It lists the settings the code has today. Settings that later slices add are spe
 | `policies` | section | `{"permissionRules":[],"gates":[],"anonymousPermissions":[],"masking":{"enabled":true},"rateLimits":{}}` | Permission rules, gates for all tools, anonymous callers' permissions, masking and rate limits. | `{"gates":["no-main-branch"]}` |
 | `checks` | named entries | `{}` | Checks of output, by name. Agents refer to them by name in `output.checks`. | `{"no-secrets":{"use":"extension:Acme.NoSecretsCheck"}}` |
 | `knowledge` | named entries | `{}` | Knowledge sources, by name. | `{"handbook":{"use":"extension:Acme.HandbookIndex"}}` |
-| `run` | section | `{"budget":{"cost":25,"time":"08:00:00"},"permissionMode":"ask"}` | Defaults for every run. | `{"permissionMode":"ask"}` |
+| `run` | section | `{"budget":{"cost":25,"time":"08:00:00"},"permissionMode":"ask","approvalTimeout":"00:30:00","cancelWithin":"00:00:10"}` | Defaults for every run. | `{"permissionMode":"ask"}` |
 | `operations` | section | `{"telemetry":{"cacheHitWarning":0.7}}` | How the engine is operated. | `{"telemetry":{"cacheHitWarning":0.7}}` |
 | `storage` | section | `{"retention":{"audit":"365.00:00:00"}}` | What is stored, and for how long. | `{"unstoredEvents":["textGenerated"],"retention":{"events":"30.00:00:00"}}` |
-| `capabilities` | section | `{"conversationStore":{"enabled":false},"knowledge":{"enabled":false},"workspace":{"enabled":false,"protectedPaths":[],"keepWorkingCopies":false},"sandbox":{"enabled":false,"allowedHosts":[],"toolchains":[],"commandRules":[],"secrets":{}},"taskBoard":{"enabled":false,"maxAttempts":3,"budget":8}}` | Optional capabilities and their settings. All are off by default. | `{"conversationStore":{"enabled":true}}` |
+| `capabilities` | section | `{"conversationStore":{"enabled":false},"knowledge":{"enabled":false},"humanInteraction":{"enabled":false},"workspace":{"enabled":false,"protectedPaths":[],"keepWorkingCopies":false},"sandbox":{"enabled":false,"allowedHosts":[],"toolchains":[],"commandRules":[],"secrets":{}},"taskBoard":{"enabled":false,"maxAttempts":3,"budget":8}}` | Optional capabilities and their settings. All are off by default. | `{"conversationStore":{"enabled":true}}` |
 
 ## `project`
 
@@ -137,7 +137,9 @@ It lists the settings the code has today. Settings that later slices add are spe
 | Setting | Allowed values | Default | Description | Example |
 |---|---|---|---|---|
 | `budget` | section | `{"cost":25,"time":"08:00:00"}` | The run's budget. It can be high, but it cannot be removed or unlimited. Required. Live: the owner may change it during a run. | `{"cost":25,"time":"08:00:00"}` |
-| `permissionMode` | `"ask"`, `"auto"`, `"readOnly"` | `"ask"` | How tool calls that need permission are decided: `ask` the owner, `auto` by the rules, or `readOnly`. Live: the owner may change it during a run. | `"ask"` |
+| `permissionMode` | `"ask"`, `"auto"`, `"readOnly"` | `"ask"` | How tool calls that need permission are decided: `ask` the owner about every write tool call no permission rule allows, `auto` by the rules alone, or `readOnly`, where no write tool runs. Live: the owner may change it during a run. | `"ask"` |
+| `approvalTimeout` | time span (`hh:mm:ss` or `d.hh:mm:ss`) | `"00:30:00"` | How long an approval, sign-off or question waits for the owner, as `hh:mm:ss`. With no answer by then, an approval or sign-off is denied and a question goes unanswered. | `"00:30:00"` |
+| `cancelWithin` | time span (`hh:mm:ss` or `d.hh:mm:ss`) | `"00:00:10"` | How long a cancelled agent has to stop, as `hh:mm:ss`. One still running by then is left behind, and its turn ends in a handoff. | `"00:00:10"` |
 
 ## `operations`
 
@@ -158,6 +160,7 @@ It lists the settings the code has today. Settings that later slices add are spe
 |---|---|---|---|---|
 | `conversationStore` | section | `{"enabled":false}` | The conversation store: each agent's conversation with each caller is kept, anonymous callers sharing one, so a history strategy other than `none` continues it across requests and restarts. | `{"enabled":true}` |
 | `knowledge` | section | `{"enabled":false}` | Knowledge retrieval: the sources in `knowledge`, searched before a turn or through `knowledge:` tools. | `{"enabled":true}` |
+| `humanInteraction` | section | `{"enabled":false}` | Human interaction: the `builtin:human.ask_owner` tool, and sign-offs where the run waits for the owner. | `{"enabled":true,"signOffs":["runBudgetExceeded"]}` |
 | `workspace` | section | `{"enabled":false,"protectedPaths":[],"keepWorkingCopies":false}` | The git workspace: a working copy per agent, and an integration queue into the baseline. | `{"enabled":true,"protectedPaths":[{"path":"secrets/**","access":"hidden"}]}` |
 | `sandbox` | section | `{"enabled":false,"allowedHosts":[],"toolchains":[],"commandRules":[],"secrets":{}}` | The sandbox that commands run in: no network unless allowed, and command rules. It needs the workspace. | `{"enabled":true,"allowedHosts":["api.nuget.org"]}` |
 | `taskBoard` | section | `{"enabled":false,"maxAttempts":3,"budget":8}` | The task board: tasks with dependencies, verification checks and review, which agents change through the `tasks.*` tools and the owner at any time. | `{"enabled":true,"maxAttempts":2}` |
@@ -290,6 +293,13 @@ It lists the settings the code has today. Settings that later slices add are spe
 | Setting | Allowed values | Default | Description | Example |
 |---|---|---|---|---|
 | `enabled` | boolean | `false` | Whether the capability is on. | `true` |
+
+## `capabilities.humanInteraction`
+
+| Setting | Allowed values | Default | Description | Example |
+|---|---|---|---|---|
+| `enabled` | boolean | `false` | Whether human interaction is on. | `true` |
+| `signOffs` | list |  | Where a run waits for the owner's sign-off: `runBudgetExceeded`, to go on past the run's budget, which otherwise ends the turn; and `irreversibleAction`, before every irreversible tool call, whatever the tool's `approval`. Unset means both. An empty list in a file counts as unset; to turn both off, set an empty list in code. | `["runBudgetExceeded"]` |
 
 ## `capabilities.workspace`
 

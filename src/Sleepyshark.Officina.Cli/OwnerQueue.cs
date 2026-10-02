@@ -56,7 +56,8 @@ internal sealed class OwnerQueue(TextWriter output) : IHumanChannel
         };
         if (!fits)
         {
-            return $"error: #{number} is {Describe(entry.Request)}";
+            var needs = command switch { "answer" => "a question", "change" => "an approval", _ => "an approval or sign-off" };
+            return $"error: #{number} is not {needs}.";
         }
 
         return entry.Answer.TrySetResult(answer) ? null : "error: nothing waits for you with that number.";
