@@ -80,7 +80,8 @@ public sealed record SearchHit(string Path, int Line, string Text);
 
 /// <summary>How an integration ended.</summary>
 /// <param name="Outcome">Whether the change reached the baseline.</param>
-/// <param name="Details">For a conflict, the conflicting files; for failed checks, each finding after its check's name.</param>
+/// <param name="Details">For a conflict, the conflicting files; for failed checks, each finding after its check's name; for a
+/// protected change, the protected files it changes.</param>
 public sealed record IntegrationResult(IntegrationOutcome Outcome, IReadOnlyList<string> Details)
 {
     /// <summary>What went wrong cleaning up after it, which does not change how it ended; null when nothing did.</summary>
@@ -97,6 +98,12 @@ public enum IntegrationOutcome
 
     /// <summary>A baseline check failed on the change, so the baseline did not move (WS-02).</summary>
     ChecksFailed,
+
+    /// <summary>
+    /// The change adds, changes or removes a protected path, such as a configuration file a command created in the working copy,
+    /// so the baseline did not move (INV-10, WS-05); it goes back to the author.
+    /// </summary>
+    Protected,
 }
 
 /// <summary>

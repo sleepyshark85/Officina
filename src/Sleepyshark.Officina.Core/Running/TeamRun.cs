@@ -191,9 +191,14 @@ internal sealed class TeamRun
                     team.MarkUntrusted(); // SEC-04: the findings come from running the agents' code, and reach the author
                 }
 
-                var why = result.Outcome == IntegrationOutcome.Conflict
-                    ? $"it conflicts with the baseline in {string.Join(", ", result.Details)}; the working copy now holds the baseline with the conflicts marked, to resolve"
-                    : $"the baseline checks failed with it: {string.Join("; ", result.Details)}";
+                var why = result.Outcome switch
+                {
+                    IntegrationOutcome.Conflict =>
+                        $"it conflicts with the baseline in {string.Join(", ", result.Details)}; the working copy now holds the baseline with the conflicts marked, to resolve",
+                    IntegrationOutcome.Protected =>
+                        $"it changes protected files, which no agent may change: {string.Join(", ", result.Details)}; take those changes out of the working copy",
+                    _ => $"the baseline checks failed with it: {string.Join("; ", result.Details)}",
+                };
                 changed |= (await board.ReturnAsync(task.Id, why, ct).ConfigureAwait(false)).Accepted;
                 continue;
             }

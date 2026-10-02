@@ -595,7 +595,10 @@ interface (the CLI, or the host API), never by editing files mid-run. Each chang
 | Sign-off answers, approvals | Owner | HITL-02, HITL-04. |
 
 No agent can change any setting (INV-10). None of the built-in tools can, and extension tools are
-not given access to configuration.
+not given access to configuration. The configuration files are read-only to agents' file tools and commands, and since a
+command could still create a new one, such as a `sof.<environment>.json`, integration refuses any change that adds, changes or
+removes a protected path, and returns it to its author. `sof.json` belongs in the git repository's top folder, which the
+workspace and its protected paths are relative to; a workspace in a subfolder is refused.
 
 ---
 

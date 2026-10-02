@@ -121,7 +121,7 @@ public sealed class SofConfiguration
         var extended = loaded
             .Where(file => !file.StartsWith("preset:", StringComparison.Ordinal))
             .Select(file => Path.GetRelativePath(root, file))
-            .Where(file => !file.StartsWith("..", StringComparison.Ordinal) && !Path.IsPathRooted(file)) // outside, agents cannot reach it
+            .Where(file => file.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)[0] != ".." && !Path.IsPathRooted(file)) // outside, agents cannot reach it
             .Select(file => new ProtectedPath { Path = file.Replace('\\', '/'), Access = PathAccess.ReadOnly })
             .Where(path => !WorkspaceOptions.FixedProtectedPaths.Contains(path))
             .ToList();

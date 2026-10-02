@@ -11,6 +11,9 @@ Last updated 2026-10-02.
 - **Next:** S21 (hardening and benchmark, [#23](https://github.com/sleepyshark85/Officina/issues/23)), which runs the TEST-31
   benchmark in [`benchmark/`](../../benchmark/README.md) against the live model.
 - **Open follow-ups:**
+  - After S20 (fix): integration refuses a change that adds, changes or removes a protected path, since a command can create a
+    configuration file such as `sof.<environment>.json` that the sandbox could not protect; a workspace in a subfolder of its
+    git repository is refused, as protected paths are relative to the top.
   - S02 kept a `formatVersion` check, though only version 1 exists. Consider removing the setting
     until a version 2 exists (principle 13). S06 keeps `output.schema` as JSON text, and S13 too; if a later slice wants the
     reference's `{ "file": … }` form, that is a format change.

@@ -28,10 +28,10 @@ public sealed partial class GitWorkspace : IWorkspace, IDisposable
         this.root = root;
         this.options = options;
         this.runLock = runLock;
-        queue = new IntegrationQueue(root, baseline, runId, baselineChecks, time, released);
         var paths = WorkspaceOptions.FixedProtectedPaths.Concat(options.ProtectedPaths).ToList();
         hidden = Globs(paths.Where(path => path.Access == PathAccess.Hidden));
         readOnly = Globs(paths.Where(path => path.Access == PathAccess.ReadOnly));
+        queue = new IntegrationQueue(root, baseline, runId, baselineChecks, time, released, Globs(paths));
     }
 
     /// <summary>The working copies that are open now.</summary>
@@ -88,9 +88,17 @@ public sealed partial class GitWorkspace : IWorkspace, IDisposable
         {
             await File.WriteAllTextAsync(activeRun, runId, ct).ConfigureAwait(false);
             var (exitCode, branch, _) = await Git.TryRunAsync(root, ct, "symbolic-ref", "--short", "HEAD").ConfigureAwait(false);
-            return exitCode == 0
+            if (exitCode != 0)
+            {
+                throw new WorkspaceException($"{root} must be a git repository with the baseline branch checked out.");
+            }
+
+            // Working copies, diffs and protected paths are all relative to the repository's top folder, so the workspace is that
+            // folder: in a subfolder, the configuration there would be neither where the protected paths say nor protected.
+            var prefix = (await Git.RunAsync(root, ct, "rev-parse", "--show-prefix").ConfigureAwait(false)).Trim();
+            return prefix.Length == 0
                 ? new GitWorkspace(root, branch.Trim(), runId, options, baselineChecks, time, runLock, released)
-                : throw new WorkspaceException($"{root} must be a git repository with the baseline branch checked out.");
+                : throw new WorkspaceException($"{root} is the subfolder {prefix} of a git repository. Put sof.json in the repository's top folder.");
         }
         catch
         {
