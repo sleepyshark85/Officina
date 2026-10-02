@@ -64,8 +64,9 @@ It lists the settings the code has today. Settings that later slices add are spe
 | `toolDescriptionsOnDemand` | boolean | `false` | Whether the model is offered only the tools' names, and reads a tool's description and arguments with `describe_tool` when it needs them. For agents with many tools. | `true` |
 | `permissions` | list |  | Narrows the caller's permissions for this agent's tool calls: a permission counts only if the caller holds it and it is listed here. Unset keeps the caller's. | `["issues:write"]` |
 | `maxParallelToolCalls` | whole number, ≥ 1 | `4` | The most tool calls from one reply that run at the same time, when every tool called is safe to run in parallel. | `4` |
+| `pattern` | section | `{"type":"toolLoop","steps":[],"next":[],"routes":{},"branches":[],"maxParallel":4,"combine":"all","checks":[],"maxRevisions":3,"maxReplans":2,"roles":{}}` | How the agent does its work: in a turn of its own, or in a pattern of steps. A pattern's steps draw on the agent's turn budget, and the agent's other settings apply to its own turns. Required. | `{"type":"router","routes":{"bug":{"agent":"developer"}}}` |
 | `context` | section | `{"operatingFacts":[],"historyCacheLifetime":"00:05:00","recordScope":"all","currentTask":true,"retrieval":{"beforeTurn":[],"handOffWhenNotCovered":false},"history":{"strategy":"none","shortening":"provider","lastTurns":10}}` | How the agent's model input is built. Required. | `{"operatingFacts":["Today is {{now:date}}."]}` |
-| `output` | section | `{"format":"text","attempts":2,"checks":[]}` | What the output must be before a turn completes with it. Required. | `{"format":"structured","schema":"{ \u0022type\u0022: \u0022object\u0022 }"}` |
+| `output` | section | `{"format":"text","attempts":2,"checks":[],"onCheckFailure":"handoff"}` | What the output must be before a turn completes with it. Required. | `{"format":"structured","schema":"{ \u0022type\u0022: \u0022object\u0022 }"}` |
 | `stopWhen` | section | `{"finished":true,"checksPass":false}` | When a turn is complete. They combine: the first that holds completes the turn. Required. | `{"finished":false,"finishTool":"submit_report"}` |
 | `budget` | section | `{"turn":{"iterations":50,"toolCalls":200,"tokens":3000000,"cost":5,"time":"00:45:00"}}` | The agent's budgets. They can be high, but they cannot be removed or unlimited. Required. | `{"turn":{"iterations":50,"cost":5}}` |
 | `stall` | section | `{"iterationsWithoutProgress":3}` | When a turn has stalled. Required. | `{"iterationsWithoutProgress":5}` |
@@ -182,6 +183,31 @@ It lists the settings the code has today. Settings that later slices add are spe
 | `cacheWrite5m` | number, ≥ 0 | `0` | USD per million tokens written to the cache for five minutes. | `5` |
 | `cacheWrite1h` | number, ≥ 0 | `0` | USD per million tokens written to the cache for an hour. | `8` |
 
+## `agents.<name>.pattern`
+
+| Setting | Allowed values | Default | Description | Example |
+|---|---|---|---|---|
+| `type` | text | `"toolLoop"` | `toolLoop`: a turn that calls tools until a stop condition holds; `singleCall`: a turn with no tools; `workflow`, `router`, `fanOut`, `evaluateAndRevise`, `planAndExecute` or `team`; or `extension:<id>` for a pattern the application registers, which reads the settings here that it needs. Required. | `"router"` |
+| `steps` | list | `[]` | workflow: the steps, run in order from the first. Each needs an `id`. | `[{"id":"draft"},{"id":"review","agent":"reviewer","input":["draft"]}]` |
+| `next` | list | `[]` | workflow: where to go after a step completes. The first rule from that step whose `when` holds decides; with none, the next step follows. | `[{"from":"triage","when":{"field":"output.kind","is":"question"},"goto":"end"}]` |
+| `classify` | section |  | router: the step that classifies the input. Its output must be structured. Unset: a turn of the agent itself. | `{"agent":"classifier"}` |
+| `on` | text |  | router: the field of the classification that picks the route. fanOut with `combine: majority`: the field the branches vote on. | `"output.route"` |
+| `routes` | named entries | `{}` | router: the step for each value of `on`, by value. It gets the router's input. | `{"bug":{"agent":"developer"},"docs":{"agent":"writer"}}` |
+| `otherwise` | text |  | router: the route taken when no route has the value. Unset: the work is handed off, as no route for a value. | `"bug"` |
+| `branches` | list | `[]` | fanOut: the steps that run in parallel on the input; with `over`, the one step that runs on each item. | `[{"agent":"reviewer"},{"agent":"tester"}]` |
+| `over` | text |  | fanOut: a list in the input, which must then be JSON, such as `input.files`. The branch runs once for each item. | `"input.files"` |
+| `maxParallel` | whole number, ≥ 1 | `4` | fanOut: the most branches that run at once. team: the most agents that work at once. | `2` |
+| `combine` | `"all"`, `"firstSuccess"`, `"majority"`, `"step"` | `"all"` | fanOut: how the branches' results are combined. `all`: every branch must complete, and the output is the JSON list of their outputs; `firstSuccess`: the first to complete, and the others are stopped; `majority`: the output of a branch whose value of `on` more than half of the branches share; `step`: `combiner` combines their outputs. | `"majority"` |
+| `combiner` | section |  | fanOut with `combine: step`: the step that gets the branches' outputs and combines them. | `{"agent":"editor"}` |
+| `generate` | section |  | evaluateAndRevise: the step that produces the work. Unset: a turn of the agent itself. | `{"agent":"developer"}` |
+| `checks` | list | `[]` | evaluateAndRevise: the checks, by name in `checks`, that the work must pass, in order. The first failure's findings go back to `generate`, masked, with the input and the work. | `["build","tests"]` |
+| `maxRevisions` | whole number, ≥ 0 | `3` | evaluateAndRevise: how many times the work is revised before it is handed off, as an output check failure. | `5` |
+| `planner` | section |  | planAndExecute: the step that writes the plan: structured output with a `steps` list. Unset: a turn of the agent itself. | `{"agent":"planner"}` |
+| `executor` | section |  | planAndExecute: the step that carries out each item of the plan's `steps`, in order. | `{"agent":"developer"}` |
+| `maxReplans` | whole number, ≥ 0 | `2` | planAndExecute: how many times the planner is asked for a new plan after a step does not complete, before the work is handed off. | `1` |
+| `lead` | text |  | team: the agent, by name in `agents`, that coordinates the others over the task board. | `"lead"` |
+| `roles` | named entries | `{}` | team: the agents, by name in `agents`, that can join the team, with how many of each. | `{"developer":{"max":3},"reviewer":{"max":1}}` |
+
 ## `agents.<name>.context`
 
 | Setting | Allowed values | Default | Description | Example |
@@ -200,8 +226,9 @@ It lists the settings the code has today. Settings that later slices add are spe
 |---|---|---|---|---|
 | `format` | `"text"`, `"structured"` | `"text"` | `text`, or `structured`: JSON that must match `schema`. | `"structured"` |
 | `schema` | text |  | The JSON Schema that structured output must match, as JSON text. | `"{ \u0022type\u0022: \u0022object\u0022, \u0022required\u0022: [\u0022total\u0022] }"` |
-| `attempts` | whole number, ≥ 0 | `2` | How many times structured output that does not match the schema goes back to the model with the errors before the turn is handed off. | `3` |
-| `checks` | list | `[]` | Checks, by name in `checks`, that the output must pass, run in this order. The first that fails hands the turn off. | `["no-secrets","style"]` |
+| `attempts` | whole number, ≥ 0 | `2` | How many times output goes back to the model with its problems before the turn is handed off: structured output that does not match the schema and, with `onCheckFailure: revise`, output that fails a check. | `3` |
+| `checks` | list | `[]` | Checks, by name in `checks`, that the output must pass, run in this order. The first that fails decides. | `["no-secrets","style"]` |
+| `onCheckFailure` | `"handoff"`, `"revise"` | `"handoff"` | What a failed check, or citation rule, does: `handoff` the turn, or `revise`: its findings, masked, go back to the model, which replies again, within `attempts`. | `"revise"` |
 | `citations` | `"off"`, `"resolve"`, `"required"` |  | `off`; `resolve`: every id the output cites as `[cite:<id>]` must be a citation in the run record; or `required`: as `resolve`, and the output must cite at least one. Output that fails hands the turn off. Unset means `resolve` when the knowledge capability is on, otherwise `off`. | `"required"` |
 
 ## `agents.<name>.stopWhen`
@@ -236,7 +263,7 @@ It lists the settings the code has today. Settings that later slices add are spe
 
 | Setting | Allowed values | Default | Description | Example |
 |---|---|---|---|---|
-| `field` | text |  | The field a test reads: a dotted path with optional `[n]` indexes, such as `args.branch`. | `"args.branch"` |
+| `field` | text |  | The field a test reads: a dotted path with optional `[n]` indexes, such as `args.branch` in a tool's arguments or `output.kind` in a step's output. | `"args.branch"` |
 | `is` | text |  | Holds when the field equals this value. Numbers compare by value, and `true` and `false` match booleans. | `"main"` |
 | `in` | list |  | Holds when the field equals one of these values. | `["main","master"]` |
 | `gt` | number |  | Holds when the field is a number greater than this. | `10` |
@@ -336,6 +363,30 @@ It lists the settings the code has today. Settings that later slices add are spe
 | `maxAttempts` | whole number, ≥ 1 | `3` | How many attempts of a task may fail a check, a review or an integration before it goes back to the lead. | `3` |
 | `budget` | number, > 0 | `8` | The most a task's turns may cost, in USD, unless the owner gives the task another budget. A task whose budget is used up goes back to the lead. | `8` |
 
+## `agents.<name>.pattern.steps[]`
+
+| Setting | Allowed values | Default | Description | Example |
+|---|---|---|---|---|
+| `id` | text |  | workflow: the step's name, which `input`, `next` and `goto:` use. It cannot be `input` or `end`. | `"triage"` |
+| `agent` | text |  | The agent, by name in `agents`, whose work the step is: its turn, or its own pattern. Unset, with no `pattern`: a turn of the agent the pattern belongs to. | `"reviewer"` |
+| `pattern` | section |  | A nested pattern, of the agent the pattern belongs to. | `{"type":"evaluateAndRevise","checks":["tests"]}` |
+| `input` | list |  | workflow: what the step gets: `input` for the workflow's input, or an earlier step's id for its output. Several are each labelled with their source. Unset: the workflow's input. | `["input","triage"]` |
+| `onOutcome` | section | `{"completed":"continue","handedOff":"handoff","failed":"handoff"}` | workflow: what happens after each outcome of the step. Required. | `{"failed":"retry:1","handedOff":"goto:escalate"}` |
+
+## `agents.<name>.pattern.next[]`
+
+| Setting | Allowed values | Default | Description | Example |
+|---|---|---|---|---|
+| `from` | text |  | The step, by id, after which the rule applies. Required. | `"triage"` |
+| `when` | section |  | The condition on the step's structured output, such as `output.kind`. Unset means always. | `{"field":"output.kind","is":"question"}` |
+| `goto` | text |  | The step, by id, to go to, or `end`. Required. | `"end"` |
+
+## `agents.<name>.pattern.roles.<name>`
+
+| Setting | Allowed values | Default | Description | Example |
+|---|---|---|---|---|
+| `max` | whole number, ≥ 1 | `1` | How many of the agent can work at once. | `3` |
+
 ## `agents.<name>.context.retrieval`
 
 | Setting | Allowed values | Default | Description | Example |
@@ -381,3 +432,11 @@ It lists the settings the code has today. Settings that later slices add are spe
 |---|---|---|---|---|
 | `match` | text |  | The command it applies to, where `*` matches any text and `?` any one character. Required. | `"dotnet test*"` |
 | `action` | `"allow"`, `"ask"`, `"deny"` | `"deny"` | What a match decides: `allow`, `ask` a human, or `deny`. | `"allow"` |
+
+## `agents.<name>.pattern.steps[].onOutcome`
+
+| Setting | Allowed values | Default | Description | Example |
+|---|---|---|---|---|
+| `completed` | text | `"continue"` | After the step completes: `continue` to the step `next` picks, `retry:<n>`, `goto:<step>` or `handoff` to end the workflow with the step's result. | `"goto:publish"` |
+| `handedOff` | text | `"handoff"` | After the step is handed off: `continue`, `retry:<n>`, `goto:<step>` or `handoff`. | `"retry:1"` |
+| `failed` | text | `"handoff"` | After the step fails: `continue`, `retry:<n>`, `goto:<step>` or `handoff`. | `"retry:2"` |

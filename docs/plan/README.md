@@ -6,18 +6,18 @@ Status: draft · 2026-10-01 · slices `REQUIREMENTS.md` (revision 2) into delive
 
 Last updated 2026-10-02.
 
-- **Done:** M0 spikes S00a and S00b; M1 slices S01 (walking skeleton) and S02 (configuration); S03 (tool pipeline); S04 (turn loop); S05 (context and caching); S06 (run record and output); S07 (history and conversation store); S08 (events, storage and observability); S09 (triggers and admission); S10 (MCP and knowledge); S11 (Claude provider); S14 (git workspace); S15 (sandbox); S18 (task board); S16 part 1 (human interaction).
+- **Done:** M0 spikes S00a and S00b; M1 slices S01 (walking skeleton) and S02 (configuration); S03 (tool pipeline); S04 (turn loop); S05 (context and caching); S06 (run record and output); S07 (history and conversation store); S08 (events, storage and observability); S09 (triggers and admission); S10 (MCP and knowledge); S11 (Claude provider); S13 (loop patterns); S14 (git workspace); S15 (sandbox); S18 (task board); S16 part 1 (human interaction).
 - **Waiting:** the M0 design review sign-off on `REQUIREMENTS.md`, `CONFIGURATION.md` and `DESIGN.md`.
 - **Doing:** S16, part 2 (S16b): wiring the workspace, sandbox and tool servers into `sof run` (see the follow-ups).
 - **Next:** S16b, then S12 (model gateway) and S17.
 - **Open follow-ups:**
   - S02 kept a `formatVersion` check, though only version 1 exists. Consider removing the setting
-    until a version 2 exists (principle 13). S06 keeps `output.schema` as JSON text; when S13 or S16 want the
+    until a version 2 exists (principle 13). S06 keeps `output.schema` as JSON text, and S13 too; when S16 wants the
     reference's `{ "file": … }` form, that is a format change.
   - S02 rejects a plain-text `apiKey`, because the binder would otherwise skip it silently and
     fall back to the default secret reference. Kept on purpose.
-  - S13 adds the output-check failure outcome "revise" where the pattern supports it (OUT-03); until then a failed check
-    hands off.
+  - S20 runs the team pattern; S13 validates only its shape, and a team step fails until then. The condition roots
+    `checks.<name>`, `outcome` and `stopReason` (configuration reference §6, marked not built) wait for a case that needs them.
   - The configuration binder adds a file's items to a list setting's default instead of replacing it, so
     `storage.unstoredEvents` set in a file keeps `textGenerated`. S06 made `context.record` unset by default to avoid it.
   - S16b builds the Claude provider and the tool servers in `sof run` with the runner's `KnownSecrets`, so the API key
@@ -28,7 +28,7 @@ Last updated 2026-10-02.
   - S04 left parts of its requirements to the slices that add the state they need; its Notes list them
     (S06, S07, S09, S14, S16, S19).
   - S08 left parts of its requirements to the slices that add the state they need; its Notes list them
-    (S06, S07, S09, S12, S13, S16, S17, S19, S20).
+    (S06, S07, S09, S12, S16, S17, S19, S20); S13 added steps.
   - S11 moved MDL-05 to S12, which retries classified failures, and CLD-06 and CLD-11 (the Claude provider's feature
     switches and Message Batches) to S21. Its Notes list the rest.
   - S16b wires the workspace, sandbox and tool servers into `sof run`: it connects the tool servers; gives each agent
@@ -114,7 +114,7 @@ A slice is **done** when:
 | [S10](S10-mcp-and-knowledge.md) | MCP and knowledge sources | M2 | M | S03 | [#12](https://github.com/sleepyshark85/Officina/issues/12) | done |
 | [S11](S11-claude-provider.md) | Claude provider | M3 | M | S00b, S05 | [#13](https://github.com/sleepyshark85/Officina/issues/13) | done |
 | [S12](S12-model-gateway.md) | Model gateway | M3 | S | S11 | [#14](https://github.com/sleepyshark85/Officina/issues/14) | todo |
-| [S13](S13-loop-patterns.md) | Loop patterns | M4 | M | S04, S06 | [#15](https://github.com/sleepyshark85/Officina/issues/15) | todo |
+| [S13](S13-loop-patterns.md) | Loop patterns | M4 | M | S04, S06 | [#15](https://github.com/sleepyshark85/Officina/issues/15) | done |
 | [S14](S14-git-workspace.md) | Git workspace | M5 | M | S03 | [#16](https://github.com/sleepyshark85/Officina/issues/16) | done |
 | [S15](S15-sandbox.md) | Sandbox | M5 | M ×2 | S00a, S14 | [#17](https://github.com/sleepyshark85/Officina/issues/17) | done |
 | [S16](S16-human-interaction-cli.md) | Human interaction and CLI | M5 | M | S04, S08 | [#18](https://github.com/sleepyshark85/Officina/issues/18) | doing |

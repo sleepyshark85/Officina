@@ -1,0 +1,23 @@
+{
+  "agents": {
+    "support": {
+      "instructions": "Handles a support request: triage, then an answer.",
+      "pattern": {
+        "type": "workflow",
+        "steps": [
+          { "id": "triage", "agent": "triager" },
+          { "id": "answer", "agent": "writer", "input": ["input", "triage"] }
+        ],
+        "next": [{ "from": "triage", "when": { "field": "output.kind", "is": "spam" }, "goto": "end" }]
+      }
+    },
+    "triager": {
+      "instructions": "Classify the request.",
+      "output": {
+        "format": "structured",
+        "schema": "{ \"type\": \"object\", \"properties\": { \"kind\": { \"enum\": [\"question\", \"spam\"] } }, \"required\": [\"kind\"] }"
+      }
+    },
+    "writer": { "instructions": "Answer the request." }
+  }
+}

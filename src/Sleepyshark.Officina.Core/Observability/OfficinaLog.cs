@@ -4,8 +4,7 @@ namespace Sleepyshark.Officina.Core.Observability;
 
 /// <summary>
 /// The structured log (OBS-03), as an event source the host forwards to its logging, for example with OpenTelemetry's
-/// event source bridge. Each entry names its run and agent; a run has one turn until loop patterns (S13) add steps,
-/// which then join the entries. No entry holds conversation content: only names, categories and internal error details
+/// event source bridge. Each entry names its run and agent, and its step when the agent's pattern has steps. No entry holds conversation content: only names, categories and internal error details
 /// with known secrets removed.
 /// </summary>
 [EventSource(Name = SourceName)]
@@ -29,9 +28,18 @@ internal sealed class OfficinaLog : EventSource
     /// <summary>A tool call failed. The detail is what the model is never told, such as an exception's message (TOOL-08).</summary>
     /// <param name="runId">The run.</param>
     /// <param name="agent">The agent.</param>
+    /// <param name="step">The step of the agent's pattern; empty for the agent's own turn.</param>
     /// <param name="tool">The tool.</param>
     /// <param name="category">The error category the model was told.</param>
     /// <param name="detail">The internal detail, with known secrets removed.</param>
-    [Event(2, Level = EventLevel.Warning, Message = "Run {0}: agent {1}'s call of {2} failed ({3}): {4}")]
-    public void ToolFailed(string runId, string agent, string tool, string category, string detail) => WriteEvent(2, runId, agent, tool, category, detail);
+    [Event(2, Version = 1, Level = EventLevel.Warning, Message = "Run {0}: agent {1}'s call of {3} in step {2} failed ({4}): {5}")]
+    public void ToolFailed(string runId, string agent, string step, string tool, string category, string detail) =>
+        WriteEvent(2, runId, agent, step, tool, category, detail);
+
+    /// <param name="runId">The run.</param>
+    /// <param name="agent">The agent.</param>
+    /// <param name="step">The step of the agent's pattern.</param>
+    /// <param name="outcome">How the step ended.</param>
+    [Event(3, Level = EventLevel.Informational, Message = "Run {0}: agent {1}'s step {2} ended: {3}")]
+    public void StepEnded(string runId, string agent, string step, string outcome) => WriteEvent(3, runId, agent, step, outcome);
 }

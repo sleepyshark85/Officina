@@ -1,0 +1,11 @@
+{
+  "agents": {
+    "assistant": {
+      "instructions": "Answer the question. Note what you learn on the way.",
+      "pattern": { "type": "toolLoop" },
+      "tools": ["notes"]
+    }
+  },
+  "tools": { "note": { "source": "builtin:record.propose_finding" } },
+  "toolSets": { "notes": ["note"] }
+}

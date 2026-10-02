@@ -1,0 +1,9 @@
+{
+  "agents": {
+    "writer": {
+      "instructions": "Write the release note.",
+      "pattern": { "type": "evaluateAndRevise", "checks": ["short"], "maxRevisions": 2 }
+    }
+  },
+  "checks": { "short": { "use": "extension:Samples.Short" } }
+}

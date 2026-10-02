@@ -1,0 +1,17 @@
+{
+  "agents": {
+    "release": {
+      "instructions": "Write the release note, then translate it.",
+      "pattern": {
+        "type": "workflow",
+        "steps": [
+          { "id": "draft", "pattern": { "type": "evaluateAndRevise", "generate": { "agent": "writer" }, "checks": ["short"] } },
+          { "id": "translate", "agent": "translator", "input": ["draft"] }
+        ]
+      }
+    },
+    "writer": { "instructions": "Write the release note." },
+    "translator": { "instructions": "Translate the note into French." }
+  },
+  "checks": { "short": { "use": "extension:Samples.Short" } }
+}

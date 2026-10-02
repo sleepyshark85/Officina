@@ -1,0 +1,12 @@
+{
+  "agents": {
+    "extractor": {
+      "instructions": "Extract the invoice total. Reply with JSON only.",
+      "pattern": { "type": "singleCall" },
+      "output": {
+        "format": "structured",
+        "schema": "{ \"type\": \"object\", \"properties\": { \"total\": { \"type\": \"number\" } }, \"required\": [\"total\"] }"
+      }
+    }
+  }
+}

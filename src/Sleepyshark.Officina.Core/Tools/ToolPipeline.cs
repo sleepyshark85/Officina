@@ -244,7 +244,7 @@ public sealed class ToolPipeline
         if (detail is not null)
         {
             // TOOL-08: a read tool's details are not audited, so the log is where they are kept.
-            OfficinaLog.Log.ToolFailed(context.RunId, context.Agent, tool.Name, $"{result.Error}", detail);
+            OfficinaLog.Log.ToolFailed(context.RunId, context.Agent, context.Step ?? "", tool.Name, $"{result.Error}", detail);
         }
 
         await AuditAsync(context, tool, arguments, null, outcome, ct, detail).ConfigureAwait(false);

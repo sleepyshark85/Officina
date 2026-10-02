@@ -133,7 +133,7 @@ public sealed class TelemetryTests : IDisposable
 
         var entries = logging.Entries.Where(entry => entry.Payload![0] as string == runId).ToList();
         Assert.Equal(["ToolFailed", "TurnEnded"], entries.Select(entry => entry.EventName));
-        Assert.Equal([runId, Observed, "read", "Failed", "IOException: disk full"], entries[0].Payload);
+        Assert.Equal([runId, Observed, "", "read", "Failed", "IOException: disk full"], entries[0].Payload);
         Assert.Equal([runId, Observed, "Completed", ""], entries[1].Payload);
         Assert.DoesNotContain(entries.SelectMany(entry => entry.Payload!), value => $"{value}".Contains(Content, StringComparison.Ordinal));
     }

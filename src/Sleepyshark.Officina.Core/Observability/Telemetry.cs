@@ -28,6 +28,11 @@ public static class Telemetry
 
     internal static Activity? StartTurn(ToolContext context) => Start($"invoke_agent {context.Agent}", ActivityKind.Internal, context, "invoke_agent");
 
+    /// <summary>A step of the agent's pattern; the spans of its model and tool calls are its children.</summary>
+    internal static Activity? StartStep(ToolContext context) => Start($"step {context.Step}", ActivityKind.Internal, context, "step");
+
+    internal static void StepEnded(Activity? activity, string outcome) => activity?.SetTag("officina.outcome", outcome);
+
     /// <param name="context">Who makes the call.</param>
     /// <param name="provider">The provider, by its configured name; the Claude provider (S11) maps it to the well-known name.</param>
     /// <param name="model">The model.</param>
@@ -104,5 +109,6 @@ public static class Telemetry
         Source.StartActivity(name, kind)?
             .SetTag("gen_ai.operation.name", operation)
             .SetTag("gen_ai.agent.name", context.Agent)
-            .SetTag("officina.run.id", context.RunId);
+            .SetTag("officina.run.id", context.RunId)
+            .SetTag("officina.step", context.Step);
 }

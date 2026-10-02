@@ -18,8 +18,8 @@ namespace Sleepyshark.Officina.Core.Running;
 /// <summary>
 /// One turn of one agent, the primitive every pattern is built from (REQUIREMENTS.md §4.4). It calls the model, decides
 /// the next step by the stop reason alone (LOOP-03, INV-01), runs the tools the model asks for through the tool
-/// pipeline, and repeats until a stop condition holds (LOOP-05) or the turn must be handed off. The budget is checked
-/// before every model call (LOOP-06), and the turn always ends in a result (INV-07). Each call's input is built by the
+/// pipeline, and repeats until a stop condition holds (LOOP-05) or the turn must be handed off. Its budget, and those it
+/// is drawn from, are checked before every model call (LOOP-06, PAT-06), and the turn always ends in a result (INV-07). Each call's input is built by the
 /// turn's <see cref="Conversation"/>, with the messages that arrived since the last call (CTX-08). The conversation
 /// starts from the history its strategy keeps (CTX-06), and the turn is stored with it when it ends (CAP-05). The turn
 /// completes only with output that passes its schema, citation rule and checks (OUT, INV-09).
@@ -32,6 +32,7 @@ internal sealed class Turn
     private readonly ToolContext context;
     private readonly ProjectOptions project;
     private readonly AgentDefinition agent;
+    private readonly Budget budget;
     private readonly RunBudget runBudget;
     private readonly double cacheHitWarning;
     private readonly Conversation conversation;
@@ -66,7 +67,6 @@ internal sealed class Turn
     private int toolCalls;
     private int withoutProgress;
     private int outputAttempts;
-    private int runBudgets = 1;
     private Usage usage = Usage.None;
     private decimal cost;
     private string lastText = "";
@@ -86,6 +86,7 @@ internal sealed class Turn
     /// <param name="work">What the turn is asked to do, as admission passed it.</param>
     /// <param name="inbox">Messages sent to the agent, which the turn adds to its history before each model call, masked like the work.</param>
     /// <param name="whilePaused">Waits while the owner has paused the agent (RUN-06).</param>
+    /// <param name="budget">The budget the turn's own is drawn from: its pattern's, or the run's.</param>
     /// <param name="time">The clock for the time budgets and the operating facts.</param>
     public Turn(
         ToolContext context,
@@ -103,11 +104,13 @@ internal sealed class Turn
         Work work,
         ConcurrentQueue<(Sender From, string Text)> inbox,
         Func<CancellationToken, Task> whilePaused,
+        Budget budget,
         TimeProvider time)
     {
         this.context = context;
         project = options.Project;
         agent = options.Agents[context.Agent];
+        this.budget = budget.Draw("turn's", agent.Budget.Turn);
         runBudget = options.Run.Budget;
         cacheHitWarning = options.Operations.Telemetry.CacheHitWarning;
         var profile = options.Models[agent.Model];
@@ -183,6 +186,7 @@ internal sealed class Turn
             }
 
             iterations++;
+            budget.Spend(iterations: 1);
             while (inbox.TryDequeue(out var message))
             {
                 conversation.Add(Labels.From(message.From, Mask(message.Text)));
@@ -301,21 +305,9 @@ internal sealed class Turn
         task = board?.TaskId is { } id ? (await board.ReadAsync(ct).ConfigureAwait(false)).FirstOrDefault(task => task.Id == id) : null;
     }
 
-    /// <summary>Which limit of the turn's, its task's or the run's budget is used up, if any (LOOP-06, COST-02).</summary>
-    private (string Limit, bool OfRun)? Exhausted()
-    {
-        var turn = agent.Budget.Turn;
-        var elapsed = Elapsed;
-        return iterations >= turn.Iterations ? ("turn's iteration", false)
-            : toolCalls >= turn.ToolCalls ? ("turn's tool-call", false)
-            : usage.Total >= turn.Tokens ? ("turn's token", false)
-            : cost >= turn.Cost ? ("turn's cost", false)
-            : elapsed >= turn.Time ? ("turn's time", false)
-            : task is not null && task.Spent + cost >= task.Budget ? ("task's cost", false)
-            : cost >= runBudget.Cost * runBudgets ? ("run's cost", true)
-            : elapsed >= runBudget.Time * runBudgets ? ("run's time", true)
-            : null;
-    }
+    /// <summary>Which limit of the turn's, its pattern's, its task's or the run's budget is used up, if any (LOOP-06, COST-02).</summary>
+    private (string Limit, bool OfRun)? Exhausted() =>
+        task is not null && task.Spent + cost >= task.Budget ? ("task's cost", false) : budget.Exhausted();
 
     /// <summary>
     /// RUN-05, HITL-04: with the sign-off on, the owner may let the run go on past its budget, by another budget of the
@@ -335,7 +327,7 @@ internal sealed class Turn
             return false;
         }
 
-        runBudgets++;
+        budget.ExtendRun();
         return true;
     }
 
@@ -362,8 +354,8 @@ internal sealed class Turn
     /// <summary>
     /// Completes the turn with the output if it passes (OUT-01 to OUT-04). Structured output that does not match its
     /// schema goes back to the model with the errors while attempts are left and the model is called again
-    /// (<paramref name="revisable"/>), and null is returned so the turn goes on (OUT-02); any other failure hands the
-    /// turn off.
+    /// (<paramref name="revisable"/>), and null is returned so the turn goes on (OUT-02); so does output that fails a
+    /// check when failures are revised (OUT-03). Any other failure hands the turn off.
     /// </summary>
     private async Task<AgentResult?> FinishAsync(string output, CancellationToken ct, bool revisable = true)
     {
@@ -373,10 +365,15 @@ internal sealed class Turn
         }
 
         var (reason, problem) = found;
-        if (reason == HandoffReason.InvalidStructuredOutput && revisable && outputAttempts < agent.Output.Attempts)
+        var invalid = reason == HandoffReason.InvalidStructuredOutput;
+        if ((invalid || agent.Output.OnCheckFailure == CheckFailure.Revise) && revisable && outputAttempts < agent.Output.Attempts)
         {
             outputAttempts++;
-            conversation.Add(Message.User($"The output does not match its schema: {problem}. Reply again with output that does."));
+
+            // A check sees the artifacts as tools produced them, so its findings are masked before the model sees them (ING-02).
+            conversation.Add(Message.User(invalid
+                ? $"The output does not match its schema: {problem}. Reply again with output that does."
+                : $"The output fails its checks: {Mask(problem)}. Revise it, and reply again with the whole output."));
             return null;
         }
 
@@ -404,13 +401,22 @@ internal sealed class Turn
             return (HandoffReason.OutputCheckFailed, "the output cites no source");
         }
 
+        return await FailedCheckAsync(context, checks, output, artifacts, ct).ConfigureAwait(false) is { } failed
+            ? (HandoffReason.OutputCheckFailed, failed)
+            : null;
+    }
+
+    /// <summary>Runs the checks on the output in order, and says which failed first and what it found; null when all pass (OUT-03).</summary>
+    internal static async Task<string?> FailedCheckAsync(
+        ToolContext context, IEnumerable<(string Name, ICheck Check)> checks, string output, IReadOnlyList<Artifact> artifacts, CancellationToken ct)
+    {
         foreach (var (name, check) in checks)
         {
             var result = await check.RunAsync(new CheckContext(null, output, [.. artifacts]), ct).ConfigureAwait(false);
             Telemetry.CheckEnded(context, name, result.Passed);
             if (!result.Passed)
             {
-                return (HandoffReason.OutputCheckFailed, $"check {name} failed: {string.Join("; ", result.Findings)}");
+                return $"check {name} failed: {string.Join("; ", result.Findings)}";
             }
         }
 
@@ -471,12 +477,14 @@ internal sealed class Turn
                 case ProviderToolUsed used:
                     // TOOL-13: the provider ran it, so it is audited after the fact and counts towards the budget.
                     toolCalls++;
+                    budget.Spend(toolCalls: 1);
                     await tools.AuditProviderToolAsync(context, used.Request, used.Result, ct).ConfigureAwait(false);
                     break;
                 case UsageReported reported:
                     var spent = price?.Cost(reported.Usage) ?? 0m;
                     (callUsage, callCost) = (callUsage + reported.Usage, callCost + spent);
                     (usage, cost) = (usage + reported.Usage, cost + spent);
+                    budget.Spend(tokens: reported.Usage.Total, cost: spent);
                     break;
                 case Stopped stopped:
                     stop = stopped.Reason;
@@ -546,6 +554,7 @@ internal sealed class Turn
             Role.User, pending.Zip(results, (call, result) => new ToolResultContent(call.Id, Labels.Data($"tool:{call.Name}", result.Content), result.Error is not null))));
         pending = [];
         toolCalls += requests.Count;
+        budget.Spend(toolCalls: requests.Count);
         var batch = requests.Zip(results, (call, result) => new ToolAttempt(call, result)).ToList();
         var progressed = batch.Any(IsProgress);
         attempts.AddRange(batch);
