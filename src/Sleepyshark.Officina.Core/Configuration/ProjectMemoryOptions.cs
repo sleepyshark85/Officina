@@ -18,7 +18,7 @@ public sealed record ProjectMemoryOptions
     [Range(1, int.MaxValue, ErrorMessage = "must be at least 1.")]
     public int MaxTokens { get; init; } = 20_000;
 
-    [Setting("Who approves an agent's proposed change: `lead`, through a `builtin:memory.review` tool, which you give only to the lead's tool sets (nothing checks that yet), or `owner`, who is asked at the proposal and needs `humanInteraction`.",
+    [Setting("Who approves an agent's proposed change: `lead`, through a `builtin:memory.review` tool, which you give only to the lead's tool sets (nothing checks that yet), or `owner`, who is asked at the proposal and needs `humanInteraction`. Both memory tools are write tools, so each needs `gates` or a `gateExemption`, and under `permissionMode: ask` each call also asks the owner unless a permission rule allows it.",
         Example = "\"lead\"")]
     public MemoryApprover ApproveBy { get; init; } = MemoryApprover.Lead;
 }
