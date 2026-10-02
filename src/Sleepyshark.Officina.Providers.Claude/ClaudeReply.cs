@@ -15,14 +15,34 @@ namespace Sleepyshark.Officina.Providers.Claude;
 /// order of the reply, so the reply goes back to Claude as it came. A tool's input streams unchecked (eager input
 /// streaming), and the tool pipeline checks it against the tool's schema before the tool runs.
 /// </summary>
-internal sealed class ClaudeReply(ImmutableArray<ToolDefinition> tools)
+internal sealed class ClaudeReply
 {
+    private readonly ImmutableArray<ToolDefinition> tools;
     private readonly Dictionary<string, ToolRequest> providerCalls = new(StringComparer.Ordinal);
     private readonly StringBuilder thinking = new();
     private readonly StringBuilder input = new();
     private JsonObject? block;
     private string? signature;
     private BetaUsage? started;
+
+    /// <param name="tools">The tools the request offers.</param>
+    /// <param name="history">
+    /// The request's history. A paused reply (<c>pause_turn</c>) can end with a server tool's call, whose result arrives in
+    /// the next reply, so the calls of the last assistant message that have no result yet are waiting for one.
+    /// </param>
+    public ClaudeReply(ImmutableArray<ToolDefinition> tools, ImmutableArray<Message> history)
+    {
+        this.tools = tools;
+        var data = history.LastOrDefault(message => message.Role == Core.Messages.Role.Assistant)?.Content.OfType<ProviderContent>().Select(content => content.Data).ToList() ?? [];
+        var answered = data.Select(block => block.TryGetProperty("tool_use_id", out var id) ? id.GetString() : null).ToHashSet(StringComparer.Ordinal);
+        foreach (var block in data.Where(block => block.TryGetProperty("type", out var type) && type.GetString() == "server_tool_use"))
+        {
+            if (!answered.Contains(block.GetProperty("id").GetString()))
+            {
+                providerCalls[block.GetProperty("id").GetString()!] = Request(block);
+            }
+        }
+    }
 
     public IEnumerable<ModelEvent> Read(BetaRawMessageStreamEvent streamEvent)
     {
@@ -119,19 +139,21 @@ internal sealed class ClaudeReply(ImmutableArray<ToolDefinition> tools)
 
         var data = JsonSerializer.SerializeToElement(complete);
         yield return new ContentReceived(new ProviderContent(data));
-        // The API returns a server tool's call and result in the same reply, so matching within one reply is enough.
-        // S12 and S21 handle a call that ends a reply (pause_turn) if the API ever splits them.
         if (type == "server_tool_use")
         {
-            // Claude names its tools by their own names; the core knows them by their configured ones.
-            var name = complete["name"]!.GetValue<string>();
-            var configured = tools.FirstOrDefault(tool => tool.ProviderTool == name)?.Name ?? name;
-            providerCalls[complete["id"]!.GetValue<string>()] = new ToolRequest(configured, data.GetProperty("input"));
+            providerCalls[complete["id"]!.GetValue<string>()] = Request(data);
         }
         else if (complete["tool_use_id"]?.GetValue<string>() is { } id && providerCalls.Remove(id, out var call))
         {
             yield return new ProviderToolUsed(call, complete["content"]?.ToJsonString() ?? "");
         }
+    }
+
+    /// <summary>A server tool's call. Claude names its tools by their own names; the core knows them by their configured ones.</summary>
+    private ToolRequest Request(JsonElement call)
+    {
+        var name = call.GetProperty("name").GetString()!;
+        return new ToolRequest(tools.FirstOrDefault(tool => tool.ProviderTool == name)?.Name ?? name, call.GetProperty("input"));
     }
 
     /// <summary>The streamed input; input cut off by the output limit is kept as text, which no tool's schema accepts.</summary>

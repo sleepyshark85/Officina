@@ -47,7 +47,7 @@ public sealed class ClaudeProvider : IModelProvider, IDisposable
     {
         ArgumentNullException.ThrowIfNull(request);
         var parameters = ClaudeRequest.From(request);
-        var reply = new ClaudeReply(request.Tools);
+        var reply = new ClaudeReply(request.Tools, request.History);
         var stream = (await ClientAsync(ct).ConfigureAwait(false)).Beta.Messages.CreateStreaming(parameters, ct).GetAsyncEnumerator(ct);
         await using var _ = stream.ConfigureAwait(false);
         var inputTooLong = false;
@@ -106,6 +106,11 @@ public sealed class ClaudeProvider : IModelProvider, IDisposable
     /// <summary>The client, created once by the first call, even when calls start together.</summary>
     private async ValueTask<AnthropicClient> ClientAsync(CancellationToken ct)
     {
+        if (client is { } existing)
+        {
+            return existing;
+        }
+
         await clientGate.WaitAsync(ct).ConfigureAwait(false);
         try
         {

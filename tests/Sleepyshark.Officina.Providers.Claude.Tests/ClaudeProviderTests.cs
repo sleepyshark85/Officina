@@ -77,6 +77,24 @@ public sealed class ClaudeProviderTests : IDisposable
         Assert.True(JsonElement.DeepEquals(Json(result), Json(used.Result)));
     }
 
+    // TOOL-13: a paused reply can end with a server tool's call, whose result arrives in the reply that continues it.
+    [Fact]
+    public async Task A_server_tool_s_result_in_the_reply_after_a_pause_is_reported_once()
+    {
+        using var provider = Replay(Named("pause-turn.json"));
+        var first = await StreamAsync(provider, new ModelRequest(Profile, [Search], "Research.", [Message.User("Find the SDK.")], []));
+        var paused = first.OfType<ContentReceived>().Select(received => received.Content).ToArray();
+        Assert.Empty(first.OfType<ProviderToolUsed>());
+        Assert.Contains(new Stopped(StopReason.Paused), first);
+
+        var second = await StreamAsync(
+            provider, new ModelRequest(Profile, [Search], "Research.", [Message.User("Find the SDK."), new Message(Role.Assistant, paused)], []));
+
+        var used = Assert.Single(second.OfType<ProviderToolUsed>());
+        Assert.Equal("search", used.Request.Name);
+        Assert.True(JsonElement.DeepEquals(Json("""{ "query": "anthropic csharp sdk" }"""), used.Request.Arguments));
+    }
+
     // CLD-04, TEST-03.
     [Theory]
     [InlineData("end_turn", StopReason.Finished)]
