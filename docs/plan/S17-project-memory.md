@@ -45,7 +45,8 @@ Durable project knowledge shared across runs.
   (PRIV-02).
 
 Left to later slices:
-- S19: the checkpoint records memory's revision.
+- S19 (done in part 1): the checkpoint records memory's log position. A rollback leaves memory alone, because it is shared by
+  runs, and lists the changes made since as not undone.
 - S20: the CLI's owner commands to list and review proposals and condensing, and tying `memory.review` to the lead role.
 - S21: unmasking text that agents propose for memory.
 

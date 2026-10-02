@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using Sleepyshark.Officina.Core.Checkpoints;
 using Sleepyshark.Officina.Core.Configuration;
 using Sleepyshark.Officina.Core.Events;
 using Sleepyshark.Officina.Core.Extensibility;
@@ -31,6 +32,7 @@ public sealed class AgentRunner
     private readonly IReadOnlyDictionary<string, ILoopPattern> patterns;
     private readonly Dictionary<string, IHistoryShortener> shortening;
     private readonly Admission admission;
+    private readonly Checkpointer checkpointer;
     private readonly ConcurrentDictionary<string, SemaphoreSlim> turns = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, ConcurrentQueue<(Sender From, string Text)>> inboxes = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, TaskCompletionSource> paused = new(StringComparer.Ordinal);
@@ -58,6 +60,7 @@ public sealed class AgentRunner
     /// <param name="time">The clock for budgets, time limits and audit times.</param>
     /// <param name="shorteners">The application's history shorteners, by the id that <c>extension:&lt;id&gt;</c> shortenings name.</param>
     /// <param name="patterns">The application's loop patterns, by the id that <c>extension:&lt;id&gt;</c> patterns name (PAT-07).</param>
+    /// <param name="workspace">The workspace whose working copies checkpoints save and restore; null when the run has none (RUN-04).</param>
     /// <exception cref="ConfigurationException">The configuration has errors.</exception>
     public AgentRunner(
         OfficinaOptions options,
@@ -71,7 +74,8 @@ public sealed class AgentRunner
         ISecretSource secrets,
         TimeProvider time,
         IReadOnlyDictionary<string, IHistoryShortener>? shorteners = null,
-        IReadOnlyDictionary<string, ILoopPattern>? patterns = null)
+        IReadOnlyDictionary<string, ILoopPattern>? patterns = null,
+        IWorkspace? workspace = null)
     {
         ArgumentNullException.ThrowIfNull(providers);
         ArgumentNullException.ThrowIfNull(options);
@@ -98,6 +102,7 @@ public sealed class AgentRunner
         gateway = new ModelGateway(options, providers, time);
         shortening = Shortening(options, providers, shorteners ?? new Dictionary<string, IHistoryShortener>());
         admission = new Admission(options.Policies, time);
+        checkpointer = new Checkpointer(options, storage, workspace, Events, pipeline, time);
         Options = options;
     }
 
@@ -125,6 +130,93 @@ public sealed class AgentRunner
     {
         get => pipeline.PermissionMode;
         set => pipeline.PermissionMode = value;
+    }
+
+    /// <summary>
+    /// Takes a checkpoint of a run now (RUN-03). The owner asks for one at any time, and a host that integrates a change asks
+    /// for one at <see cref="CheckpointPoint.Integration"/>, which is taken only if the configuration lists it.
+    /// </summary>
+    /// <param name="runId">The run.</param>
+    /// <param name="caller">The run's caller; anonymous when null.</param>
+    /// <param name="point">Why: on demand, or after an integration.</param>
+    /// <param name="ct">Cancels the checkpoint.</param>
+    /// <returns>The checkpoint; null when the configuration takes none at this point.</returns>
+    /// <exception cref="ArgumentException">There is no such run.</exception>
+    public async Task<Checkpoint?> CheckpointAsync(string runId, Caller? caller = null, CheckpointPoint point = CheckpointPoint.OnDemand, CancellationToken ct = default)
+    {
+        var (_, context) = await FindAsync(runId, caller ?? Caller.Anonymous, ct).ConfigureAwait(false);
+        return await checkpointer.TakeAsync(context, point, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>A run's checkpoints, in order (RUN-08).</summary>
+    /// <exception cref="ArgumentException">There is no such run.</exception>
+    public async Task<IReadOnlyList<Checkpoint>> CheckpointsAsync(string runId, Caller? caller = null, CancellationToken ct = default)
+    {
+        var (_, context) = await FindAsync(runId, caller ?? Caller.Anonymous, ct).ConfigureAwait(false);
+        return await storage.Checkpoints.ReadAsync(context.Caller.Tenant, runId, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Rolls a run back to one of its checkpoints, restoring its state and its working copies together (RUN-08). Nothing
+    /// outside the core's state is undone: the report lists the effects of write tools made since, such as commands and
+    /// calls to servers. The run is then running again as far as the store knows, so <see cref="ResumeAsync"/> goes on from there.
+    /// Stop the run's turns first, and drop any handle on its working copies: the host has none to keep.
+    /// </summary>
+    /// <param name="runId">The run.</param>
+    /// <param name="number">The checkpoint, from 0 for the run's start.</param>
+    /// <param name="caller">The run's caller; anonymous when null.</param>
+    /// <param name="ct">Cancels the rollback.</param>
+    /// <exception cref="ArgumentException">There is no such run or checkpoint.</exception>
+    /// <exception cref="InvalidOperationException">Checkpoints are off, or a turn is running.</exception>
+    public async Task<RollbackReport> RollbackAsync(string runId, int number, Caller? caller = null, CancellationToken ct = default)
+    {
+        NeedCheckpoints();
+        if (turns.Values.Any(turn => turn.CurrentCount == 0))
+        {
+            throw new InvalidOperationException("A turn is running. Cancel it before rolling a run back.");
+        }
+
+        var (_, context) = await FindAsync(runId, caller ?? Caller.Anonymous, ct).ConfigureAwait(false);
+        var to = (await storage.Checkpoints.ReadAsync(context.Caller.Tenant, runId, ct).ConfigureAwait(false)).FirstOrDefault(checkpoint => checkpoint.Number == number)
+            ?? throw new ArgumentException($"Run {runId} has no checkpoint {number}.", nameof(number));
+        var (notUndone, memoryChanges) = await checkpointer.RestoreAsync(context, to, ct).ConfigureAwait(false);
+        await storage.Runs.RecordStatusAsync(context.Caller.Tenant, runId, RunStatus.Running, ct).ConfigureAwait(false);
+        await Events.PublishAsync(context, new RunRolledBack(number, notUndone, memoryChanges.Count), ct).ConfigureAwait(false);
+        return new RollbackReport(to, notUndone, memoryChanges);
+    }
+
+    /// <summary>
+    /// Starts a run again after a crash or a restart, from its last checkpoint (RUN-04). Its state and working copies are
+    /// restored to the checkpoint first, and the work since is redone: the run's work starts again on the restored state.
+    /// A write tool call whose outcome is unknown is flagged in a <see cref="RunResumed"/> event, and an irreversible one is
+    /// never run again, so it goes to a human (RUN-07, TOOL-10). The run's configuration is the runner's, not the stored one.
+    /// </summary>
+    /// <param name="runId">The run, as it was started.</param>
+    /// <param name="caller">The run's caller, with its permissions: only the caller's id and tenant are stored. Anonymous when null.</param>
+    /// <param name="ct">Cancels the run, which then ends in a handoff.</param>
+    /// <exception cref="ArgumentException">There is no such run for the caller.</exception>
+    /// <exception cref="InvalidOperationException">Checkpoints are off, or the run has ended.</exception>
+    public async Task<AgentResult> ResumeAsync(string runId, Caller? caller = null, CancellationToken ct = default)
+    {
+        NeedCheckpoints();
+        caller ??= Caller.Anonymous;
+        var (stored, _) = await FindAsync(runId, caller, ct).ConfigureAwait(false);
+        if (stored.Status != RunStatus.Running)
+        {
+            throw new InvalidOperationException($"Run {runId} has ended ({stored.Status}), so it does not resume. Roll it back to a checkpoint to run it again.");
+        }
+
+        var started = stored.Started;
+        KnownAgent(started.Agent);
+        var saved = await storage.Checkpoints.ReadAsync(caller.Tenant, runId, ct).ConfigureAwait(false);
+        if (saved.Count > 0)
+        {
+            // Refused here, not in the run, which would end in a failed result.
+            await checkpointer.EnsureNoOtherRunsAsync(new ToolContext(runId, started.Agent, caller), saved[^1], ct).ConfigureAwait(false);
+        }
+
+        var work = new Work(started.Agent, started.Input) { Trigger = started.Trigger, Caller = caller, TaskId = started.TaskId, RunId = runId };
+        return await RunCoreAsync(work, ct, resume: true).ConfigureAwait(false);
     }
 
     /// <summary>Runs a single request.</summary>
@@ -313,7 +405,25 @@ public sealed class AgentRunner
 
     private ConcurrentQueue<(Sender From, string Text)> Inbox(string agentName) => inboxes.GetOrAdd(agentName, _ => new());
 
-    private async Task<AgentResult> RunCoreAsync(Work work, CancellationToken ct)
+    private void NeedCheckpoints()
+    {
+        if (!Options.Capabilities.Checkpoints.Enabled)
+        {
+            throw new InvalidOperationException("Checkpoints are off. Set capabilities.checkpoints.enabled to true.");
+        }
+    }
+
+    /// <summary>The stored run of a caller, and the context that acts on it as the owner.</summary>
+    private async Task<(StoredRun Run, ToolContext Context)> FindAsync(string runId, Caller caller, CancellationToken ct)
+    {
+        var stored = await storage.Runs.ReadAsync(caller.Tenant, runId, ct).ConfigureAwait(false)
+            ?? throw new ArgumentException($"There is no run {runId}.", nameof(runId));
+        return stored.Started.Owner == caller.Id
+            ? (stored, new ToolContext(runId, stored.Started.Agent, caller))
+            : throw new ArgumentException($"There is no run {runId}.", nameof(runId));
+    }
+
+    private async Task<AgentResult> RunCoreAsync(Work work, CancellationToken ct, bool resume = false)
     {
         var name = work.Agent;
         var agent = Options.Agents[name];
@@ -325,12 +435,13 @@ public sealed class AgentRunner
         }
 
         var context = new ToolContext(work.RunId, name, work.Caller) { Masker = masker, TaskId = work.TaskId };
-        var steps = new Steps(Options, patterns, checks, Events, NewTurn, context, admitted, time);
+        var steps = new Steps(Options, patterns, checks, Events, NewTurn, context, admitted, time, checkpointer.TakeAsync);
         var oneAtATime = turns.GetOrAdd(name, _ => new SemaphoreSlim(1, 1));
         using var stop = CancellationTokenSource.CreateLinkedTokenSource(ct, cancels.GetOrAdd(name, _ => new CancellationTokenSource()).Token);
         var entered = false;
         Activity? activity = null;
         Task<StepResult>? running = null;
+        var recorded = false;
         StepResult ended;
         try
         {
@@ -338,8 +449,21 @@ public sealed class AgentRunner
             entered = true;
             activity = Telemetry.StartTurn(context); // after the wait, so the span covers the turn only
             await storage.DeleteExpiredAsync(Options.Storage.Retention, time.GetUtcNow(), stop.Token).ConfigureAwait(false);
-            var started = new RunStarted(context.RunId, name, context.Caller.Id, time.GetUtcNow(), CoreVersion.Value, Options);
-            await storage.Runs.RecordStartAsync(context.Caller.Tenant, started, stop.Token).ConfigureAwait(false);
+            if (resume)
+            {
+                await ResumeStateAsync(context, stop.Token).ConfigureAwait(false);
+            }
+            else
+            {
+                var started = new RunStarted(context.RunId, name, context.Caller.Id, time.GetUtcNow(), CoreVersion.Value, Options)
+                {
+                    Input = admitted.Input, Trigger = admitted.Trigger, TaskId = admitted.TaskId,
+                };
+                await storage.Runs.RecordStartAsync(context.Caller.Tenant, started, stop.Token).ConfigureAwait(false);
+                await checkpointer.TakeAsync(context, CheckpointPoint.Start, stop.Token).ConfigureAwait(false);
+            }
+
+            recorded = true;
             await Events.PublishAsync(context, new TurnStarted(), stop.Token).ConfigureAwait(false);
             running = steps.RunAsync(Budget.ForRun(Options.Run.Budget, time), stop.Token);
             ended = await running.WaitAsync(stop.Token).ConfigureAwait(false);
@@ -365,6 +489,10 @@ public sealed class AgentRunner
         {
             // Published even when the turn was cancelled, so readers see every turn end.
             await Events.PublishAsync(context, new TurnEnded(result.Outcome, result.Handoff?.Reason), CancellationToken.None).ConfigureAwait(false);
+            if (recorded)
+            {
+                await storage.Runs.RecordStatusAsync(context.Caller.Tenant, context.RunId, StatusOf(ended.Outcome), CancellationToken.None).ConfigureAwait(false);
+            }
         }
         catch (Exception exception)
         {
@@ -377,6 +505,37 @@ public sealed class AgentRunner
         activity?.Dispose();
         return result;
     }
+
+    /// <summary>
+    /// RUN-04: the run starts again where its last checkpoint left it. Events continue the stored numbering, the state and the
+    /// working copies return to the checkpoint, and the calls whose outcome is unknown are flagged (RUN-07).
+    /// </summary>
+    private async Task ResumeStateAsync(ToolContext context, CancellationToken ct)
+    {
+        var interrupted = await checkpointer.InterruptedAsync(context, ct).ConfigureAwait(false);
+        var saved = await storage.Checkpoints.ReadAsync(context.Caller.Tenant, context.RunId, ct).ConfigureAwait(false);
+        var last = saved.Count == 0 ? null : saved[^1];
+        if (last is null)
+        {
+            // It died before its first checkpoint, so nothing was saved and nothing is restored.
+            last = await checkpointer.TakeAsync(context, CheckpointPoint.Start, ct).ConfigureAwait(false);
+        }
+        else
+        {
+            await checkpointer.RestoreAsync(context, last, ct).ConfigureAwait(false);
+        }
+
+        await Events.PublishAsync(context, new RunResumed(last!.Number, interrupted), ct).ConfigureAwait(false);
+    }
+
+    /// <summary>A run that ends in a handoff waits for a human (RUN-01).</summary>
+    private static RunStatus StatusOf(StepOutcome outcome) => outcome switch
+    {
+        StepOutcome.Completed => RunStatus.Completed,
+        StepOutcome.Failed => RunStatus.Failed,
+        StepOutcome.Cancelled => RunStatus.Cancelled,
+        _ => RunStatus.WaitingForHuman,
+    };
 
     /// <summary>
     /// RUN-06: a cancelled run has <c>run.cancelWithin</c> to stop its model call and its tools, which stop their

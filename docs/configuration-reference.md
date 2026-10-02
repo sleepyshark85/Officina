@@ -605,7 +605,7 @@ object with `"enabled"` plus its own settings.
   "humanInteraction": {
     "signOffs": ["planApproval", "runBudgetExceeded", "irreversibleAction"]   // HITL-04; without it, an exhausted run budget hands off
   },
-  "checkpoints": { "at": ["turn", "integration"] },                 // RUN-03; also "step", "tool"
+  "checkpoints": { "at": ["turn", "integration"] },                 // RUN-03; also "step". One is always taken at the start and on demand
   "team":        { "maxParallelAgents": 4, "helperDepth": 2, "helperCount": 4 },
   "taskBoard":   { "maxAttempts": 3, "budget": 8 },                // TASK-09; the transitions are fixed (TASK-02), and each task says whether it needs a review
   "workspace": {

@@ -1,5 +1,7 @@
 using System.Collections.Concurrent;
 using System.Text.RegularExpressions;
+using System.Text.Json;
+using Sleepyshark.Officina.Core.Checkpoints;
 using Sleepyshark.Officina.Core.Extensibility;
 
 namespace Sleepyshark.Officina.Testing;
@@ -14,9 +16,67 @@ public sealed class InMemoryWorkspace : IWorkspace
     /// <summary>The baseline: each file's text, by its path.</summary>
     public ConcurrentDictionary<string, string> Files { get; } = new(StringComparer.Ordinal);
 
-    public Task<IWorkingCopy> OpenWorkingCopyAsync(string taskId, string agent, CancellationToken ct) => Task.FromResult<IWorkingCopy>(new Copy(new(Files)));
+    private readonly Dictionary<string, (Copy Copy, string Agent)> open = new(StringComparer.Ordinal);
 
-    public Task CloseWorkingCopyAsync(IWorkingCopy copy, CancellationToken ct) => Task.CompletedTask;
+    public Task<IWorkingCopy> OpenWorkingCopyAsync(string taskId, string agent, CancellationToken ct)
+    {
+        lock (open)
+        {
+            if (!open.TryGetValue(taskId, out var found))
+            {
+                open[taskId] = found = (new Copy(new(Files)), agent);
+            }
+
+            return Task.FromResult<IWorkingCopy>(found.Copy);
+        }
+    }
+
+    public Task CloseWorkingCopyAsync(IWorkingCopy copy, CancellationToken ct)
+    {
+        lock (open)
+        {
+            foreach (var task in open.Where(found => found.Value.Copy == copy).Select(found => found.Key).ToList())
+            {
+                open.Remove(task);
+            }
+        }
+
+        return Task.CompletedTask;
+    }
+
+    /// <summary>A snapshot's "commit" is the copy's files as JSON, so a snapshot is exact and needs nothing kept.</summary>
+    public Task<IReadOnlyList<CopySnapshot>> SnapshotAsync(CancellationToken ct)
+    {
+        lock (open)
+        {
+            return Task.FromResult<IReadOnlyList<CopySnapshot>>([.. open.OrderBy(found => found.Key, StringComparer.Ordinal)
+                .Select(found => new CopySnapshot(found.Key, found.Value.Agent, JsonSerializer.Serialize(found.Value.Copy.Files)))]);
+        }
+    }
+
+    public Task RestoreAsync(IReadOnlyList<CopySnapshot> snapshot, CancellationToken ct)
+    {
+        lock (open)
+        {
+            var saved = snapshot.Select(copy => copy.TaskId).ToHashSet(StringComparer.Ordinal);
+            foreach (var added in open.Keys.Where(task => !saved.Contains(task)).ToList())
+            {
+                open.Remove(added);
+            }
+
+            foreach (var saving in snapshot)
+            {
+                if (!open.TryGetValue(saving.TaskId, out var found))
+                {
+                    open[saving.TaskId] = found = (new Copy([]), saving.Agent);
+                }
+
+                found.Copy.Reset(JsonSerializer.Deserialize<Dictionary<string, string>>(saving.Commit)!);
+            }
+        }
+
+        return Task.CompletedTask;
+    }
 
     /// <summary>A working copy: its own files, and the text of each file when the agent last read or wrote it.</summary>
     public sealed class Copy(Dictionary<string, string> files) : IWorkingCopy
@@ -25,6 +85,21 @@ public sealed class InMemoryWorkspace : IWorkspace
 
         /// <summary>The copy's files, by path.</summary>
         public IReadOnlyDictionary<string, string> Files => files;
+
+        /// <summary>Puts the copy's files back as they were; the agent has read none of them since.</summary>
+        internal void Reset(Dictionary<string, string> saved)
+        {
+            lock (files)
+            {
+                files.Clear();
+                foreach (var (path, text) in saved)
+                {
+                    files[path] = text;
+                }
+
+                seen.Clear();
+            }
+        }
 
         public Task<string> ReadAsync(string path, int? firstLine, int? lineCount, CancellationToken ct)
         {

@@ -43,6 +43,9 @@ public sealed class ProjectMemory
         _ => "tenant",
     };
 
+    /// <summary>The scope this memory is of.</summary>
+    internal string Scope => scope;
+
     /// <summary>Whether the owner, and not the lead, approves agents' changes (MEM-03).</summary>
     internal bool OwnerApproves => options.ApproveBy == MemoryApprover.Owner;
 

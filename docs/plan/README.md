@@ -6,9 +6,9 @@ Status: draft · 2026-10-01 · slices `REQUIREMENTS.md` (revision 2) into delive
 
 Last updated 2026-10-02.
 
-- **Done:** M0 spikes S00a and S00b; M1 slices S01 (walking skeleton) and S02 (configuration); S03 (tool pipeline); S04 (turn loop); S05 (context and caching); S06 (run record and output); S07 (history and conversation store); S08 (events, storage and observability); S09 (triggers and admission); S10 (MCP and knowledge); S11 (Claude provider); S12 (model gateway); S13 (loop patterns); S14 (git workspace); S15 (sandbox); S16 (human interaction and CLI); S17 (project memory); S18 (task board).
+- **Done:** M0 spikes S00a and S00b; M1 slices S01 (walking skeleton) and S02 (configuration); S03 (tool pipeline); S04 (turn loop); S05 (context and caching); S06 (run record and output); S07 (history and conversation store); S08 (events, storage and observability); S09 (triggers and admission); S10 (MCP and knowledge); S11 (Claude provider); S12 (model gateway); S13 (loop patterns); S14 (git workspace); S15 (sandbox); S16 (human interaction and CLI); S17 (project memory); S18 (task board); S19, part 1 (checkpoints, resume and rollback).
 - **Waiting:** the M0 design review sign-off on `REQUIREMENTS.md`, `CONFIGURATION.md` and `DESIGN.md`.
-- **Next:** S19 (checkpoints and long runs).
+- **Next:** S19, part 2 (the budget hierarchy, cost breakdown and run report, the Windows sandbox leftovers), then S20.
 - **Open follow-ups:**
   - S02 kept a `formatVersion` check, though only version 1 exists. Consider removing the setting
     until a version 2 exists (principle 13). S06 keeps `output.schema` as JSON text, and S13 too; if a later slice wants the
@@ -41,11 +41,12 @@ Last updated 2026-10-02.
   - S21 (from S16): `sof config dry-run` cannot run a configuration that uses the `workspace.*` or `sandbox.*` tools. It
     should register them over the test kit's `InMemoryWorkspace` and `FakeSandbox` (CFG-12).
   - S20 adds the plan-approval sign-off and the model's tool to hand off to a human (EGR-04). S20 adds
-    integration and S19 snapshots to `IWorkspace`.
+    integration to `IWorkspace`, and calls `AgentRunner.CheckpointAsync` with `CheckpointPoint.Integration` after each one.
   - S21 (from S16): when a cancelled turn outlives `run.cancelWithin`, the agent's lock is released, so its next turn
     can overlap with the left-behind one, and the left-behind turn reports zero cost.
-  - S19 cleans up what the Windows sandbox leaves outside a cleaned-up working copy: its AppContainer
-    profile, its home folder `%TEMP%\officina-<hash>`, and its read-and-execute grants on `toolchains` folders.
+  - S19, part 2, cleans up what the Windows sandbox leaves outside a cleaned-up working copy: its AppContainer
+    profile, its home folder `%TEMP%\officina-<hash>`, and its read-and-execute grants on `toolchains` folders. It also
+    brings back the budget a run had spent when it resumes, and adds budget warnings (S08) and the per-run rate limit (ING-03).
   - S21 runs the Windows sandbox tests once as a standard user in CI (the S00a recipe), tests the CPU
     limit on both systems with limit reporting, and proves HTTPS through the proxy (a CONNECT tunnel).
   - S20 runs the team on the task board: it claims and assigns tasks, gives each a working copy that its checks
@@ -54,10 +55,14 @@ Last updated 2026-10-02.
     requires `taskBoard`. A failed task goes back to the lead, who retries it (only the owner can for now). S18's Notes list the rest.
   - S18 moved the SQLite format version to 3. A slice that adds a table bumps it again, unless an unmerged PR has
     already bumped it past the version on main.
-  - S19 snapshots and restores the workspace, and cleans up worktrees left by a crash.
+  - S19, part 2, also: a resumed pattern runs again from its first step, redoing the steps already done (resume part-way);
+    nothing checks that a run is dead when the workspace is off, so the owner must not resume a live run; old checkpoint commits
+    are kept only by the reflog after a squash, so `git gc` can break restoring them. Open, for a case (S19's Notes list them):
+    masking tokens from before a crash are not restored; the host passes the `Caller` to `ResumeAsync`, because only its id and
+    tenant are stored; a crashed run's branches are kept until it ends, and nothing lists runs yet.
   - S05 moved CTX-06 to S07 and CTX-07 to S06.
   - S17 left the owner's CLI commands for memory proposals and tying `memory.review` to the lead (S20), unmasking
-    proposed text (S21) and the checkpoint's memory revision (S19); their slice files say so.
+    proposed text (S21); their slice files say so.
   - S09 left parts of its requirements to the slices that add the state they need; its Notes list them
     (S06, S19, S20, and S21 for Message Batches).
   - REQUIREMENTS.md §4.3 lists masking as replaceable, but DESIGN.md §4 keeps it in Core and not replaceable in v1.
@@ -123,7 +128,7 @@ A slice is **done** when:
 | [S16](S16-human-interaction-cli.md) | Human interaction and CLI | M5 | M | S04, S08 | [#18](https://github.com/sleepyshark85/Officina/issues/18) | done |
 | [S17](S17-project-memory.md) | Project memory | M5 | S | S05, S16 | [#19](https://github.com/sleepyshark85/Officina/issues/19) | done |
 | [S18](S18-task-board.md) | Task board | M6 | M | S06, S08 | [#20](https://github.com/sleepyshark85/Officina/issues/20) | done |
-| [S19](S19-checkpoints-long-runs.md) | Checkpoints and long runs | M6 | M | S08, S14 | [#21](https://github.com/sleepyshark85/Officina/issues/21) | todo |
+| [S19](S19-checkpoints-long-runs.md) | Checkpoints and long runs | M6 | M ×2 | S08, S14 | [#21](https://github.com/sleepyshark85/Officina/issues/21) | doing |
 | [S20](S20-team.md) | Team | M6 | M | S13, S18, S19 | [#22](https://github.com/sleepyshark85/Officina/issues/22) | todo |
 | [S21](S21-hardening.md) | Hardening and benchmark | M7 | M | S20 | [#23](https://github.com/sleepyshark85/Officina/issues/23) | todo |
 

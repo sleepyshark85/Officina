@@ -84,10 +84,15 @@ internal sealed class IntegrationQueue(string root, string baseline, string runI
         }
     }
 
-    /// <summary>Commits what the agent changed, attributed to the run, the agent and the task (WS-04).</summary>
+    /// <summary>
+    /// Commits what the agent changed as one commit, attributed to the run, the agent and the task (WS-04). The checkpoint
+    /// commits on the branch (RUN-03) are squashed into it, so the baseline's history holds none of them.
+    /// </summary>
     private async Task CommitAsync(WorkingCopy copy, CancellationToken ct)
     {
         await Git.RunAsync(copy.Directory, ct, "add", "--all").ConfigureAwait(false);
+        var branchPoint = (await Git.RunAsync(copy.Directory, ct, "merge-base", "HEAD", baseline).ConfigureAwait(false)).Trim();
+        await Git.RunAsync(copy.Directory, ct, "reset", "--soft", branchPoint).ConfigureAwait(false);
         if ((await Git.TryRunAsync(copy.Directory, ct, "diff", "--cached", "--quiet").ConfigureAwait(false)).ExitCode != 0)
         {
             await Git.RunAsync(copy.Directory, ct, "commit", "--no-verify", "--author", $"{copy.Agent} <{copy.Agent}@officina>",

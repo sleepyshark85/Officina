@@ -24,7 +24,7 @@ It lists the settings the code has today. Settings that later slices add are spe
 | `run` | section | `{"budget":{"cost":25,"time":"08:00:00"},"permissionMode":"ask","approvalTimeout":"00:30:00","cancelWithin":"00:00:10"}` | Defaults for every run. | `{"permissionMode":"ask"}` |
 | `operations` | section | `{"telemetry":{"cacheHitWarning":0.7}}` | How the engine is operated. | `{"telemetry":{"cacheHitWarning":0.7}}` |
 | `storage` | section | `{"retention":{"audit":"365.00:00:00"}}` | What is stored, and for how long. | `{"unstoredEvents":["textGenerated"],"retention":{"events":"30.00:00:00"}}` |
-| `capabilities` | section | `{"conversationStore":{"enabled":false},"knowledge":{"enabled":false},"humanInteraction":{"enabled":false},"workspace":{"enabled":false,"protectedPaths":[],"keepWorkingCopies":false},"sandbox":{"enabled":false,"allowedHosts":[],"toolchains":[],"commandRules":[],"secrets":{}},"taskBoard":{"enabled":false,"maxAttempts":3,"budget":8},"projectMemory":{"enabled":false,"scope":"project","maxTokens":20000,"approveBy":"lead"}}` | Optional capabilities and their settings. All are off by default. | `{"conversationStore":{"enabled":true}}` |
+| `capabilities` | section | `{"conversationStore":{"enabled":false},"knowledge":{"enabled":false},"humanInteraction":{"enabled":false},"workspace":{"enabled":false,"protectedPaths":[],"keepWorkingCopies":false},"sandbox":{"enabled":false,"allowedHosts":[],"toolchains":[],"commandRules":[],"secrets":{}},"taskBoard":{"enabled":false,"maxAttempts":3,"budget":8},"projectMemory":{"enabled":false,"scope":"project","maxTokens":20000,"approveBy":"lead"},"checkpoints":{"enabled":false}}` | Optional capabilities and their settings. All are off by default. | `{"conversationStore":{"enabled":true}}` |
 
 ## `project`
 
@@ -171,6 +171,7 @@ It lists the settings the code has today. Settings that later slices add are spe
 | `sandbox` | section | `{"enabled":false,"allowedHosts":[],"toolchains":[],"commandRules":[],"secrets":{}}` | The sandbox that commands run in: no network unless allowed, and command rules. It needs the workspace. | `{"enabled":true,"allowedHosts":["api.nuget.org"]}` |
 | `taskBoard` | section | `{"enabled":false,"maxAttempts":3,"budget":8}` | The task board: tasks with dependencies, verification checks and review, which agents change through the `tasks.*` tools and the owner at any time. | `{"enabled":true,"maxAttempts":2}` |
 | `projectMemory` | section | `{"enabled":false,"scope":"project","maxTokens":20000,"approveBy":"lead"}` | Project memory: durable instructions, conventions and decisions in every agent's stable prefix, which agents change through the `memory.*` tools once the lead or the owner approves. | `{"enabled":true,"scope":"project","approveBy":"lead"}` |
+| `checkpoints` | section | `{"enabled":false}` | Checkpoints: saved states a run resumes from after a crash and the owner can roll back to, with the working copies restored together with the run's state. | `{"enabled":true,"at":["turn","integration"]}` |
 
 ## `providers.<name>.apiKey`
 
@@ -384,6 +385,13 @@ It lists the settings the code has today. Settings that later slices add are spe
 | `scope` | `"project"`, `"owner"`, `"tenant"` | `"project"` | Whose memory it is: `project` (one per project name), `owner` (one per caller) or `tenant` (one per tenant). Agents of one definition share a prefix only within one scope. | `"project"` |
 | `maxTokens` | whole number, ≥ 1 | `20000` | The size limit, in tokens, counted as one token per four characters. A change that would take memory past it is not applied: agents propose a condensed version instead, which only the owner approves. | `20000` |
 | `approveBy` | `"lead"`, `"owner"` | `"lead"` | Who approves an agent's proposed change: `lead`, through a `builtin:memory.review` tool, which you give only to the lead's tool sets (nothing checks that yet), or `owner`, who is asked at the proposal and needs `humanInteraction`. Both memory tools are write tools, so each needs `gates` or a `gateExemption`, and under `permissionMode: ask` each call also asks the owner unless a permission rule allows it. | `"lead"` |
+
+## `capabilities.checkpoints`
+
+| Setting | Allowed values | Default | Description | Example |
+|---|---|---|---|---|
+| `enabled` | boolean | `false` | Whether checkpoints are on. A run then takes one when it starts, and one at each point in `at`; the owner can take one at any time. A crashed run resumes from its last, and the owner can roll a run back to any. It needs the conversation store. | `true` |
+| `at` | list |  | Where a checkpoint is taken: `turn` after each turn, `step` after each step of a pattern, `integration` after each integration into the baseline. Unset means `turn`. An empty list in a file counts as unset. | `["turn","integration"]` |
 
 ## `agents.<name>.pattern.steps[]`
 

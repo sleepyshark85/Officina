@@ -8,7 +8,7 @@ namespace Sleepyshark.Officina.Core.Configuration;
 public sealed record CapabilitiesOptions
 {
     /// <summary>What each capability needs on as well, checked at validation (CAP-03).</summary>
-    public static IReadOnlyList<(string Capability, string Requires)> Dependencies { get; } = [("sandbox", "workspace")];
+    public static IReadOnlyList<(string Capability, string Requires)> Dependencies { get; } = [("sandbox", "workspace"), ("checkpoints", "conversationStore")];
 
     [Setting("The conversation store: each agent's conversation with each caller is kept, anonymous callers sharing one, so a history strategy other than `none` continues it across requests and restarts.",
         Example = """{ "enabled": true }""")]
@@ -38,6 +38,10 @@ public sealed record CapabilitiesOptions
         Example = """{ "enabled": true, "scope": "project", "approveBy": "lead" }""")]
     public ProjectMemoryOptions ProjectMemory { get; init; } = new();
 
+    [Setting("Checkpoints: saved states a run resumes from after a crash and the owner can roll back to, with the working copies restored together with the run's state.",
+        Example = """{ "enabled": true, "at": ["turn", "integration"] }""")]
+    public CheckpointOptions Checkpoints { get; init; } = new();
+
     /// <summary>Every capability, by its name in configuration, and whether it is on.</summary>
     public IReadOnlyDictionary<string, bool> Switches() => new Dictionary<string, bool>
     {
@@ -48,6 +52,7 @@ public sealed record CapabilitiesOptions
         ["sandbox"] = Sandbox.Enabled,
         ["taskBoard"] = TaskBoard.Enabled,
         ["projectMemory"] = ProjectMemory.Enabled,
+        ["checkpoints"] = Checkpoints.Enabled,
     };
 }
 

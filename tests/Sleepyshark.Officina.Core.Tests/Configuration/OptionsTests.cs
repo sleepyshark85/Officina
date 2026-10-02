@@ -17,7 +17,7 @@ public class OptionsTests
             .SelectMany(type => type.GetProperties(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly))
             .ToArray();
 
-        Assert.Equal(48, OptionsTypes.Length);
+        Assert.Equal(49, OptionsTypes.Length);
         Assert.All(settings, property => Assert.DoesNotMatch(RequirementId, property.GetCustomAttribute<SettingAttribute>()?.Description ?? ""));
         Assert.All(settings, property =>
         {

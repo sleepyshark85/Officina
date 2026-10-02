@@ -1,3 +1,4 @@
+using Sleepyshark.Officina.Core.Checkpoints;
 using Sleepyshark.Officina.Core.Configuration;
 using Sleepyshark.Officina.Core.Events;
 using Sleepyshark.Officina.Core.Memory;
@@ -9,8 +10,8 @@ namespace Sleepyshark.Officina.Core.Extensibility;
 
 /// <summary>
 /// The storage extension point (STO-01): one store per kind of data, and the rules across them (PRIV-01, PRIV-02).
-/// Everything stored carries its tenant, and every read and write is limited to one tenant (SEC-02). The slice that
-/// stores checkpoints adds its store. Memory outlives runs, so it is never expired; only an owner's own memory is
+/// Everything stored carries its tenant, and every read and write is limited to one tenant (SEC-02). A run's checkpoints go with the run.
+/// Memory outlives runs, so it is never expired; only an owner's own memory is
 /// exported and deleted with the owner's data.
 /// </summary>
 public interface IStorage
@@ -30,6 +31,8 @@ public interface IStorage
     ITaskStore Tasks { get; }
 
     IMemoryStore Memory { get; }
+
+    ICheckpointStore Checkpoints { get; }
 
     /// <summary>Everything stored about an owner's runs and conversations, for an export on request (PRIV-02).</summary>
     ValueTask<OwnerData> ExportAsync(string? tenant, string owner, CancellationToken ct);
@@ -54,4 +57,5 @@ public sealed record OwnerData(
     IReadOnlyList<RecordEntry> Records,
     IReadOnlyList<Artifact> Artifacts,
     IReadOnlyList<TaskChange> Tasks,
-    IReadOnlyList<MemoryChange> Memory);
+    IReadOnlyList<MemoryChange> Memory,
+    IReadOnlyList<Checkpoint> Checkpoints);

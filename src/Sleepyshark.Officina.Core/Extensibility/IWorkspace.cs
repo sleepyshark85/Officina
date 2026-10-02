@@ -1,17 +1,31 @@
+using Sleepyshark.Officina.Core.Checkpoints;
+
 namespace Sleepyshark.Officina.Core.Extensibility;
 
 /// <summary>
 /// Where agents change files: a working copy for each agent's task (WS-01). The <c>workspace.*</c> tools work through
-/// it, so the test kit's in-memory workspace can stand in for the git workspace (TEST-01). The task board (S18) adds
-/// integration, and checkpoints (S19) snapshots.
+/// it, so the test kit's in-memory workspace can stand in for the git workspace (TEST-01). Checkpoints save and
+/// restore its working copies (RUN-04, RUN-08). Integration arrives with the team (S20).
 /// </summary>
 public interface IWorkspace
 {
-    /// <summary>Creates the working copy where an agent does a task, from the baseline as it is now.</summary>
+    /// <summary>
+    /// Creates the working copy where an agent does a task, from the baseline as it is now. A working copy that is already
+    /// open for the task is returned as it is, and so is one that a restore brought back.
+    /// </summary>
     Task<IWorkingCopy> OpenWorkingCopyAsync(string taskId, string agent, CancellationToken ct);
 
     /// <summary>Removes the working copy when its task ends.</summary>
     Task CloseWorkingCopyAsync(IWorkingCopy copy, CancellationToken ct);
+
+    /// <summary>Saves every open working copy as it is now, committing changes not yet committed first (DESIGN.md §8).</summary>
+    Task<IReadOnlyList<CopySnapshot>> SnapshotAsync(CancellationToken ct);
+
+    /// <summary>
+    /// Returns the working copies to a snapshot: each one in it is reset to its saved state, opened again if it is gone, and
+    /// any other open working copy is removed, because it did not exist then (RUN-04, RUN-08).
+    /// </summary>
+    Task RestoreAsync(IReadOnlyList<CopySnapshot> snapshot, CancellationToken ct);
 }
 
 /// <summary>

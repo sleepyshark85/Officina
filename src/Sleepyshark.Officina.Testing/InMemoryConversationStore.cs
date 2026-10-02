@@ -22,4 +22,17 @@ public sealed class InMemoryConversationStore : IConversationStore
         var start = Math.Max(0, turns.ToList().FindLastIndex(turn => turn.Shortened));
         return ValueTask.FromResult<IReadOnlyList<ConversationTurn>>([.. turns.Skip(start)]);
     }
+
+    public ValueTask<int> CountAsync(string? tenant, string agent, string? owner, CancellationToken ct) =>
+        ValueTask.FromResult(Rows.Where(tenant, turn => turn.Agent == agent && turn.Owner == owner).Count);
+
+    public ValueTask<int> CountOtherRunsAfterAsync(string? tenant, string agent, string? owner, int count, string runId, CancellationToken ct) =>
+        ValueTask.FromResult(Rows.Where(tenant, turn => turn.Agent == agent && turn.Owner == owner).Skip(count).Count(turn => turn.RunId != runId));
+
+    public ValueTask TruncateAsync(string? tenant, string agent, string? owner, int count, CancellationToken ct)
+    {
+        var position = 0;
+        Rows.RemoveAll((rowTenant, turn) => rowTenant == tenant && turn.Agent == agent && turn.Owner == owner && ++position > count);
+        return ValueTask.CompletedTask;
+    }
 }
