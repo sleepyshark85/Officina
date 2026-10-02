@@ -73,6 +73,36 @@ public sealed partial class ConfigCommandTests : IDisposable
             error);
     }
 
+    // CFG-06: validate reports what sof run refuses as it starts: an extension sof does not register, and a feature the model's
+    // provider does not have for it (MDL-06).
+    [Fact]
+    public async Task Validate_reports_what_sof_run_refuses_as_it_starts()
+    {
+        sof.Write("sof.json", """
+            {
+              "providers": { "claude": { "features": { "refusalFallback": true } } },
+              "models": { "default": { "model": "claude-haiku-4-5" } },
+              "agents": { "a": { "instructions": "Look things up.", "tools": ["all"] } },
+              "tools": { "lookup": { "source": "extension:acme.lookup", "gates": ["acme"] } },
+              "toolSets": { "all": ["lookup"] },
+              "gates": { "acme": { "use": "extension:acme.gate" } }
+            }
+            """);
+
+        var (exitCode, _, error) = await sof.RunAsync("config", "validate");
+
+        Assert.Equal(1, exitCode);
+        Assert.Equal(
+            """
+            error: tools.lookup.source: tool extension "acme.lookup" is not one sof registers. sof registers the workspace.* and sandbox.* tools and the sandbox.commandRules gate, and runs command checks; use one of them, a built-in, or a tool server.
+            error: gates.acme.use: gate extension "acme.gate" is not one sof registers. sof registers the workspace.* and sandbox.* tools and the sandbox.commandRules gate, and runs command checks; use one of them, a built-in, or a tool server.
+            error: providers.claude.features.refusalFallback: model "claude-haiku-4-5" of agent "a" does not have the feature. Switch it off, or use a model that has it.
+            3 errors.
+
+            """.ReplaceLineEndings("\n"),
+            error);
+    }
+
     // CFG-12.
     [Fact]
     public async Task Dry_run_shows_the_configuration_and_runs_the_agent_against_scripted_replies()
@@ -84,6 +114,31 @@ public sealed partial class ConfigCommandTests : IDisposable
         Assert.Equal((0, ""), (exitCode, error));
         Assert.Contains("project.name", output, StringComparison.Ordinal);
         Assert.EndsWith("\nextractor: Completed\n{\"total\":42}\n", output, StringComparison.Ordinal);
+    }
+
+    // CFG-12: a configuration with the workspace's and the sandbox's tools, a command gate and a command check dry-runs too, over
+    // files in memory and a sandbox that runs nothing.
+    [Fact]
+    public async Task Dry_run_runs_a_configuration_with_the_workspace_and_the_sandbox()
+    {
+        sof.Write("sof.json", """
+            {
+              "agents": { "dev": { "instructions": "Develop.", "tools": ["code"] } },
+              "tools": {
+                "write_file": { "source": "extension:workspace.write_file", "gateExemption": "It changes only the working copy." },
+                "run_command": { "source": "extension:sandbox.run", "gates": ["commands"] }
+              },
+              "toolSets": { "code": ["write_file", "run_command"] },
+              "gates": { "commands": { "use": "extension:sandbox.commandRules" } },
+              "checks": { "build": { "command": "dotnet build" } },
+              "capabilities": { "workspace": { "enabled": true, "baselineChecks": ["build"] }, "sandbox": { "enabled": true } }
+            }
+            """);
+
+        var (exitCode, output, error) = await sof.RunAsync("config", "dry-run", "--input", "Fix it.", "--reply", "Done.");
+
+        Assert.Equal((0, ""), (exitCode, error));
+        Assert.EndsWith("\ndev: Completed\nDone.\n", output, StringComparison.Ordinal);
     }
 
     [Fact]

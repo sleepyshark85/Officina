@@ -23,6 +23,22 @@ public class ProjectMemoryTests
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
+    // ING-02, MEM-02: a masking token stands for a value in one run only, and memory outlives the run and is read by every model call
+    // after it, so a proposal that holds one is refused, never given the real value.
+    [Fact]
+    public async Task A_proposal_holding_a_masked_value_is_refused()
+    {
+        var kit = Kit();
+        kit.Model.CallTools(("propose", """{ "kind": "note", "subject": "contact", "text": "Mail [email-1] about releases." }""")).Reply("Done.");
+
+        await kit.Runner.RunAsync(Agent, "Mail ann@example.com about releases.", Owner, Ct);
+
+        var result = Assert.IsType<ToolResultContent>(kit.Model.Requests[1].History[^1].Content[0]);
+        Assert.True(result.IsError);
+        Assert.Contains("holds a masked value", result.Text, StringComparison.Ordinal);
+        Assert.Empty((await kit.Runner.Memory(Owner).ReadAsync(Ct)).Pending);
+    }
+
     // MEM-01, CTX-11, TEST-09: boundary ② follows memory, and there is none while memory is empty.
     [Theory]
     [InlineData(4, true, new[] { CachePoint.Instructions, CachePoint.Memory, CachePoint.History })]

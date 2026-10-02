@@ -62,19 +62,22 @@ internal sealed class ConfigurationCommandOptions
     }
 
     /// <summary>Prints every error; the exit code says whether there were any.</summary>
-    public static int ReportErrors(SofConfiguration configuration, SofEnvironment host)
+    public static int ReportErrors(SofConfiguration configuration, SofEnvironment host) => ReportErrors(configuration.Errors, host);
+
+    /// <summary>Prints every error; the exit code says whether there were any.</summary>
+    public static int ReportErrors(IReadOnlyList<ConfigurationError> errors, SofEnvironment host)
     {
-        foreach (var error in configuration.Errors)
+        foreach (var error in errors)
         {
             host.Error.WriteLine($"error: {error}");
         }
 
-        if (configuration.Errors.Count == 0)
+        if (errors.Count == 0)
         {
             return ExitCodes.Success;
         }
 
-        host.Error.WriteLine(configuration.Errors.Count == 1 ? "1 error." : $"{configuration.Errors.Count} errors.");
+        host.Error.WriteLine(errors.Count == 1 ? "1 error." : $"{errors.Count} errors.");
         return ExitCodes.Invalid;
     }
 }

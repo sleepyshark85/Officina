@@ -1,12 +1,17 @@
 using System.CommandLine;
 using Sleepyshark.Officina.Core.Configuration;
+using Sleepyshark.Officina.Core.Extensibility;
+using Sleepyshark.Officina.Core.Tools;
+using Sleepyshark.Officina.Sandbox;
 using Sleepyshark.Officina.Testing;
 
 namespace Sleepyshark.Officina.Cli;
 
 /// <summary>
 /// <c>sof config dry-run [--agent &lt;name&gt;] [--input &lt;text&gt;] --reply &lt;text&gt;…</c>: validates the
-/// configuration, shows it, and runs an agent against a scripted model, with no real model calls (CFG-12).
+/// configuration, shows it, and runs an agent against a scripted model, with no real model calls (CFG-12). The workspace's
+/// tools work on files in memory, and commands, the sandbox's and the command checks', are not run: each answers that it was
+/// not, with exit code 0. The command rules still decide which may run.
 /// </summary>
 internal static class DryRunCommand
 {
@@ -31,10 +36,35 @@ internal static class DryRunCommand
                 return ExitCodes.Usage;
             }
 
+            var options = configuration.Options;
+            var (tools, gates, checks) = (new Dictionary<string, ITool>(), new Dictionary<string, IGate>(), new Dictionary<string, ICheck>());
+            var workspace = options.Capabilities.Workspace.Enabled ? new InMemoryWorkspace() : null;
+            foreach (var (id, tool) in workspace is null ? new Dictionary<string, ITool>() : new WorkspaceTools(call => workspace.OpenWorkingCopyAsync(call.WorkingCopy, call.Agent, ct)).Tools)
+            {
+                tools[id] = tool;
+            }
+
+            using var folder = options.Capabilities.Sandbox.Enabled ? new DryRunFolder() : null;
+            if (folder is not null)
+            {
+                var sandbox = new FakeSandbox { Answer = _ => ("(dry run: the command was not run)", 0) };
+                foreach (var (id, tool) in new SandboxTools(sandbox, options.Capabilities.Sandbox, options.Capabilities.Workspace, "", folder.Path).Tools)
+                {
+                    tools[id] = tool;
+                }
+
+                gates[CommandRules.Id] = new CommandRules(options.Capabilities.Sandbox);
+                foreach (var (checkName, check) in options.Checks.Where(check => check.Value.Command is not null))
+                {
+                    checks[check.Id(checkName)] = new CommandCheck(
+                        sandbox, options.Capabilities.Sandbox, options.Capabilities.Workspace, InstructionPlaceholders.FillCommand(check.Command!, options.Project), check.Timeout, TimeProvider.System);
+                }
+            }
+
             TestKit kit;
             try
             {
-                kit = new TestKit(configuration.Options);
+                kit = new TestKit(options, tools, gates, checks: checks, workspace: workspace);
             }
             catch (ConfigurationException exception)
             {
@@ -55,5 +85,13 @@ internal static class DryRunCommand
             return ExitCodes.Success;
         });
         return command;
+    }
+
+    /// <summary>An empty folder that stands for the working copy the sandbox's tools are given, removed after the dry run.</summary>
+    private sealed class DryRunFolder : IDisposable
+    {
+        public string Path { get; } = Directory.CreateTempSubdirectory("sof-dry-run-").FullName;
+
+        public void Dispose() => Directory.Delete(Path, recursive: true);
     }
 }

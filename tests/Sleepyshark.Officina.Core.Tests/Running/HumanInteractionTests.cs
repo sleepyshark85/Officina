@@ -287,7 +287,8 @@ public class HumanInteractionTests
         Assert.True(result.Handoff is { Reason: HandoffReason.RequestedByHuman, Detail: "the turn was cancelled", ToolCalls: [{ Result.Error: ToolErrorCategory.Cancelled }] }, seen);
     }
 
-    // RUN-06, TEST-27: a model call that ignores cancellation is left behind once the configured time has passed.
+    // RUN-06, TEST-27: a model call that ignores cancellation is left behind once the configured time has passed. What it spent so
+    // far is in the result, and the agent's next turn waits until it has stopped (LOOP-02).
     [Fact]
     public async Task A_cancelled_agent_that_does_not_stop_is_left_behind_within_the_configured_time()
     {
@@ -313,6 +314,18 @@ public class HumanInteractionTests
         var result = await dev;
         Assert.Equal((HandoffReason.RequestedByHuman, "the turn was cancelled, and did not stop within 00:00:10"), (result.Handoff!.Reason, result.Handoff.Detail));
         Assert.True(waited >= TimeSpan.FromSeconds(10)); // the clock starts when the runner sees the cancellation, a moment after Cancel
+        Assert.Equal(4m, result.Statistics.Cost); // a million input tokens of Opus 5.5, spent before it got stuck
+
+        var next = runner.RunAsync(Agent, "again", ct: Ct);
+        for (var i = 0; i < 20; i++)
+        {
+            await Task.Yield();
+        }
+
+        Assert.Equal((false, 1), (next.IsCompleted, model.Calls));
+        model.Unstick.SetResult();
+        Assert.Equal(AgentOutcome.Completed, (await next).Outcome);
+        Assert.Equal(2, model.Calls);
     }
 
     /// <summary>The agents <c>dev</c> and <c>other</c>, with human interaction on, in the <c>auto</c> mode; <c>edit</c> needs approval.</summary>
@@ -355,15 +368,28 @@ public class HumanInteractionTests
     /// <summary>A model whose call never ends and ignores cancellation, as a misbehaving provider might.</summary>
     private sealed class StuckModel : IModelProvider
     {
+        private int calls;
+
         public TaskCompletionSource Called { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        /// <summary>Lets the first call, which ignores cancellation, end.</summary>
+        public TaskCompletionSource Unstick { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public int Calls => calls;
 
         public ProviderCapabilities CapabilitiesOf(string model) => ProviderCapabilities.None;
 
         public async IAsyncEnumerable<ModelEvent> StreamAsync(ModelRequest request, [EnumeratorCancellation] CancellationToken ct)
         {
-            Called.TrySetResult();
-            await new TaskCompletionSource().Task;
-            yield break;
+            if (Interlocked.Increment(ref calls) == 1)
+            {
+                yield return new UsageReported(new Usage(1_000_000, 0, 0, 0));
+                Called.TrySetResult();
+                await Unstick.Task;
+            }
+
+            yield return new TextDelta("Done.");
+            yield return new Stopped(StopReason.Finished);
         }
     }
 }

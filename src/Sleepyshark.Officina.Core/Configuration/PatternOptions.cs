@@ -104,7 +104,7 @@ public sealed record PatternOptions
                 .Where(step => step.Item2 is not null).Select(step => ($"{path}.{step.Item1}", step.Item2!)));
 
     /// <summary>This pattern and every pattern nested in it, with their setting paths.</summary>
-    internal IEnumerable<(string Path, PatternOptions Pattern)> Nested(string path) =>
+    public IEnumerable<(string Path, PatternOptions Pattern)> Nested(string path) =>
         Children(path).Where(child => child.Step.Pattern is not null)
             .SelectMany(child => child.Step.Pattern!.Nested($"{child.Path}.pattern")).Prepend((path, this));
 

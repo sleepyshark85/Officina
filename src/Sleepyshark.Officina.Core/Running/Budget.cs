@@ -13,6 +13,7 @@ internal sealed class Budget
     private readonly string level;
     private readonly TurnBudget limits;
     private readonly Budget? parent;
+    private readonly Budget? alongside;
     private readonly TimeProvider time;
     private readonly long started;
     private readonly TimeSpan timeBefore;
@@ -23,8 +24,9 @@ internal sealed class Budget
     private decimal cost;
     private int allowances = 1;
 
-    private Budget(string level, TurnBudget limits, Budget? parent, TimeProvider time, Spent before)
+    private Budget(string level, TurnBudget limits, Budget? parent, TimeProvider time, Spent before, Budget? alongside = null)
     {
+        this.alongside = alongside;
         cost = before.Cost;
         tokens = before.Tokens;
         toolCalls = before.ToolCalls;
@@ -47,15 +49,25 @@ internal sealed class Budget
     /// <param name="before">What the level had spent before, which the levels above already count.</param>
     public Budget Draw(string level, TurnBudget limits, Spent before = default) => new(level, limits, this, time, before);
 
+    /// <summary>
+    /// This budget, with another level beside it that is not above it, such as the agent level of a pattern's step agent: what is
+    /// spent counts at both, and either can be used up (RUN-05).
+    /// </summary>
+    public Budget Alongside(Budget other) =>
+        new("", new TurnBudget { Iterations = int.MaxValue, ToolCalls = int.MaxValue, Tokens = long.MaxValue, Cost = decimal.MaxValue, Time = TimeSpan.MaxValue }, this, time, default, other);
+
+    /// <summary>An agent's own level over all its turns in a run, beside the levels its turns draw on (RUN-05).</summary>
+    public static Budget ForAgent(TotalBudget total, TimeProvider time, Spent before) =>
+        new("agent's", Limits(total), null, time, before);
+
     /// <summary>An agent's budget over all its turns in the run (RUN-05).</summary>
     public Budget DrawAgent(TotalBudget? total, Spent before) =>
-        total is null ? this : Draw(
-            "agent's",
-            new TurnBudget
-            {
-                Iterations = int.MaxValue, ToolCalls = total.ToolCalls ?? int.MaxValue, Tokens = total.Tokens ?? long.MaxValue, Cost = total.Cost ?? decimal.MaxValue, Time = TimeSpan.MaxValue,
-            },
-            before);
+        total is null ? this : Draw("agent's", Limits(total), before);
+
+    private static TurnBudget Limits(TotalBudget total) => new()
+    {
+        Iterations = int.MaxValue, ToolCalls = total.ToolCalls ?? int.MaxValue, Tokens = total.Tokens ?? long.MaxValue, Cost = total.Cost ?? decimal.MaxValue, Time = TimeSpan.MaxValue,
+    };
 
     public void Spend(int iterations = 0, int toolCalls = 0, long tokens = 0, decimal cost = 0m)
     {
@@ -68,6 +80,7 @@ internal sealed class Budget
         }
 
         parent?.Spend(iterations, toolCalls, tokens, cost);
+        alongside?.Spend(iterations, toolCalls, tokens, cost);
     }
 
     /// <summary>
@@ -113,7 +126,10 @@ internal sealed class Budget
             extensions = allowances - 1;
         }
 
-        return limit is null ? parent?.Exhausted() : ($"{level} {limit}", parent is null, extensions);
+        return limit is not null ? ($"{level} {limit}", parent is null, extensions) : parent?.Exhausted() ?? AlongsideExhausted();
+
+        // A level beside the chain is never the run's, so the owner is not asked to extend it.
+        (string, bool, int)? AlongsideExhausted() => alongside?.Exhausted() is { } found ? (found.Limit, false, 0) : null;
     }
 
     /// <summary>
@@ -138,7 +154,7 @@ internal sealed class Budget
             }
         }
 
-        return parent is null ? found : [.. found, .. parent.Warnings()];
+        return [.. found, .. parent?.Warnings() ?? [], .. alongside?.Warnings() ?? []];
     }
 
     /// <summary>The share of a limit at which a budget warns.</summary>

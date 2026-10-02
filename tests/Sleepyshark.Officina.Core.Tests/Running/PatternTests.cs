@@ -35,6 +35,19 @@ public class PatternTests
             (result.Handoff!.Reason, result.Handoff.Detail, result.Statistics.Iterations));
     }
 
+    // RUN-05: a step agent's own budget.total covers all its steps in the run, beside the pattern's budget it draws on.
+    [Fact]
+    public async Task A_step_agents_own_budget_covers_all_its_steps()
+    {
+        var kit = Kit(Workflow("one", "two"), worker: worker => worker with { Budget = new() { Total = new() { ToolCalls = 2 } } });
+        kit.Model.CallTools(("report", "{}")).Reply("1").CallTools(("report", "{}")).Reply("never asked for");
+
+        var result = await kit.RunAsync("lead", "work", Ct);
+
+        Assert.Equal((HandoffReason.BudgetExhausted, "the agent's tool-call budget is used up"), (result.Handoff!.Reason, result.Handoff.Detail));
+        Assert.Equal(3, kit.Model.Requests.Count);
+    }
+
     // PAT-04, PAT-08: a step that is handed off is retried; another takes a different branch, and a step gets the inputs it declares.
     [Fact]
     public async Task A_workflow_step_is_retried_or_goes_elsewhere_by_its_outcome()

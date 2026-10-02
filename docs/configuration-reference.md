@@ -614,7 +614,7 @@ object with `"enabled"` plus its own settings.
   },
   "checkpoints": { "at": ["turn", "integration"] },                 // RUN-03; also "step". One is always taken at the start and on demand
   "team":        { "enabled": true, "helperDepth": 2, "helperCount": 4 },   // TEAM; TEAM-07: how deep helpers go, and how many one turn starts
-  "taskBoard":   { "maxAttempts": 3, "budget": 8 },                // TASK-09; the transitions are fixed (TASK-02), and each task says whether it needs a review
+  "taskBoard":   { "maxAttempts": 3, "budget": { "cost": 8 } },    // TASK-09, RUN-05: also "tokens", "toolCalls" and "time"; the transitions are fixed (TASK-02)
   "workspace": {
     "type": "builtin:git",
     "root": ".",
@@ -814,8 +814,11 @@ Attempts to weaken an invariant, and how each is rejected:
 | INV-10 | Workspace settings that expose the configuration files to agents as writable |
 
 Each error is reported once: a setting rejected in an early phase is not reported again by later
-phases. `sof config validate` runs all phases and exits non-zero on any error. `sof config dry-run
-[--agent <name>] [--input <text>] --reply <text>…` also runs an agent against a scripted model (CFG-12).
+phases. `sof config validate` runs all phases and exits non-zero on any error; it also reports what
+`sof run` refuses as it starts: an `extension:` id that `sof` does not register, and a provider tool,
+feature or history shortening a model's provider does not have. `sof config dry-run [--agent <name>]
+[--input <text>] --reply <text>…` also runs an agent against a scripted model (CFG-12), with the
+workspace's files in memory and the sandbox's commands answered without running them.
 
 ---
 

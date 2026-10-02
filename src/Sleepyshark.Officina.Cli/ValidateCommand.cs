@@ -1,4 +1,7 @@
 using System.CommandLine;
+using Sleepyshark.Officina.Core.Configuration;
+using Sleepyshark.Officina.Core.Extensibility;
+using Sleepyshark.Officina.Core.Running;
 
 namespace Sleepyshark.Officina.Cli;
 
@@ -15,6 +18,19 @@ internal static class ValidateCommand
             if (ConfigurationCommandOptions.ReportErrors(configuration, host) is var code && code != ExitCodes.Success)
             {
                 return code;
+            }
+
+            // What sof run refuses as it starts: extensions sof does not register, and what the models' providers lack. No model is
+            // called and nothing is opened.
+            var (providers, claude) = RunCommand.Providers(configuration.Options, host, new EnvironmentSecrets(host.Variables));
+            using (claude)
+            {
+                IReadOnlyList<ConfigurationError> errors =
+                    [.. WorkspaceHost.RegistrationErrors(configuration.Options), .. AgentRunner.ProviderErrors(configuration.Options, providers, new Dictionary<string, IHistoryShortener>())];
+                if (errors.Count > 0)
+                {
+                    return ConfigurationCommandOptions.ReportErrors(errors, host);
+                }
             }
 
             host.Out.WriteLine("The configuration is valid.");

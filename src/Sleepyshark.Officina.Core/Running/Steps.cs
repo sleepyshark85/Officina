@@ -47,6 +47,8 @@ internal sealed class Steps(
     };
 
     private readonly ConcurrentQueue<AgentResult> turns = new();
+    private readonly ConcurrentDictionary<Turn, byte> live = new();
+    private readonly ConcurrentDictionary<string, Budget> stepAgents = new(StringComparer.Ordinal);
     private long? started;
 
     /// <summary>The run's work, as admission passed it.</summary>
@@ -81,6 +83,19 @@ internal sealed class Steps(
     {
         var agent = step.Agent is { } named ? options.Agents[named] : null;
         context = context with { Agent = step.Agent ?? context.Agent };
+        if (step.Agent is { } stepAgent && stepAgent != run.Agent && context.Instance is null && agent!.Budget.Total is { } total)
+        {
+            // RUN-05: a step agent with a budget of its own spends from it over all its steps in the run, beside the levels it draws on.
+            // Steps that start at once may both read what it spent before; the first level stored is the one they all use.
+            if (!stepAgents.TryGetValue(stepAgent, out var level))
+            {
+                var stored = await team.Log.ReadAsync(run.Caller.Tenant, run.RunId, 0, ct).ConfigureAwait(false);
+                level = stepAgents.GetOrAdd(stepAgent, Budget.ForAgent(total, time, Spent.OfAgent(stored, stepAgent)));
+            }
+
+            budget = budget.Alongside(level);
+        }
+
         using var activity = Telemetry.StartStep(context);
         StepResult result;
         try
@@ -129,11 +144,13 @@ internal sealed class Steps(
     public AgentResult Result(StepResult ended)
     {
         var all = turns.ToArray();
+        // A turn that did not stop within run.cancelWithin is still running: what it has used so far counts too.
+        var used = all.Select(turn => turn.Statistics).Concat(live.Keys.Select(turn => turn.SoFar())).ToList();
         var statistics = new TurnStatistics(
-            all.Sum(turn => turn.Statistics.Iterations),
-            all.Sum(turn => turn.Statistics.ToolCalls),
-            all.Aggregate(Usage.None, (usage, turn) => usage + turn.Statistics.Usage),
-            all.Sum(turn => turn.Statistics.Cost),
+            used.Sum(turn => turn.Iterations),
+            used.Sum(turn => turn.ToolCalls),
+            used.Aggregate(Usage.None, (usage, turn) => usage + turn.Usage),
+            used.Sum(turn => turn.Cost),
             started is { } at ? time.GetElapsedTime(at) : TimeSpan.Zero);
         var outcome = ended.Outcome switch
         {
@@ -154,6 +171,7 @@ internal sealed class Steps(
     private async Task<StepResult> RunTurnAsync(ToolContext context, string input, Budget budget, CancellationToken ct)
     {
         var turn = newTurn(context, work with { Input = input }, budget);
+        live[turn] = 0;
         AgentResult result;
         try
         {
@@ -169,6 +187,7 @@ internal sealed class Steps(
         }
 
         turns.Enqueue(result);
+        live.TryRemove(turn, out _);
         if (!ct.IsCancellationRequested)
         {
             await checkpoint(context, CheckpointPoint.Turn, ct).ConfigureAwait(false);

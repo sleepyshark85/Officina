@@ -274,8 +274,9 @@ decides the outcome.
   steps run again from the first, on the state the checkpoint holds. The budgets hold across the restart (INV-07): the resumed
   run's budget starts with the cost, tokens and tool calls summed from the stored events, and the time spent inside its work
   items, so downtime between processes does not count. Event retention shorter than a run's life would under-count it. `sof` holds a lock file for a run while it works on it, so a live run is not resumed from another process.
-- **Budgets and the report (RUN-05, RUN-10, RUN-11).** Each level draws on the one above: turn, pattern, agent, run; a task's cost
-  is checked beside them. Exhausting any ends the turn in a handoff that names the level, and the run level asks the owner. The agent level exists only when configured. A level
+- **Budgets and the report (RUN-05, RUN-10, RUN-11).** Each level draws on the one above: turn, pattern, agent, run; a task's budget
+  (its cost, and its tokens, tool calls and time when set) is checked beside them, and so is the own level of a pattern's step agent
+  with a `budget.total`, over all its steps in the run. Exhausting any ends the turn in a handoff that names the level, and the run level asks the owner. The agent level exists only when configured. A level
   announces a `budgetWarning` once at 80% of a limit. The report is built from the stored events, record and board, so it can be
   made for a run of another process; cost is summed from `modelCallEnded` events by their agent, task, step and model.
 

@@ -101,7 +101,7 @@ public sealed class TaskBoard
                 return "only the owner sets a task's budget or assignee.";
             }
 
-            tasks[id] = Apply(new BoardTask { Id = id, Title = task.Title ?? "", Budget = options.Capabilities.TaskBoard.Budget }, task);
+            tasks[id] = Apply(new BoardTask { Id = id, Title = task.Title ?? "", Budget = options.Capabilities.TaskBoard.Budget.Cost }, task);
             return string.IsNullOrWhiteSpace(task.Title) ? "a task needs a title." : null;
         }, ct);
     }
@@ -299,19 +299,53 @@ public sealed class TaskBoard
             return null;
         }, ct);
 
-    /// <summary>Adds the cost of a turn to the agent's task. Once its budget is used up, the task goes back to the lead (TASK-09).</summary>
-    internal Task<(bool Accepted, string Text)> ChargeAsync(decimal cost, CancellationToken ct) =>
-        ChangeAsync($"a turn on it cost {cost} USD", tasks =>
+    /// <summary>
+    /// Adds what a turn spent to the agent's task. Once a limit of its budget is used up, the task goes back to the lead (TASK-09,
+    /// RUN-05).
+    /// </summary>
+    internal Task<(bool Accepted, string Text)> ChargeAsync(TaskSpending spent, CancellationToken ct) =>
+        ChangeAsync($"a turn on it cost {spent.Cost} USD, {spent.Tokens} tokens, {spent.ToolCalls} tool calls and {spent.Time:hh\\:mm\\:ss}", tasks =>
         {
             if (TaskId is null || !tasks.TryGetValue(TaskId, out var task))
             {
                 return NoTask(TaskId);
             }
 
-            task = task with { Spent = task.Spent + cost };
-            tasks[TaskId] = task.Spent >= task.Budget && task.State is InProgress or InReview ? task with { State = Failed, Assignee = null } : task;
+            task = task with
+            {
+                Spent = task.Spent + spent.Cost, SpentTokens = task.SpentTokens + spent.Tokens, SpentToolCalls = task.SpentToolCalls + spent.ToolCalls,
+                SpentTime = task.SpentTime + spent.Time,
+            };
+            tasks[TaskId] = UsedUp(task, options.Capabilities.TaskBoard.Budget, default) is not null && task.State is InProgress or InReview
+                ? task with { State = Failed, Assignee = null } : task;
             return null;
         }, ct);
+
+    /// <summary>
+    /// The limit of a task's budget that is used up, with what a turn on it has spent so far, such as <c>token</c>; null when none is.
+    /// </summary>
+    internal static string? UsedUp(BoardTask task, TaskBudget budget, TaskSpending turn) =>
+        Shares(task, budget, turn).FirstOrDefault(share => share.Used >= 1).Limit;
+
+    /// <summary>How much of each limit of a task's budget is used, with what a turn on it has spent so far.</summary>
+    internal static IEnumerable<(string Limit, double Used)> Shares(BoardTask task, TaskBudget budget, TaskSpending turn)
+    {
+        yield return ("cost", (double)((task.Spent + turn.Cost) / task.Budget));
+        if (budget.Tokens is { } tokens)
+        {
+            yield return ("token", (double)(task.SpentTokens + turn.Tokens) / tokens);
+        }
+
+        if (budget.ToolCalls is { } toolCalls)
+        {
+            yield return ("tool-call", (double)(task.SpentToolCalls + turn.ToolCalls) / toolCalls);
+        }
+
+        if (budget.Time is { } time)
+        {
+            yield return ("time", (task.SpentTime + turn.Time) / time);
+        }
+    }
 
     /// <summary>A task as the agent working on it sees it in the volatile context (CTX-01): its status and acceptance criteria.</summary>
     internal static string Describe(BoardTask task) =>
@@ -519,3 +553,6 @@ public sealed class TaskBoard
 
     private static string NoTask(string? id) => $"the board has no task {id}.";
 }
+
+/// <summary>What turns on a task spent (RUN-05).</summary>
+internal readonly record struct TaskSpending(decimal Cost, long Tokens, int ToolCalls, TimeSpan Time);
