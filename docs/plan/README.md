@@ -52,8 +52,7 @@ Last updated 2026-10-02.
   - S18 moved the SQLite format version to 3. A slice that adds a table bumps it again, unless an unmerged PR has
     already bumped it past the version on main.
   - S19 snapshots and restores the workspace, and cleans up worktrees left by a crash.
-  - S05 moved CTX-06 to S07 and CTX-07 to S06, and left boundary ② and the memory-change case of TEST-09 to S17;
-    its Notes list the rest (S06, S09, S18).
+  - S05 moved CTX-06 to S07 and CTX-07 to S06, and left boundary ② and the memory-change case of TEST-09 to S17.
   - S09 left parts of its requirements to the slices that add the state they need; its Notes list them
     (S06, S19, S20, and S21 for Message Batches).
   - REQUIREMENTS.md §4.3 lists masking as replaceable, but DESIGN.md §4 keeps it in Core and not replaceable in v1.

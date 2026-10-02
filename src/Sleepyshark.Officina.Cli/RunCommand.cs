@@ -66,6 +66,7 @@ internal static class RunCommand
             var work = new Work(name, parse.GetValue(input)!);
             var directory = shared.Directory(parse, host);
             var starting = true;
+            int? exitCode = null;
             try
             {
                 await using var servers = options.ToolServers.Count > 0 ? await ToolServers.ConnectAsync(options, secrets, ct) : null;
@@ -85,7 +86,14 @@ internal static class RunCommand
                     options, providers, storage, tools, new Dictionary<string, IGate>(workspace?.Gates ?? new Dictionary<string, IGate>()), new Dictionary<string, ICheck>(),
                     new Dictionary<string, IKnowledgeSource>(), queue, secrets, host.Time);
                 starting = false;
-                return await RunAsync(runner, work, name, queue, output, workspace, host, ct);
+                exitCode = await RunAsync(runner, work, name, queue, output, workspace, host, ct);
+                return exitCode.Value;
+            }
+            catch (AggregateException exception) when (exitCode is { } ran)
+            {
+                // Only the workspace's cleanup after the run throws this; the run's own exit code stands.
+                host.Error.WriteLine($"warning: cleanup after the run failed, so some of it is left behind: {string.Join("; ", exception.InnerExceptions.Select(inner => inner.Message))}");
+                return ran;
             }
             catch (Exception exception) when (starting && exception is ConfigurationException or WorkspaceException or InvalidOperationException or KeyNotFoundException or IOException or HttpRequestException)
             {
