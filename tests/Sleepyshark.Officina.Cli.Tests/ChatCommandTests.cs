@@ -56,7 +56,7 @@ public sealed class ChatCommandTests : IDisposable
         release.SetResult();
         await sof.Out.WaitForAsync("dev: Completed, cost $0.00; this session $0.00", Ct);
         sof.In.Type("/quit");
-        var (exitCode, output, _) = await chat;
+        var (exitCode, output, _) = await sof.EndedAsync(chat);
 
         Assert.Equal(ExitCodes.Success, exitCode);
         Assert.Contains("[dev] Hello.\n", output, StringComparison.Ordinal);
@@ -73,7 +73,7 @@ public sealed class ChatCommandTests : IDisposable
         sof.In.Type("My name is Ann.");
         sof.In.Type("What is my name?");
         sof.In.Dispose(); // Ctrl+D: the session ends once both messages have their replies
-        var (exitCode, output, _) = await chat;
+        var (exitCode, output, _) = await sof.EndedAsync(chat);
 
         Assert.Equal(ExitCodes.Success, exitCode);
         Assert.Equal(2, output.Split('\n').Count(line => line.StartsWith("run ", StringComparison.Ordinal)));
@@ -85,7 +85,7 @@ public sealed class ChatCommandTests : IDisposable
         sof.In.Type("And now?");
         await sof.Out.WaitForAsync("[dev] Still Ann.", Ct);
         sof.In.Dispose(); // Ctrl+D
-        Assert.Equal(ExitCodes.Success, (await chat).ExitCode);
+        Assert.Equal(ExitCodes.Success, (await sof.EndedAsync(chat)).ExitCode);
         Assert.Equal(5, model.Requests[2].History.Length);
 
         sof.NewConsole();
@@ -93,7 +93,7 @@ public sealed class ChatCommandTests : IDisposable
         sof.In.Type("And now?");
         await sof.Out.WaitForAsync("[dev] Who?", Ct);
         sof.In.Dispose();
-        Assert.Equal(ExitCodes.Success, (await chat).ExitCode);
+        Assert.Equal(ExitCodes.Success, (await sof.EndedAsync(chat)).ExitCode);
         Assert.Equal([Message.User("And now?")], model.Requests[3].History);
     }
 
@@ -116,7 +116,7 @@ public sealed class ChatCommandTests : IDisposable
         sof.In.Type("/approve 1");
         await sof.Out.WaitForAsync("[dev] Next.", Ct);
         sof.In.Type("/quit");
-        var (exitCode, output, _) = await chat;
+        var (exitCode, output, _) = await sof.EndedAsync(chat);
 
         Assert.Equal(ExitCodes.Success, exitCode);
         Assert.Contains("dev: Completed, cost $0.00; this session $0.00", output, StringComparison.Ordinal);
@@ -143,7 +143,7 @@ public sealed class ChatCommandTests : IDisposable
         sof.Press(PosixSignal.SIGINT);
         await sof.Out.WaitForAsync("Press Ctrl+C again, or type /quit, to end the session.", Ct);
         sof.Press(PosixSignal.SIGINT);
-        var (exitCode, output, _) = await chat;
+        var (exitCode, output, _) = await sof.EndedAsync(chat);
 
         Assert.Equal(ExitCodes.Success, exitCode);
         Assert.Contains("dev: HandedOff (", output, StringComparison.Ordinal);
@@ -164,7 +164,7 @@ public sealed class ChatCommandTests : IDisposable
         sof.In.Type("Note the database.");
         await sof.Out.WaitForAsync("#1 dev asks to run note", Ct);
         sof.Press(PosixSignal.SIGTERM);
-        var (exitCode, output, _) = await chat;
+        var (exitCode, output, _) = await sof.EndedAsync(chat);
 
         Assert.Equal(ExitCodes.Success, exitCode);
         Assert.Contains("dev: HandedOff (", output, StringComparison.Ordinal);
@@ -182,7 +182,7 @@ public sealed class ChatCommandTests : IDisposable
         sof.In.Type("/status");
         sof.In.Type("Second.");
         sof.In.Dispose();
-        var (exitCode, output, _) = await chat;
+        var (exitCode, output, _) = await sof.EndedAsync(chat);
 
         Assert.Equal(ExitCodes.Success, exitCode);
         Assert.True(output.IndexOf("[dev] Two.", StringComparison.Ordinal) < output.IndexOf("The session has ended.", StringComparison.Ordinal));
@@ -215,7 +215,7 @@ public sealed class ChatCommandTests : IDisposable
         sof.In.Type("/report");
         await sof.Out.WaitForAsync("Work: Note the database.", Ct);
         sof.In.Type("/quit");
-        var (exitCode, output, _) = await chat;
+        var (exitCode, output, _) = await sof.EndedAsync(chat);
 
         Assert.Equal(ExitCodes.Success, exitCode);
         Assert.DoesNotContain("asks to run", output, StringComparison.Ordinal);
@@ -273,7 +273,7 @@ public sealed class ChatCommandTests : IDisposable
         sof.In.Type("First.");
         sof.In.Type("Second.");
         sof.In.Dispose();
-        var (exitCode, output, _) = await chat;
+        var (exitCode, output, _) = await sof.EndedAsync(chat);
 
         Assert.Equal(ExitCodes.Success, exitCode);
         Assert.Contains("note: agents.dev.context.history.strategy is none, so each message starts a new conversation.", output, StringComparison.Ordinal);
@@ -308,7 +308,7 @@ public sealed class ChatCommandTests : IDisposable
         sof.In.Type("Write a parser.");
         sof.In.Type("Now print the result.");
         sof.In.Dispose();
-        var (exitCode, output, _) = await chat;
+        var (exitCode, output, _) = await sof.EndedAsync(chat);
 
         Assert.Equal(ExitCodes.Success, exitCode);
         Assert.Contains("[lead] Printed.", output, StringComparison.Ordinal);
@@ -337,7 +337,7 @@ public sealed class ChatCommandTests : IDisposable
         sof.In.Type("First.");
         sof.In.Type("Second.");
         sof.In.Dispose();
-        var (_, output, _) = await chat;
+        var (_, output, _) = await sof.EndedAsync(chat);
         var runs = output.Split('\n').Where(line => line.StartsWith("run ", StringComparison.Ordinal)).Select(line => line[4..]).ToList();
 
         sof.NewConsole();
@@ -371,7 +371,7 @@ public sealed class ChatCommandTests : IDisposable
         await sof.Out.WaitForAsync("Chatting with ops.", Ct);
         sof.In.Type("Hello.");
         sof.In.Dispose();
-        var (exitCode, output, _) = await chat;
+        var (exitCode, output, _) = await sof.EndedAsync(chat);
 
         Assert.Equal(ExitCodes.Success, exitCode);
         Assert.Contains("[ops] Hi from ops.", output, StringComparison.Ordinal);
@@ -417,7 +417,7 @@ public sealed class ChatCommandTests : IDisposable
         await sof.Out.WaitForAsync("Your next message starts a new conversation.", Ct);
         sof.In.Type("/chat");
         sof.In.Dispose();
-        var (exitCode, _, error) = await chat;
+        var (exitCode, _, error) = await sof.EndedAsync(chat);
 
         Assert.Equal(ExitCodes.Success, exitCode);
         Assert.Contains("error: this is a chat session already; /new starts a new conversation.", error, StringComparison.Ordinal);

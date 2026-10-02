@@ -103,6 +103,22 @@ internal sealed class Sof : IDisposable
         public void Dispose() => dispose();
     }
 
+    /// <summary>How long output may stay unchanged before a wait for it fails: far longer than any step of a test takes.</summary>
+    internal static readonly TimeSpan Quiet = TimeSpan.FromMinutes(1);
+
+    /// <summary>The command's result, or a failure with its output if it has not ended within <see cref="Quiet"/>.</summary>
+    public async Task<(int ExitCode, string Output, string Error)> EndedAsync(Task<(int ExitCode, string Output, string Error)> command)
+    {
+        try
+        {
+            return await command.WaitAsync(Quiet);
+        }
+        catch (TimeoutException)
+        {
+            throw new TimeoutException($"The command did not end within {Quiet}. The output:\n{Out}");
+        }
+    }
+
     /// <summary>Output that a test can wait on until it shows some text.</summary>
     internal sealed class Console : StringWriter
     {
@@ -146,7 +162,15 @@ internal sealed class Sof : IDisposable
                     next = written.Task;
                 }
 
-                await next.WaitAsync(ct);
+                try
+                {
+                    await next.WaitAsync(Quiet, ct);
+                }
+                catch (TimeoutException)
+                {
+                    // A hang fails the test with what it shows, rather than holding the test run until its own limit.
+                    throw new TimeoutException($"Nothing was written for {Quiet} while waiting for \"{text}\". The output:\n{ToString()}");
+                }
             }
         }
 
