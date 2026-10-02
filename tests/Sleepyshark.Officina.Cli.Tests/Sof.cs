@@ -146,7 +146,7 @@ internal sealed class Sof : IDisposable
                     next = written.Task;
                 }
 
-                try { await next.WaitAsync(TimeSpan.FromSeconds(10), ct); } catch (TimeoutException) { throw new TimeoutException($"waiting for {text}:\n{ToString()}"); }
+                await next.WaitAsync(ct);
             }
         }
 

@@ -485,7 +485,11 @@ task (`capabilities.taskBoard.budget`) and run (`run.budget`); DESIGN.md §8 say
 }
 ```
 
-`sof run --agent <name>` picks the agent a run starts with; it may be left out when there is only one.
+`sof run --agent <name>` picks the agent a run starts with; it may be left out when there is only one. A chat session
+(plain `sof`, or `sof chat`) runs each message as a run of the `conversation` trigger, with the conversation store on and
+`full` history for the agent it chats with (a team's lead), unless the configuration sets that agent's
+`context.history.strategy`; it refuses to run when the configuration sets `capabilities.conversationStore.enabled` to
+`false`, or the agent's `triggers` leave out `conversation`. `sof resume` runs a chat message's run the same way.
 
 ### Live settings (CFG-08)
 
@@ -700,7 +704,8 @@ agents.lead.instructions: placeholder {{caller.id}} is not allowed in instructio
 
 A setting rejected in an early phase is not reported again. `sof config validate` runs every phase and exits 1 on any
 error. It also reports what `sof run` refuses as it starts: an `extension:` id `sof` does not register, and a provider
-tool, feature or history shortening a model's provider lacks. `sof config dry-run [--agent <name>] [--input <text>]
+tool, feature or history shortening a model's provider lacks. What only a chat session refuses (see §8) it prints as a
+note, as the other commands run with it. `sof config dry-run [--agent <name>] [--input <text>]
 --reply <text>…` also runs an agent against a scripted model (CFG-12), with the workspace's files in memory and the
 sandbox's commands answered without running them.
 

@@ -24,6 +24,10 @@ Last updated 2026-10-02.
      test commands), TASK-08 (`sof`'s console cannot change tasks) and STO-01 (artifacts are SQLite rows, not files).
      Build each, or change it at revision 3. The configuration reference §17 keeps their spec.
   7. Sign off the M0 design review of `REQUIREMENTS.md`, `CONFIGURATION.md` and `DESIGN.md`.
+- **After the plan:** `sof chat` (plain `sof`), an interactive session that keeps its context: each message is a run of
+  the conversation trigger in the conversation the agent keeps with the owner, the reply streams, and every command is
+  typed after a `/` (TRG-01, CAP-05, HITL-01 to HITL-03, RUN-06, UX-01, LAT-02). See the user guide, section 6. Next:
+  a line editor with Tab completion and history for it.
 - **Open follow-ups**, each waiting for a case or for the owner:
   - Flaky test: `ModelGatewayTests.A_fallback_serves_the_call_when_the_primary_stays_unavailable_and_the_switch_is_recorded`
     listens with a process-wide `MeterListener`, so it can hear the fallbacks of `HistoryTests` running in parallel.
