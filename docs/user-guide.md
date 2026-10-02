@@ -146,6 +146,11 @@ Lines that start with `/` are commands, so they're never taken for a message:
 | `/help [command]` | Everything, or one command's options |
 | `/quit` | End the session. So does Ctrl+D, once the messages you sent have their replies |
 
+At a terminal, lines are edited with a line editor: **Tab** completes a `/` command, a command's subcommands and
+options, agents' names and the run ids of this session's messages, **Up** and **Down** go through
+the lines you typed, and **Ctrl+D** on an empty line ends the session. A reply's output clears the prompt line, which
+comes back at your next key; what you had typed is kept. With piped input (`sof < script.txt`), plain lines are read.
+
 How it behaves:
 
 - **Each message is a run of its own**, with its own run id, report, checkpoints and budget: `run.budget` applies to each
@@ -289,7 +294,6 @@ Write down anything surprising, with the run id; `sof report <run>` and `.sof/so
 - Fan-out branches of one agent share a working copy. Command checks time out after 20 minutes by default
   (`checks.<name>.timeout`).
 - `board` only shows the task board; the console can't add, edit, reprioritise, reassign or cancel tasks.
-- The chat session reads whole lines: no Tab completion or command history yet.
 - The items left out of v1 are listed in [`docs/plan/S21-hardening.md`](plan/S21-hardening.md).
 
 ## 11. The benchmark (later)

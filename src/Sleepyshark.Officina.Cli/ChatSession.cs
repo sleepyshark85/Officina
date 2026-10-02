@@ -62,7 +62,9 @@ internal sealed class ChatSession
     private string agent = "";
     private bool keepsHistory;
     private PermissionMode? mode;
-    private string? lastRun;
+    private readonly List<string> runs = [];
+
+    private string? LastRun => runs.LastOrDefault();
     private RunCommand.Session? current;
 
     public ChatSession(ParseResult parse, ConfigurationCommandOptions shared, SofEnvironment host, string? named, bool fresh)
@@ -119,6 +121,11 @@ internal sealed class ChatSession
             }
 
             agent = name;
+            if (host.In is TerminalReader terminal)
+            {
+                var completion = new ChatCompletion(SofCommandLine.Create(new ConfigurationCommandOptions(), host), () => Agents(options, name), () => Enumerable.Reverse(runs));
+                terminal.Complete = completion.Complete;
+            }
             var conversing = ChatCommand.Conversing(configuration, name);
             var keeps = ChatCommand.KeepsHistory(conversing, name);
             keepsHistory = conversing.Agents[keeps].Context.History.Strategy != HistoryStrategy.None;
@@ -309,7 +316,7 @@ internal sealed class ChatSession
             fresh = false;
         }
 
-        lastRun = session.RunId;
+        runs.Add(session.RunId);
         current = session;
         AgentResult result;
         try
@@ -457,7 +464,7 @@ internal sealed class ChatSession
     /// <summary>RUN-11: the report of the reply that runs, or of the last message's run.</summary>
     private async Task ReportAsync(RunCommand.Session? session, CancellationToken ct)
     {
-        if ((session?.RunId ?? lastRun) is not { } run)
+        if ((session?.RunId ?? LastRun) is not { } run)
         {
             status.WriteLine("error: no message has been sent in this session yet; /report <run> shows any run's.");
             return;
@@ -469,6 +476,11 @@ internal sealed class ChatSession
             status.WriteLine(report.ToText().TrimEnd());
         }
     }
+
+    /// <summary>The agents the run's commands name: the configuration's, and in a team the ids of its agents, such as <c>developer[1]</c>.</summary>
+    internal static IEnumerable<string> Agents(OfficinaOptions options, string agent) =>
+        options.Agents.Keys.Concat(options.Agents[agent].Pattern.Roles.SelectMany(role => Enumerable.Range(1, role.Value.Max).Select(number => $"{role.Key}[{number}]")))
+            .Order(StringComparer.Ordinal);
 
     private static PermissionMode? ModeOf(List<string> words) =>
         words is ["mode", var name] && Enum.TryParse<PermissionMode>(name, ignoreCase: true, out var chosen) ? chosen : null;
