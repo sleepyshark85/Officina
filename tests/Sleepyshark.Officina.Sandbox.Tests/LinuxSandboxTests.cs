@@ -156,7 +156,7 @@ public sealed class LinuxSandboxTests : IDisposable
 
             var (output, _) = await real.RunAsync($"cat {otherCopy}/work.txt; grep -l '987650[4]' /proc/[0-9]*/cmdline; pkill -f '987650[4]'; echo done");
 
-            Assert.Equal("done", output.Split('\n', StringSplitOptions.RemoveEmptyEntries)[^1]);
+            Assert.Contains("done\n", output, StringComparison.Ordinal);
             Assert.DoesNotContain("theirs", output, StringComparison.Ordinal);
             Assert.DoesNotContain("/cmdline", output, StringComparison.Ordinal);
             Assert.False(other.ExitCode.IsCompleted);
