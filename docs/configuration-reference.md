@@ -302,7 +302,7 @@ Built-in tool packs (TOOL-01) are only offered when their capability is on (CAP-
 - **`sandbox.*`:** `run`, `start_process`, `read_process_output`, `stop_process`.
 - **`record.*`:** `propose_fact`, `propose_finding`, `propose_decision`, `cite` (REC-02).
 - **`tasks.*`:** `create`, `update`, `claim`, `submit_for_review`, `review` (TASK).
-- **`team.*`:** `message`, `start_helper`, `handoff`.
+- **`team.*`:** `message` (to another agent of the team and run, by its id); `start_helper` and `handoff` arrive in S20 part 3.
 - **`memory.*`:** `propose_change`, and `review`, for the lead to approve or reject a proposal (MEM-03). Both are write tools, so each needs `gates` or a `gateExemption`.
 - **`human.*`:** `ask_owner`, `request_handoff` (HITL-06, EGR-04).
 - **`artifact.*`:** `page` (TOOL-09).
@@ -492,10 +492,10 @@ examples of each pattern are in `samples/` (TEST-06).
   "executor": { "agent": "developer" },
   "maxReplans": 2 }
 
-{ "type": "team",                   // runs from S20; validated only until then
-  "lead": "lead",
-  "roles": { "developer": { "max": 3 }, "reviewer": { "max": 1 } },
-  "maxParallel": 4 }                // TEAM-01, TEAM-03
+{ "type": "team",                   // an agent's own pattern, never a step; needs capabilities.team
+  "lead": "lead",                   // plans, decides on failed tasks, reports; works in turns of its own
+  "roles": { "developer": { "max": 3 }, "reviewer": { "max": 1 } },   // agents developer[1]…[3], reviewer[1]; no history
+  "maxParallel": 4 }                // TEAM-01, TEAM-03: the lead included
 
 { "type": "extension:Acme.CanaryPattern" }     // PAT-07; reads the settings above that it needs
 ```
@@ -569,7 +569,7 @@ but it always exists. The stop condition "the output passes its checks" arrives 
 ```jsonc
 "run": {
   "entry": "team",                                 // the agent definition a run starts with
-  "budget": { "cost": 25, "time": "08:00:00" },          // RUN-05
+  "budget": { "cost": 25, "time": "08:00:00" },          // RUN-05; also "tokens" and "toolCalls", unset by default
   "permissionMode": "ask",                         // HITL-01: ask | auto | readOnly   (live)
   "approvalTimeout": "00:30:00",                   // HITL-02: then deny
   "cancelWithin": "00:00:10"                            // RUN-06
@@ -606,7 +606,7 @@ object with `"enabled"` plus its own settings.
     "signOffs": ["planApproval", "runBudgetExceeded", "irreversibleAction"]   // HITL-04; without it, an exhausted run budget hands off
   },
   "checkpoints": { "at": ["turn", "integration"] },                 // RUN-03; also "step". One is always taken at the start and on demand
-  "team":        { "maxParallelAgents": 4, "helperDepth": 2, "helperCount": 4 },
+  "team":        { "enabled": true },                              // TEAM; helper limits arrive with helpers (S20 part 3)
   "taskBoard":   { "maxAttempts": 3, "budget": 8 },                // TASK-09; the transitions are fixed (TASK-02), and each task says whether it needs a review
   "workspace": {
     "type": "builtin:git",

@@ -139,13 +139,13 @@ public class ProjectMemoryTests
         var memory = pipeline.Memory(Owner);
         setup.Time.SetUtcNow(new DateTimeOffset(2026, 10, 2, 9, 0, 0, TimeSpan.Zero));
         await CallAsync(pipeline, Agent, "propose", """{ "kind": "decision", "subject": "db", "text": "Use SQLite.", "reason": "It needs no server." }""");
-        await CallAsync(pipeline, Lead, "review", """{ "id": 1, "approved": true, "reason": "Agreed." }""");
+        await CallAsync(pipeline, Lead, "review", """{ "id": 1, "approved": true, "reason": "Agreed." }""", lead: true);
         setup.Time.SetUtcNow(new DateTimeOffset(2026, 11, 5, 9, 0, 0, TimeSpan.Zero));
 
         var withoutReason = await CallAsync(pipeline, Agent, "propose", """{ "kind": "decision", "subject": "db", "text": "Use Postgres." }""");
         var replaced = await CallAsync(pipeline, Agent, "propose", """{ "kind": "decision", "subject": "db", "text": "Use Postgres.", "reason": "We need many writers.", "replaces": [1] }""");
         var unknown = await CallAsync(pipeline, Agent, "propose", """{ "kind": "note", "subject": "db", "text": "x", "replaces": [9] }""");
-        await CallAsync(pipeline, Lead, "review", """{ "id": 2, "approved": true, "reason": "Agreed." }""");
+        await CallAsync(pipeline, Lead, "review", """{ "id": 2, "approved": true, "reason": "Agreed." }""", lead: true);
 
         Assert.Equal("invalid arguments: a decision needs its reason.", withoutReason);
         Assert.Equal("Proposed as #2. The lead decides on it.", replaced);
@@ -159,7 +159,7 @@ public class ProjectMemoryTests
             state.Entries.Select(entry => (entry.Id, entry.Author, entry.Date)));
     }
 
-    // MEM-03: the lead decides, never on a proposal of its own.
+    // MEM-03: only the team's lead decides, by the authority the team gives it and never by its name, and never on a proposal of its own.
     [Fact]
     public async Task A_proposal_becomes_memory_when_the_lead_approves_it_and_not_before()
     {
@@ -167,15 +167,17 @@ public class ProjectMemoryTests
         var memory = pipeline.Memory(Owner);
 
         var proposed = await CallAsync(pipeline, Agent, "propose", """{ "kind": "note", "subject": "build", "text": "Run dotnet test." }""");
-        var own = await CallAsync(pipeline, Agent, "review", """{ "id": 1, "approved": true, "reason": "Fine." }""");
+        var notLead = await CallAsync(pipeline, Agent, "review", """{ "id": 1, "approved": true, "reason": "Fine." }""");
+        var namedLead = await CallAsync(pipeline, Lead, "review", """{ "id": 1, "approved": true, "reason": "Fine." }""");
         Assert.Empty((await memory.ReadAsync(Ct)).Entries);
-        var approved = await CallAsync(pipeline, Lead, "review", """{ "id": 1, "approved": true, "reason": "Fine." }""");
-        var again = await CallAsync(pipeline, Lead, "review", """{ "id": 1, "approved": false, "reason": "Too late." }""");
+        var approved = await CallAsync(pipeline, Lead, "review", """{ "id": 1, "approved": true, "reason": "Fine." }""", lead: true);
+        var again = await CallAsync(pipeline, Lead, "review", """{ "id": 1, "approved": false, "reason": "Too late." }""", lead: true);
         await CallAsync(pipeline, Agent, "propose", """{ "kind": "note", "subject": "style", "text": "Tabs." }""");
-        var rejected = await CallAsync(pipeline, Lead, "review", """{ "id": 2, "approved": false, "reason": "We use spaces." }""");
+        var rejected = await CallAsync(pipeline, Lead, "review", """{ "id": 2, "approved": false, "reason": "We use spaces." }""", lead: true);
 
         Assert.Equal("Proposed as #1. The lead decides on it.", proposed);
-        Assert.Equal("invalid arguments: you cannot decide on your own proposal.", own);
+        Assert.Equal("invalid arguments: only the team's lead decides on changes.", notLead);
+        Assert.Equal("invalid arguments: only the team's lead decides on changes.", namedLead);
         Assert.Equal("Approved #1.", approved);
         Assert.Equal("invalid arguments: #1 is not a proposal waiting for a decision.", again);
         Assert.Equal("Rejected #2.", rejected);
@@ -198,9 +200,9 @@ public class ProjectMemoryTests
         await memory.ApproveAsync(2, null, Ct);
 
         await CallAsync(pipeline, "owner", "propose", """{ "kind": "note", "subject": "style", "text": "Tabs." }""");
-        var own = await CallAsync(pipeline, "owner", "review", """{ "id": 3, "approved": true, "reason": "Fine." }""");
+        var own = await CallAsync(pipeline, "owner", "review", """{ "id": 3, "approved": true, "reason": "Fine." }""", lead: true);
         await CallAsync(pipeline, Agent, "propose", """{ "kind": "note", "subject": "all", "text": "Both.", "replaces": [1, 2] }""");
-        var condensing = await CallAsync(pipeline, "owner", "review", """{ "id": 4, "approved": true, "reason": "Shorter." }""");
+        var condensing = await CallAsync(pipeline, "owner", "review", """{ "id": 4, "approved": true, "reason": "Shorter." }""", lead: true);
 
         Assert.Equal("invalid arguments: you cannot decide on your own proposal.", own);
         Assert.Equal("invalid arguments: the owner reviews condensing.", condensing);
@@ -217,7 +219,7 @@ public class ProjectMemoryTests
         var denied = await CallAsync(pipeline, Agent, "propose", """{ "kind": "note", "subject": "build", "text": "Run dotnet test." }""");
         Assert.Empty((await memory.ReadAsync(Ct)).Log);
         var approved = await CallAsync(pipeline, Agent, "propose", """{ "kind": "note", "subject": "build", "text": "Run dotnet test." }""");
-        var review = await CallAsync(pipeline, Lead, "review", """{ "id": 1, "approved": true, "reason": "Fine." }""");
+        var review = await CallAsync(pipeline, Lead, "review", """{ "id": 1, "approved": true, "reason": "Fine." }""", lead: true);
 
         Assert.StartsWith("approval denied", denied, StringComparison.OrdinalIgnoreCase);
         Assert.Equal("Proposed as #1. The owner approved it, so it is memory now.", approved);
@@ -241,9 +243,9 @@ public class ProjectMemoryTests
         await memory.ApproveAsync(2, null, Ct);
 
         await CallAsync(pipeline, Agent, "propose", $$"""{ "kind": "note", "subject": "style", "text": "{{new string('c', 60)}}" }""");
-        var full = await CallAsync(pipeline, Lead, "review", """{ "id": 3, "approved": true, "reason": "Fine." }""");
+        var full = await CallAsync(pipeline, Lead, "review", """{ "id": 3, "approved": true, "reason": "Fine." }""", lead: true);
         await CallAsync(pipeline, Agent, "propose", """{ "kind": "note", "subject": "all", "text": "Build and test as before.", "replaces": [1, 2] }""");
-        var leadCondenses = await CallAsync(pipeline, Lead, "review", """{ "id": 4, "approved": true, "reason": "Shorter." }""");
+        var leadCondenses = await CallAsync(pipeline, Lead, "review", """{ "id": 4, "approved": true, "reason": "Shorter." }""", lead: true);
 
         Assert.StartsWith("invalid arguments: memory would be ", full, StringComparison.Ordinal);
         Assert.EndsWith("tokens, over its limit of 60. Propose a condensed version that replaces several entries with one; the owner reviews it.", full, StringComparison.Ordinal);
@@ -251,7 +253,7 @@ public class ProjectMemoryTests
         Assert.Equal([3L, 4L], (await memory.ReadAsync(Ct)).Pending.Select(proposal => proposal.Id));
 
         Assert.True((await memory.ApproveAsync(4, "Condensed.", Ct)).Accepted);
-        Assert.Equal("Approved #3.", await CallAsync(pipeline, Lead, "review", """{ "id": 3, "approved": true, "reason": "Fine now." }"""));
+        Assert.Equal("Approved #3.", await CallAsync(pipeline, Lead, "review", """{ "id": 3, "approved": true, "reason": "Fine now." }""", lead: true));
 
         var state = await memory.ReadAsync(Ct);
         Assert.Equal([4L, 3L], state.Current().Select(entry => entry.Id));
@@ -341,6 +343,7 @@ public class ProjectMemoryTests
         return setup;
     }
 
-    private static async Task<string> CallAsync(ToolPipeline pipeline, string agent, string tool, string arguments) =>
-        (await RunAsync(pipeline, tool, arguments, Context with { Agent = agent })).Content;
+    /// <summary>Calls a memory tool as an agent; the team gives its lead the lead's authority, never the agent's name.</summary>
+    private static async Task<string> CallAsync(ToolPipeline pipeline, string agent, string tool, string arguments, bool lead = false) =>
+        (await RunAsync(pipeline, tool, arguments, Context with { Agent = agent, Lead = lead })).Content;
 }

@@ -45,8 +45,8 @@ internal sealed class TaskTool : ITool
             $$""" {{Fields}}, "checks": {{Texts}}, "requiresReview": { "type": "boolean" }, {{Reason}} """, """, "title", "reason" """,
             (board, arguments, ct) => board.AddAsync(Get(arguments, "id"), Edit(arguments), Get(arguments, "reason"), ct)),
         "tasks.update" => new(
-            "Changes a task's fields, or blocks it, or unblocks or retries it by setting its state to ready, and says why.",
-            $$""" {{Fields}}, "state": { "enum": ["blocked", "ready"] }, {{Reason}} """, """, "reason" """,
+            "Changes a task's fields, or blocks it, or unblocks or retries it by setting its state to ready, and says why. The team's lead also assigns a task to an agent of the team, and cancels a task that is no longer needed.",
+            $$""" {{Fields}}, "assignee": {{Text}}, "state": { "enum": ["blocked", "ready", "cancelled"] }, {{Reason}} """, """, "reason" """,
             (board, arguments, ct) => board.EditAsync(Get(arguments, "id"), Edit(arguments), Get(arguments, "reason"), ct)),
         "tasks.claim" => new(
             "Takes a ready task to work on. Only one agent works on a task at a time.", "", "",

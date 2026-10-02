@@ -40,6 +40,8 @@ public sealed record CoreEvent(string RunId, string Agent, string? Step, long Se
 [JsonDerivedType(typeof(CheckpointTaken), "checkpointTaken")]
 [JsonDerivedType(typeof(RunResumed), "runResumed")]
 [JsonDerivedType(typeof(RunRolledBack), "runRolledBack")]
+[JsonDerivedType(typeof(MessageSent), "messageSent")]
+[JsonDerivedType(typeof(AgentStatusChanged), "agentStatusChanged")]
 public abstract record EventPayload
 {
     private static readonly Dictionary<Type, string> Names = typeof(EventPayload).GetCustomAttributes<JsonDerivedTypeAttribute>()
@@ -126,3 +128,32 @@ public sealed record RunResumed(int Checkpoint, IReadOnlyList<ToolEffect> Interr
 /// undone, and neither are the project memory changes made since, which are counted.
 /// </summary>
 public sealed record RunRolledBack(int Checkpoint, IReadOnlyList<ToolEffect> NotUndone, int MemoryChanges) : EventPayload;
+
+/// <summary>The agent sent another agent of its team a message, which the recipient reads as data (TEAM-06).</summary>
+/// <param name="To">The recipient, by its id in the team, such as <c>developer[2]</c>.</param>
+/// <param name="Text">The message.</param>
+public sealed record MessageSent(string To, string Text) : EventPayload;
+
+/// <summary>An agent of a team has a new status (TEAM-08). Waiting for the owner is a <see cref="HumanAsked"/> event.</summary>
+/// <param name="Status">Its status.</param>
+/// <param name="Detail">What it works on or waits for, or why it failed.</param>
+public sealed record AgentStatusChanged(AgentStatus Status, string? Detail = null) : EventPayload;
+
+/// <summary>What an agent of a team is doing (TEAM-08).</summary>
+public enum AgentStatus
+{
+    /// <summary>It has no work.</summary>
+    Idle,
+
+    /// <summary>It works on a task, or on the team's plan.</summary>
+    Working,
+
+    /// <summary>It has no work it can do yet: its tasks wait for their dependencies or for a review.</summary>
+    Waiting,
+
+    /// <summary>The team has ended.</summary>
+    Finished,
+
+    /// <summary>Its last work failed, stalled, ran out of budget or was stopped, and went back to the lead.</summary>
+    Failed,
+}

@@ -69,8 +69,11 @@ public sealed class TaskBoard
     internal static JsonSerializerOptions Json { get; } = new(JsonSerializerDefaults.Web) { Converters = { new JsonStringEnumConverter() } };
 
     /// <summary>The tasks as they are now, the highest priority first.</summary>
-    public async ValueTask<IReadOnlyList<BoardTask>> ReadAsync(CancellationToken ct) =>
-        [.. Tasks(await HistoryAsync(ct).ConfigureAwait(false)).Values.OrderByDescending(task => task.Priority).ThenBy(task => task.Id, StringComparer.Ordinal)];
+    public async ValueTask<IReadOnlyList<BoardTask>> ReadAsync(CancellationToken ct) => Current(await HistoryAsync(ct).ConfigureAwait(false));
+
+    /// <summary>The tasks as the changes left them, the highest priority first.</summary>
+    internal static IReadOnlyList<BoardTask> Current(IReadOnlyList<TaskChange> history) =>
+        [.. Tasks(history).Values.OrderByDescending(task => task.Priority).ThenBy(task => task.Id, StringComparer.Ordinal)];
 
     /// <summary>Every change of the board in revision order: who made it, when, what changed and why (TASK-07).</summary>
     public ValueTask<IReadOnlyList<TaskChange>> HistoryAsync(CancellationToken ct) => store.ReadAsync(context.Caller.Tenant, RunId, ct);
@@ -99,8 +102,10 @@ public sealed class TaskBoard
 
     /// <summary>
     /// Changes a task's fields, and blocks, unblocks, retries or cancels it. A retried task starts again with no failed
-    /// attempts and nothing spent. The owner may change anything (TASK-08); agents may not change a task's checks,
-    /// budget, assignee or review requirement, nor cancel it, nor retry a failed task.
+    /// attempts and nothing spent. The owner may change anything (TASK-08). No agent changes a task's checks, budget or
+    /// review requirement (INV-10). The team's lead also assigns, retries and cancels tasks (TEAM-02, TEAM-09). Any other
+    /// agent changes only a task nobody has claimed, and of its own claimed task only whether it is blocked: once claimed,
+    /// a task is the work it is verified and reviewed against.
     /// </summary>
     public Task<(bool Accepted, string Text)> EditAsync(string id, TaskEdit edit, string reason, CancellationToken ct)
     {
@@ -112,14 +117,9 @@ public sealed class TaskBoard
                 return NoTask(id);
             }
 
-            if (!owner && (edit.Checks is not null || edit.Budget is not null || edit.Assignee is not null || edit.RequiresReview is not null || edit.State == Cancelled))
+            if (Refused(task, edit) is { } refused)
             {
-                return "only the owner changes a task's checks, budget, assignee or review requirement, or cancels it.";
-            }
-
-            if (!owner && task.State == Failed && edit.State is not null)
-            {
-                return "a failed task goes back to the lead; only the owner retries it.";
+                return refused;
             }
 
             if (edit.State is { } state && state is not (Blocked or Ready or Cancelled))
@@ -170,6 +170,22 @@ public sealed class TaskBoard
             return null;
         }, ct);
 
+    /// <summary>
+    /// Sends a task back to the lead, failed, when the agent working on it or reviewing it stopped without finishing: it
+    /// failed, stalled, ran out of budget or was stopped (TEAM-09). The reason says which.
+    /// </summary>
+    public Task<(bool Accepted, string Text)> FailAsync(string id, string reason, CancellationToken ct) =>
+        ChangeAsync(reason, tasks =>
+        {
+            if (!owner || !tasks.TryGetValue(id, out var task) || task.State is not (InProgress or InReview))
+            {
+                return owner ? $"task {id} is not in progress or in review." : HostOnly;
+            }
+
+            tasks[id] = task with { State = Failed, Assignee = null, Verified = false, Approved = false };
+            return null;
+        }, ct);
+
     /// <summary>Takes a ready task for the agent, unless it is assigned to another (TASK-03, TASK-04).</summary>
     internal Task<(bool Accepted, string Text)> ClaimAsync(string id, CancellationToken ct) =>
         ChangeAsync("claimed", tasks =>
@@ -184,12 +200,12 @@ public sealed class TaskBoard
                 return $"task {id} is {task.State}; only a Ready task, whose dependencies are done, can be claimed.";
             }
 
-            if (task.Assignee is { } assignee && assignee != context.Agent)
+            if (task.Assignee is { } assignee && assignee != context.AgentId)
             {
                 return $"task {id} is assigned to {assignee}.";
             }
 
-            tasks[id] = task with { State = InProgress, Assignee = context.Agent };
+            tasks[id] = task with { State = InProgress, Assignee = context.AgentId };
             return null;
         }, ct);
 
@@ -200,9 +216,9 @@ public sealed class TaskBoard
     internal async Task<(bool Accepted, string Text)> SubmitAsync(string id, IReadOnlyList<string> artifacts, IReadOnlyDictionary<string, ICheck> checks, CancellationToken ct)
     {
         var task = (await ReadAsync(ct).ConfigureAwait(false)).FirstOrDefault(task => task.Id == id);
-        if (task?.State != InProgress || task.Assignee != context.Agent)
+        if (task?.State != InProgress || task.Assignee != context.AgentId)
         {
-            return (false, $"task {id} is not in progress with {context.Agent}.");
+            return (false, $"task {id} is not in progress with {context.AgentId}.");
         }
 
         string? failed = null;
@@ -245,7 +261,7 @@ public sealed class TaskBoard
                 return $"task {id} is not waiting for a review.";
             }
 
-            if (task.Assignee == context.Agent)
+            if (task.Assignee == context.AgentId)
             {
                 return "the reviewer is never the author.";
             }
@@ -298,7 +314,7 @@ public sealed class TaskBoard
             }
 
             var what = string.Join("; ", changed.Select(task => Describe(before.GetValueOrDefault(task.Id), task)));
-            var added = new TaskChange(RunId, history.Count == 0 ? 1 : history[^1].Revision + 1, context.Agent, time.GetUtcNow(), what, reason, changed);
+            var added = new TaskChange(RunId, history.Count == 0 ? 1 : history[^1].Revision + 1, context.AgentId, time.GetUtcNow(), what, reason, changed);
             if (await store.TryAppendAsync(context.Caller.Tenant, added, ct).ConfigureAwait(false))
             {
                 foreach (var task in changed.Where(task => before.GetValueOrDefault(task.Id)?.State != task.State))
@@ -340,6 +356,47 @@ public sealed class TaskBoard
         }
 
         return Cycle(after) is { } cycle ? $"the dependencies would form a cycle: {cycle}." : null;
+    }
+
+    /// <summary>Why the agent may not make the edit, or null when it may (TASK-08, TEAM-02).</summary>
+    private string? Refused(BoardTask task, TaskEdit edit)
+    {
+        if (owner)
+        {
+            return null;
+        }
+
+        if (edit.Checks is not null || edit.Budget is not null || edit.RequiresReview is not null)
+        {
+            return "only the owner changes a task's checks, budget or review requirement.";
+        }
+
+        if (context.Lead)
+        {
+            return null;
+        }
+
+        if (edit.Assignee is not null || edit.State == Cancelled)
+        {
+            return "only the lead or the owner assigns or cancels a task.";
+        }
+
+        if (task.State == Failed && edit.State is not null)
+        {
+            return "a failed task goes back to the lead; only the lead or the owner retries it.";
+        }
+
+        if (task.Assignee is null && task.State is Proposed or Ready)
+        {
+            return null;
+        }
+
+        if (task.Assignee != context.AgentId || task.State is not (InProgress or Blocked))
+        {
+            return $"task {task.Id} is {task.State}{(task.Assignee is { } assignee ? $" with {assignee}" : "")}; only the lead or the owner changes it now.";
+        }
+
+        return edit with { State = null } == new TaskEdit() ? null : "only the lead or the owner changes a task once it is claimed; you can block or unblock your own.";
     }
 
     /// <summary>A failed attempt: the task goes back to its author, or, after the last attempt, to the lead (TASK-09, WS-03).</summary>

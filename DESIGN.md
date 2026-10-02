@@ -16,8 +16,8 @@ namespace is its name.
 
 | Project | Box in the diagram | What it contains | Depends on | Loaded when |
 |---|---|---|---|---|
-| `Sleepyshark.Officina.Core` | Core | Options classes and validation; admission; turn engine; built-in loop patterns; context builder; conversation history and its shortening, kept through `IStorage.Conversations`; tool pipeline; run record; budgets; events; audit; extension interfaces (§4); built-in `record.*`, `control.*` and `artifact.*` tools; knowledge retrieval and its tools; the task board and its `tasks.*` tools, kept through `IStorage.Tasks`; the `workspace.*` tools, over `IWorkingCopy` | .NET base library and a JSON Schema validator only | Always |
-| `Sleepyshark.Officina.Team` | Capabilities | Team pattern, lead role support, helper agents; `team.*` tools | Core | `team` is on |
+| `Sleepyshark.Officina.Core` | Core | Options classes and validation; admission; turn engine; built-in loop patterns; context builder; conversation history and its shortening, kept through `IStorage.Conversations`; tool pipeline; run record; budgets; events; audit; extension interfaces (§4); built-in `record.*`, `control.*` and `artifact.*` tools; knowledge retrieval and its tools; the task board and its `tasks.*` tools, kept through `IStorage.Tasks`; the team pattern, which runs on the board, and the `team.*` tools; the `workspace.*` tools, over `IWorkingCopy` | .NET base library and a JSON Schema validator only | Always |
+| `Sleepyshark.Officina.Team` | Capabilities | Empty for now: the team runs on the task board, so it lives in Core beside it (S20) | Core | `team` is on |
 | `Sleepyshark.Officina.Workspace` | Capabilities | Git-backed workspace: baseline, working copies, integration queue, edit safety; `sof` registers Core's `workspace.*` tools over its working copies, as `extension:` ids | Core; the git CLI at run time | `workspace` is on |
 | `Sleepyshark.Officina.Sandbox` | Capabilities | Linux sandbox (bubblewrap, cgroups v2) and Windows sandbox (AppContainer, Job Objects); filtering network proxy; `sandbox.*` tools and the command rules gate, which `sof` registers as `extension:` ids | Core | `sandbox` is on |
 | `Sleepyshark.Officina.Capabilities` | Capabilities | Human interaction, project memory, checkpoints; `human.*` and `memory.*` tools | Core | Each part when its capability is on |
@@ -210,6 +210,12 @@ decides the outcome.
   who changed them, what changed and why (TASK-07). Its rules are checked on the board after every change: the
   transitions in the diagram, which are fixed in code (TASK-02), dependencies that exist and form no cycle (TASK-03),
   and done only for a task whose checks passed and, if it requires one, whose review approved it (TASK-05, TASK-06).
+- **The team** is an agent's own pattern (`TeamRun`), built from turns like every other. Each agent of it is an instance,
+  `role[n]` or the lead, with its own turns, budget, inbox and status; it sees only its task as data, the board when it is the
+  lead, and messages sent to it (TEAM-04). The team works from the board as it is, so a resumed run goes on from its last
+  checkpoint's board: the lead plans only while the board is empty, each ready task goes to a free agent of its role, a task
+  that needs a review to another agent whose tools can review, and work that ends unfinished fails its task back to the lead
+  with the reason. The lead's authority (assign, retry, cancel, decide on memory) is a flag the team sets, never a name.
 - **Done means integrated.** Submitting runs the task's checks, and only if they pass is the task in review. The host
   integrates a task in review that is verified and approved, then marks it done; a conflict or a failed baseline check
   returns it to its author as a failed attempt (WS-03). The last failed attempt, or a used-up task budget, sends it to

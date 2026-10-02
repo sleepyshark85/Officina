@@ -51,7 +51,7 @@ public sealed record PatternOptions
     [Setting("fanOut: a list in the input, which must then be JSON, such as `input.files`. The branch runs once for each item.", Example = "\"input.files\"")]
     public string? Over { get; init; }
 
-    [Setting("fanOut: the most branches that run at once. team: the most agents that work at once.", Example = "2")]
+    [Setting("fanOut: the most branches that run at once. team: the most agents, the lead included, that work at once.", Example = "2")]
     [Range(1, int.MaxValue, ErrorMessage = "must be at least 1.")]
     public int MaxParallel { get; init; } = 4;
 
@@ -83,10 +83,10 @@ public sealed record PatternOptions
     [Range(0, int.MaxValue, ErrorMessage = "must be zero or more.")]
     public int MaxReplans { get; init; } = 2;
 
-    [Setting("team: the agent, by name in `agents`, that coordinates the others over the task board.", Example = "\"lead\"")]
+    [Setting("team: the agent, by name in `agents`, that plans the work as tasks on the board, decides on the tasks that fail, and reports. It works in turns of its own.", Example = "\"lead\"")]
     public string? Lead { get; init; }
 
-    [Setting("team: the agents, by name in `agents`, that can join the team, with how many of each.", Example = """{ "developer": { "max": 3 }, "reviewer": { "max": 1 } }""")]
+    [Setting("team: the agents, by name in `agents`, that do and review the tasks, with how many of each work at once. Each is an agent of its own, such as `developer[2]`, which works in turns of its own and keeps no history.", Example = """{ "developer": { "max": 3 }, "reviewer": { "max": 1 } }""")]
     public IReadOnlyDictionary<string, RoleOptions> Roles { get; init; } = new Dictionary<string, RoleOptions>();
 
     /// <summary>Whether the pattern is a turn of the agent itself rather than steps.</summary>

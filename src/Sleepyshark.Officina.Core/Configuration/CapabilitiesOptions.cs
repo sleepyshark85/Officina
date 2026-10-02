@@ -8,7 +8,7 @@ namespace Sleepyshark.Officina.Core.Configuration;
 public sealed record CapabilitiesOptions
 {
     /// <summary>What each capability needs on as well, checked at validation (CAP-03).</summary>
-    public static IReadOnlyList<(string Capability, string Requires)> Dependencies { get; } = [("sandbox", "workspace"), ("checkpoints", "conversationStore")];
+    public static IReadOnlyList<(string Capability, string Requires)> Dependencies { get; } = [("sandbox", "workspace"), ("checkpoints", "conversationStore"), ("team", "taskBoard")];
 
     [Setting("The conversation store: each agent's conversation with each caller is kept, anonymous callers sharing one, so a history strategy other than `none` continues it across requests and restarts.",
         Example = """{ "enabled": true }""")]
@@ -42,6 +42,10 @@ public sealed record CapabilitiesOptions
         Example = """{ "enabled": true, "at": ["turn", "integration"] }""")]
     public CheckpointOptions Checkpoints { get; init; } = new();
 
+    [Setting("The team: agents of several roles that work at once over the task board, led by one lead, with the `team.*` tools; agents use it through the `team` pattern. It needs the task board.",
+        Example = """{ "enabled": true }""")]
+    public CapabilityOptions Team { get; init; } = new();
+
     /// <summary>Every capability, by its name in configuration, and whether it is on.</summary>
     public IReadOnlyDictionary<string, bool> Switches() => new Dictionary<string, bool>
     {
@@ -53,6 +57,7 @@ public sealed record CapabilitiesOptions
         ["taskBoard"] = TaskBoard.Enabled,
         ["projectMemory"] = ProjectMemory.Enabled,
         ["checkpoints"] = Checkpoints.Enabled,
+        ["team"] = Team.Enabled,
     };
 }
 

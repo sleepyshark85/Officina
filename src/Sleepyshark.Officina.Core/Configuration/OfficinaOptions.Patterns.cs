@@ -28,6 +28,13 @@ public sealed partial record OfficinaOptions
                 errors.Add(new(ValidationPhase.Shape, at, "names both an agent and a pattern.", "Keep one of them."));
             }
 
+            if (step.Pattern?.Type == PatternOptions.Team || (step.Agent is not null && Agents.GetValueOrDefault(step.Agent)?.Pattern?.Type == PatternOptions.Team))
+            {
+                // A run has one task board, so it has at most one team.
+                errors.Add(new(ValidationPhase.Shape, at, "is a team, which is an agent's own pattern and never a step of another.",
+                    "Run the team as the run's agent."));
+            }
+
             if (step.Pattern is { IsTurn: true })
             {
                 errors.Add(new(ValidationPhase.Shape, $"{at}.pattern", $"\"{step.Pattern.Type}\" is a turn, not a nested pattern.",
@@ -50,6 +57,7 @@ public sealed partial record OfficinaOptions
             PatternOptions.EvaluateAndRevise when pattern.Checks.Count == 0 => "checks",
             PatternOptions.PlanAndExecute when pattern.Executor is null => "executor",
             PatternOptions.Team when pattern.Lead is null => "lead",
+            PatternOptions.Team when pattern.Roles.Count == 0 => "roles",
             _ => null,
         };
         if (needed is not null)
@@ -66,9 +74,7 @@ public sealed partial record OfficinaOptions
             PatternOptions.FanOut => FanOutSettings(path, owner, pattern),
             PatternOptions.EvaluateAndRevise => References($"{path}.checks", "check", pattern.Checks, "checks", Checks.Keys),
             PatternOptions.PlanAndExecute => Reads($"{path}.planner", owner, pattern.Planner, new() { Field = "output.steps", Exists = true }),
-            PatternOptions.Team => References($"{path}.lead", "agent", [pattern.Lead!], "agents", Agents.Keys)
-                .Concat(References($"{path}.roles", "agent", pattern.Roles.Keys, "agents", Agents.Keys))
-                .Concat(pattern.Roles.SelectMany(role => Annotations(role.Value, $"{path}.roles.{role.Key}"))),
+            PatternOptions.Team => TeamSettings(path, owner, pattern),
             _ => [],
         });
     }
@@ -118,6 +124,51 @@ public sealed partial record OfficinaOptions
 
         IEnumerable<ConfigurationError> Target(string at, string target) =>
             target == BranchRule.End || ids.Contains(target) ? [] : [Missing(at, "step", target, $"{path}.steps", ids.Append(BranchRule.End))];
+    }
+
+    /// <summary>
+    /// TEAM-01: a lead and roles that are agents working in turns of their own. Each instance of a role is an agent of its own
+    /// with its own conversation (TEAM-04), so a role keeps no history between its turns; the lead has one instance, so it may.
+    /// </summary>
+    private List<ConfigurationError> TeamSettings(string path, string owner, PatternOptions pattern)
+    {
+        var errors = References($"{path}.lead", "agent", [pattern.Lead!], "agents", Agents.Keys)
+            .Concat(References($"{path}.roles", "agent", pattern.Roles.Keys, "agents", Agents.Keys))
+            .Concat(pattern.Roles.SelectMany(role => Annotations(role.Value, $"{path}.roles.{role.Key}")))
+            .ToList();
+        if (Agents.GetValueOrDefault(owner)?.Budget?.Total is not null)
+        {
+            // RUN-05: the team is the run's work, so the run's budget is the team's, and each of its agents has its own.
+            errors.Add(new(ValidationPhase.Shape, $"agents.{owner}.budget.total", "does not apply to a team: the run's budget is the team's, and each of its agents has its own.",
+                "Remove it, and set run.budget or the roles' budget.total."));
+        }
+
+        if (pattern.Roles.ContainsKey(pattern.Lead!))
+        {
+            errors.Add(new(ValidationPhase.Shape, $"{path}.roles.{pattern.Lead}", "is the team's lead, which is not also a role.", "Define the role as an agent of its own."));
+        }
+
+        foreach (var (at, name) in pattern.Roles.Keys.Select(role => ($"{path}.roles.{role}", role)).Prepend(($"{path}.lead", pattern.Lead!)))
+        {
+            if (Agents.GetValueOrDefault(name) is not { } member)
+            {
+                continue;
+            }
+
+            if (member.Pattern is { IsTurn: false })
+            {
+                errors.Add(new(ValidationPhase.Shape, at, $"agent \"{name}\" works in a {member.Pattern.Type} pattern, but a team's agents work in turns of their own.",
+                    $"Give agents.{name}.pattern the toolLoop or singleCall type."));
+            }
+
+            if (at != $"{path}.lead" && member.Context?.History is { Strategy: not HistoryStrategy.None })
+            {
+                errors.Add(new(ValidationPhase.Shape, $"agents.{name}.context.history.strategy",
+                    "must be none for a role of a team: each of its agents has a conversation of its own, which is neither shared nor kept.", "Set it to none."));
+            }
+        }
+
+        return errors;
     }
 
     private List<ConfigurationError> FanOutSettings(string path, string owner, PatternOptions pattern)

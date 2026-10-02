@@ -224,6 +224,23 @@ public class HumanInteractionTests
         Assert.Equal("Dev done.", (await dev).Output);
     }
 
+    // RUN-06: a paused run waits before each of its agents' next model call, while other runs go on (of another agent: an agent takes one turn at a time).
+    [Fact]
+    public async Task A_paused_run_waits_before_its_next_model_call_while_other_runs_go_on()
+    {
+        var kit = Kit();
+        kit.Model.Reply("Other done.").Reply("Paused done.");
+        var paused = new Work(Agent, "work");
+
+        kit.Runner.PauseRun(paused.RunId);
+        var waiting = kit.Runner.RunAsync(paused, Ct);
+        var other = await kit.RunAsync("other", "work", Ct);
+
+        Assert.Equal(("Other done.", false, 1), (other.Output, waiting.IsCompleted, kit.Model.Requests.Count));
+        kit.Runner.ResumeRun(paused.RunId);
+        Assert.Equal("Paused done.", (await waiting).Output);
+    }
+
     // RUN-06, TEST-27.
     [Fact]
     public async Task A_cancelled_agent_ends_in_a_handoff_and_its_waiting_call_is_cancelled()

@@ -158,6 +158,39 @@ public class TaskBoardTests
         Assert.Equal("Changed: t1 state InProgress → InReview, verified false → true.", await CallAsync(Reviewer, "submit", """{ "id": "t1" }"""));
     }
 
+    // TEAM-02, TEAM-09, TASK-08: an agent changes only a task nobody has claimed, and of its own claimed task only whether it is
+    // blocked; the lead, by the authority the team gives it and not by its name, also assigns, retries and cancels.
+    [Fact]
+    public async Task Agents_change_only_unclaimed_tasks_and_the_lead_also_assigns_retries_and_cancels()
+    {
+        await AddAsync("t1", new() { Title = "Fix the parser", AcceptanceCriteria = ["Empty files parse."] });
+        await AddAsync("t2", new() { Title = "Write the docs" });
+        await AddAsync("t3", new() { Title = "Release it" });
+        await CallAsync(Agent, "claim", """{ "id": "t1" }""");
+
+        Assert.Equal(
+            "invalid arguments: only the lead or the owner changes a task once it is claimed; you can block or unblock your own.",
+            await CallAsync(Agent, "update", """{ "id": "t1", "acceptanceCriteria": ["It compiles."], "reason": "Easier." }"""));
+        Assert.StartsWith("Changed: t1 state InProgress → Blocked", await CallAsync(Agent, "update", """{ "id": "t1", "state": "blocked", "reason": "Waiting for the grammar." }"""), StringComparison.Ordinal);
+        Assert.Equal(
+            "invalid arguments: task t1 is Blocked with dev; only the lead or the owner changes it now.",
+            await CallAsync(Reviewer, "update", """{ "id": "t1", "title": "Mine now", "reason": "Faster." }"""));
+        Assert.Equal(
+            "invalid arguments: only the lead or the owner assigns or cancels a task.",
+            await CallAsync(Agent, "update", """{ "id": "t2", "assignee": "reviewer", "reason": "Split the work." }"""));
+        Assert.StartsWith("Changed: t2 priority 0 → 3", await CallAsync(Reviewer, "update", """{ "id": "t2", "priority": 3, "reason": "Urgent." }"""), StringComparison.Ordinal);
+
+        Assert.StartsWith("Changed: t2 assignee null → reviewer", await CallAsync(Reviewer, "update", """{ "id": "t2", "assignee": "reviewer", "reason": "Split the work." }""", lead: true), StringComparison.Ordinal);
+        Assert.StartsWith("Changed: t3 state Ready → Cancelled", await CallAsync(Reviewer, "update", """{ "id": "t3", "state": "cancelled", "reason": "Not needed." }""", lead: true), StringComparison.Ordinal);
+        Assert.True((await owner.EditAsync("t1", new() { State = TaskState.Ready }, "unblocked", Ct)).Accepted);
+        await CallAsync(Agent, "claim", """{ "id": "t1" }""");
+        Assert.Equal((true, "Changed: t1 assignee dev → null, state InProgress → Failed."), await owner.FailAsync("t1", "dev stalled", Ct));
+        Assert.Equal(
+            "invalid arguments: a failed task goes back to the lead; only the lead or the owner retries it.",
+            await CallAsync(Agent, "update", """{ "id": "t1", "state": "ready", "reason": "Retry." }"""));
+        Assert.StartsWith("Changed: t1 state Failed → Ready", await CallAsync(Reviewer, "update", """{ "id": "t1", "state": "ready", "reason": "Retry." }""", lead: true), StringComparison.Ordinal);
+    }
+
     // TASK-09, WS-03: a failed check, a review that asks for changes, and a change returned by integration are failed attempts.
     [Theory]
     [InlineData("check")]
@@ -188,7 +221,7 @@ public class TaskBoardTests
 
         Assert.Equal([(TaskState.InProgress, Agent), (TaskState.Failed, null)], states);
         Assert.Equal(
-            "invalid arguments: a failed task goes back to the lead; only the owner retries it.", await CallAsync(Agent, "update", """{ "id": "t1", "state": "ready", "reason": "retry" }"""));
+            "invalid arguments: a failed task goes back to the lead; only the lead or the owner retries it.", await CallAsync(Agent, "update", """{ "id": "t1", "state": "ready", "reason": "retry" }"""));
         Assert.Equal(
             (true, "Changed: t1 state Failed → Ready, failedAttempts 2 → 0."), await owner.EditAsync("t1", new() { State = TaskState.Ready }, "retry", Ct));
     }
@@ -331,8 +364,8 @@ public class TaskBoardTests
     private async Task<BoardTask> TaskAsync(string id) => (await owner.ReadAsync(Ct)).Single(task => task.Id == id);
 
     /// <summary>Calls a task tool as an agent, and returns what the agent reads.</summary>
-    private async Task<string> CallAsync(string agent, string tool, string arguments) =>
-        (await RunAsync(pipeline, tool, arguments, Context with { Agent = agent })).Content;
+    private async Task<string> CallAsync(string agent, string tool, string arguments, bool lead = false) =>
+        (await RunAsync(pipeline, tool, arguments, Context with { Agent = agent, Lead = lead })).Content;
 
     /// <summary>Stands in for a test command; two tests fail when it fails.</summary>
     private sealed class TestCommand(Func<bool> passes) : ICheck

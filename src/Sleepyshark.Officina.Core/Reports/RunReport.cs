@@ -5,6 +5,7 @@ using Sleepyshark.Officina.Core.Extensibility;
 using Sleepyshark.Officina.Core.Records;
 using Sleepyshark.Officina.Core.Running;
 using Sleepyshark.Officina.Core.Tasks;
+using Sleepyshark.Officina.Core.Tools;
 
 namespace Sleepyshark.Officina.Core.Reports;
 
@@ -12,12 +13,13 @@ namespace Sleepyshark.Officina.Core.Reports;
 public sealed record Spend(decimal Cost, long Tokens, int Calls);
 
 /// <summary>
-/// What a run cost, in total and by agent, task, step and model (RUN-10). Work that is for no task, or not in a pattern's step,
-/// is under <see cref="None"/>. Each agent is its own definition until the team capability gives definitions several agents (S20).
+/// What a run cost, in total and by agent, definition, task, step and model (RUN-10). Work that is for no task, or not in a pattern's
+/// step, is under <see cref="None"/>. An agent of a team is its instance, such as <c>developer[2]</c>, and its definition is <c>developer</c>.
 /// </summary>
 public sealed record CostBreakdown(
     Spend Total,
     IReadOnlyDictionary<string, Spend> ByAgent,
+    IReadOnlyDictionary<string, Spend> ByDefinition,
     IReadOnlyDictionary<string, Spend> ByTask,
     IReadOnlyDictionary<string, Spend> ByStep,
     IReadOnlyDictionary<string, Spend> ByModel)
@@ -29,7 +31,7 @@ public sealed record CostBreakdown(
     public static CostBreakdown Of(IEnumerable<CoreEvent> events)
     {
         var calls = events.Where(coreEvent => coreEvent.Payload is ModelCallEnded).Select(coreEvent => (Event: coreEvent, Call: (ModelCallEnded)coreEvent.Payload)).ToList();
-        return new(Sum(calls), By(calls, call => call.Event.Agent), By(calls, call => call.Call.Task), By(calls, call => call.Event.Step), By(calls, call => call.Call.Model));
+        return new(Sum(calls), By(calls, call => call.Event.Agent), By(calls, call => ToolContext.DefinitionOf(call.Event.Agent)), By(calls, call => call.Call.Task), By(calls, call => call.Event.Step), By(calls, call => call.Call.Model));
 
         static Spend Sum(IEnumerable<(CoreEvent Event, ModelCallEnded Call)> calls) =>
             new(calls.Sum(call => call.Call.Cost), calls.Sum(call => (long)call.Call.Usage.Total), calls.Count());
@@ -97,7 +99,7 @@ public sealed record RunReport(
         issues.AddRange(record.Where(entry => record.Any(other => RunRecord.Conflict(entry, other, record))).Select(entry => RunRecord.Describe(entry, record)));
         issues.AddRange(checks.Where(check => check.Failed > 0 && check.Passed == 0).Select(check => $"Check {check.Check}{(check.Task is null ? "" : $" on task {check.Task}")} never passed."));
         return new(
-            runId, stored.Started.Agent, stored.Started.Input, stored.Started.Time, stored.Status, outcome, Spent.Of(events, stored.Started.Agent).Run.Time,
+            runId, stored.Started.Agent, stored.Started.Input, stored.Started.Time, stored.Status, outcome, Spent.Of(events).Run.Time,
             events.Count(coreEvent => coreEvent.Payload is RunResumed), CostBreakdown.Of(events), tasks,
             [.. record.Where(entry => entry.Item is Decision).Select(entry => RunRecord.Describe(entry, record))], checks, issues);
     }
@@ -110,7 +112,7 @@ public sealed record RunReport(
         text.AppendLine(CultureInfo.InvariantCulture, $"Agent {Agent}, started {Started:u}, running {(int)Running.TotalHours}:{Running:mm\\:ss}{(Resumes > 0 ? $", resumed {Resumes} times" : "")}");
         text.AppendLine(CultureInfo.InvariantCulture, $"Work: {Input}");
         text.AppendLine(CultureInfo.InvariantCulture, $"Cost: ${Cost.Total.Cost:0.00} in {Cost.Total.Calls} model calls, {Cost.Total.Tokens} tokens");
-        foreach (var (name, by) in new[] { ("agent", Cost.ByAgent), ("task", Cost.ByTask), ("step", Cost.ByStep), ("model", Cost.ByModel) })
+        foreach (var (name, by) in new[] { ("agent", Cost.ByAgent), ("definition", Cost.ByDefinition), ("task", Cost.ByTask), ("step", Cost.ByStep), ("model", Cost.ByModel) })
         {
             text.AppendLine(CultureInfo.InvariantCulture, $"  by {name}: {string.Join(", ", by.Select(line => $"{line.Key} ${line.Value.Cost:0.00}"))}");
         }

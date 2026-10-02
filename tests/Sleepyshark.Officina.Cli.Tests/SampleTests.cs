@@ -17,7 +17,6 @@ public class SampleTests
     public static TheoryData<string> Samples() =>
         [.. Directory.GetDirectories(Path.Combine(GeneratedDocumentationTests.Root, "samples")).Select(directory => Path.GetFileName(directory)!).Order(StringComparer.Ordinal)];
 
-    // The team pattern runs from the team capability; until then its sample is only validated.
     [Theory]
     [MemberData(nameof(Samples))]
     public void Every_sample_is_valid(string sample) => Assert.Empty(Kit(sample).Errors);
@@ -108,6 +107,34 @@ public class SampleTests
             [("draft/generate", "writer"), ("draft/generate", "writer"), ("draft", "release"), ("translate", "translator")],
             (await kit.Storage.Events.ReadAsync(null, kit.Storage.Runs.Runs[^1].RunId, 0, Ct))
                 .Where(coreEvent => coreEvent.Payload is StepEnded).Select(coreEvent => (coreEvent.Step!, coreEvent.Agent)));
+    }
+
+    // TEAM-01, TEAM-03: the lead plans two tasks, two developers do one each at the same time, and the lead reports.
+    [Fact]
+    public async Task Team()
+    {
+        var (kit, _) = Kit("team");
+        kit.Model.When(request => ScriptedModelProvider.WorkOf(request).StartsWith("You lead a team", StringComparison.Ordinal))
+            .CallTools(
+                ("create_task", """{ "id": "parse", "title": "Parse the input", "reason": "plan" }"""),
+                ("create_task", """{ "id": "print", "title": "Print the result", "reason": "plan" }"""))
+            .Reply("Planned.");
+        kit.Model.When(request => ScriptedModelProvider.WorkOf(request).StartsWith("Every task is done", StringComparison.Ordinal)).Reply("Both are done.");
+        foreach (var task in new[] { "parse", "print" })
+        {
+            kit.Model.When(request => ScriptedModelProvider.WorkOf(request).Contains($"Do task {task},", StringComparison.Ordinal))
+                .CallTools(("submit_task", $$"""{ "id": "{{task}}" }""")).Reply("Submitted.");
+        }
+
+        var result = await kit.RunAsync("team", "Build a calculator.", Ct);
+
+        Assert.Equal((AgentOutcome.Completed, "Both are done."), (result.Outcome, result.Output));
+        var runId = kit.Storage.Runs.Runs[^1].RunId;
+        Assert.All(await kit.Runner.Board(null, runId).ReadAsync(Ct), task => Assert.Equal(Core.Tasks.TaskState.Done, task.State));
+        Assert.Equal(
+            ["developer[1]", "developer[2]"],
+            (await kit.Storage.Events.ReadAsync(null, runId, 0, Ct)).Where(coreEvent => coreEvent.Step?.StartsWith("task:", StringComparison.Ordinal) == true)
+                .Select(coreEvent => coreEvent.Agent).Distinct().Order(StringComparer.Ordinal));
     }
 
     private static async Task<(AgentOutcome, string)> RunAsync(string sample, string agent, params string[] replies)

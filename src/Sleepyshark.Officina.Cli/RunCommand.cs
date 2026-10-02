@@ -15,7 +15,8 @@ namespace Sleepyshark.Officina.Cli;
 /// <summary>
 /// <c>sof run [--agent &lt;name&gt;] --input &lt;text&gt;</c>: runs an agent with the owner at the console. The run's
 /// events are shown as they happen (UX-01), and the owner answers what waits for them, messages agents, changes the
-/// permission mode, and pauses, resumes or cancels agents by typing commands (HITL, RUN-06). Ctrl+C cancels the run. The
+/// permission mode, and pauses or resumes the run or one agent, and cancels an agent, by typing commands (HITL, RUN-06). In a team,
+/// agents are named by their id, such as developer[2]. Ctrl+C cancels the run. The
 /// run is stored in <c>.sof/sof.db</c> in the project directory (STO-01).
 /// </summary>
 internal static class RunCommand
@@ -230,7 +231,7 @@ internal static class RunCommand
                 {
                     output.WriteLine(await CheckpointAsync(runner, runId, ct));
                 }
-                else if (Apply(line.Trim(), runner, agent, queue, status) is { } problem)
+                else if (Apply(line.Trim(), runner, agent, runId, queue, status) is { } problem)
                 {
                     output.WriteLine(problem);
                 }
@@ -255,10 +256,11 @@ internal static class RunCommand
     }
 
     /// <summary>Carries out one command; returns what was wrong with it, if anything.</summary>
-    private static string? Apply(string line, AgentRunner runner, string agent, OwnerQueue queue, StatusView status)
+    private static string? Apply(string line, AgentRunner runner, string agent, string runId, OwnerQueue queue, StatusView status)
     {
         var words = line.Split(' ', 3, StringSplitOptions.RemoveEmptyEntries);
-        var target = words.Length > 1 ? words[1] : agent;
+        var target = words.Length > 1 ? words[1] : null;
+        var team = runner.Options.Agents[agent].Pattern.Type == PatternOptions.Team;
         try
         {
             switch (words.FirstOrDefault())
@@ -276,26 +278,44 @@ internal static class RunCommand
                     return Answer(words, queue, words[0], HumanAnswer.ApproveChanged(JsonDocument.Parse(words[2]).RootElement.Clone()));
                 case "answer" when words.Length == 3:
                     return Answer(words, queue, words[0], HumanAnswer.Reply(words[2]));
+                case "tell" when words.Length == 3 && team:
+                    runner.Send(runId, words[1], Sender.Owner, words[2]); // HITL-03: an agent of the run's team, by its id
+                    return null;
                 case "tell" when words.Length == 3:
                     runner.Send(words[1], Sender.Owner, words[2]); // HITL-03
                     return null;
                 case "mode" when words.Length == 2 && Enum.TryParse<PermissionMode>(words[1], ignoreCase: true, out var mode):
                     runner.PermissionMode = mode;
                     return null;
+                case "pause" when target is null:
+                    runner.PauseRun(runId); // RUN-06: the whole run
+                    return null;
+                case "pause" when team:
+                    runner.Pause(runId, target); // an agent of the run's team, by its id
+                    return null;
                 case "pause":
                     runner.Pause(target);
+                    return null;
+                case "resume" when target is null:
+                    runner.ResumeRun(runId);
+                    return null;
+                case "resume" when team:
+                    runner.Resume(runId, target);
                     return null;
                 case "resume":
                     runner.Resume(target);
                     return null;
+                case "cancel" when target is not null && team:
+                    runner.Cancel(runId, target);
+                    return null;
                 case "cancel":
-                    runner.Cancel(target);
+                    runner.Cancel(target ?? agent);
                     return null;
                 default:
                     return Help;
             }
         }
-        catch (Exception exception) when (exception is ConfigurationException or JsonException)
+        catch (Exception exception) when (exception is ConfigurationException or JsonException or ArgumentException)
         {
             return $"error: {exception.Message}";
         }

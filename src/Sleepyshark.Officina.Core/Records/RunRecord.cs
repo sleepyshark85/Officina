@@ -25,7 +25,7 @@ public sealed partial class RunRecord
         this.store = store;
         tenant = context.Caller.Tenant;
         RunId = context.RunId;
-        agent = context.Agent;
+        agent = context.AgentId;
         task = context.TaskId;
         this.time = time;
         masker = context.Masker;

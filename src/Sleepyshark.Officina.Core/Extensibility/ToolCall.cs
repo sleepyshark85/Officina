@@ -25,4 +25,7 @@ public sealed record ToolCall(
 
     /// <summary>Project memory as the agent acts on it; null when project memory is off.</summary>
     public ProjectMemory? Memory { get; init; }
+
+    /// <summary>Sends another agent of the caller's team a message; it returns why it cannot, or null. Null when the agent is in no team.</summary>
+    internal Func<string, string, CancellationToken, ValueTask<string?>>? Send { get; init; }
 }

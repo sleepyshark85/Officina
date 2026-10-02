@@ -172,6 +172,23 @@ public sealed partial record OfficinaOptions : IValidatableObject
             errors = on.Contains("projectMemory") ? errors : errors.Append(Off($"tools.{name}.source", "projectMemory"));
         }
 
+        foreach (var name in Tools.Where(tool => tool.Value.BuiltinTool()?.StartsWith("team.", StringComparison.Ordinal) == true).Select(tool => tool.Key))
+        {
+            errors = on.Contains("team") ? errors : errors.Append(Off($"tools.{name}.source", "team"));
+        }
+
+        foreach (var name in Agents.Where(agent => agent.Value.Pattern?.Type == PatternOptions.Team).Select(agent => agent.Key))
+        {
+            errors = on.Contains("team") ? errors : errors.Append(Off($"agents.{name}.pattern.type", "team"));
+        }
+
+        if (on.Contains("team") && on.Contains("workspace"))
+        {
+            // S20 part 2 gives each task a working copy and integrates it; until then a team's changes would never reach the baseline.
+            errors = errors.Append(new(ValidationPhase.Capabilities, "capabilities.team.enabled", "cannot be on with the workspace yet: the team does not integrate working copies.",
+                "Turn capabilities.workspace off for a team."));
+        }
+
         if (Capabilities.ProjectMemory is { Enabled: true, ApproveBy: MemoryApprover.Owner } && !on.Contains("humanInteraction"))
         {
             errors = errors.Append(Off("capabilities.projectMemory.approveBy", "humanInteraction"));

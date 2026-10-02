@@ -4,7 +4,13 @@
       "instructions": "A lead and two developers.",
       "pattern": { "type": "team", "lead": "lead", "roles": { "developer": { "max": 2 } } }
     },
-    "lead": { "instructions": "Plan the work and assign it." },
-    "developer": { "instructions": "Do the task you are assigned." }
-  }
+    "lead": { "instructions": "Plan the work as tasks on the board, then report what was done.", "tools": ["planning"] },
+    "developer": { "instructions": "Do the task you are given, then submit it.", "tools": ["work"] }
+  },
+  "tools": {
+    "create_task": { "source": "builtin:tasks.create" },
+    "submit_task": { "source": "builtin:tasks.submit_for_review" }
+  },
+  "toolSets": { "planning": ["create_task"], "work": ["submit_task"] },
+  "capabilities": { "taskBoard": { "enabled": true }, "team": { "enabled": true } }
 }

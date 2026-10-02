@@ -191,7 +191,7 @@ internal sealed class Turn
         while (true)
         {
             await whilePaused(ct).ConfigureAwait(false);
-            if (Exhausted() is { } exhausted && !(exhausted.OfRun && await SignedOffToExceedAsync(exhausted.Limit, ct).ConfigureAwait(false)))
+            if (Exhausted() is { } exhausted && !(exhausted.OfRun && await SignedOffToExceedAsync(exhausted.Limit, exhausted.Extensions, ct).ConfigureAwait(false)))
             {
                 return HandOff(HandoffReason.BudgetExhausted, $"the {exhausted.Limit} budget is used up");
             }
@@ -356,8 +356,8 @@ internal sealed class Turn
     }
 
     /// <summary>Which limit of the turn's, its pattern's, its task's or the run's budget is used up, if any (LOOP-06, COST-02).</summary>
-    private (string Limit, bool OfRun)? Exhausted() =>
-        task is not null && task.Spent + cost >= task.Budget ? ("task's cost", false) : budget.Exhausted();
+    private (string Limit, bool OfRun, int Extensions)? Exhausted() =>
+        task is not null && task.Spent + cost >= task.Budget ? ("task's cost", false, 0) : budget.Exhausted();
 
     /// <summary>Publishes a warning for each limit of the turn's, its pattern's, its agent's, its task's or the run's budget that is nearly used up (EVT-01).</summary>
     private async Task WarnAsync(CancellationToken ct)
@@ -378,21 +378,26 @@ internal sealed class Turn
     /// RUN-05, HITL-04: with the sign-off on, the owner may let the run go on past its budget, by another budget of the
     /// same size each time, so the run is never without a limit (INV-07).
     /// </summary>
-    private async Task<bool> SignedOffToExceedAsync(string limit, CancellationToken ct)
+    /// <param name="limit">The limit used up.</param>
+    /// <param name="extensions">How many times the owner had let the run go on when it was found used up.</param>
+    /// <param name="ct">Cancels the wait.</param>
+    private async Task<bool> SignedOffToExceedAsync(string limit, int extensions, CancellationToken ct)
     {
         if (!signOffToExceedRunBudget)
         {
             return false;
         }
 
-        var summary = $"The {limit} budget is used up. Go on for another {runBudget.Cost} USD and {runBudget.Time}?";
+        var more = string.Concat(runBudget.Tokens is { } tokens ? $", {tokens} tokens" : "", runBudget.ToolCalls is { } calls ? $", {calls} tool calls" : "");
+        var summary = $"The {limit} budget is used up. Go on for another {runBudget.Cost} USD and {runBudget.Time}{more}?";
         var answer = await tools.Owner.AskAsync(context, tools.Owner.Request(context, HumanRequestKind.SignOff, summary), ct).ConfigureAwait(false);
         if (answer is not { Approved: true })
         {
             return false;
         }
 
-        budget.ExtendRun();
+        // Agents of a team that ran out at the same time each asked; the owner's yes to one of them goes on for all, once.
+        budget.ExtendRun(extensions);
         return true;
     }
 
