@@ -29,6 +29,9 @@ Last updated 2026-10-02.
   typed after a `/` (TRG-01, CAP-05, HITL-01 to HITL-03, RUN-06, UX-01, LAT-02). See the user guide, section 6. Next:
   a line editor with Tab completion and history for it.
 - **Open follow-ups**, each waiting for a case or for the owner:
+  - Chat with a single agent in the workspace: each message works in a fresh working copy, so edits that are not
+    integrated are lost between messages (the session and `config validate` warn). For the owner: keep one working copy
+    for the whole session, or integrate each message's changes when its reply ends.
   - Flaky test: `ModelGatewayTests.A_fallback_serves_the_call_when_the_primary_stays_unavailable_and_the_switch_is_recorded`
     listens with a process-wide `MeterListener`, so it can hear the fallbacks of `HistoryTests` running in parallel.
     Filter on a model only it uses, or run it in a non-parallel collection (a separate PR).

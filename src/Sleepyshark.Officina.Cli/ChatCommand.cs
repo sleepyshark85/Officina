@@ -75,6 +75,22 @@ internal static class ChatCommand
     internal static string KeepsHistory(OfficinaOptions options, string agent) =>
         options.Agents[agent].Pattern is { Type: PatternOptions.Team, Lead: { } lead } ? lead : agent;
 
+    /// <summary>
+    /// What a chat with an agent that works in the workspace outside a team loses: each message's run works in a fresh working copy
+    /// of the branch, and what it changes and does not integrate goes when the reply ends. Only a team integrates its work. Whether a
+    /// chat should keep one working copy for the session, or integrate at the end of each message, is the owner's open question.
+    /// </summary>
+    internal static string? WorkspaceWarning(OfficinaOptions options, string agent) =>
+        options.Capabilities.Workspace.Enabled && options.Agents[agent].Pattern.Type != PatternOptions.Team
+            ? $"agent \"{agent}\" works in the workspace, and each message works in a fresh working copy of the branch: what it changes " +
+              "and does not integrate is lost when the reply ends, unless capabilities.workspace.keepWorkingCopies is on, which keeps " +
+              "each message's copy, though the next message does not see it."
+            : null;
+
+    /// <summary>Every agent a chat with which loses its edits between messages, and why, for <c>config validate</c>.</summary>
+    internal static IEnumerable<string> WorkspaceWarnings(OfficinaOptions options) =>
+        options.Agents.Keys.Order(StringComparer.Ordinal).Select(agent => WorkspaceWarning(options, agent)).OfType<string>();
+
     private static string? StoreRefusal(SofConfiguration configuration) =>
         configuration.Sets(Store) && !configuration.Options.Capabilities.ConversationStore.Enabled
             ? $"sof chat keeps the conversation in the conversation store, which {Store} turns off. Remove that setting, or set it to true."

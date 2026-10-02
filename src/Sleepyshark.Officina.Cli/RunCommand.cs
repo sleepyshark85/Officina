@@ -284,7 +284,9 @@ internal static class RunCommand
     {
         try
         {
-            while (await input.ReadLineAsync(ct) is { } line && !ct.IsCancellationRequested)
+            // A line read is the run's even if the run ends meanwhile: a console that is shared, as in a chat session, keeps
+            // a line taken after the run stopped reading (ChatSession.SessionReader).
+            while (await input.ReadLineAsync(ct) is { } line)
             {
                 await CarryOutAsync(line, session, status, Help(), ct);
             }

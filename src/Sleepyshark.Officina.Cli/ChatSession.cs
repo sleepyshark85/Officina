@@ -27,7 +27,10 @@ internal sealed class ChatSession
     private static readonly HashSet<string> RunCommands = ["approve", "deny", "change", "answer", "tell", "pause", "resume", "cancel", "checkpoint", "board", "memory"];
 
     /// <summary>The <c>sof</c> commands that take the console or the workspace, so they wait until no reply runs.</summary>
-    private static readonly HashSet<string> Between = ["run", "resume", "rollback"];
+    private static readonly HashSet<string> Between = ["run", "rollback"];
+
+    /// <summary>How soon after a Ctrl+C a console read that ends is taken for the Ctrl+C rather than the end of the input.</summary>
+    private static readonly TimeSpan InterruptedRead = TimeSpan.FromSeconds(1);
 
     private static readonly string Help = $"""
         {RunCommand.Help("/")}
@@ -43,6 +46,12 @@ internal sealed class ChatSession
     private readonly string? named;
     private readonly Channel<string> lines = Channel.CreateUnbounded<string>(new() { SingleWriter = true });
     private readonly Queue<string> queued = new();
+
+    /// <summary>Lines a command typed in the session took as it stopped reading; the session takes them next.</summary>
+    private readonly System.Collections.Concurrent.ConcurrentQueue<string> returned = new();
+
+    /// <summary>When the last Ctrl+C arrived, by the host's clock; see <see cref="ReadConsoleAsync"/>.</summary>
+    private long interrupted;
     private readonly CancellationTokenSource ending = new();
     private readonly Lock gate = new();
     private readonly TextWriter output;
@@ -78,6 +87,11 @@ internal sealed class ChatSession
         var configuration = shared.Load(parse, host);
         if (ConfigurationCommandOptions.ReportErrors(configuration, host) is var code && code != ExitCodes.Success)
         {
+            if (!File.Exists(Path.Combine(shared.Directory(parse, host), "sof.json")))
+            {
+                host.Error.WriteLine("There is no sof.json here to chat with: write one first, as section 3 of the user guide (docs/user-guide.md) shows.");
+            }
+
             return code;
         }
 
@@ -123,6 +137,11 @@ internal sealed class ChatSession
             var keeps = ChatCommand.KeepsHistory(conversing, name);
             keepsHistory = conversing.Agents[keeps].Context.History.Strategy != HistoryStrategy.None;
             status.WriteLine($"Chatting with {name}. Each line you type is a message; /help lists the commands, and /quit or Ctrl+D ends the session.");
+            if (ChatCommand.WorkspaceWarning(options, name) is { } warning)
+            {
+                status.WriteLine($"warning: {warning}");
+            }
+
             if (!keepsHistory)
             {
                 status.WriteLine($"note: agents.{keeps}.context.history.strategy is none, so each message starts a new conversation.");
@@ -195,7 +214,7 @@ internal sealed class ChatSession
             return null;
         }
 
-        if (queued.TryDequeue(out var message))
+        if (queued.TryDequeue(out var message) || returned.TryDequeue(out message))
         {
             return message;
         }
@@ -226,13 +245,26 @@ internal sealed class ChatSession
         return null;
     }
 
+    /// <summary>
+    /// Reads the console into <see cref="lines"/> until the input ends. On Windows, Ctrl+C ends a console read that waits with
+    /// null, as the end of the input does; a null just after a Ctrl+C is taken for that, once, and the console is read again.
+    /// </summary>
     private async Task ReadConsoleAsync()
     {
         try
         {
-            while (await host.In.ReadLineAsync(CancellationToken.None) is { } line)
+            while (true)
             {
-                lines.Writer.TryWrite(line);
+                if (await host.In.ReadLineAsync(CancellationToken.None) is { } line)
+                {
+                    lines.Writer.TryWrite(line);
+                    continue;
+                }
+
+                if (Interlocked.Exchange(ref interrupted, 0) is var at && (at == 0 || host.Time.GetElapsedTime(at) > InterruptedRead))
+                {
+                    break;
+                }
             }
         }
         catch (Exception exception)
@@ -408,6 +440,10 @@ internal sealed class ChatSession
                 case "report" when words.Count == 1:
                     await ReportAsync(session, ending.Token);
                     break;
+                case "resume" when session is not null && words.Count > 1 && !Agents(session.Runner.Options, session.Agent).Contains(words[1]):
+                    // A run, not an agent of the reply's run: it is sof resume, which waits as /rollback does.
+                    status.WriteLine("error: /resume <run> waits until no reply runs, as it takes the console and may need the workspace the reply holds.");
+                    break;
                 case var _ when session is not null && RunCommands.Contains(word):
                     await RunCommand.CarryOutAsync(command, session, status, Help, ending.Token);
                     break;
@@ -447,7 +483,7 @@ internal sealed class ChatSession
 
         var nested = host with
         {
-            Out = output, WorkingDirectory = shared.Directory(parse, host), Variables = variables, In = new SessionReader(lines.Reader), Signals = null, InSession = true,
+            Out = output, WorkingDirectory = shared.Directory(parse, host), Variables = variables, In = new SessionReader(lines.Reader, returned), Signals = null, InSession = true,
         };
         return session is null
             ? GuardedAsync(token => SofCommandLine.RunAsync(args, nested, token))
@@ -464,11 +500,15 @@ internal sealed class ChatSession
         }
 
         IStorage storage = session?.Storage ?? await SqliteStorage.OpenAsync(Path.Combine(shared.Directory(parse, host), WorkspaceOptions.StateFolder, "sof.db"), ct);
-        if (await RunReport.BuildAsync(storage, null, run, ct) is { } report)
-        {
-            status.WriteLine(report.ToText().TrimEnd());
-        }
+        status.WriteLine(await RunReport.BuildAsync(storage, null, run, ct) is { } report
+            ? report.ToText().TrimEnd()
+            : $"Run {run} has not been recorded yet; try again in a moment.");
     }
+
+    /// <summary>The agents the run's commands name: the configuration's, and in a team the ids of its agents, such as <c>developer[1]</c>.</summary>
+    internal static IEnumerable<string> Agents(OfficinaOptions options, string agent) =>
+        options.Agents.Keys.Concat(options.Agents[agent].Pattern.Roles.SelectMany(role => Enumerable.Range(1, role.Value.Max).Select(number => $"{role.Key}[{number}]")))
+            .Order(StringComparer.Ordinal);
 
     private static PermissionMode? ModeOf(List<string> words) =>
         words is ["mode", var name] && Enum.TryParse<PermissionMode>(name, ignoreCase: true, out var chosen) ? chosen : null;
@@ -486,6 +526,7 @@ internal sealed class ChatSession
             }
 
             armed = true;
+            Interlocked.Exchange(ref interrupted, host.Time.GetTimestamp());
             reply = replying;
         }
 
@@ -530,11 +571,18 @@ internal sealed class ChatSession
     /// The console of a <c>sof</c> command typed in the session: the session's lines, taken only while the command reads, and a read
     /// is cancelled when the command stops reading, so no line is left behind to a command that has ended.
     /// </summary>
-    private sealed class SessionReader(ChannelReader<string> lines) : TextReader
+    private sealed class SessionReader(ChannelReader<string> lines, System.Collections.Concurrent.ConcurrentQueue<string> returned) : TextReader
     {
         public override async ValueTask<string?> ReadLineAsync(CancellationToken cancellationToken)
         {
             var line = await ChatSession.ReadAsync(lines, cancellationToken);
+            if (line is not null && cancellationToken.IsCancellationRequested)
+            {
+                // The command stopped reading as the line came: it is the session's.
+                returned.Enqueue(line);
+                return null;
+            }
+
             return line is not null && line.StartsWith('/') ? line[1..] : line;
         }
 
