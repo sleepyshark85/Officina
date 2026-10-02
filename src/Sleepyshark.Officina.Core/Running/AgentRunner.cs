@@ -38,6 +38,13 @@ public sealed class AgentRunner
     private readonly ConcurrentDictionary<string, ConcurrentQueue<(Sender From, string Text)>> inboxes = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, TaskCompletionSource> paused = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, CancellationTokenSource> cancels = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, TaskCompletionSource> pausedRuns = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, IReadOnlySet<string>> teams = new(StringComparer.Ordinal);
+
+    // An agent of a team is its run's: its id, such as developer[2], names another agent in another run of the same team.
+    private readonly ConcurrentDictionary<(string Run, string Agent), ConcurrentQueue<(Sender From, string Text)>> memberInboxes = new();
+    private readonly ConcurrentDictionary<(string Run, string Agent), TaskCompletionSource> memberPaused = new();
+    private readonly ConcurrentDictionary<(string Run, string Agent), CancellationTokenSource> memberCancels = new();
 
     /// <summary>Validates the configuration in full, with the application's tools, gates and checks; nothing runs if it has errors (CFG-06).</summary>
     /// <param name="options">The configuration, fixed for the runner's lifetime. A changed configuration needs a new runner (CFG-08).</param>
@@ -104,6 +111,7 @@ public sealed class AgentRunner
         shortening = Shortening(options, providers, shorteners ?? new Dictionary<string, IHistoryShortener>());
         admission = new Admission(options.Policies, time);
         checkpointer = new Checkpointer(options, storage, workspace, Events, pipeline, time);
+        pipeline.Messages = DeliverAsync;
         Options = options;
     }
 
@@ -257,9 +265,11 @@ public sealed class AgentRunner
                 throw new ArgumentException("The work is for a task, but the task board is off.", nameof(work));
             }
 
-            if (!(await Board(work.Caller.Tenant, work.RunId).ReadAsync(ct).ConfigureAwait(false)).Any(task => task.Id == work.TaskId))
+            var task = (await Board(work.Caller.Tenant, work.RunId).ReadAsync(ct).ConfigureAwait(false)).FirstOrDefault(task => task.Id == work.TaskId)
+                ?? throw new ArgumentException($"The work is for task {work.TaskId}, which is not on the board.", nameof(work));
+            if (task.State is TaskState.Done or TaskState.Cancelled or TaskState.Failed)
             {
-                throw new ArgumentException($"The work is for task {work.TaskId}, which is not on the board.", nameof(work));
+                throw new ArgumentException($"The work is for task {work.TaskId}, which is {task.State}: nobody works on it unless it is retried.", nameof(work));
             }
         }
 
@@ -299,7 +309,25 @@ public sealed class AgentRunner
         Inbox(agentName).Enqueue((from, text));
     }
 
-    /// <summary>Pauses the agent before its next model call, until it is resumed (RUN-06). Other agents go on.</summary>
+    /// <summary>
+    /// Sends an agent of a run's team a message, as <see cref="Send(string, Sender, string)"/> does for an agent outside a team
+    /// (CTX-08, HITL-03). It reaches only that agent of that run.
+    /// </summary>
+    /// <param name="runId">The team's run.</param>
+    /// <param name="agentId">The agent, by its id in the team, such as <c>developer[2]</c>, or the lead's name.</param>
+    /// <param name="from">Who sends it.</param>
+    /// <param name="text">The message.</param>
+    /// <exception cref="ArgumentException">The run has no team at work, or the team no such agent.</exception>
+    public void Send(string runId, string agentId, Sender from, string text)
+    {
+        ArgumentNullException.ThrowIfNull(from);
+        ArgumentNullException.ThrowIfNull(text);
+        Member(runId, agentId);
+        Inbox(runId, agentId).Enqueue((from, text));
+    }
+
+    /// <summary>Pauses the agent's turns before their next model call, until it is resumed (RUN-06). Other agents go on.</summary>
+    /// <param name="agentName">The agent, by its name in <c>agents</c>; every run of it is paused.</param>
     public void Pause(string agentName)
     {
         KnownAgent(agentName);
@@ -310,6 +338,51 @@ public sealed class AgentRunner
     {
         KnownAgent(agentName);
         if (paused.TryRemove(agentName, out var gate))
+        {
+            gate.SetResult();
+        }
+    }
+
+    /// <summary>Pauses one agent of a run's team before its next model call, until it is resumed (RUN-06). The others go on.</summary>
+    /// <param name="runId">The team's run.</param>
+    /// <param name="agentId">The agent, by its id in the team, such as <c>developer[2]</c>, or the lead's name.</param>
+    /// <exception cref="ArgumentException">The run has no team at work, or the team no such agent.</exception>
+    public void Pause(string runId, string agentId) =>
+        memberPaused.TryAdd(Member(runId, agentId), new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously));
+
+    /// <inheritdoc cref="Pause(string, string)"/>
+    public void Resume(string runId, string agentId)
+    {
+        if (memberPaused.TryRemove(Member(runId, agentId), out var gate))
+        {
+            gate.SetResult();
+        }
+    }
+
+    /// <summary>
+    /// Stops one agent of a run's team (RUN-06): its turn ends in a handoff within <c>run.cancelWithin</c>, and its task goes
+    /// back to the lead (TEAM-09). The team goes on, and may give the agent other work.
+    /// </summary>
+    /// <inheritdoc cref="Pause(string, string)"/>
+    public void Cancel(string runId, string agentId)
+    {
+        if (memberCancels.TryRemove(Member(runId, agentId), out var cancel))
+        {
+            cancel.Cancel();
+        }
+    }
+
+    /// <summary>Pauses every agent of a run before its next model call, until the run is resumed (RUN-06). Other runs go on.</summary>
+    public void PauseRun(string runId)
+    {
+        ArgumentNullException.ThrowIfNull(runId);
+        pausedRuns.TryAdd(runId, new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously));
+    }
+
+    public void ResumeRun(string runId)
+    {
+        ArgumentNullException.ThrowIfNull(runId);
+        if (pausedRuns.TryRemove(runId, out var gate))
         {
             gate.SetResult();
         }
@@ -420,6 +493,84 @@ public sealed class AgentRunner
 
     private ConcurrentQueue<(Sender From, string Text)> Inbox(string agentName) => inboxes.GetOrAdd(agentName, _ => new());
 
+    /// <summary>The messages of an agent of a run's team: its own, so a message never reaches another run's agent of the same id.</summary>
+    private ConcurrentQueue<(Sender From, string Text)> Inbox(string runId, string agentId) => memberInboxes.GetOrAdd((runId, agentId), _ => new());
+
+    /// <summary>The owner's cancellation of an agent of a run's team (RUN-06).</summary>
+    private CancellationToken CancelOf(string runId, string agentId) => memberCancels.GetOrAdd((runId, agentId), _ => new CancellationTokenSource()).Token;
+
+    /// <summary>An agent of a run's team, as the key of what belongs to it.</summary>
+    /// <exception cref="ArgumentException">The run has no team at work, or the team no such agent.</exception>
+    private (string Run, string Agent) Member(string runId, string agentId)
+    {
+        ArgumentNullException.ThrowIfNull(runId);
+        ArgumentNullException.ThrowIfNull(agentId);
+        return teams.TryGetValue(runId, out var members) && members.Contains(agentId)
+            ? (runId, agentId)
+            : throw new ArgumentException($"Run {runId} has no team at work with an agent {agentId}.", nameof(agentId));
+    }
+
+    /// <summary>
+    /// Registers who is in a run's team, or, with null, forgets the team: the messages left for its agents, and the owner's
+    /// pauses and cancellations of them, which end with it.
+    /// </summary>
+    private void Members(string runId, IReadOnlySet<string>? members)
+    {
+        if (members is not null)
+        {
+            teams[runId] = members;
+            return;
+        }
+
+        if (teams.TryRemove(runId, out var ended))
+        {
+            foreach (var agentId in ended)
+            {
+                memberInboxes.TryRemove((runId, agentId), out _);
+                if (memberPaused.TryRemove((runId, agentId), out var gate))
+                {
+                    gate.SetResult();
+                }
+
+                if (memberCancels.TryRemove((runId, agentId), out var cancel))
+                {
+                    cancel.Dispose();
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// TEAM-06: a message from an agent of a team to another of the same team and run. It is recorded, with its sender and
+    /// recipient, before it is delivered, and reaches the recipient as data labelled with its sender (INV-08).
+    /// </summary>
+    private async ValueTask<string?> DeliverAsync(ToolContext from, string to, string text, CancellationToken ct)
+    {
+        if (from.Instance is null || !teams.TryGetValue(from.RunId, out var members))
+        {
+            return "only the agents of a team send each other messages.";
+        }
+
+        if (to == from.AgentId || !members.Contains(to))
+        {
+            return $"{to} is not another agent of your team. Send to one of: {string.Join(", ", members.Where(member => member != from.AgentId))}.";
+        }
+
+        await Events.PublishAsync(from, new MessageSent(to, text), ct).ConfigureAwait(false);
+        Inbox(from.RunId, to).Enqueue((new Sender(SenderKind.Agent, from.AgentId), text));
+        return null;
+    }
+
+    /// <summary>Waits while the owner has paused the agent, its definition or its run (RUN-06).</summary>
+    private async Task WhilePausedAsync(ToolContext context, CancellationToken ct)
+    {
+        while ((paused.GetValueOrDefault(context.Agent) ?? (context.Instance is { } instance ? memberPaused.GetValueOrDefault((context.RunId, instance)) : null)
+            ?? pausedRuns.GetValueOrDefault(context.RunId)) is { } gate)
+        {
+            await gate.Task.WaitAsync(ct).ConfigureAwait(false);
+        }
+    }
+
     private void NeedCheckpoints()
     {
         if (!Options.Capabilities.Checkpoints.Enabled)
@@ -450,7 +601,7 @@ public sealed class AgentRunner
         }
 
         var context = new ToolContext(work.RunId, name, work.Caller) { Masker = masker, TaskId = work.TaskId };
-        var steps = new Steps(Options, patterns, checks, Events, NewTurn, context, admitted, time, checkpointer.TakeAsync);
+        var steps = new Steps(Options, patterns, checks, Events, NewTurn, context, admitted, time, checkpointer.TakeAsync, new(pipeline, storage.Events, agentId => CancelOf(context.RunId, agentId), Members));
         var oneAtATime = turns.GetOrAdd(name, _ => new SemaphoreSlim(1, 1));
         using var stop = CancellationTokenSource.CreateLinkedTokenSource(ct, cancels.GetOrAdd(name, _ => new CancellationTokenSource()).Token);
         var entered = false;
@@ -470,7 +621,7 @@ public sealed class AgentRunner
                 await ResumeStateAsync(context, stop.Token).ConfigureAwait(false);
 
                 // INV-07: what the run spent before it died still counts against its budgets.
-                spent = Spent.Of(await storage.Events.ReadAsync(context.Caller.Tenant, context.RunId, 0, stop.Token).ConfigureAwait(false), name);
+                spent = Spent.Of(await storage.Events.ReadAsync(context.Caller.Tenant, context.RunId, 0, stop.Token).ConfigureAwait(false));
             }
             else
             {
@@ -500,6 +651,12 @@ public sealed class AgentRunner
             if (entered)
             {
                 oneAtATime.Release();
+            }
+
+            // The owner's pause of the run ends with its work.
+            if (pausedRuns.TryRemove(context.RunId, out var pausedRun))
+            {
+                pausedRun.SetResult();
             }
         }
 
@@ -587,8 +744,8 @@ public sealed class AgentRunner
         var name = context.Agent;
         return new Turn(
             context, Options, gateway, pipeline, new RunRecord(storage.Records, context, time), pipeline.Board(context), pipeline.Memory(context), checks, knowledge, storage.Conversations,
-            shortening.GetValueOrDefault(name), Events, instructions, work, Inbox(name),
-            token => paused.TryGetValue(name, out var gate) ? gate.Task.WaitAsync(token) : Task.CompletedTask, budget, time);
+            shortening.GetValueOrDefault(name), Events, instructions, work, context.Instance is { } instance ? Inbox(context.RunId, instance) : Inbox(name),
+            token => WhilePausedAsync(context, token), budget, time);
     }
 
     private IModelProvider Provider(string agentName)

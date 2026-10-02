@@ -27,3 +27,9 @@ From S11, each a feature switch of the Claude provider:
 - CLD-06: native structured output (`output_config.format`, `strict` tools), compaction as the provider's
   `IHistoryShortener` (HIST-01), clearing old tool results, task budgets and the server-side refusal fallback.
 - CLD-11: `ModelRequest.Batch` sent through Message Batches (MDL-10).
+
+From S20 (part 1):
+- The per-run rate limit (ING-03) kept across processes by a long-lived runner, with the host and serve mode. A team's tasks
+  are its own work, so nothing joins a live run from outside.
+- `budget.total` of a pattern's step agents, which still draw on the entry agent's level (a team's agents have their own).
+- The condition roots `checks.<name>`, `outcome` and `stopReason` (configuration reference §6), for a case that needs them.

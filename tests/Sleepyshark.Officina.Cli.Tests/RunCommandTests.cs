@@ -94,6 +94,53 @@ public sealed class RunCommandTests : IDisposable
         Assert.Contains("Done.\n\nRun ", output, StringComparison.Ordinal);
     }
 
+    // TEAM-08, RUN-06, HITL-03: a team's agents show their status by their id; the owner pauses and resumes the whole run, and messages one agent of the team.
+    [Fact]
+    public async Task The_owner_follows_a_team_pauses_the_run_and_messages_one_of_its_agents()
+    {
+        sof.Write("sof.json", """
+            {
+              "providers": { "claude": { "prices": { "claude-opus-5-5": { "input": 1 } } } },
+              "agents": {
+                "team": { "instructions": "A team.", "pattern": { "type": "team", "lead": "lead", "roles": { "developer": { "max": 2 } } } },
+                "lead": { "instructions": "Lead.", "tools": ["planning"] },
+                "developer": { "instructions": "Develop.", "tools": ["work"] }
+              },
+              "tools": {
+                "create": { "source": "builtin:tasks.create" },
+                "submit": { "source": "builtin:tasks.submit_for_review" },
+                "ask": { "source": "builtin:human.ask_owner" }
+              },
+              "toolSets": { "planning": ["create"], "work": ["submit", "ask"] },
+              "capabilities": { "humanInteraction": { "enabled": true }, "taskBoard": { "enabled": true }, "team": { "enabled": true } }
+            }
+            """);
+        model.When(request => ScriptedModelProvider.WorkOf(request).StartsWith("You lead a team", StringComparison.Ordinal))
+            .CallTools(("create", """{ "id": "a", "title": "Parse", "reason": "plan" }""")).Reply("Planned.");
+        model.When(request => ScriptedModelProvider.WorkOf(request).StartsWith("Every task is done", StringComparison.Ordinal)).Reply("Parsed.");
+        model.When(request => ScriptedModelProvider.WorkOf(request).Contains("Do task a,", StringComparison.Ordinal))
+            .CallTools(("ask", """{ "question": "Tabs or spaces?" }""")).CallTools(("submit", """{ "id": "a" }""")).Reply("Submitted.");
+
+        var run = sof.RunAsync("run", "--agent", "team", "--input", "Write a parser.");
+        await sof.Out.WaitForAsync("#1 developer[1] asks: Tabs or spaces?", Ct);
+        sof.In.Type("pause");
+        sof.In.Type("tell developer[1] Keep it short.");
+        sof.In.Type("tell developer[9] Hello.");
+        await sof.Out.WaitForAsync("error: Run ", Ct);
+        sof.In.Type("answer 1 Tabs.");
+        sof.In.Type("resume");
+        var (exitCode, output, _) = await run;
+
+        Assert.Equal(ExitCodes.Success, exitCode);
+        Assert.Contains("[developer[1]] working: task:a", output, StringComparison.Ordinal);
+        Assert.Contains("[developer[1]] finished", output, StringComparison.Ordinal);
+        Assert.Contains("error: Run ", output, StringComparison.Ordinal);
+        var developer = model.Requests.Last(request => ScriptedModelProvider.WorkOf(request).Contains("Do task a,", StringComparison.Ordinal)).History;
+        Assert.Contains(Message.User("<message from=\"owner\">\nKeep it short.\n</message>"), developer);
+        Assert.DoesNotContain(model.Requests.Where(request => !ScriptedModelProvider.WorkOf(request).Contains("Do task a,", StringComparison.Ordinal)),
+            request => request.History.Contains(Message.User("<message from=\"owner\">\nKeep it short.\n</message>")));
+    }
+
     [Fact]
     public async Task A_provider_this_build_does_not_have_is_reported()
     {

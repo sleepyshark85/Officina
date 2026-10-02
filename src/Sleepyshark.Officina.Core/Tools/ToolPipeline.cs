@@ -90,6 +90,9 @@ public sealed class ToolPipeline
         set => permissionMode = Enum.IsDefined(value) ? value : throw new ArgumentOutOfRangeException(nameof(value));
     }
 
+    /// <summary>Delivers a message from the agent of the context to another agent of its team; it returns why it cannot, or null (TEAM-06).</summary>
+    internal Func<ToolContext, string, string, CancellationToken, ValueTask<string?>>? Messages { get; set; }
+
     /// <summary>Who answers approvals, questions and sign-offs, by their deadline.</summary>
     internal OwnerChannel Owner { get; }
 
@@ -109,7 +112,7 @@ public sealed class ToolPipeline
 
     /// <summary>The project memory the agent of <paramref name="context"/> acts on; null when project memory is off.</summary>
     internal ProjectMemory? Memory(ToolContext context, bool owner = false) => options.Capabilities.ProjectMemory is { Enabled: true } memory
-        ? new ProjectMemory(storage.Memory, context.Caller.Tenant, ProjectMemory.ScopeOf(memory, options.Project, context.Caller), memory, time, context.Agent, owner)
+        ? new ProjectMemory(storage.Memory, context.Caller.Tenant, ProjectMemory.ScopeOf(memory, options.Project, context.Caller), memory, time, context.AgentId, owner, context.Lead)
         : null;
 
     /// <summary>The run's task board as the agent of <paramref name="context"/> acts on it; null when the task board is off.</summary>
@@ -244,7 +247,9 @@ public sealed class ToolPipeline
         var (result, detail) = tool.Implementation is AskOwnerTool
             ? (await AskQuestionAsync(context, arguments, ct).ConfigureAwait(false), null)
             : await InvokeAsync(
-                tool, new ToolCall(real ? context.Masker!.Restore(arguments) : arguments, context.Caller, key, secrets, record, board, PublishAsync) { Agent = context.Agent, Memory = Memory(context) }, ct).ConfigureAwait(false);
+                tool, new ToolCall(real ? context.Masker!.Restore(arguments) : arguments, context.Caller, key, secrets, record, board, PublishAsync) {
+                    Agent = context.AgentId, Memory = Memory(context), Send = Messages is { } send ? (to, text, token) => send(context, to, text, token) : null,
+                }, ct).ConfigureAwait(false);
         detail = detail is null || masker is null ? detail : masker.Mask(detail);
         if (tool.Options.Untrusted && result.Error is null)
         {
@@ -405,7 +410,7 @@ public sealed class ToolPipeline
             : ValueTask.CompletedTask;
 
     private AuditEntry Entry(ToolContext context, string tool, JsonElement arguments, string? decidedBy, AuditOutcome outcome) =>
-        new(context.RunId, context.Agent, context.Caller.Id, tool, secrets.Remove(arguments.GetRawText()), decidedBy, outcome,
+        new(context.RunId, context.AgentId, context.Caller.Id, tool, secrets.Remove(arguments.GetRawText()), decidedBy, outcome,
             time.GetUtcNow(), IdempotencyKey(context.RunId, tool, arguments));
 
     /// <summary>The same for the same run, tool and arguments, whatever the order of the arguments' properties (TOOL-10).</summary>

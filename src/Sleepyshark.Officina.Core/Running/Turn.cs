@@ -386,13 +386,15 @@ internal sealed class Turn
         }
 
         var summary = $"The {limit} budget is used up. Go on for another {runBudget.Cost} USD and {runBudget.Time}?";
+        var extensions = budget.RunExtensions;
         var answer = await tools.Owner.AskAsync(context, tools.Owner.Request(context, HumanRequestKind.SignOff, summary), ct).ConfigureAwait(false);
         if (answer is not { Approved: true })
         {
             return false;
         }
 
-        budget.ExtendRun();
+        // Agents of a team that ran out at the same time each asked; the owner's yes to one of them goes on for all, once.
+        budget.ExtendRun(extensions);
         return true;
     }
 

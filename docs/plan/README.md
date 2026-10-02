@@ -8,15 +8,17 @@ Last updated 2026-10-02.
 
 - **Done:** M0 spikes S00a and S00b; M1 slices S01 (walking skeleton) and S02 (configuration); S03 (tool pipeline); S04 (turn loop); S05 (context and caching); S06 (run record and output); S07 (history and conversation store); S08 (events, storage and observability); S09 (triggers and admission); S10 (MCP and knowledge); S11 (Claude provider); S12 (model gateway); S13 (loop patterns); S14 (git workspace); S15 (sandbox); S16 (human interaction and CLI); S17 (project memory); S18 (task board); S19 (checkpoints and long runs: part 1, checkpoints, resume and rollback; part 2, budgets, report and cleanup).
 - **Waiting:** the M0 design review sign-off on `REQUIREMENTS.md`, `CONFIGURATION.md` and `DESIGN.md`.
-- **Next:** S20 (team).
+- **Doing:** S20 (team): part 1, the team runs ([#22](https://github.com/sleepyshark85/Officina/issues/22)); next part 2,
+  integration and the scripted simulation, then part 3, definitions, presets, helpers and sign-offs.
+- **Next:** S20 part 2.
 - **Open follow-ups:**
   - S02 kept a `formatVersion` check, though only version 1 exists. Consider removing the setting
     until a version 2 exists (principle 13). S06 keeps `output.schema` as JSON text, and S13 too; if a later slice wants the
     reference's `{ "file": … }` form, that is a format change.
   - S02 rejects a plain-text `apiKey`, because the binder would otherwise skip it silently and
     fall back to the default secret reference. Kept on purpose.
-  - S20 runs the team pattern; S13 validates only its shape, and a team step fails until then. The condition roots
-    `checks.<name>`, `outcome` and `stopReason` (configuration reference §6, marked not built) wait for a case that needs them.
+  - S21 (from S13 and S20): the condition roots `checks.<name>`, `outcome` and `stopReason` (configuration reference §6, marked
+    not built) wait for a case that needs them; the team needed none.
   - The configuration binder adds a file's items to a list setting's default instead of replacing it, so
     `storage.unstoredEvents` set in a file keeps `textGenerated`. S06 made `context.record` unset by default to avoid it.
   - S21 makes the Claude provider an `IHistoryShortener` (CLD-06); the capability slices (S19, S20) add their switches and
@@ -31,34 +33,33 @@ Last updated 2026-10-02.
     allow list (such as Haiku 4.5 and Sonnet 5) rejects (`InvalidRequest`); the provider should send it as a user message for them. A reply the model
     gateway starts over after a mid-stream failure leaves its first text in the stored `textGenerated` events, and retries
     are not events of their own. The `baseUrl` provider setting of the reference is not built.
-  - S20 also adds pausing the whole run (RUN-06); S16 pauses one agent at a time.
-  - S20 (from S16): `sof run` gives each agent one working copy, named `<run>-<agent>`, opened when the agent first
-    calls a `workspace.*` or `sandbox.*` tool and disposed when the run ends. S20 gives each task its own and disposes it
-    when the task ends. Nothing integrates in `sof run` before then, so the CLI shows an empty integration queue.
-  - S20 (from S16, S18 and S06): the CLI's board view (TASK-08); the command checks integration needs and the
+  - S20 part 2 (from S16): `sof run` gives each agent one working copy, named `<run>-<agent>` (an agent of a team by its id),
+    opened when the agent first calls a `workspace.*` or `sandbox.*` tool and disposed when the run ends. Part 2 gives each
+    task its own and disposes it when the task ends. Nothing integrates in `sof run` before then, so the CLI shows an empty
+    integration queue, and a team cannot be on with the workspace.
+  - S20 part 2 (from S16, S18 and S06): the CLI's board view (TASK-08); the command checks integration needs and the
     `capabilities.workspace.baselineChecks` setting that names them (WS-02). Fan-out branches of one agent share that
-    agent's working copy while they run at the same time; S20 gives branches their own when they change files.
+    agent's working copy while they run at the same time; part 2 gives branches their own when they change files.
   - S21 (from S16): `sof config dry-run` cannot run a configuration that uses the `workspace.*` or `sandbox.*` tools. It
     should register them over the test kit's `InMemoryWorkspace` and `FakeSandbox` (CFG-12).
-  - S20 adds the plan-approval sign-off and the model's tool to hand off to a human (EGR-04). S20 adds
-    integration to `IWorkspace`, and calls `AgentRunner.CheckpointAsync` with `CheckpointPoint.Integration` after each one.
+  - S20 part 3 adds the plan-approval sign-off and the model's tool to hand off to a human (EGR-04). Part 2 adds integration
+    to `IWorkspace`, and takes a checkpoint at `CheckpointPoint.Integration` after each one.
   - S21 (from S16): when a cancelled turn outlives `run.cancelWithin`, the agent's lock is released, so its next turn
     can overlap with the left-behind one, and the left-behind turn reports zero cost.
-  - S20 (from S19): the run's budget is shared by work items only through the stored events, which are read when a run
-    resumes; work that joins a running run in the same process (a team's tasks) needs the run's budget kept per run, and the
-    agent budget per agent instance. The run's time counts only inside work items; once work joins a live run, S20 checks
-    that this still measures what RUN-05 means. Cost is broken down by agent, task, step and model; "by definition" is the same as by agent
-    until the team gives a definition several agents, so S20 adds the instance to the event (RUN-10). S20 also takes
-    the run's tokens and tool-call limits (RUN-05), which only the turn and the agent have, and the task has cost only.
-    The per-run rate limit (ING-03) counts a run's first work and each resume, in memory: the CLI resumes in a new process, so it never
-    applies there. S20 counts the work that joins a run, and S20 or S21 (whichever owns the host and serve mode) keeps it in a long-lived runner.
-    `budget.total` of a pattern's step agents does not apply (they draw on the entry agent's), and a resume counts only the entry agent's events.
+  - S20 part 1 (from S19): a team's agents share the run's budget in one process, each with its own agent level from its
+    definition's `budget.total`; the run's time is still its elapsed time inside work items, which is what RUN-05 means. Events
+    carry the agent's id, so cost is broken down by agent and by definition (RUN-10). A resumed run's agent level counts all its
+    events. The run's tokens and tool-call limits (RUN-05) stay with the turn and the agent, and the task has cost only.
+    S21 (from S19 and S20): the per-run rate limit (ING-03) counts a run's first work and each resume, in memory, and a team's
+    tasks are its own work, so nothing joins a live run from outside; the CLI resumes in a new process, so the limit never applies
+    there, and the host and serve mode keep it in a long-lived runner. `budget.total` of a pattern's step agents does not apply
+    (they draw on the entry agent's).
   - S21 runs the Windows sandbox tests once as a standard user in CI (the S00a recipe), tests the CPU
     limit on both systems with limit reporting, and proves HTTPS through the proxy (a CONNECT tunnel).
-  - S20 runs the team on the task board: it claims and assigns tasks, gives each a working copy that its checks
-    look at, integrates a task in review once verified and approved, then calls `CompleteAsync`, or `ReturnAsync` on
-    a conflict or failed baseline check (WS-03, TASK-05). A team's agents share one run, and so one board, and `team`
-    requires `taskBoard`. A failed task goes back to the lead, who retries it (only the owner can for now). S18's Notes list the rest.
+  - S20 part 1 runs the team on the task board: it claims and assigns tasks, a failed task goes back to the lead, who
+    retries it, and a verified, approved task is done. Part 2 gives each task a working copy that its checks look at,
+    integrates a task in review once verified and approved, then calls `CompleteAsync`, or `ReturnAsync` on a conflict or
+    failed baseline check (WS-03, TASK-05). S18's Notes list the rest.
   - S18 moved the SQLite format version to 3. A slice that adds a table bumps it again, unless an unmerged PR has
     already bumped it past the version on main.
   - S19 (follow-up): a resumed pattern runs again from its first step, redoing the steps already done (resume part-way);
@@ -68,8 +69,8 @@ Last updated 2026-10-02.
     masking tokens from before a crash are not restored; the host passes the `Caller` to `ResumeAsync`, because only its id and
     tenant are stored; a crashed run's branches are kept until it ends, and nothing lists runs yet.
   - S05 moved CTX-06 to S07 and CTX-07 to S06.
-  - S17 left the owner's CLI commands for memory proposals and tying `memory.review` to the lead (S20), unmasking
-    proposed text (S21); their slice files say so.
+  - S17 left the owner's CLI commands for memory proposals (S20 part 2; part 1 tied `memory.review` to the team's lead),
+    and unmasking proposed text (S21); their slice files say so.
   - S09 left parts of its requirements to the slices that add the state they need; its Notes list them
     (S06, S19, S20, and S21 for Message Batches).
   - REQUIREMENTS.md §4.3 lists masking as replaceable, but DESIGN.md §4 keeps it in Core and not replaceable in v1.
@@ -136,7 +137,7 @@ A slice is **done** when:
 | [S17](S17-project-memory.md) | Project memory | M5 | S | S05, S16 | [#19](https://github.com/sleepyshark85/Officina/issues/19) | done |
 | [S18](S18-task-board.md) | Task board | M6 | M | S06, S08 | [#20](https://github.com/sleepyshark85/Officina/issues/20) | done |
 | [S19](S19-checkpoints-long-runs.md) | Checkpoints and long runs | M6 | M ×2 | S08, S14 | [#21](https://github.com/sleepyshark85/Officina/issues/21) | done |
-| [S20](S20-team.md) | Team | M6 | M | S13, S18, S19 | [#22](https://github.com/sleepyshark85/Officina/issues/22) | todo |
+| [S20](S20-team.md) | Team | M6 | M ×3 | S13, S18, S19 | [#22](https://github.com/sleepyshark85/Officina/issues/22) | doing |
 | [S21](S21-hardening.md) | Hardening and benchmark | M7 | M | S20 | [#23](https://github.com/sleepyshark85/Officina/issues/23) | todo |
 
 ## Order

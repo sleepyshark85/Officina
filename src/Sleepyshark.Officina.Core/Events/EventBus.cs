@@ -96,7 +96,7 @@ public sealed class EventBus
 
             var next = last + 1;
             sequences[context.RunId] = next;
-            var coreEvent = new CoreEvent(context.RunId, context.Agent, context.Step, next, time.GetUtcNow(), payload);
+            var coreEvent = new CoreEvent(context.RunId, context.AgentId, context.Step, next, time.GetUtcNow(), payload);
             if (!unstored.Contains(payload.Kind))
             {
                 await log.AppendAsync(context.Caller.Tenant, coreEvent, ct).ConfigureAwait(false);

@@ -70,20 +70,43 @@ internal sealed class Budget
         parent?.Spend(iterations, toolCalls, tokens, cost);
     }
 
-    /// <summary>The owner lets the run go on past its budget: it may spend as much again (RUN-05, HITL-04).</summary>
-    public void ExtendRun()
+    /// <summary>How many times the owner has let the run go on past its budget.</summary>
+    public int RunExtensions
     {
-        if (parent is null)
+        get
         {
+            if (parent is not null)
+            {
+                return parent.RunExtensions;
+            }
+
             lock (gate)
+            {
+                return allowances - 1;
+            }
+        }
+    }
+
+    /// <summary>
+    /// The owner lets the run go on past its budget: it may spend as much again (RUN-05, HITL-04). Only once for the extensions
+    /// seen when the owner was asked, so several agents asked at once extend it once.
+    /// </summary>
+    /// <param name="seen">The run's <see cref="RunExtensions"/> when the owner was asked.</param>
+    public void ExtendRun(int seen)
+    {
+        if (parent is not null)
+        {
+            parent.ExtendRun(seen);
+            return;
+        }
+
+        lock (gate)
+        {
+            if (allowances - 1 == seen)
             {
                 allowances++;
                 warned.Clear();
             }
-        }
-        else
-        {
-            parent.ExtendRun();
         }
     }
 
@@ -137,11 +160,12 @@ internal sealed class Budget
 internal readonly record struct Spent(decimal Cost, long Tokens, int ToolCalls, TimeSpan Time, IReadOnlyCollection<string>? Warned = null)
 {
     /// <summary>
-    /// What a run and one of its agents spent, from the run's stored events: the cost and tokens of its model calls, its tool calls,
+    /// What a run and its agent spent, from the run's stored events: the cost and tokens of its model calls, its tool calls,
     /// the budget warnings given, and the time its turns ran. Time outside turns is not counted, and neither is the time between a
-    /// process dying and the run being rolled back or resumed, so a turn that never ended counts up to its last event only.
+    /// process dying and the run being rolled back or resumed, so a turn that never ended counts up to its last event only. A
+    /// run is one agent's work, its pattern's steps and its team's agents included, so the agent has spent all the run has.
     /// </summary>
-    public static (Spent Run, Spent Agent) Of(IReadOnlyList<CoreEvent> events, string agent)
+    public static (Spent Run, Spent Agent) Of(IReadOnlyList<CoreEvent> events)
     {
         var time = TimeSpan.Zero;
         var turns = 0;
@@ -161,14 +185,21 @@ internal readonly record struct Spent(decimal Cost, long Tokens, int ToolCalls, 
             turns += events[i].Payload switch { TurnStarted => 1, TurnEnded when turns > 0 => -1, _ => 0 };
         }
 
-        return (Of(events, "run's") with { Time = time }, Of(events.Where(coreEvent => coreEvent.Agent == agent), "agent's") with { Time = time });
-
-        static Spent Of(IEnumerable<CoreEvent> events, string level) => events.Aggregate(default(Spent), (spent, coreEvent) => coreEvent.Payload switch
-        {
-            ModelCallEnded call => spent with { Cost = spent.Cost + call.Cost, Tokens = spent.Tokens + call.Usage.Total },
-            ToolCallEnded => spent with { ToolCalls = spent.ToolCalls + 1 },
-            BudgetWarning warning when warning.Level == level => spent with { Warned = [.. spent.Warned ?? [], warning.Limit] },
-            _ => spent,
-        });
+        var run = Of(events, "run's") with { Time = time };
+        return (run, run with { Warned = Of(events, "agent's").Warned });
     }
+
+    /// <summary>
+    /// What one agent of a team spent, by its id, from the run's stored events, for its own budget over its turns (RUN-05). Only
+    /// its own turns draw on that budget, so its warnings are its own.
+    /// </summary>
+    public static Spent OfAgent(IReadOnlyList<CoreEvent> events, string agentId) => Of(events.Where(coreEvent => coreEvent.Agent == agentId), "agent's");
+
+    private static Spent Of(IEnumerable<CoreEvent> events, string level) => events.Aggregate(default(Spent), (spent, coreEvent) => coreEvent.Payload switch
+    {
+        ModelCallEnded call => spent with { Cost = spent.Cost + call.Cost, Tokens = spent.Tokens + call.Usage.Total },
+        ToolCallEnded => spent with { ToolCalls = spent.ToolCalls + 1 },
+        BudgetWarning warning when warning.Level == level => spent with { Warned = [.. spent.Warned ?? [], warning.Limit] },
+        _ => spent,
+    });
 }

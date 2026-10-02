@@ -23,8 +23,9 @@ public sealed class ProjectMemory
     private readonly TimeProvider time;
     private readonly string by;
     private readonly bool owner;
+    private readonly bool lead;
 
-    internal ProjectMemory(IMemoryStore store, string? tenant, string scope, ProjectMemoryOptions options, TimeProvider time, string by, bool owner = false)
+    internal ProjectMemory(IMemoryStore store, string? tenant, string scope, ProjectMemoryOptions options, TimeProvider time, string by, bool owner = false, bool lead = false)
     {
         this.store = store;
         this.tenant = tenant;
@@ -33,6 +34,7 @@ public sealed class ProjectMemory
         this.time = time;
         this.by = by;
         this.owner = owner;
+        this.lead = lead;
     }
 
     /// <summary>Which memory a caller's agents share: the project's, the caller's or the tenant's (MEM-04).</summary>
@@ -130,6 +132,7 @@ public sealed class ProjectMemory
     private string? Authority(Proposal proposal) =>
         owner ? null
         : options.ApproveBy != MemoryApprover.Lead ? "the owner decides on changes."
+        : !lead ? "only the team's lead decides on changes."
         : proposal.By == by ? "you cannot decide on your own proposal."
         : proposal.Content.Condenses ? "the owner reviews condensing."
         : null;

@@ -35,7 +35,7 @@ internal sealed class OwnerChannel(IHumanChannel human, EventBus events, TimeSpa
     }
 
     /// <summary>A request from the agent of <paramref name="context"/>, with its deadline from now.</summary>
-    public HumanRequest Request(ToolContext context, HumanRequestKind kind, string summary) => new(kind, context.Agent, summary, time.GetUtcNow() + timeout);
+    public HumanRequest Request(ToolContext context, HumanRequestKind kind, string summary) => new(kind, context.AgentId, summary, time.GetUtcNow() + timeout);
 
     /// <summary>What the agent is told when nobody answered in time.</summary>
     public string NoAnswer => $"no answer within {timeout}";

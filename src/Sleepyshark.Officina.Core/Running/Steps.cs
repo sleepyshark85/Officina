@@ -24,6 +24,7 @@ namespace Sleepyshark.Officina.Core.Running;
 /// <param name="work">The work, as admission passed it.</param>
 /// <param name="time">The clock for the run's elapsed time.</param>
 /// <param name="checkpoint">Takes a checkpoint of the run if its configuration asks for one at the point (RUN-03).</param>
+/// <param name="team">What a team needs of the runner (TEAM).</param>
 internal sealed class Steps(
     OfficinaOptions options,
     IReadOnlyDictionary<string, ILoopPattern> patterns,
@@ -33,7 +34,8 @@ internal sealed class Steps(
     ToolContext run,
     Work work,
     TimeProvider time,
-    Func<ToolContext, CheckpointPoint, CancellationToken, Task<Checkpoint?>> checkpoint)
+    Func<ToolContext, CheckpointPoint, CancellationToken, Task<Checkpoint?>> checkpoint,
+    TeamServices team)
 {
     private static readonly Dictionary<string, ILoopPattern> BuiltIn = new(StringComparer.Ordinal)
     {
@@ -50,15 +52,21 @@ internal sealed class Steps(
     /// <summary>The run's work, as admission passed it.</summary>
     public string RunInput => work.Input;
 
-    /// <summary>Does the agent's work: its turn, or its pattern, whose budget is the agent's turn budget drawn from the agent's.</summary>
+    /// <summary>
+    /// Does the agent's work: its turn, or its pattern, whose budget is the agent's turn budget drawn from the agent's. A team's
+    /// agents draw on the run's budget, each with its own: the team is the run's work.
+    /// </summary>
     public Task<StepResult> RunAsync(Budget budget, CancellationToken ct)
     {
         started = time.GetTimestamp();
         var agent = options.Agents[run.Agent];
-        return agent.Pattern.IsTurn
-            ? RunTurnAsync(run, RunInput, budget, ct)
+        return agent.Pattern.IsTurn ? RunTurnAsync(run, RunInput, budget, ct)
+            : agent.Pattern.Type == PatternOptions.Team ? new TeamRun(this, team, options, run, agent.Pattern, RunInput, budget).RunAsync(ct)
             : RunPatternAsync(run, agent.Pattern, RunInput, budget.Draw("pattern's", agent.Budget.Turn), ct);
     }
+
+    /// <summary>Publishes an event of the run.</summary>
+    public ValueTask PublishAsync(ToolContext context, EventPayload payload, CancellationToken ct) => events.PublishAsync(context, payload, ct);
 
     /// <summary>Runs a step of a pattern; it always ends in a result (REL-02).</summary>
     /// <param name="context">The pattern's agent, and the step's path.</param>
@@ -136,11 +144,6 @@ internal sealed class Steps(
 
     private async Task<StepResult> RunPatternAsync(ToolContext context, PatternOptions pattern, string input, Budget budget, CancellationToken ct)
     {
-        if (pattern.Type == PatternOptions.Team)
-        {
-            return new(StepOutcome.Failed, "the team pattern cannot run yet");
-        }
-
         var implementation = BuiltIn.GetValueOrDefault(pattern.Type) ?? patterns[pattern.ExtensionId()!];
         return await implementation.RunAsync(new PatternContext(this, context, pattern, input, budget), ct).ConfigureAwait(false);
     }

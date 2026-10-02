@@ -24,7 +24,7 @@ It lists the settings the code has today. Settings that later slices add are spe
 | `run` | section | `{"budget":{"cost":25,"time":"08:00:00"},"permissionMode":"ask","approvalTimeout":"00:30:00","cancelWithin":"00:00:10"}` | Defaults for every run. | `{"permissionMode":"ask"}` |
 | `operations` | section | `{"telemetry":{"cacheHitWarning":0.7}}` | How the engine is operated. | `{"telemetry":{"cacheHitWarning":0.7}}` |
 | `storage` | section | `{"retention":{"audit":"365.00:00:00"}}` | What is stored, and for how long. | `{"unstoredEvents":["textGenerated"],"retention":{"events":"30.00:00:00"}}` |
-| `capabilities` | section | `{"conversationStore":{"enabled":false},"knowledge":{"enabled":false},"humanInteraction":{"enabled":false},"workspace":{"enabled":false,"protectedPaths":[],"keepWorkingCopies":false},"sandbox":{"enabled":false,"allowedHosts":[],"toolchains":[],"commandRules":[],"secrets":{}},"taskBoard":{"enabled":false,"maxAttempts":3,"budget":8},"projectMemory":{"enabled":false,"scope":"project","maxTokens":20000,"approveBy":"lead"},"checkpoints":{"enabled":false}}` | Optional capabilities and their settings. All are off by default. | `{"conversationStore":{"enabled":true}}` |
+| `capabilities` | section | `{"conversationStore":{"enabled":false},"knowledge":{"enabled":false},"humanInteraction":{"enabled":false},"workspace":{"enabled":false,"protectedPaths":[],"keepWorkingCopies":false},"sandbox":{"enabled":false,"allowedHosts":[],"toolchains":[],"commandRules":[],"secrets":{}},"taskBoard":{"enabled":false,"maxAttempts":3,"budget":8},"projectMemory":{"enabled":false,"scope":"project","maxTokens":20000,"approveBy":"lead"},"checkpoints":{"enabled":false},"team":{"enabled":false}}` | Optional capabilities and their settings. All are off by default. | `{"conversationStore":{"enabled":true}}` |
 
 ## `project`
 
@@ -172,6 +172,7 @@ It lists the settings the code has today. Settings that later slices add are spe
 | `taskBoard` | section | `{"enabled":false,"maxAttempts":3,"budget":8}` | The task board: tasks with dependencies, verification checks and review, which agents change through the `tasks.*` tools and the owner at any time. | `{"enabled":true,"maxAttempts":2}` |
 | `projectMemory` | section | `{"enabled":false,"scope":"project","maxTokens":20000,"approveBy":"lead"}` | Project memory: durable instructions, conventions and decisions in every agent's stable prefix, which agents change through the `memory.*` tools once the lead or the owner approves. | `{"enabled":true,"scope":"project","approveBy":"lead"}` |
 | `checkpoints` | section | `{"enabled":false}` | Checkpoints: saved states a run resumes from after a crash and the owner can roll back to, with the working copies restored together with the run's state. | `{"enabled":true,"at":["turn","integration"]}` |
+| `team` | section | `{"enabled":false}` | The team: agents of several roles that work at once over the task board, led by one lead, with the `team.*` tools; agents use it through the `team` pattern. It needs the task board. | `{"enabled":true}` |
 
 ## `providers.<name>.apiKey`
 
@@ -210,7 +211,7 @@ It lists the settings the code has today. Settings that later slices add are spe
 | `otherwise` | text |  | router: the route taken when no route has the value. Unset: the work is handed off, as no route for a value. | `"bug"` |
 | `branches` | list | `[]` | fanOut: the steps that run in parallel on the input; with `over`, the one step that runs on each item. | `[{"agent":"reviewer"},{"agent":"tester"}]` |
 | `over` | text |  | fanOut: a list in the input, which must then be JSON, such as `input.files`. The branch runs once for each item. | `"input.files"` |
-| `maxParallel` | whole number, ≥ 1 | `4` | fanOut: the most branches that run at once. team: the most agents that work at once. | `2` |
+| `maxParallel` | whole number, ≥ 1 | `4` | fanOut: the most branches that run at once. team: the most agents, the lead included, that work at once. | `2` |
 | `combine` | `"all"`, `"firstSuccess"`, `"majority"`, `"step"` | `"all"` | fanOut: how the branches' results are combined. `all`: every branch must complete, and the output is the JSON list of their outputs; `firstSuccess`: the first to complete, and the others are stopped; `majority`: the output of a branch whose value of `on` more than half of the branches share; `step`: `combiner` combines their outputs. | `"majority"` |
 | `combiner` | section |  | fanOut with `combine: step`: the step that gets the branches' outputs and combines them. | `{"agent":"editor"}` |
 | `generate` | section |  | evaluateAndRevise: the step that produces the work. Unset: a turn of the agent itself. | `{"agent":"developer"}` |
@@ -219,8 +220,8 @@ It lists the settings the code has today. Settings that later slices add are spe
 | `planner` | section |  | planAndExecute: the step that writes the plan: structured output with a `steps` list. Unset: a turn of the agent itself. | `{"agent":"planner"}` |
 | `executor` | section |  | planAndExecute: the step that carries out each item of the plan's `steps`, in order. | `{"agent":"developer"}` |
 | `maxReplans` | whole number, ≥ 0 | `2` | planAndExecute: how many times the planner is asked for a new plan after a step does not complete, before the work is handed off. | `1` |
-| `lead` | text |  | team: the agent, by name in `agents`, that coordinates the others over the task board. | `"lead"` |
-| `roles` | named entries | `{}` | team: the agents, by name in `agents`, that can join the team, with how many of each. | `{"developer":{"max":3},"reviewer":{"max":1}}` |
+| `lead` | text |  | team: the agent, by name in `agents`, that plans the work as tasks on the board, decides on the tasks that fail, and reports. It works in turns of its own. | `"lead"` |
+| `roles` | named entries | `{}` | team: the agents, by name in `agents`, that do and review the tasks, with how many of each work at once. Each is an agent of its own, such as `developer[2]`, which works in turns of its own and keeps no history. | `{"developer":{"max":3},"reviewer":{"max":1}}` |
 
 ## `agents.<name>.context`
 
@@ -386,7 +387,7 @@ It lists the settings the code has today. Settings that later slices add are spe
 | `enabled` | boolean | `false` | Whether project memory is on: every agent's stable prefix then holds the memory, and agents propose changes with the `memory.*` tools. | `true` |
 | `scope` | `"project"`, `"owner"`, `"tenant"` | `"project"` | Whose memory it is: `project` (one per project name), `owner` (one per caller) or `tenant` (one per tenant). Agents of one definition share a prefix only within one scope. | `"project"` |
 | `maxTokens` | whole number, ≥ 1 | `20000` | The size limit, in tokens, counted as one token per four characters. A change that would take memory past it is not applied: agents propose a condensed version instead, which only the owner approves. | `20000` |
-| `approveBy` | `"lead"`, `"owner"` | `"lead"` | Who approves an agent's proposed change: `lead`, through a `builtin:memory.review` tool, which you give only to the lead's tool sets (nothing checks that yet), or `owner`, who is asked at the proposal and needs `humanInteraction`. Both memory tools are write tools, so each needs `gates` or a `gateExemption`, and under `permissionMode: ask` each call also asks the owner unless a permission rule allows it. | `"lead"` |
+| `approveBy` | `"lead"`, `"owner"` | `"lead"` | Who approves an agent's proposed change: `lead`, the lead of a team, through a `builtin:memory.review` tool, which no other agent can use (outside a team, proposals wait for the owner), or `owner`, who is asked at the proposal and needs `humanInteraction`. Both memory tools are write tools, so each needs `gates` or a `gateExemption`, and under `permissionMode: ask` each call also asks the owner unless a permission rule allows it. | `"lead"` |
 
 ## `capabilities.checkpoints`
 
