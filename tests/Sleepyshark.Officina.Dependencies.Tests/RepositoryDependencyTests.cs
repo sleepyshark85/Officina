@@ -11,6 +11,7 @@ public class RepositoryDependencyTests
         "Storage.Sqlite", "Mcp", "Providers.Claude", "Testing", "Cli",
     ];
 
+    // CLD-12, MDL-01: the SDK is used only inside the provider, and the core depends on no provider.
     [Fact]
     public void The_solution_follows_the_dependency_rules()
     {

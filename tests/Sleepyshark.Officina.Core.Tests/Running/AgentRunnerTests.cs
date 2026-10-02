@@ -15,6 +15,7 @@ public class AgentRunnerTests
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
+    // CAP-04: a stateless single-call extractor, with no capability on.
     [Fact]
     public async Task An_agent_with_only_instructions_completes_with_the_model_output()
     {
@@ -26,6 +27,7 @@ public class AgentRunnerTests
         Assert.Equal((AgentOutcome.Completed, """{"number":"A-17"}"""), (result.Outcome, result.Output));
     }
 
+    // CFG-03.
     [Fact]
     public async Task An_agent_with_only_instructions_runs_on_the_default_profile()
     {
@@ -40,6 +42,7 @@ public class AgentRunnerTests
         Assert.Equal([Message.User("Invoice A-17")], request.History);
     }
 
+    // MDL-01, MDL-03: providers are plugged in, several in one application, and each agent's slot has its own profile.
     [Fact]
     public async Task Agents_in_one_application_can_use_different_providers()
     {

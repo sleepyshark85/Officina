@@ -35,7 +35,7 @@ public class PatternTests
             (result.Handoff!.Reason, result.Handoff.Detail, result.Statistics.Iterations));
     }
 
-    // PAT-08: a step that is handed off is retried; another takes a different branch, and a step gets the inputs it declares.
+    // PAT-04, PAT-08: a step that is handed off is retried; another takes a different branch, and a step gets the inputs it declares.
     [Fact]
     public async Task A_workflow_step_is_retried_or_goes_elsewhere_by_its_outcome()
     {

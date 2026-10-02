@@ -15,6 +15,7 @@
     <Project Path="tests/Sleepyshark.Officina.Cli.Tests/Sleepyshark.Officina.Cli.Tests.csproj" />
     <Project Path="tests/Sleepyshark.Officina.Core.Tests/Sleepyshark.Officina.Core.Tests.csproj" />
     <Project Path="tests/Sleepyshark.Officina.Dependencies.Tests/Sleepyshark.Officina.Dependencies.Tests.csproj" />
+    <Project Path="tests/Sleepyshark.Officina.Load.Tests/Sleepyshark.Officina.Load.Tests.csproj" />
     <Project Path="tests/Sleepyshark.Officina.Mcp.Tests/Sleepyshark.Officina.Mcp.Tests.csproj" />
     <Project Path="tests/Sleepyshark.Officina.Mcp.TestServer/Sleepyshark.Officina.Mcp.TestServer.csproj" />
     <Project Path="tests/Sleepyshark.Officina.Providers.Claude.Tests/Sleepyshark.Officina.Providers.Claude.Tests.csproj" />

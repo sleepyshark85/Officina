@@ -180,6 +180,7 @@ public sealed class WindowsSandboxTests : IDisposable
         Assert.True(process.ExitCode.IsCompleted);
     }
 
+    // SBX-06.
     [Fact(Skip = WindowsOnly, SkipUnless = nameof(OnWindows))]
     public async Task Sandboxes_cannot_see_or_affect_each_other()
     {

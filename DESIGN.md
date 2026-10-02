@@ -333,3 +333,8 @@ Inside the boundary, use the real thing:
 
 A test that needs a mock of an internal type is a sign that the design needs a seam at a real
 boundary instead.
+
+The load and latency tests (TEST-30, `tests/Sleepyshark.Officina.Load.Tests`) run the real runner against the scripted model and
+time it at the boundaries: a wrapper around the model provider takes out the time spent inside the model, and one around storage
+times the durable writes, which LAT-01 leaves out and the tests report on their own. They run apart from the other tests, one
+at a time, and print what they measured.
