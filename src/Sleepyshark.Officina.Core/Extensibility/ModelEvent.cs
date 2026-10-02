@@ -22,10 +22,11 @@ public sealed record UsageReported(Usage Usage) : ModelEvent;
 public sealed record Stopped(StopReason Reason) : ModelEvent;
 
 /// <summary>
-/// The model gateway is trying again after a failure partway through a reply (REL-01): everything before this event is
-/// void, and the reply starts over. Usage already reported was spent and stays counted.
+/// The model gateway is trying again after a failure (REL-01), with the same model or a fallback: any reply before this
+/// event is void, and the reply starts over. Usage already reported was spent and stays counted.
 /// </summary>
-public sealed record ReplyRestarted : ModelEvent;
+/// <param name="Failure">What the failed attempt failed with.</param>
+public sealed record ReplyRestarted(ModelFailure Failure) : ModelEvent;
 
 /// <summary>
 /// The model gateway moved to a fallback profile because the one before it stayed unavailable (MDL-04). The events that

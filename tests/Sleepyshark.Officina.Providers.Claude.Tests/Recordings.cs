@@ -15,8 +15,8 @@ internal static class Recordings
     public static string Named(string name) => Path.Combine(Folder, name);
 
     /// <summary>A provider whose requests are answered from the recording, with a key that is never checked.</summary>
-    public static ClaudeProvider Replay(string path) =>
-        new(ProviderOptions.Claude, new InMemorySecretSource(new Dictionary<string, string> { ["ANTHROPIC_API_KEY"] = "test-key" }), HttpRecording.Replay(path));
+    public static ClaudeProvider Replay(string path, ProviderOptions? options = null) =>
+        new(options ?? ProviderOptions.Claude, new InMemorySecretSource(new Dictionary<string, string> { ["ANTHROPIC_API_KEY"] = "test-key" }), HttpRecording.Replay(path));
 
     public static async Task<List<ModelEvent>> StreamAsync(ClaudeProvider provider, ModelRequest request)
     {

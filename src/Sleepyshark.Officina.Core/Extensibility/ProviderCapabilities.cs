@@ -16,4 +16,10 @@ public sealed record ProviderCapabilities
 
     /// <summary>The tools the provider runs itself, by the name <c>provider:</c> sources use (TOOL-13).</summary>
     public IReadOnlySet<string> ProviderTools { get; init; } = new HashSet<string>();
+
+    /// <summary>
+    /// The provider features (<c>providers.&lt;name&gt;.features</c>) the model supports, by their setting names. A feature switched
+    /// on for a model without it is a configuration error (MDL-06).
+    /// </summary>
+    public IReadOnlySet<string> Features { get; init; } = new HashSet<string>();
 }

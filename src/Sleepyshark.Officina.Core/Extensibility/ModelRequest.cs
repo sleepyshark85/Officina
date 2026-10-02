@@ -37,6 +37,18 @@ public sealed record ModelRequest(
     public string Memory { get; init; } = "";
 
     /// <summary>
+    /// The JSON Schema the agent's final output must match, when its output is structured (OUT-02), so a provider that
+    /// constrains output natively can (CLD-06). The core checks the output against it either way.
+    /// </summary>
+    public System.Text.Json.JsonElement? OutputSchema { get; init; }
+
+    /// <summary>
+    /// Where the current turn starts in <see cref="History"/>: the messages before it are earlier turns, which a shortener may
+    /// replace; the current turn it keeps unchanged (HIST-02).
+    /// </summary>
+    public int TurnStart { get; init; }
+
+    /// <summary>
     /// Whether this request starts with exactly the content of <paramref name="previous"/>: the same prefix, and its
     /// history followed only by new messages (CTX-10). Cache boundaries may move.
     /// </summary>

@@ -21,7 +21,9 @@ public sealed record ProviderOptions
             ["claude-fable-5-1"] = new() { Input = 10m, Output = 50m, CacheRead = 0.25m, CacheWrite5m = 12.5m, CacheWrite1h = 20m },
             ["claude-opus-5-5"] = new() { Input = 4m, Output = 20m, CacheRead = 0.2m, CacheWrite5m = 5m, CacheWrite1h = 8m },
             ["claude-opus-5"] = new() { Input = 5m, Output = 25m, CacheRead = 0.5m, CacheWrite5m = 6.25m, CacheWrite1h = 10m },
+            ["claude-opus-4-8"] = new() { Input = 5m, Output = 25m, CacheRead = 0.5m, CacheWrite5m = 6.25m, CacheWrite1h = 10m },
             ["claude-sonnet-5-5"] = new() { Input = 2m, Output = 10m, CacheRead = 0.2m, CacheWrite5m = 2.5m, CacheWrite1h = 4m },
+            ["claude-sonnet-5"] = new() { Input = 2m, Output = 10m, CacheRead = 0.2m, CacheWrite5m = 2.5m, CacheWrite1h = 4m },
             ["claude-haiku-4-5"] = new() { Input = 1m, Output = 5m, CacheRead = 0.1m, CacheWrite5m = 1.25m, CacheWrite1h = 2m },
         },
     };
@@ -44,4 +46,53 @@ public sealed record ProviderOptions
         Example = "8")]
     [Range(1, int.MaxValue, ErrorMessage = "must be at least 1.")]
     public int? MaxConcurrentCalls { get; init; }
+
+    [Setting("Features of the provider's own API, each off until switched on. The `claude` provider has them all; a provider without one ignores it.",
+        Example = """{ "structuredOutput": true, "refusalFallback": true }""")]
+    public ProviderFeatures Features { get; init; } = new();
+}
+
+/// <summary>Features of a provider's own API, switched on in configuration (CLD-06).</summary>
+public sealed record ProviderFeatures
+{
+    [Setting("Whether the model's output is constrained to the agent's `output.schema` natively (Claude's `output_config.format`). The core checks the output against the schema either way. The provider may not accept every JSON Schema keyword.",
+        Example = "true")]
+    public bool StructuredOutput { get; init; }
+
+    [Setting("Whether the provider clears the results of old tool calls from what the model reads once the conversation grows long (Claude's `clear_tool_uses` context editing). The stored history keeps them.",
+        Example = "true")]
+    public bool ClearToolResults { get; init; }
+
+    [Setting("The tokens a turn may generate and read from tool results, told to the model so it paces its work (Claude's task budget, at least 20,000). It is advice to the model: the limits in `budget` are what stop a turn. Unset means none.",
+        Example = "200000")]
+    [Range(20_000, int.MaxValue, ErrorMessage = "must be at least 20000.")]
+    public int? TaskBudget { get; init; }
+
+    [Setting("Whether a call the model's safety classifiers decline is served by the fallback model the provider recommends for the refusal's category (Claude's server-side `fallbacks`, on the Claude API). Each model is priced as it serves, so every model it may use needs a price; a `modelFallback` event names it.",
+        Example = "true")]
+    public bool RefusalFallback { get; init; }
+
+    /// <summary>The setting names of the features switched on.</summary>
+    public IEnumerable<string> On()
+    {
+        if (StructuredOutput)
+        {
+            yield return "structuredOutput";
+        }
+
+        if (ClearToolResults)
+        {
+            yield return "clearToolResults";
+        }
+
+        if (TaskBudget is not null)
+        {
+            yield return "taskBudget";
+        }
+
+        if (RefusalFallback)
+        {
+            yield return "refusalFallback";
+        }
+    }
 }

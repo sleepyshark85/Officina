@@ -402,7 +402,8 @@ public sealed class AgentRunner
 
     /// <summary>
     /// MDL-06, MDL-04: the model of each agent's profile, and of each fallback of it, must support what the agent uses: the
-    /// provider tools it is offered (TOOL-13), and, for a fallback, turn-scoped messages where the profile's model has them.
+    /// provider tools it is offered (TOOL-13), the provider features switched on (CLD-06), and, for a fallback, turn-scoped
+    /// messages where the profile's model has them.
     /// </summary>
     /// <exception cref="ConfigurationException">A model does not support one of them.</exception>
     private static void ModelsSupport(OfficinaOptions options, IReadOnlyDictionary<string, IModelProvider> providers)
@@ -433,6 +434,10 @@ public sealed class AgentRunner
                     ValidationPhase.Provider, isFallback ? at : $"tools.{tool}.source",
                     $"{who}provider \"{profile.Provider}\" does not run the tool \"{options.Tools[tool].ProviderTool()}\"{(isFallback ? $" with model \"{profile.Model}\"" : "")}.",
                     $"Use a tool it runs: {string.Join(", ", capabilities.ProviderTools.Order(StringComparer.Ordinal))}.")));
+                // CLD-06: a feature switched on for the provider must be one its model has.
+                errors.AddRange(options.Providers[profile.Provider].Features.On().Where(feature => !capabilities.Features.Contains(feature)).Select(feature => new ConfigurationError(
+                    ValidationPhase.Provider, $"providers.{profile.Provider}.features.{feature}",
+                    $"{who}model \"{profile.Model}\" of agent \"{agentName}\" does not have the feature.", "Switch it off, or use a model that has it.")));
                 if (isFallback && primaryTurnScoped && !capabilities.TurnScopedMessages)
                 {
                     errors.Add(new(ValidationPhase.Provider, at, $"{who}model \"{profile.Model}\" does not take turn-scoped system messages, which the agent's model uses.",

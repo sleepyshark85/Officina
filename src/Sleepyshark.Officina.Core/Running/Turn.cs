@@ -126,7 +126,9 @@ internal sealed class Turn
         runBudget = options.Run.Budget;
         cacheHitWarning = options.Operations.Telemetry.CacheHitWarning;
         var profile = options.Models[agent.Model];
-        conversation = new Conversation(profile, [.. tools.Offered(context.Agent)], instructions, agent.Context, gateway.CapabilitiesOf(profile));
+        conversation = new Conversation(
+            profile, [.. tools.Offered(context.Agent)], instructions, agent.Context, gateway.CapabilitiesOf(profile),
+            agent.Output.Format == OutputFormat.Structured ? System.Text.Json.JsonDocument.Parse(agent.Output.Schema!).RootElement.Clone() : null);
         this.inbox = inbox;
         this.gateway = gateway;
         this.options = options;
@@ -341,7 +343,7 @@ internal sealed class Turn
             return HandOff(HandoffReason.ProviderFailure, "the input is too long for the model");
         }
 
-        ImmutableArray<Message> shortened;
+        ShortenedHistory shortened;
         try
         {
             shortened = await shortener.ShortenAsync(request, ct).ConfigureAwait(false);
@@ -352,7 +354,16 @@ internal sealed class Turn
             return HandOff(HandoffReason.ProviderFailure, $"the input is too long for the model, and shortening it failed: {exception.GetType().Name}");
         }
 
-        if (conversation.Shorten(shortened) is { } problem)
+        // COST-02: a call the shortening made is spent like any other, and stored like one, so the run's report counts it.
+        if (shortened.Usage != Usage.None)
+        {
+            var spent = Price(request.Profile)?.Cost(shortened.Usage) ?? 0m;
+            (usage, cost) = (usage + shortened.Usage, cost + spent);
+            budget.Spend(tokens: shortened.Usage.Total, cost: spent);
+            await events.PublishAsync(context, new ModelCallEnded(StopReason.Finished, shortened.Usage, spent, request.Profile.Model, context.TaskId), ct).ConfigureAwait(false);
+        }
+
+        if (conversation.Shorten(shortened.History) is { } problem)
         {
             return HandOff(HandoffReason.ProviderFailure, $"the input is too long for the model, and the shortened history {problem}");
         }
@@ -601,10 +612,11 @@ internal sealed class Turn
                     budget.Spend(toolCalls: 1);
                     await tools.AuditProviderToolAsync(context, used.Request, used.Result, ct).ConfigureAwait(false);
                     break;
-                case ReplyRestarted:
-                    // REL-01: the gateway is trying again, so what came before is void.
+                case ReplyRestarted restarted:
+                    // REL-01: the gateway is trying again, so what came before is void, and readers of the events are told.
                     reply.Clear();
                     text.Clear();
+                    await events.PublishAsync(context, new ModelCallRetried(restarted.Failure), ct).ConfigureAwait(false);
                     break;
                 case FallbackUsed fallback:
                     // MDL-04: later events, and so the cost, are the fallback's.

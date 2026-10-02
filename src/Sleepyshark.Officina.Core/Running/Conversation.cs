@@ -30,11 +30,13 @@ internal sealed class Conversation
     /// <param name="instructions">The agent's instructions, placeholders filled.</param>
     /// <param name="context">The agent's context settings.</param>
     /// <param name="capabilities">What the provider supports.</param>
-    public Conversation(ModelProfile profile, ImmutableArray<ToolDefinition> tools, string instructions, ContextOptions context, ProviderCapabilities capabilities)
+    /// <param name="outputSchema">The JSON Schema of the agent's structured output, if it has one.</param>
+    public Conversation(
+        ModelProfile profile, ImmutableArray<ToolDefinition> tools, string instructions, ContextOptions context, ProviderCapabilities capabilities, System.Text.Json.JsonElement? outputSchema = null)
     {
         historyLifetime = context.HistoryCacheLifetime;
         boundaryLimit = capabilities.CacheBoundaries;
-        prefix = new ModelRequest(profile, tools, $"{instructions}\n\n{Labels.Policy}", [], Boundaries(memory: false));
+        prefix = new ModelRequest(profile, tools, $"{instructions}\n\n{Labels.Policy}", [], Boundaries(memory: false)) { OutputSchema = outputSchema };
         turnScoped = capabilities.TurnScopedMessages;
     }
 
@@ -119,7 +121,7 @@ internal sealed class Conversation
             AddVolatile(facts);
         }
 
-        var request = prefix with { History = [.. history] };
+        var request = prefix with { History = [.. history], TurnStart = turnStart };
         if (previous is not null && !request.StartsWith(previous))
         {
             throw new InvalidOperationException("The model request changes content an earlier request sent; history is append-only.");

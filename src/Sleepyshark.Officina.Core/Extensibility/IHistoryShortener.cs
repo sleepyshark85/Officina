@@ -16,5 +16,13 @@ public interface IHistoryShortener
     /// The shortened history. The core checks it before use (HIST-02): it starts with a user message, every tool request
     /// still has its result, and it ends with the current turn, unchanged.
     /// </returns>
-    ValueTask<ImmutableArray<Message>> ShortenAsync(ModelRequest request, CancellationToken ct);
+    ValueTask<ShortenedHistory> ShortenAsync(ModelRequest request, CancellationToken ct);
+}
+
+/// <summary>A shortened history, and what a model call to shorten it used, which counts against the budgets (COST-02).</summary>
+/// <param name="History">The shortened history.</param>
+public sealed record ShortenedHistory(ImmutableArray<Message> History)
+{
+    /// <summary>The tokens a model call to shorten the history used, of the request's model; none when no call was made.</summary>
+    public Usage Usage { get; init; } = Usage.None;
 }

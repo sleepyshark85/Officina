@@ -12,7 +12,7 @@ It lists the settings the code has today. Settings that later slices add are spe
 | `extends` | list |  | Presets, as `preset:<id>`, and other files, relative to this one, that this file builds on: each a layer below it, lowest first. A list or a value here replaces theirs. Files only. | `["preset:coding-team"]` |
 | `formatVersion` | whole number | `1` | The configuration format version. Unknown versions are rejected. | `1` |
 | `project` | section | `{"values":{}}` | The project's identity, and values usable in placeholders. | `{"name":"invoice-api"}` |
-| `providers` | named entries | `{"claude":{"apiKey":{"secret":"ANTHROPIC_API_KEY"},"prices":{"claude-fable-5-1":{"input":10,"output":50,"cacheRead":0.25,"cacheWrite5m":12.5,"cacheWrite1h":20},"claude-opus-5-5":{"input":4,"output":20,"cacheRead":0.2,"cacheWrite5m":5,"cacheWrite1h":8},"claude-opus-5":{"input":5,"output":25,"cacheRead":0.5,"cacheWrite5m":6.25,"cacheWrite1h":10},"claude-sonnet-5-5":{"input":2,"output":10,"cacheRead":0.2,"cacheWrite5m":2.5,"cacheWrite1h":4},"claude-haiku-4-5":{"input":1,"output":5,"cacheRead":0.1,"cacheWrite5m":1.25,"cacheWrite1h":2}},"timeout":"00:10:00","retry":{"maxAttempts":5,"initialDelay":"00:00:01","maxDelay":"00:01:00"}}}` | Model providers, by name. | `{"claude":{"apiKey":{"secret":"ANTHROPIC_API_KEY"}}}` |
+| `providers` | named entries | `{"claude":{"apiKey":{"secret":"ANTHROPIC_API_KEY"},"prices":{"claude-fable-5-1":{"input":10,"output":50,"cacheRead":0.25,"cacheWrite5m":12.5,"cacheWrite1h":20},"claude-opus-5-5":{"input":4,"output":20,"cacheRead":0.2,"cacheWrite5m":5,"cacheWrite1h":8},"claude-opus-5":{"input":5,"output":25,"cacheRead":0.5,"cacheWrite5m":6.25,"cacheWrite1h":10},"claude-opus-4-8":{"input":5,"output":25,"cacheRead":0.5,"cacheWrite5m":6.25,"cacheWrite1h":10},"claude-sonnet-5-5":{"input":2,"output":10,"cacheRead":0.2,"cacheWrite5m":2.5,"cacheWrite1h":4},"claude-sonnet-5":{"input":2,"output":10,"cacheRead":0.2,"cacheWrite5m":2.5,"cacheWrite1h":4},"claude-haiku-4-5":{"input":1,"output":5,"cacheRead":0.1,"cacheWrite5m":1.25,"cacheWrite1h":2}},"timeout":"00:10:00","retry":{"maxAttempts":5,"initialDelay":"00:00:01","maxDelay":"00:01:00"},"features":{"structuredOutput":false,"clearToolResults":false,"refusalFallback":false}}}` | Model providers, by name. | `{"claude":{"apiKey":{"secret":"ANTHROPIC_API_KEY"}}}` |
 | `models` | named entries | `{"default":{"provider":"claude","model":"claude-opus-5-5","toolChoice":"auto","settings":{},"fallbacks":[]}}` | Model profiles, by name. Agents refer to them by name. | `{"strong":{"effort":"high"}}` |
 | `agents` | named entries | `{}` | Agent definitions, by name. | `{"extractor":{"instructions":"Extract the invoice number."}}` |
 | `toolServers` | named entries | `{}` | External tool servers (MCP), by name. Tools use their tools with `mcp:<server>/<tool>` sources. | `{"github":{"command":"github-mcp-server","args":["stdio"]}}` |
@@ -43,6 +43,7 @@ It lists the settings the code has today. Settings that later slices add are spe
 | `timeout` | time span (`hh:mm:ss` or `d.hh:mm:ss`) | `"00:10:00"` | How long to wait for the provider to answer a call, and then for each next piece of its streamed reply, as `hh:mm:ss`. A call that goes quiet for longer is given up on as a transient failure and retried. | `"00:10:00"` |
 | `retry` | section | `{"maxAttempts":5,"initialDelay":"00:00:01","maxDelay":"00:01:00"}` | How failed calls are retried, for every agent that calls this provider. | `{"maxAttempts":5,"initialDelay":"00:00:01"}` |
 | `maxConcurrentCalls` | whole number, ≥ 1 |  | The most calls to this provider in flight at once, across all agents: the account's share of the provider's rate limit. Calls over it wait their turn, the team lead's first. Unset means no limit. | `8` |
+| `features` | section | `{"structuredOutput":false,"clearToolResults":false,"refusalFallback":false}` | Features of the provider's own API, each off until switched on. The `claude` provider has them all; a provider without one ignores it. | `{"structuredOutput":true,"refusalFallback":true}` |
 
 ## `models.<name>`
 
@@ -201,6 +202,15 @@ It lists the settings the code has today. Settings that later slices add are spe
 | `maxAttempts` | whole number, ≥ 1 | `5` | How many times a call is made in all, the first included, when it fails as transient or rate-limited. 1 means no retries. When the attempts are used up, the next fallback is tried. | `5` |
 | `initialDelay` | time span (`hh:mm:ss` or `d.hh:mm:ss`) | `"00:00:01"` | How long to wait before the first retry, as `hh:mm:ss`. Each retry waits twice as long as the one before, up to `maxDelay`. If the provider asks for a longer wait, that is used instead. | `"00:00:01"` |
 | `maxDelay` | time span (`hh:mm:ss` or `d.hh:mm:ss`) | `"00:01:00"` | The longest wait the progression reaches, as `hh:mm:ss`. A wait the provider asks for is not cut short by it. | `"00:01:00"` |
+
+## `providers.<name>.features`
+
+| Setting | Allowed values | Default | Description | Example |
+|---|---|---|---|---|
+| `structuredOutput` | boolean | `false` | Whether the model's output is constrained to the agent's `output.schema` natively (Claude's `output_config.format`). The core checks the output against the schema either way. The provider may not accept every JSON Schema keyword. | `true` |
+| `clearToolResults` | boolean | `false` | Whether the provider clears the results of old tool calls from what the model reads once the conversation grows long (Claude's `clear_tool_uses` context editing). The stored history keeps them. | `true` |
+| `taskBudget` | whole number, ≥ 20000 |  | The tokens a turn may generate and read from tool results, told to the model so it paces its work (Claude's task budget, at least 20,000). It is advice to the model: the limits in `budget` are what stop a turn. Unset means none. | `200000` |
+| `refusalFallback` | boolean | `false` | Whether a call the model's safety classifiers decline is served by the fallback model the provider recommends for the refusal's category (Claude's server-side `fallbacks`, on the Claude API). Each model is priced as it serves, so every model it may use needs a price; a `modelFallback` event names it. | `true` |
 
 ## `agents.<name>.pattern`
 

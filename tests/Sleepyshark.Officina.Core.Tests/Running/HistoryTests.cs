@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.Extensions.Time.Testing;
 using Sleepyshark.Officina.Core.Configuration;
+using Sleepyshark.Officina.Core.Events;
 using Sleepyshark.Officina.Core.Extensibility;
 using Sleepyshark.Officina.Core.Memory;
 using Sleepyshark.Officina.Core.Messages;
@@ -87,6 +88,28 @@ public class HistoryTests
         Assert.Equal(["1", "one", "2", "two", "3"], kit.Model.Requests[2].History.Select(Text));
         Assert.Equal(["Summary: 1 and 2 are done.", "3"], kit.Model.Requests[3].History.Select(Text));
         Assert.Equal(["Summary: 1 and 2 are done.", "3", "three", "4"], kit.Model.Requests[4].History.Select(Text));
+    }
+
+    // COST-02, HIST-01: a model call the shortening makes is paid like any other: it counts against the budgets and in the run's
+    // cost, and is stored as a model call. The shortener is told where the current turn starts, which it keeps.
+    [Fact]
+    public async Task A_model_call_the_shortening_makes_is_counted_and_stored()
+    {
+        var summarizer = new PaidSummarizer();
+        var kit = new TestKit(
+            Configure(new() { Strategy = HistoryStrategy.Shortened, Shortening = "extension:Summarizer" }), Tools(),
+            shorteners: new Dictionary<string, IHistoryShortener> { ["Summarizer"] = summarizer });
+        kit.Model.Reply("one").Reply(TooLong).Reply("two");
+        await kit.RunAsync(Agent, "1", Ct);
+        var work = new Work(Agent, "2");
+
+        var result = await kit.Runner.RunAsync(work, Ct);
+
+        Assert.Equal((AgentOutcome.Completed, 4m), (result.Outcome, result.Statistics.Cost)); // a million input tokens of Opus 5.5
+        Assert.Equal(2, summarizer.TurnStart);
+        Assert.Contains(
+            (await kit.Storage.Events.ReadAsync(null, work.RunId, 0, Ct)).Select(coreEvent => coreEvent.Payload),
+            payload => payload is ModelCallEnded { Cost: 4m, Model: "claude-opus-5-5" });
     }
 
     // CTX-10: the call made again has no new reply, so a turn-scoped context is not sent twice.
@@ -278,5 +301,17 @@ public class HistoryTests
         public ProviderCapabilities CapabilitiesOf(string model) => ProviderCapabilities.None;
 
         public IAsyncEnumerable<ModelEvent> StreamAsync(ModelRequest request, CancellationToken ct) => throw new NotSupportedException();
+    }
+
+    /// <summary>A shortener that calls a model of its own to summarize the earlier turns, and keeps the current one.</summary>
+    private sealed class PaidSummarizer : IHistoryShortener
+    {
+        public int TurnStart { get; private set; }
+
+        public ValueTask<ShortenedHistory> ShortenAsync(ModelRequest request, CancellationToken ct)
+        {
+            TurnStart = request.TurnStart;
+            return ValueTask.FromResult(new ShortenedHistory([Message.User("Summary."), .. request.History[request.TurnStart..]]) { Usage = new Usage(1_000_000, 0, 0, 0) });
+        }
     }
 }

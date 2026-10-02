@@ -102,6 +102,21 @@ public class ModelGatewayTests
         Assert.Equal("A whole answer.", Assert.Single(result.Transcript, message => message.Role == Role.Assistant).Content.OfType<TextContent>().Single().Text);
     }
 
+    // REL-01, EVT-01: each retry is an event of its own, so a reader of the events knows the text before it in the call is void.
+    [Fact]
+    public async Task Each_retry_is_published_so_readers_know_the_text_before_it_is_void()
+    {
+        var kit = Kit(maxAttempts: 3);
+        kit.Model.Fail(ModelFailure.Transient).Fail(ModelFailure.RateLimited, null, new TextDelta("A half ")).Reply("Done.");
+        var work = new Work(Agent, "work");
+
+        await RunAsync(kit, work);
+
+        Assert.Equal(
+            [new ModelCallRetried(ModelFailure.Transient), new ModelCallRetried(ModelFailure.RateLimited)],
+            (await kit.Storage.Events.ReadAsync(null, work.RunId, 0, Ct)).Select(coreEvent => coreEvent.Payload).OfType<ModelCallRetried>());
+    }
+
     // MDL-04, TEST-16, OBS-02.
     [Fact]
     public async Task A_fallback_serves_the_call_when_the_primary_stays_unavailable_and_the_switch_is_recorded()
@@ -328,10 +343,10 @@ public class ModelGatewayTests
     }
 
     /// <summary>Runs the agent, moving the clock on to each wait as it starts; says how long it waited.</summary>
-    private static async Task<(AgentResult Result, TimeSpan Waited)> RunAsync(TestKit kit)
+    private static async Task<(AgentResult Result, TimeSpan Waited)> RunAsync(TestKit kit, Work? work = null)
     {
         var start = kit.Time.GetUtcNow();
-        var run = kit.RunAsync(Agent, "work", Ct);
+        var run = work is null ? kit.RunAsync(Agent, "work", Ct) : kit.Runner.RunAsync(work, Ct);
         while (true)
         {
             await Eventually(() => run.IsCompleted || kit.Time.Pending.Count > 0);

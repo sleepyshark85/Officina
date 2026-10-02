@@ -153,20 +153,15 @@ An unknown placeholder is an error, never an empty string.
 ```jsonc
 "providers": {
   "claude": {
-    "type": "claude",                                  // provider implementation
     "apiKey": { "secret": "ANTHROPIC_API_KEY" },
-    "baseUrl": null,                                   // optional override
     "retry": { "maxAttempts": 5, "initialDelay": "00:00:01", "maxDelay": "00:01:00" },   // REL-01, MDL-05
     "maxConcurrentCalls": null,                        // MDL-08, CLD-10: calls in flight at once, all agents together
     "timeout": "00:10:00",                             // longest silence in a call before it is retried as transient
-    "features": {                                      // provider features to use, when models support them
-      "midConversationSystemMessages": true,           // CLD-03
-      "turnScopedSystemMessages": true,                // CLD-03, CTX-10 (beta)
-      "compaction": false,                             // CLD-06, HIST-01 (beta)
-      "clearOldToolResults": false,                    // CLD-06, HIST-05 (beta)
-      "taskBudgets": false,                            // CLD-06 (beta)
-      "refusalFallback": "off",                        // CLD-06: "off" | "default" (beta)
-      "batch": true                                    // CLD-11
+    "features": {                                      // CLD-06: features of the provider's API, each off until switched on
+      "structuredOutput": false,                       // output.schema sent as the API's output format
+      "clearToolResults": false,                       // the API clears old tool results from what the model reads (beta)
+      "taskBudget": null,                              // tokens a turn may use, told to the model (beta)
+      "refusalFallback": false                         // a declined call served by the recommended fallback model (beta)
     },
     "prices": {                                        // MDL-09; overrides the provider's shipped table
       "claude-opus-5-5": { "input": 4.00, "output": 20.00, "cacheRead": 0.20,
@@ -180,8 +175,12 @@ An unknown placeholder is an error, never an empty string.
   Configured prices replace shipped ones per model, and a model with no known price fails
   validation when any cost budget is set (MDL-09).
 - Beta features are named by what they do, never by beta header. The provider maps each one to
-  whatever header is current, and it fails validation when a feature is on but the selected model
-  or platform does not support it (MDL-06).
+  whatever header is current, and a feature switched on for a model that does not have it fails
+  validation (MDL-06). Mid-conversation and turn-scoped system messages are used wherever the model
+  takes them, with no setting. History shortening by the provider (`context.history.shortening:
+  provider`) is Claude's compaction, which every current model but Haiku has (HIST-01).
+- Not built in v1: a `type` other than the provider's name, `baseUrl`, and Message Batches for the
+  batch trigger (CLD-11), so batch work runs as ordinary calls.
 - Rate limits are shared across the process automatically (MDL-08, CLD-10); there is no setting
   to switch that off. `maxConcurrentCalls` caps the calls in flight to the provider, for all agents together; calls
   over the cap wait, the team lead's first and the others in the order they came. A wait the provider asks for
