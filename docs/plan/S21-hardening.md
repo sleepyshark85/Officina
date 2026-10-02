@@ -207,6 +207,8 @@ Linux and Windows runners where they differ much:
   step after "Test" in the Windows job, as the script's help shows. It has not been run yet. Its first run should show: a run
   where every test passes exits 0, and one where a test fails exits 1; the log's `whoami /groups` has Medium Mandatory Level and
   no Administrators; the Windows tests ran, not skipped, at their expected count; and afterwards the user and the folder are gone.
+  Under PowerShell 7, `New-LocalUser` may need `Import-Module Microsoft.PowerShell.LocalAccounts -UseWindowsPowerShell`; the script
+  imports it so only when the cmdlet is missing, and the first run should show that the user is made either way.
 
 ## Notes
 

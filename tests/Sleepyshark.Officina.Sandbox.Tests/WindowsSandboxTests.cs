@@ -146,7 +146,7 @@ public sealed class WindowsSandboxTests : IDisposable
     {
         // The processor time is the whole process's, all its threads, which the limit holds together.
         var (wall, cpu) = await real.TimeWorkAsync(
-            "powershell -NoProfile -NonInteractive -Command \"$p = Get-Process -Id $PID; $c = $p.TotalProcessorTime; $w = [Diagnostics.Stopwatch]::StartNew(); " +
+            "powershell -NoProfile -NonInteractive -Command \"$p = [Diagnostics.Process]::GetCurrentProcess(); $c = $p.TotalProcessorTime; $w = [Diagnostics.Stopwatch]::StartNew(); " +
             "$i = 0; while ($i -lt 1000000) { $i++ }; $p.Refresh(); 'WALL ' + [long]$w.Elapsed.TotalMilliseconds; 'CPU ' + [long]($p.TotalProcessorTime - $c).TotalMilliseconds\"");
 
         Assert.True(cpu > TimeSpan.FromSeconds(0.3) && wall >= cpu * 1.5, $"With half a core, the work took {wall} and used {cpu} of processor time.");

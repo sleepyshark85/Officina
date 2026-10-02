@@ -36,6 +36,11 @@ if (-not (Test-Path (Join-Path $built "Sleepyshark.Officina.Sandbox.Tests.dll"))
     throw "Build the solution in $Configuration first: $built has no sandbox tests."
 }
 
+# Under PowerShell 7 the local-accounts cmdlets may need Windows PowerShell's module; Windows PowerShell has them already.
+if (-not (Get-Command New-LocalUser -ErrorAction SilentlyContinue)) {
+    Import-Module Microsoft.PowerShell.LocalAccounts -UseWindowsPowerShell
+}
+
 $user = "sofstandard"
 $root = "C:\sof-standard-user"
 $password = ConvertTo-SecureString ("Sf!" + [guid]::NewGuid().ToString("N").Substring(0, 10)) -AsPlainText -Force
@@ -44,6 +49,8 @@ try {
     # New-LocalUser takes the password as a SecureString, so it is on no command line, and it throws when the user cannot be made.
     New-LocalUser -Name $user -Password $password -AccountNeverExpires -UserMayNotChangePassword | Out-Null
     $created = $true
+    # New-LocalUser puts the account in no group; a standard user is in Users (S-1-5-32-545), which logging on needs.
+    Add-LocalGroupMember -SID S-1-5-32-545 -Member $user
     New-Item -ItemType Directory -Force "$root\temp" | Out-Null
     Copy-Item -Recurse -Force $built "$root\tests"
     # Only that user, the administrators (S-1-5-32-544) and the system (S-1-5-18) may use the folder: what it would inherit from
@@ -58,14 +65,15 @@ try {
     # temporary folder is set, as the process may get the administrator's environment, whose temporary folder that user cannot use.
     # The space before each >> keeps cmd from reading the exit code's digit as a handle number.
     $dotnet = (Get-Command dotnet).Source
-    $command = "set `"TEMP=$root\temp`" & set `"TMP=$root\temp`" & whoami /groups > `"$log`" 2>&1 & " +
+    $command = "set `"TEMP=$root\temp`" & set `"TMP=$root\temp`" & whoami /groups > `"$log`" 2>&1 & echo END OF GROUPS >> `"$log`" & " +
         "`"$dotnet`" `"$root\tests\Sleepyshark.Officina.Sandbox.Tests.dll`" -class Sleepyshark.Officina.Sandbox.Tests.WindowsSandboxTests >> `"$log`" 2>&1 " +
         "&& (echo EXIT 0 >> `"$log`") || (echo EXIT 1 >> `"$log`")"
     $credential = New-Object System.Management.Automation.PSCredential($user, $password)
     Start-Process -FilePath cmd.exe -ArgumentList "/c", $command -Credential $credential -Wait -WorkingDirectory $root -LoadUserProfile
 
     Get-Content $log
-    $text = Get-Content -Raw $log
+    # Only whoami's part of the log, so the tests' own output cannot match.
+    $text = (Get-Content -Raw $log) -split "END OF GROUPS" | Select-Object -First 1
     if ($text -notmatch "Mandatory Label\\Medium Mandatory Level" -or $text -match "BUILTIN\\Administrators") {
         Write-Error "The tests did not run as a standard user at medium integrity."
         exit 1
@@ -77,10 +85,14 @@ try {
     }
 }
 finally {
-    if ($created) {
-        Remove-LocalUser -Name $user
+    try {
+        if ($created) {
+            Remove-LocalUser -Name $user
+        }
+    }
+    finally {
+        Remove-Item -Recurse -Force $root -ErrorAction SilentlyContinue
     }
 
-    Remove-Item -Recurse -Force $root -ErrorAction SilentlyContinue
     # The user's profile folder stays until the runner is discarded; it holds nothing but what the tests left in it.
 }
