@@ -262,7 +262,7 @@ public sealed class ToolPipeline
             ? (await AskQuestionAsync(context, arguments, ct).ConfigureAwait(false), null)
             : await InvokeAsync(
                 tool, new ToolCall(real ? context.Masker!.Restore(arguments) : arguments, context.Caller, key, secrets, record, board, PublishAsync) {
-                    StartHelper = context.StartHelper, Agent = context.AgentId, Definition = context.Agent, WorkingCopy = WorkingCopyOf(context), Memory = Memory(context), Send = Messages is { } send ? (to, text, token) => send(context, to, text, token) : null,
+                    StartHelper = context.StartHelper, Agent = context.AgentId, Definition = context.Agent, WorkingCopy = WorkingCopyOf(context), Memory = Memory(context), HoldsMaskingToken = context.Masker is { } run ? run.HoldsToken : null, Send = Messages is { } send ? (to, text, token) => send(context, to, text, token) : null,
                 }, ct).ConfigureAwait(false);
         detail = detail is null || masker is null ? detail : masker.Mask(detail);
         if ((tool.Options.Untrusted && result.Error is null) || result.Untrusted)

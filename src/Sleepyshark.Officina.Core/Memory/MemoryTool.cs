@@ -57,6 +57,13 @@ internal sealed class MemoryTool : ITool
             arguments.GetProperty("subject").GetString()!, arguments.GetProperty("text").GetString()!,
             arguments.TryGetProperty("reason", out var reason) ? reason.GetString() : null,
             arguments.TryGetProperty("replaces", out var replaces) ? [.. replaces.EnumerateArray().Select(id => id.GetInt64())] : null);
+        // ING-02: a masking token names a value in this run only, and memory outlives the run and is read by every model call
+        // after it, so a proposal that holds one is refused rather than given the real value.
+        if (call.HoldsMaskingToken is { } masked && masked($"{proposal.Subject}\n{proposal.Text}\n{proposal.Reason}"))
+        {
+            return (false, "The proposal holds a masked value, such as [email-1], which stands for a real value in this run only, and memory outlives the run. Propose it without the value.");
+        }
+
         var (id, text) = await call.Memory!.ProposeAsync(proposal, ct).ConfigureAwait(false);
         if (id is null)
         {

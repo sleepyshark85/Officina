@@ -56,7 +56,7 @@ internal sealed class Turn
     private readonly bool batch;
     private readonly bool handOffToHuman;
     private readonly bool signOffToExceedRunBudget;
-    private bool warnedTask;
+    private readonly HashSet<string> warnedTask = new(StringComparer.Ordinal);
     private readonly Func<CancellationToken, Task> whilePaused;
     private readonly Func<ToolContext, string, Budget, CancellationToken, Task<AgentResult>> runHelper;
     private int helpers;
@@ -74,6 +74,7 @@ internal sealed class Turn
     private int toolCalls;
     private int withoutProgress;
     private int outputAttempts;
+    private readonly Lock spending = new();
     private Usage usage = Usage.None;
     private decimal cost;
     private string lastText = "";
@@ -166,9 +167,9 @@ internal sealed class Turn
         await StartMemoryAsync(history.Strategy == HistoryStrategy.LastTurns ? null : (earlier.Count > 0 ? earlier[^1] : null), ct).ConfigureAwait(false);
         conversation.Add(Message.User(work));
         var result = await RunTurnAsync(ct).ConfigureAwait(false);
-        if (task is not null && cost > 0)
+        if (task is not null)
         {
-            await board!.ChargeAsync(cost, ct).ConfigureAwait(false); // TASK-09
+            await board!.ChargeAsync(Spending, ct).ConfigureAwait(false); // TASK-09, RUN-05
         }
 
         if (history.Strategy != HistoryStrategy.None)
@@ -307,6 +308,18 @@ internal sealed class Turn
         return new AgentResult(outcome, output, statistics, conversation.History, [.. cacheWarnings], [.. entries], [.. artifacts], handoff?.Invoke());
     }
 
+    /// <summary>
+    /// What the turn has used so far, read from another thread: the turn of a run whose result is given while the turn is still
+    /// running, because it did not stop within <c>run.cancelWithin</c>.
+    /// </summary>
+    public TurnStatistics SoFar()
+    {
+        lock (spending)
+        {
+            return new(iterations, toolCalls, usage, cost, Elapsed);
+        }
+    }
+
     /// <summary>Time since the turn started; zero for a turn cancelled before it started.</summary>
     private TimeSpan Elapsed => started is { } at ? time.GetElapsedTime(at) : TimeSpan.Zero;
 
@@ -370,7 +383,11 @@ internal sealed class Turn
         if (shortened.Usage != Usage.None)
         {
             var spent = Price(request.Profile)?.Cost(shortened.Usage) ?? 0m;
-            (usage, cost) = (usage + shortened.Usage, cost + spent);
+            lock (spending)
+            {
+                (usage, cost) = (usage + shortened.Usage, cost + spent);
+            }
+
             budget.Spend(tokens: shortened.Usage.Total, cost: spent);
             await events.PublishAsync(context, new ModelCallEnded(StopReason.Finished, shortened.Usage, spent, request.Profile.Model, context.TaskId), ct).ConfigureAwait(false);
         }
@@ -426,7 +443,11 @@ internal sealed class Turn
                     case UsageReported reported:
                         var spent = Price(served)?.Cost(reported.Usage) ?? 0m;
                         (callUsage, callCost) = (callUsage + reported.Usage, callCost + spent);
-                        (usage, cost) = (usage + reported.Usage, cost + spent);
+                        lock (spending)
+                        {
+                            (usage, cost) = (usage + reported.Usage, cost + spent);
+                        }
+
                         budget.Spend(tokens: reported.Usage.Total, cost: spent);
                         break;
                     case Stopped stopped:
@@ -485,7 +506,10 @@ internal sealed class Turn
 
     /// <summary>Which limit of the turn's, its pattern's, its task's or the run's budget is used up, if any (LOOP-06, COST-02).</summary>
     private (string Limit, bool OfRun, int Extensions)? Exhausted() =>
-        task is not null && task.Spent + cost >= task.Budget ? ("task's cost", false, 0) : budget.Exhausted();
+        task is not null && TaskBoard.UsedUp(task, options.Capabilities.TaskBoard.Budget, Spending) is { } limit ? ($"task's {limit}", false, 0) : budget.Exhausted();
+
+    /// <summary>What this turn has spent so far, which counts against its task's budget (RUN-05).</summary>
+    private TaskSpending Spending => new(cost, usage.Total, toolCalls, Elapsed);
 
     /// <summary>Publishes a warning for each limit of the turn's, its pattern's, its agent's, its task's or the run's budget that is nearly used up (EVT-01).</summary>
     private async Task WarnAsync(CancellationToken ct)
@@ -495,10 +519,12 @@ internal sealed class Turn
             await events.PublishAsync(context, new BudgetWarning(level, limit, used), ct).ConfigureAwait(false);
         }
 
-        if (task is not null && (double)((task.Spent + cost) / task.Budget) is var share && share >= Budget.WarnAt && share < 1 && !warnedTask)
+        foreach (var (limit, share) in task is null ? [] : TaskBoard.Shares(task, options.Capabilities.TaskBoard.Budget, Spending))
         {
-            warnedTask = true;
-            await events.PublishAsync(context, new BudgetWarning("task's", "cost", share), ct).ConfigureAwait(false);
+            if (share >= Budget.WarnAt && share < 1 && warnedTask.Add(limit))
+            {
+                await events.PublishAsync(context, new BudgetWarning("task's", limit, share), ct).ConfigureAwait(false);
+            }
         }
     }
 
@@ -679,7 +705,11 @@ internal sealed class Turn
                     break;
                 case ProviderToolUsed used:
                     // TOOL-13: the provider ran it, so it is audited after the fact and counts towards the budget.
-                    toolCalls++;
+                    lock (spending)
+                    {
+                        toolCalls++;
+                    }
+
                     budget.Spend(toolCalls: 1);
                     await tools.AuditProviderToolAsync(context, used.Request, used.Result, ct).ConfigureAwait(false);
                     break;
@@ -708,7 +738,11 @@ internal sealed class Turn
                 case UsageReported reported:
                     var spent = price?.Cost(reported.Usage) ?? 0m;
                     (callUsage, callCost) = (callUsage + reported.Usage, callCost + spent);
-                    (usage, cost) = (usage + reported.Usage, cost + spent);
+                    lock (spending)
+                    {
+                        (usage, cost) = (usage + reported.Usage, cost + spent);
+                    }
+
                     budget.Spend(tokens: reported.Usage.Total, cost: spent);
                     break;
                 case Stopped stopped:
@@ -778,7 +812,11 @@ internal sealed class Turn
         conversation.Add(new Message(
             Role.User, pending.Zip(results, (call, result) => new ToolResultContent(call.Id, Labels.Data($"tool:{call.Name}", result.Content), result.Error is not null))));
         pending = [];
-        toolCalls += requests.Count;
+        lock (spending)
+        {
+            toolCalls += requests.Count;
+        }
+
         budget.Spend(toolCalls: requests.Count);
         var batch = requests.Zip(results, (call, result) => new ToolAttempt(call, result)).ToList();
         var progressed = batch.Any(IsProgress);

@@ -25,7 +25,7 @@ its runs reach 90% on both systems.
 | 1 | The benchmark up to the live run: runner, scoring, report, reference solutions and the suites' validation (TEST-31) | done |
 | 2 | Load and latency tests (TEST-30: SCALE-01, SCALE-02, LAT-01, LAT-02, storage writes), SCALE-03, coverage (TEST-33), the MUST verification check | done |
 | 3 | The Claude provider's feature switches and compaction (CLD-06), and the S12 follow-ups | done |
-| 4 | The core follow-ups: a task's tokens, time and tool calls (RUN-05), step agents' `budget.total`, `config validate` and `extension:` ids, `config dry-run` with the workspace and sandbox tools, masking tokens in memory proposals, a cancelled turn that outlives `run.cancelWithin` | todo |
+| 4 | The core follow-ups: a task's tokens, time and tool calls (RUN-05), step agents' `budget.total`, `config validate` matching `sof run`, `config dry-run` with the workspace and sandbox tools, masking tokens in memory proposals, a cancelled turn that outlives `run.cancelWithin` | done |
 | 5 | The sandbox follow-ups: the CPU limit with limit reporting on both systems, HTTPS through the proxy, and the Windows tests as a standard user | todo |
 
 ## The follow-ups S21 took
@@ -40,12 +40,12 @@ has a reason under principle 13.
 | S11, S09 | CLD-11 (SHOULD): `ModelRequest.Batch` through Message Batches (MDL-10) | Not in v1: `sof`, the only v1 application, has no batch trigger. A batch call can wait up to a day, so it needs a way to hold no place in the model gateway's line meanwhile and to be priced at batch rates; both are design work for the first application that batches |
 | S12 | Operator and memory-change messages sent as a user message to models outside the allow list; a restarted reply's first text left in `textGenerated`, and retries that are not events | Built in part 3 |
 | S12 | The `baseUrl` provider setting of the configuration reference | Not in v1: `sof` calls the Claude API itself, and no case needs another address; the reference now says it is not built |
-| S20 part 1 | RUN-05: a task's tokens, time and tool calls (its budget caps its cost only) | Part 4 |
-| S20 part 1 | `budget.total` of a pattern's step agents, which draw on the entry agent's level | Part 4 |
-| S20 part 2 | `sof config validate` reports the `extension:` tools, gates and checks `sof` never registers, as `sof run` refuses them | Part 4 |
-| S16 | `sof config dry-run` with the `workspace.*` and `sandbox.*` tools over the test kit's `InMemoryWorkspace` and `FakeSandbox` (CFG-12) | Part 4 |
-| S17 | Masking tokens in text proposed for project memory: restore them or refuse the proposal | Part 4 |
-| S16 | A cancelled turn that outlives `run.cancelWithin` releases the agent's lock, so a next turn can overlap it, and reports zero cost | Part 4 |
+| S20 part 1 | RUN-05: a task's tokens, time and tool calls (its budget caps its cost only) | Built in part 4 |
+| S20 part 1 | `budget.total` of a pattern's step agents, which draw on the entry agent's level | Built in part 4 |
+| S20 part 2 | `sof config validate` reports the `extension:` tools, gates and checks `sof` never registers, as `sof run` refuses them | Built in part 4, with the provider checks too |
+| S16 | `sof config dry-run` with the `workspace.*` and `sandbox.*` tools over the test kit's `InMemoryWorkspace` and `FakeSandbox` (CFG-12) | Built in part 4 |
+| S17 | Masking tokens in text proposed for project memory: restore them or refuse the proposal | Built in part 4: refused |
+| S16 | A cancelled turn that outlives `run.cancelWithin` releases the agent's lock, so a next turn can overlap it, and reports zero cost | Built in part 4 |
 | S15 | The CPU limit tested on both systems with limit reporting; HTTPS through the proxy (a CONNECT tunnel) | Part 5 |
 | S15 | The Windows sandbox tests once as a standard user in CI (the S00a recipe) | Part 5 prepares it; the owner changes CI |
 | S20 part 1, S19 | ING-03's per-run rate limit kept across processes by a long-lived runner, with the host and serve mode | Not in v1: v1 has only the CLI, which resumes in a new process, and a team's tasks are its own work, so nothing joins a live run from outside. It comes with the host |
@@ -158,6 +158,34 @@ Linux and Windows runners where they differ much:
 - Not built, as the decisions above say: strict tools (DESIGN.md §9 says why), Message Batches (CLD-11) and `baseUrl`.
 - `sof config validate` does not yet run the provider checks that `sof run` does at start-up (provider tools, features, shortening);
   part 4 makes it.
+
+## Part 4: the core follow-ups
+
+- RUN-05: `capabilities.taskBoard.budget` is now `{ cost, tokens, toolCalls, time }` (it was the cost alone, `8`). A task keeps what its
+  turns spent of each (`BoardTask.SpentTokens`, `SpentToolCalls`, `SpentTime`); a turn checks them with its own spending before each
+  model call, warns at 80% of each, and a used-up limit ends the turn in a handoff naming it (`the task's token budget is used up`)
+  and sends the task back to the lead. Every turn on a task is charged, not only one that cost money. A task's owner-set budget is
+  still its cost; the other limits are the configuration's.
+- RUN-05: a pattern's step agent with `budget.total` has its own level over all its steps in the run, beside the levels its turns draw
+  on (`Budget.Alongside`): what it spends counts at both, either can be used up, and a resumed run starts it with what the agent had
+  spent. A team's agents keep their own levels, as before, and an agent that is the run's entry agent keeps its one level.
+- CFG-06: `sof config validate` reports what `sof run` refuses as it starts: an `extension:` tool, gate, check, knowledge source or
+  pattern `sof` does not register (`WorkspaceHost.RegistrationErrors`), and what a model's provider lacks: a provider tool, a feature,
+  turn-scoped messages for a fallback, a history shortening (`AgentRunner.ProviderErrors`, which the runner itself uses). It opens
+  nothing and calls no model. Loading a configuration does not report the extensions, as a configuration may be meant for another
+  host (the samples are).
+- CFG-12: `sof config dry-run` runs a configuration with the workspace's tools over `InMemoryWorkspace`, and the sandbox's tools, its
+  command rules and the command checks over a `FakeSandbox` whose every command answers that it was not run, exit code 0.
+- ING-02: a proposal to project memory that holds a masking token (`[email-1]`, by the configured patterns' names, of any run) is
+  refused. Restoring the value was the other way, but memory goes into every later model call's prefix, so the value would reach
+  the model that masking keeps it from.
+- RUN-06, LOOP-02: a turn left behind after `run.cancelWithin` keeps the agent's lock until it stops, so the agent's next turn waits
+  for it, with no upper bound, and a warning event says so; the result counts what the turn had spent so far (`Turn.SoFar`).
+- `capabilities.taskBoard.budget` written as a number (the old form) is a configuration error that says to write `{ "cost": N }`, as
+  the binder would skip it and the default would apply. A failed task retried starts every one of its limits again.
+- `sof config validate` also reports an agent's model whose provider this build of `sof` has not.
+- Follow-up, not in v1: a cancelled turn, or one whose process died, is not charged to its task (as before for cost, now for its
+  tokens, tool calls and time too), since the charge is made with the turn's cancelled token at its end.
 
 ## Notes
 

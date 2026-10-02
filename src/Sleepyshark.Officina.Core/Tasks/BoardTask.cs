@@ -66,6 +66,15 @@ public sealed record BoardTask
     /// <summary>What its turns have cost, in USD.</summary>
     public decimal Spent { get; init; }
 
+    /// <summary>The tokens its turns have used (RUN-05).</summary>
+    public long SpentTokens { get; init; }
+
+    /// <summary>The tool calls its turns have made (RUN-05).</summary>
+    public int SpentToolCalls { get; init; }
+
+    /// <summary>The time its turns have taken (RUN-05).</summary>
+    public TimeSpan SpentTime { get; init; }
+
     public bool RequiresReview { get; init; }
 
     /// <summary>Whether its verification checks passed on the work now in review.</summary>

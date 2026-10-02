@@ -48,7 +48,9 @@ Dependency rules, enforced by the dependency check, which runs as a test in CI (
 <sub>[Open the HTML version](docs/diagrams/runtime.html)</sub>
 
 - **Agent actor.** Each agent has a mailbox (`Channel<T>`) and processes one turn at a time
-  (LOOP-02). Messages that arrive during a turn are appended at the next iteration (CTX-08).
+  (LOOP-02). Messages that arrive during a turn are appended at the next iteration (CTX-08). A turn
+  left behind after `run.cancelWithin` keeps the agent until it stops, so the agent's next turn waits
+  for it, with no upper bound; a warning event says it waits.
 - **Turn engine.** This is the only primitive (principle 4). Patterns, including the team, call
   `PatternContext.RunStepAsync(id, step, input)` and nothing else. A step is a turn of an agent, that
   agent's own pattern, or a nested pattern, so every leaf is a turn, and budgets (each drawn from its
@@ -274,8 +276,9 @@ decides the outcome.
   steps run again from the first, on the state the checkpoint holds. The budgets hold across the restart (INV-07): the resumed
   run's budget starts with the cost, tokens and tool calls summed from the stored events, and the time spent inside its work
   items, so downtime between processes does not count. Event retention shorter than a run's life would under-count it. `sof` holds a lock file for a run while it works on it, so a live run is not resumed from another process.
-- **Budgets and the report (RUN-05, RUN-10, RUN-11).** Each level draws on the one above: turn, pattern, agent, run; a task's cost
-  is checked beside them. Exhausting any ends the turn in a handoff that names the level, and the run level asks the owner. The agent level exists only when configured. A level
+- **Budgets and the report (RUN-05, RUN-10, RUN-11).** Each level draws on the one above: turn, pattern, agent, run; a task's budget
+  (its cost, and its tokens, tool calls and time when set) is checked beside them, and so is the own level of a pattern's step agent
+  with a `budget.total`, over all its steps in the run. Exhausting any ends the turn in a handoff that names the level, and the run level asks the owner. The agent level exists only when configured. A level
   announces a `budgetWarning` once at 80% of a limit. The report is built from the stored events, record and board, so it can be
   made for a run of another process; cost is summed from `modelCallEnded` events by their agent, task, step and model.
 

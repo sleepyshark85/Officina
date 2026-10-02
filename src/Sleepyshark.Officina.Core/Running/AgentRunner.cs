@@ -35,6 +35,7 @@ public sealed class AgentRunner
     private readonly Admission admission;
     private readonly Checkpointer checkpointer;
     private readonly ConcurrentDictionary<string, SemaphoreSlim> turns = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, byte> leftBehindTurns = new(StringComparer.Ordinal); // agents with a turn left behind, still running
     private readonly ConcurrentDictionary<string, ConcurrentQueue<(Sender From, string Text)>> inboxes = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, TaskCompletionSource> paused = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, CancellationTokenSource> cancels = new(StringComparer.Ordinal);
@@ -103,9 +104,15 @@ public sealed class AgentRunner
 
         this.checks = checks;
         this.knowledge = knowledge;
-        ModelsSupport(options, providers);
+        var (found, errors) = Shortening(options, providers, shorteners ?? new Dictionary<string, IHistoryShortener>());
+        errors = [.. ModelsSupport(options, providers), .. errors];
+        if (errors.Count > 0)
+        {
+            throw new ConfigurationException([.. errors.OrderBy(error => error.Phase)]);
+        }
+
         gateway = new ModelGateway(options, providers, time);
-        shortening = Shortening(options, providers, shorteners ?? new Dictionary<string, IHistoryShortener>());
+        shortening = found;
         admission = new Admission(options.Policies, time);
         checkpointer = new Checkpointer(options, storage, workspace, Events, pipeline, time);
         pipeline.Messages = DeliverAsync;
@@ -405,8 +412,7 @@ public sealed class AgentRunner
     /// provider tools it is offered (TOOL-13), the provider features switched on (CLD-06), and, for a fallback, turn-scoped
     /// messages where the profile's model has them.
     /// </summary>
-    /// <exception cref="ConfigurationException">A model does not support one of them.</exception>
-    private static void ModelsSupport(OfficinaOptions options, IReadOnlyDictionary<string, IModelProvider> providers)
+    private static List<ConfigurationError> ModelsSupport(OfficinaOptions options, IReadOnlyDictionary<string, IModelProvider> providers)
     {
         var errors = new List<ConfigurationError>();
         foreach (var (agentName, agent) in options.Agents)
@@ -446,18 +452,28 @@ public sealed class AgentRunner
             }
         }
 
-        if (errors.Count > 0)
-        {
-            throw new ConfigurationException(errors);
-        }
+        return errors;
+    }
+
+    /// <summary>
+    /// CFG-06: what a runner over these providers and shorteners would refuse in the configuration, as it is constructed: a model
+    /// that lacks a provider tool, a feature or turn-scoped messages it needs (MDL-06), and a history shortening that is not
+    /// available (HIST-01). A host's <c>config validate</c> reports them without starting a run.
+    /// </summary>
+    public static IReadOnlyList<ConfigurationError> ProviderErrors(
+        OfficinaOptions options, IReadOnlyDictionary<string, IModelProvider> providers, IReadOnlyDictionary<string, IHistoryShortener> shorteners)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(providers);
+        ArgumentNullException.ThrowIfNull(shorteners);
+        return [.. ModelsSupport(options, providers).Concat(Shortening(options, providers, shorteners).Errors).OrderBy(error => error.Phase)];
     }
 
     /// <summary>
     /// What shortens the history of each agent whose strategy is <c>shortened</c> (HIST-01): its model provider, which
     /// must be able to, or a shortener the application registers.
     /// </summary>
-    /// <exception cref="ConfigurationException">A shortening is not available.</exception>
-    private static Dictionary<string, IHistoryShortener> Shortening(
+    private static (Dictionary<string, IHistoryShortener> Found, List<ConfigurationError> Errors) Shortening(
         OfficinaOptions options, IReadOnlyDictionary<string, IModelProvider> providers, IReadOnlyDictionary<string, IHistoryShortener> shorteners)
     {
         var found = new Dictionary<string, IHistoryShortener>(StringComparer.Ordinal);
@@ -485,7 +501,7 @@ public sealed class AgentRunner
             }
         }
 
-        return errors.Count > 0 ? throw new ConfigurationException([.. errors.OrderBy(error => error.Phase)]) : found;
+        return (found, errors);
     }
 
     private void KnownAgent(string agentName)
@@ -608,10 +624,17 @@ public sealed class AgentRunner
         Activity? activity = null;
         Task<StepResult>? running = null;
         var recorded = false;
+        var leftBehind = false;
         var spent = (Run: default(Spent), Agent: default(Spent));
         StepResult ended;
         try
         {
+            if (leftBehindTurns.ContainsKey(name))
+            {
+                // LOOP-02: the wait has no limit, as two turns of one agent never run at once; it is told, so a wait is not silent.
+                await Events.PublishAsync(context, new Warning($"Agent {name} waits for its turn that was cancelled and has not stopped yet."), stop.Token).ConfigureAwait(false);
+            }
+
             await oneAtATime.WaitAsync(stop.Token).ConfigureAwait(false);
             entered = true;
             activity = Telemetry.StartTurn(context); // after the wait, so the span covers the turn only
@@ -642,7 +665,7 @@ public sealed class AgentRunner
         }
         catch (OperationCanceledException) when (stop.IsCancellationRequested)
         {
-            ended = await CancelledAsync(steps, running).ConfigureAwait(false);
+            (ended, leftBehind) = await CancelledAsync(steps, running).ConfigureAwait(false);
         }
         catch (Exception exception)
         {
@@ -650,7 +673,19 @@ public sealed class AgentRunner
         }
         finally
         {
-            if (entered)
+            if (entered && leftBehind)
+            {
+                // LOOP-02: a turn left behind still runs, so the agent's next turn waits until it has stopped.
+                leftBehindTurns[name] = 0;
+                _ = running!.ContinueWith(
+                    stopped =>
+                    {
+                        leftBehindTurns.TryRemove(name, out _);
+                        oneAtATime.Release();
+                    },
+                    CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+            }
+            else if (entered)
             {
                 oneAtATime.Release();
             }
@@ -720,7 +755,7 @@ public sealed class AgentRunner
     /// RUN-06: a cancelled run has <c>run.cancelWithin</c> to stop its model call and its tools, which stop their
     /// sandboxed processes, and ends in a handoff. One still running then is left behind, so the owner never waits longer.
     /// </summary>
-    private async Task<StepResult> CancelledAsync(Steps steps, Task<StepResult>? running)
+    private async Task<(StepResult Ended, bool LeftBehind)> CancelledAsync(Steps steps, Task<StepResult>? running)
     {
         try
         {
@@ -728,14 +763,14 @@ public sealed class AgentRunner
         }
         catch (TimeoutException)
         {
-            return steps.Cancelled($"the turn was cancelled, and did not stop within {Options.Run.CancelWithin}");
+            return (steps.Cancelled($"the turn was cancelled, and did not stop within {Options.Run.CancelWithin}"), true);
         }
         catch
         {
             // The run stopped, as it should, with its cancellation.
         }
 
-        return steps.Cancelled("the turn was cancelled");
+        return (steps.Cancelled("the turn was cancelled"), false);
     }
 
     /// <summary>A turn of the context's agent on the work, within the budget given; steps of a pattern are turns too.</summary>

@@ -106,7 +106,7 @@ public sealed class SofConfiguration
 
         bound = ProtectExtended(bound, directory, loaded);
         var configuration = new SofConfiguration(bound, errors, root, describe);
-        errors.AddRange(PlainTextSecrets(root).Select(error => error with { Location = configuration.Provided(error.Path) }));
+        errors.AddRange(PlainTextSecrets(root).Concat(ScalarTaskBudget(root)).Select(error => error with { Location = configuration.Provided(error.Path) }));
         errors.AddRange(bound.Validate().Concat(WorkspaceHost.CapabilityErrors(bound)).Select(error => error with { Location = configuration.Provided(error.Path) }));
         return configuration;
     }
@@ -174,6 +174,15 @@ public sealed class SofConfiguration
                 secret.Path.Replace(':', '.'),
                 "is a value, but it must reference a secret.",
                 "Write { \"secret\": \"NAME\" } and put the value in the secret source, such as an environment variable NAME."));
+
+    /// <summary>
+    /// The task's budget was a number, its cost, and is now an object. The binder skips a number where an object belongs, and the
+    /// default cost would apply in its place, so it is reported.
+    /// </summary>
+    private static IEnumerable<ConfigurationError> ScalarTaskBudget(IConfigurationRoot root) =>
+        root.GetSection("capabilities:taskBoard:budget") is { Value: { Length: > 0 } value }
+            ? [new ConfigurationError(ValidationPhase.Shape, "capabilities.taskBoard.budget", "is a number, but it is now an object.", $"Write {{ \"cost\": {value} }}.")]
+            : [];
 
     /// <summary>Environment variables or command-line options, as one in-memory layer that remembers what set each key.</summary>
     private static void AddText(

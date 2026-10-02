@@ -25,7 +25,7 @@ It lists the settings the code has today. Settings that later slices add are spe
 | `run` | section | `{"budget":{"cost":25,"time":"08:00:00"},"permissionMode":"ask","approvalTimeout":"00:30:00","cancelWithin":"00:00:10"}` | Defaults for every run. | `{"permissionMode":"ask"}` |
 | `operations` | section | `{"telemetry":{"cacheHitWarning":0.7}}` | How the engine is operated. | `{"telemetry":{"cacheHitWarning":0.7}}` |
 | `storage` | section | `{"retention":{"audit":"365.00:00:00"}}` | What is stored, and for how long. | `{"unstoredEvents":["textGenerated"],"retention":{"events":"30.00:00:00"}}` |
-| `capabilities` | section | `{"conversationStore":{"enabled":false},"knowledge":{"enabled":false},"humanInteraction":{"enabled":false},"workspace":{"enabled":false,"protectedPaths":[],"baselineChecks":[],"keepWorkingCopies":false},"sandbox":{"enabled":false,"allowedHosts":[],"toolchains":[],"commandRules":[],"secrets":{}},"taskBoard":{"enabled":false,"maxAttempts":3,"budget":8},"projectMemory":{"enabled":false,"scope":"project","maxTokens":20000,"approveBy":"lead"},"checkpoints":{"enabled":false},"team":{"enabled":false,"helperDepth":2,"helperCount":4}}` | Optional capabilities and their settings. All are off by default. | `{"conversationStore":{"enabled":true}}` |
+| `capabilities` | section | `{"conversationStore":{"enabled":false},"knowledge":{"enabled":false},"humanInteraction":{"enabled":false},"workspace":{"enabled":false,"protectedPaths":[],"baselineChecks":[],"keepWorkingCopies":false},"sandbox":{"enabled":false,"allowedHosts":[],"toolchains":[],"commandRules":[],"secrets":{}},"taskBoard":{"enabled":false,"maxAttempts":3,"budget":{"cost":8}},"projectMemory":{"enabled":false,"scope":"project","maxTokens":20000,"approveBy":"lead"},"checkpoints":{"enabled":false},"team":{"enabled":false,"helperDepth":2,"helperCount":4}}` | Optional capabilities and their settings. All are off by default. | `{"conversationStore":{"enabled":true}}` |
 
 ## `project`
 
@@ -174,7 +174,7 @@ It lists the settings the code has today. Settings that later slices add are spe
 | `humanInteraction` | section | `{"enabled":false}` | Human interaction: the `builtin:human.ask_owner` tool, and sign-offs where the run waits for the owner. | `{"enabled":true,"signOffs":["runBudgetExceeded"]}` |
 | `workspace` | section | `{"enabled":false,"protectedPaths":[],"baselineChecks":[],"keepWorkingCopies":false}` | The git workspace: a working copy per agent, and an integration queue into the baseline. | `{"enabled":true,"protectedPaths":[{"path":"secrets/**","access":"hidden"}]}` |
 | `sandbox` | section | `{"enabled":false,"allowedHosts":[],"toolchains":[],"commandRules":[],"secrets":{}}` | The sandbox that commands run in: no network unless allowed, and command rules. It needs the workspace. | `{"enabled":true,"allowedHosts":["api.nuget.org"]}` |
-| `taskBoard` | section | `{"enabled":false,"maxAttempts":3,"budget":8}` | The task board: tasks with dependencies, verification checks and review, which agents change through the `tasks.*` tools and the owner at any time. | `{"enabled":true,"maxAttempts":2}` |
+| `taskBoard` | section | `{"enabled":false,"maxAttempts":3,"budget":{"cost":8}}` | The task board: tasks with dependencies, verification checks and review, which agents change through the `tasks.*` tools and the owner at any time. | `{"enabled":true,"maxAttempts":2}` |
 | `projectMemory` | section | `{"enabled":false,"scope":"project","maxTokens":20000,"approveBy":"lead"}` | Project memory: durable instructions, conventions and decisions in every agent's stable prefix, which agents change through the `memory.*` tools once the lead or the owner approves. | `{"enabled":true,"scope":"project","approveBy":"lead"}` |
 | `checkpoints` | section | `{"enabled":false}` | Checkpoints: saved states a run resumes from after a crash and the owner can roll back to, with the working copies restored together with the run's state. | `{"enabled":true,"at":["turn","integration"]}` |
 | `team` | section | `{"enabled":false,"helperDepth":2,"helperCount":4}` | The team: agents of several roles that work at once over the task board, led by one lead, with the `team.*` tools; agents use it through the `team` pattern. It needs the task board. | `{"enabled":true}` |
@@ -395,7 +395,7 @@ It lists the settings the code has today. Settings that later slices add are spe
 |---|---|---|---|---|
 | `enabled` | boolean | `false` | Whether the task board is on. | `true` |
 | `maxAttempts` | whole number, ≥ 1 | `3` | How many attempts of a task may fail a check, a review or an integration before it goes back to the lead. | `3` |
-| `budget` | number, > 0 | `8` | The most a task's turns may cost, in USD, unless the owner gives the task another budget. A task whose budget is used up goes back to the lead. | `8` |
+| `budget` | section | `{"cost":8}` | What a task's turns may spend together. A task whose budget is used up goes back to the lead. | `{"cost":8,"tokens":20000000,"toolCalls":500,"time":"02:00:00"}` |
 
 ## `capabilities.projectMemory`
 
@@ -498,6 +498,15 @@ It lists the settings the code has today. Settings that later slices add are spe
 |---|---|---|---|---|
 | `match` | text |  | The command it applies to, where `*` matches any text and `?` any one character. Required. | `"dotnet test*"` |
 | `action` | `"allow"`, `"ask"`, `"deny"` | `"deny"` | What a match decides: `allow`, `ask` a human, or `deny`. | `"allow"` |
+
+## `capabilities.taskBoard.budget`
+
+| Setting | Allowed values | Default | Description | Example |
+|---|---|---|---|---|
+| `cost` | number, > 0 | `8` | The most a task's turns may cost, in USD, unless the owner gives the task another budget. | `8` |
+| `tokens` | whole number, ≥ 1 |  | The most tokens a task's turns may use: input, output, cache reads and cache writes together. Unset means no limit of its own. | `20000000` |
+| `toolCalls` | whole number, ≥ 1 |  | The most tool calls a task's turns may make. Unset means no limit of its own. | `500` |
+| `time` | time span (`hh:mm:ss` or `d.hh:mm:ss`) |  | The longest a task's turns may take together, as `hh:mm:ss`. Unset means no limit of its own. | `"02:00:00"` |
 
 ## `agents.<name>.pattern.steps[].onOutcome`
 

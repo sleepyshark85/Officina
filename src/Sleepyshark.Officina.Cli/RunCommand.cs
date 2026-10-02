@@ -100,13 +100,8 @@ internal static class RunCommand
 
         // INV-06: the API key and the tool servers' secrets are read through the secrets the runner removes from what tools return.
         var secrets = new KnownSecrets(new EnvironmentSecrets(host.Variables));
-        var providers = new Dictionary<string, IModelProvider>(host.Providers);
-        using var claude = !providers.ContainsKey(ProviderOptions.ClaudeName) && options.Providers.TryGetValue(ProviderOptions.ClaudeName, out var claudeOptions)
-            ? new ClaudeProvider(claudeOptions, secrets) : null;
-        if (claude is not null)
-        {
-            providers[ProviderOptions.ClaudeName] = claude;
-        }
+        var (providers, claude) = Providers(options, host, secrets);
+        using var _claude = claude;
 
         if (options.Models[options.Agents[name].Model].Provider is var missing && !providers.ContainsKey(missing))
         {
@@ -152,6 +147,23 @@ internal static class RunCommand
             host.Error.WriteLine($"error: {exception.Message}");
             return ExitCodes.Invalid;
         }
+    }
+
+    /// <summary>
+    /// The model providers a run uses: the host's, and the Claude provider for <c>providers.claude</c> unless the host has one. The
+    /// Claude provider is returned too, for the caller to dispose of; it reads its key from <paramref name="secrets"/> at its first call.
+    /// </summary>
+    internal static (Dictionary<string, IModelProvider> Providers, ClaudeProvider? Claude) Providers(OfficinaOptions options, SofEnvironment host, ISecretSource secrets)
+    {
+        var providers = new Dictionary<string, IModelProvider>(host.Providers);
+        var claude = !providers.ContainsKey(ProviderOptions.ClaudeName) && options.Providers.TryGetValue(ProviderOptions.ClaudeName, out var claudeOptions)
+            ? new ClaudeProvider(claudeOptions, secrets) : null;
+        if (claude is not null)
+        {
+            providers[ProviderOptions.ClaudeName] = claude;
+        }
+
+        return (providers, claude);
     }
 
     /// <summary>

@@ -150,7 +150,8 @@ public sealed partial record OfficinaOptions : IValidatableObject
         if (Capabilities.TaskBoard is { Enabled: true } board)
         {
             // INV-07: a task's budget is a budget level.
-            errors = errors.Concat(Annotations(board, "capabilities.taskBoard", ValidationPhase.Invariants));
+            errors = errors.Concat(Annotations(board, "capabilities.taskBoard", ValidationPhase.Invariants))
+                .Concat(Annotations(board.Budget, "capabilities.taskBoard.budget", ValidationPhase.Invariants));
         }
 
         if (Capabilities.Team is { Enabled: true } team)

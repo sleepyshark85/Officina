@@ -34,6 +34,13 @@ internal sealed class Masker(Regex patterns)
         }
     });
 
+    /// <summary>
+    /// Whether the text holds a token, of this run or any other, such as <c>[email-1]</c>: one of the patterns' names, a dash and a
+    /// number, in brackets.
+    /// </summary>
+    public bool HoldsToken(string text) =>
+        Regex.IsMatch(text, $@"\[({string.Join('|', patterns.GetGroupNames().Where(name => !int.TryParse(name, out _)).Select(Regex.Escape))})-\d+\]");
+
     /// <summary>The arguments with each token of this run replaced by its value, just before the tool runs.</summary>
     public JsonElement Restore(JsonElement arguments)
     {

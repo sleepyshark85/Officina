@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using Sleepyshark.Officina.Core.Checkpoints;
 using Sleepyshark.Officina.Core.Configuration;
 using Sleepyshark.Officina.Core.Extensibility;
+using Sleepyshark.Officina.Core.Running;
 using Sleepyshark.Officina.Core.Tools;
 using Sleepyshark.Officina.Sandbox;
 using Sleepyshark.Officina.Workspace;
@@ -126,6 +127,27 @@ internal sealed class WorkspaceHost : IWorkspace, IAsyncDisposable
 
     /// <summary>The sandbox of this machine (SBX-07).</summary>
     public static ISandbox MachineSandbox() => OperatingSystem.IsWindows() ? new WindowsSandbox() : new LinuxSandbox();
+
+    /// <summary>
+    /// CFG-06: the extensions <c>sof</c> registers are the workspace's and the sandbox's tools, the command rules gate and the command
+    /// checks. Any other <c>extension:</c> id the configuration names, <c>sof run</c> refuses, so <c>config validate</c> reports it.
+    /// History shorteners are left to the runner's own check (<see cref="AgentRunner.ProviderErrors"/>).
+    /// </summary>
+    public static IEnumerable<ConfigurationError> RegistrationErrors(OfficinaOptions options)
+    {
+        var tools = new WorkspaceTools(_ => throw new InvalidOperationException("Only the ids are read.")).Tools.Keys
+            .Concat([SandboxTools.Run, SandboxTools.Start, SandboxTools.Read, SandboxTools.Stop]).ToHashSet(StringComparer.Ordinal);
+        var uses = options.Tools.Where(tool => tool.Value.ExtensionId() is { } id && !tools.Contains(id)).Select(tool => ($"tools.{tool.Key}.source", "tool", tool.Value.ExtensionId()!))
+            .Concat(options.Gates.Where(gate => gate.Value.ExtensionId() is { } id && id != CommandRules.Id).Select(gate => ($"gates.{gate.Key}.use", "gate", gate.Value.ExtensionId()!)))
+            .Concat(options.Checks.Where(check => check.Value.Command is null && check.Value.ExtensionId() is not null)
+                .Select(check => ($"checks.{check.Key}.use", "check", check.Value.ExtensionId()!)))
+            .Concat(options.Knowledge.Select(source => ($"knowledge.{source.Key}.use", "knowledge source", source.Value.ExtensionId()!)))
+            .Concat(options.Agents.SelectMany(agent => agent.Value.Pattern.Nested($"agents.{agent.Key}.pattern"))
+                .Where(nested => nested.Pattern.ExtensionId() is not null).Select(nested => ($"{nested.Path}.type", "pattern", nested.Pattern.ExtensionId()!)));
+        return uses.Select(use => new ConfigurationError(
+            ValidationPhase.References, use.Item1, $"{use.Item2} extension \"{use.Item3}\" is not one sof registers.",
+            "sof registers the workspace.* and sandbox.* tools and the sandbox.commandRules gate, and runs command checks; use one of them, a built-in, or a tool server."));
+    }
 
     /// <summary>CAP-02: the tools and the gate of a capability are used only when it is on.</summary>
     public static IEnumerable<ConfigurationError> CapabilityErrors(OfficinaOptions options)

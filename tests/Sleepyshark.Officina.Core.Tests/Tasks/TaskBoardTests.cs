@@ -349,7 +349,7 @@ public class TaskBoardTests
     [Fact]
     public async Task A_task_that_runs_out_of_budget_goes_back_to_the_lead()
     {
-        var kit = Kit(new() { Enabled = true, Budget = 0.001m });
+        var kit = Kit(new() { Enabled = true, Budget = new() { Cost = 0.001m } });
         var work = new Work(Agent, "Fix the parser.") { TaskId = "t1" };
         await kit.Runner.Board(null, work.RunId).AddAsync("t1", new() { Title = "Fix the parser" }, "planned", Ct);
         kit.Model.Reply(
@@ -361,6 +361,44 @@ public class TaskBoardTests
         Assert.Equal((HandoffReason.BudgetExhausted, "the task's cost budget is used up"), (result.Handoff!.Reason, result.Handoff.Detail));
         var task = Assert.Single(await kit.Runner.Board(null, work.RunId).ReadAsync(Ct));
         Assert.Equal((TaskState.Failed, null, 0.001m), (task.State, task.Assignee, task.Spent));
+    }
+
+    // RUN-05, TASK-09: a task's budget also caps its tokens, tool calls and time, when they are set; what a turn on it spent is kept.
+    [Theory]
+    [InlineData("token")]
+    [InlineData("tool-call")]
+    [InlineData("time")]
+    public async Task A_task_that_runs_out_of_tokens_tool_calls_or_time_goes_back_to_the_lead(string limit)
+    {
+        TestKit? kit = null;
+        var budget = limit switch
+        {
+            "token" => new TaskBudget { Tokens = 500 },
+            "tool-call" => new TaskBudget { ToolCalls = 1 },
+            _ => new TaskBudget { Time = TimeSpan.FromMinutes(1) },
+        };
+        var options = Options(("claim", new() { Source = "builtin:tasks.claim" }), ("slow", Extension("slow") with { Gates = [] }));
+        options = options with { Capabilities = new() { TaskBoard = new() { Enabled = true, Budget = budget } } };
+        kit = new TestKit(options, new Dictionary<string, ITool>
+        {
+            ["slow"] = new FakeTool(ToolKind.Read, run: (_, _) => { kit!.Time.Advance(TimeSpan.FromMinutes(2)); return ValueTask.FromResult(ToolResult.Success("done")); }),
+        });
+        var work = new Work(Agent, "Fix the parser.") { TaskId = "t1" };
+        await kit.Runner.Board(null, work.RunId).AddAsync("t1", new() { Title = "Fix the parser" }, "planned", Ct);
+        kit.Model.Reply(
+            new ContentReceived(new ToolUseContent("call-0", "claim", Args("""{ "id": "t1" }"""))), new ContentReceived(new ToolUseContent("call-1", "slow", Args("{}"))),
+            new UsageReported(new Usage(1000, 0, 0, 0)), new Stopped(StopReason.WantsTools));
+
+        var result = await kit.Runner.RunAsync(work, Ct);
+
+        Assert.Equal((HandoffReason.BudgetExhausted, $"the task's {limit} budget is used up"), (result.Handoff!.Reason, result.Handoff.Detail));
+        var task = Assert.Single(await kit.Runner.Board(null, work.RunId).ReadAsync(Ct));
+        Assert.Equal((TaskState.Failed, 1000L, 2, TimeSpan.FromMinutes(2)), (task.State, task.SpentTokens, task.SpentToolCalls, task.SpentTime));
+
+        // Retried, the task starts its budget again, so it can be worked.
+        Assert.True((await kit.Runner.Board(null, work.RunId).EditAsync("t1", new() { State = TaskState.Ready }, "retry", Ct)).Accepted);
+        task = Assert.Single(await kit.Runner.Board(null, work.RunId).ReadAsync(Ct));
+        Assert.Equal((TaskState.Ready, 0m, 0L, 0, TimeSpan.Zero), (task.State, task.Spent, task.SpentTokens, task.SpentToolCalls, task.SpentTime));
     }
 
     // CTX-01, CTX-09, REC-06: the agent sees its task, the work's placeholders, and only its task's record entries.
