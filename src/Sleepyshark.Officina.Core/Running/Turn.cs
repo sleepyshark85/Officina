@@ -346,7 +346,19 @@ internal sealed class Turn
         ShortenedHistory shortened;
         try
         {
-            shortened = await shortener.ShortenAsync(request, ct).ConfigureAwait(false);
+            if (shortener is ProviderSummary)
+            {
+                if (await SummarizeAsync(request, ct).ConfigureAwait(false) is not { } summary)
+                {
+                    return HandOff(HandoffReason.ProviderFailure, "the input is too long for the model, and the model gave no summary of the earlier turns");
+                }
+
+                shortened = summary;
+            }
+            else
+            {
+                shortened = await shortener.ShortenAsync(request, ct).ConfigureAwait(false);
+            }
         }
         catch (Exception exception) when (exception is not OperationCanceledException || !ct.IsCancellationRequested)
         {
@@ -368,9 +380,68 @@ internal sealed class Turn
             return HandOff(HandoffReason.ProviderFailure, $"the input is too long for the model, and the shortened history {problem}");
         }
 
-        // The shortened history may have lost the messages that told of memory changes, so they are told again.
-        seenMemory = prefixMemory;
+        // The operator's messages in the turns it summarized stop applying once a summary takes their place, so they are told again,
+        // after the current turn; memory changes are among them.
+        foreach (var message in request.History.Take(request.TurnStart).Where(message => message is { Role: Role.System, TurnScoped: false }))
+        {
+            if (!shortened.History.Contains(message))
+            {
+                conversation.Add(message);
+            }
+        }
+
         return null;
+    }
+
+    /// <summary>
+    /// HIST-01: the provider's own shortening. The model summarizes the earlier turns, in a call through the model gateway like any
+    /// other, paid and stored like one, whether or not a summary comes back; the summary, an assistant message of the provider's own
+    /// content, takes the earlier turns' place before the current turn. Null when no summary came back.
+    /// </summary>
+    private async Task<ShortenedHistory?> SummarizeAsync(ModelRequest request, CancellationToken ct)
+    {
+        if (request.TurnStart == 0)
+        {
+            return null; // the current turn is never shortened
+        }
+
+        var earlier = request with { History = request.History[..request.TurnStart], Summarize = true };
+        var (served, summary, callUsage, callCost, stop) = (earlier.Profile, new List<Content>(), Usage.None, 0m, StopReason.Unknown);
+        try
+        {
+            await foreach (var modelEvent in gateway.StreamAsync(context.Agent, earlier, ct).WithCancellation(ct).ConfigureAwait(false))
+            {
+                switch (modelEvent)
+                {
+                    case ContentReceived received:
+                        summary.Add(received.Content);
+                        break;
+                    case ReplyRestarted restarted:
+                        summary.Clear();
+                        await events.PublishAsync(context, new ModelCallRetried(restarted.Failure), ct).ConfigureAwait(false);
+                        break;
+                    case FallbackUsed fallback:
+                        served = fallback.Profile;
+                        break;
+                    case UsageReported reported:
+                        var spent = Price(served)?.Cost(reported.Usage) ?? 0m;
+                        (callUsage, callCost) = (callUsage + reported.Usage, callCost + spent);
+                        (usage, cost) = (usage + reported.Usage, cost + spent);
+                        budget.Spend(tokens: reported.Usage.Total, cost: spent);
+                        break;
+                    case Stopped stopped:
+                        stop = stopped.Reason;
+                        break;
+                }
+            }
+        }
+        finally
+        {
+            // COST-02: what the call used counts and is stored, also when it failed or gave no summary.
+            await events.PublishAsync(context, new ModelCallEnded(stop, callUsage, callCost, served.Model, context.TaskId), CancellationToken.None).ConfigureAwait(false);
+        }
+
+        return summary.OfType<ProviderContent>().Any() ? new ShortenedHistory([new Message(Role.Assistant, summary), .. request.History[request.TurnStart..]]) : null;
     }
 
     /// <summary>
@@ -618,10 +689,19 @@ internal sealed class Turn
                     text.Clear();
                     await events.PublishAsync(context, new ModelCallRetried(restarted.Failure), ct).ConfigureAwait(false);
                     break;
+                case ToolCallsWithdrawn:
+                    // CLD-06: the provider took them back, as the model that asked for them was declined; they are not run.
+                    reply.RemoveAll(content => content is ToolUseContent);
+                    break;
                 case FallbackUsed fallback:
                     // MDL-04: later events, and so the cost, are the fallback's.
                     served = fallback.Profile;
                     price = Price(served);
+                    if (price is null)
+                    {
+                        await events.PublishAsync(context, new Warning($"Model {served.Model} has no price, so what it uses costs nothing in the budgets. Add its price to providers.{served.Provider}.prices."), ct).ConfigureAwait(false);
+                    }
+
                     Telemetry.FallbackUsed(activity, context, served.Provider, served.Model, fallback.Failure.ToString());
                     await events.PublishAsync(context, new ModelFallback(fallback.Name, served.Provider, served.Model, fallback.Failure), ct).ConfigureAwait(false);
                     break;
@@ -763,4 +843,16 @@ internal sealed class Turn
         attempts.AddRange(pending.Select(call => new ToolAttempt(new ToolRequest(call.Name, call.Arguments), cancelled)));
         pending = [];
     }
+}
+
+/// <summary>
+/// The provider's own history shortening, by a summary the model writes (<see cref="ProviderCapabilities.Summarizes"/>): the turn asks
+/// for it through the model gateway, so it is never called itself.
+/// </summary>
+internal sealed class ProviderSummary : IHistoryShortener
+{
+    public static ProviderSummary Instance { get; } = new();
+
+    public ValueTask<ShortenedHistory> ShortenAsync(ModelRequest request, CancellationToken ct) =>
+        throw new NotSupportedException("The turn asks the model for its summary through the model gateway.");
 }

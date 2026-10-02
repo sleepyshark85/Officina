@@ -92,7 +92,9 @@ internal sealed class Conversation
         var current = CurrentTurn;
         var content = shortened.IsDefault ? [] : shortened.SelectMany(message => message.Content).ToList();
         var results = content.OfType<ToolResultContent>().Select(result => result.ToolUseId).ToHashSet();
-        var problem = shortened.IsDefaultOrEmpty || shortened[0].Role != Role.User ? "does not start with a user message"
+        // A provider's summary is its own content, which may come first as an assistant message (HIST-01).
+        var problem = shortened.IsDefaultOrEmpty || !(shortened[0].Role == Role.User || shortened[0] is { Role: Role.Assistant } first && first.Content.All(content => content is ProviderContent))
+            ? "does not start with a user message or the provider's summary"
             : !content.OfType<ToolUseContent>().All(request => results.Contains(request.Id)) ? "has a tool request without its result"
             : shortened.Length < current.Length || !shortened[^current.Length..].SequenceEqual(current) ? "changes the current turn"
             : null;

@@ -29,6 +29,12 @@ public sealed record Stopped(StopReason Reason) : ModelEvent;
 public sealed record ReplyRestarted(ModelFailure Failure) : ModelEvent;
 
 /// <summary>
+/// The provider withdrew the tool calls of the reply so far, such as a model's that its safety classifiers declined before another
+/// model took over (CLD-06): they are not run, and the reply goes on without them.
+/// </summary>
+public sealed record ToolCallsWithdrawn : ModelEvent;
+
+/// <summary>
 /// The model gateway moved to a fallback profile because the one before it stayed unavailable (MDL-04). The events that
 /// follow are the fallback's.
 /// </summary>

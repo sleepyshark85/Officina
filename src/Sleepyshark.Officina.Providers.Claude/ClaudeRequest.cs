@@ -223,14 +223,19 @@ internal static class ClaudeRequest
     }
 
     /// <summary>
-    /// What of a message goes back to Claude. After a refusal fallback, the reasoning of the model that declined, before the last
-    /// <c>fallback</c> block, is left out, as the API asks; everything else goes back as it came, the block where it was.
+    /// What of a message goes back to Claude. After a refusal fallback, the API asks that what the declining model produced before the
+    /// last <c>fallback</c> block be left out, but its text and its server tool calls with their results: its reasoning, its tool calls,
+    /// and its server tool calls without a result. Everything else goes back as it came, the block where it was.
     /// </summary>
     private static IEnumerable<(Content Content, int Index)> Kept(Message message)
     {
         var lastFallback = message.Content.Select(TypeOf).ToList().LastIndexOf("fallback");
+        var answered = message.Content.OfType<ProviderContent>().Select(content => content.Data.TryGetProperty("tool_use_id", out var id) ? id.GetString() : null).ToHashSet();
         return message.Content.Select((content, index) => (content, index)).Where(kept => kept.index > lastFallback
-            || kept.content is not ReasoningContent && TypeOf(kept.content) is not ("redacted_thinking" or "connector_text"));
+            || kept.content is TextContent
+            || TypeOf(kept.content) is "fallback"
+            || kept.content is ProviderContent provider && provider.Data.TryGetProperty("tool_use_id", out _)
+            || kept.content is ProviderContent server && TypeOf(server) == "server_tool_use" && answered.Contains(server.Data.GetProperty("id").GetString()));
     }
 
     /// <summary>Reasoning goes back exactly as received (CLD-05), and content of Claude's own as the JSON it came in.</summary>

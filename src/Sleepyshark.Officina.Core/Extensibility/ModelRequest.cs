@@ -49,6 +49,12 @@ public sealed record ModelRequest(
     public int TurnStart { get; init; }
 
     /// <summary>
+    /// Whether the request asks the model to summarize <see cref="History"/> instead of replying (HIST-01), when the model
+    /// <see cref="ProviderCapabilities.Summarizes"/>. The reply's content is the summary, which takes the history's place.
+    /// </summary>
+    public bool Summarize { get; init; }
+
+    /// <summary>
     /// Whether this request starts with exactly the content of <paramref name="previous"/>: the same prefix, and its
     /// history followed only by new messages (CTX-10). Cache boundaries may move.
     /// </summary>

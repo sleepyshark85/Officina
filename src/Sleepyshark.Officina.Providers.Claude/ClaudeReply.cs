@@ -25,6 +25,7 @@ internal sealed class ClaudeReply
     private readonly StringBuilder input = new();
     private JsonObject? block;
     private string? signature;
+    private int toolUses;
     private BetaUsage? started;
 
     /// <param name="tools">The tools the request offers.</param>
@@ -80,6 +81,17 @@ internal sealed class ClaudeReply
             else if (blockDelta.Delta.TryPickInputJson(out var json))
             {
                 input.Append(json.PartialJson);
+            }
+            else if (blockDelta.Delta.TryPickCompaction(out _) && block is not null)
+            {
+                // A compaction block's summary can arrive in pieces, its opaque content too; the block goes back with all of it.
+                foreach (var field in new[] { "content", "encrypted_content" })
+                {
+                    if (blockDelta.Delta.Json.TryGetProperty(field, out var piece) && piece.ValueKind == JsonValueKind.String)
+                    {
+                        block[field] = (block[field]?.GetValue<string>() ?? "") + piece.GetString();
+                    }
+                }
             }
         }
         else if (streamEvent.TryPickContentBlockStop(out _) && block is not null)
@@ -138,8 +150,26 @@ internal sealed class ClaudeReply
             complete["input"] = Input();
         }
 
+        if (type == "compaction" && signature is not null)
+        {
+            complete["signature"] = signature;
+        }
+
+        if (type == "fallback")
+        {
+            // CLD-06: the declining model's tool calls are not run, and its server tool calls without a result are not waited for.
+            if (toolUses > 0)
+            {
+                yield return new ToolCallsWithdrawn();
+            }
+
+            toolUses = 0;
+            providerCalls.Clear();
+        }
+
         if (type == "tool_use")
         {
+            toolUses++;
             yield return new ContentReceived(new ToolUseContent(
                 complete["id"]!.GetValue<string>(), complete["name"]!.GetValue<string>(), JsonSerializer.SerializeToElement(complete["input"] ?? new JsonObject())));
             yield break;
@@ -200,8 +230,9 @@ internal sealed class ClaudeReply
                 yield return new FallbackUsed(name, profile with { Model = name }, ModelFailure.Refused);
             }
 
+            var oneHour = iteration.TryGetProperty("cache_creation", out var creation) && creation.ValueKind == JsonValueKind.Object ? Tokens(creation, "ephemeral_1h_input_tokens") : 0;
             yield return new UsageReported(new(Tokens(iteration, "input_tokens"), Tokens(iteration, "output_tokens"), Tokens(iteration, "cache_read_input_tokens"),
-                Tokens(iteration, "cache_creation_input_tokens"), 0));
+                Tokens(iteration, "cache_creation_input_tokens"), oneHour));
         }
 
         static long Tokens(JsonElement iteration, string name) =>

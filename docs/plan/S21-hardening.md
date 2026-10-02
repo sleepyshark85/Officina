@@ -129,21 +129,32 @@ Linux and Windows runners where they differ much:
   `refusalFallback` sends `fallbacks: "default"`. Each beta feature sends its header, and a recording now checks the header too.
   `ProviderCapabilities.Features` names what each model has, and a feature switched on for a model without it is a configuration
   error at start-up (MDL-06).
-- A refusal fallback: the `fallback` block stays where it came; the declining model's reasoning before it is not sent back; each
+- A refusal fallback: the `fallback` block stays where it came; what the declining model produced before it is not sent back but
+  its text and its server tool calls with their results, as the API asks; its tool calls are withdrawn (`ToolCallsWithdrawn`), so they
+  are never run; each
   attempt in `usage.iterations` is priced by its own model, the switch reported as a fallback (`ModelFailure.Refused`), so the
   `modelFallback` event and the cost by model show it, and a later call that sticky routing sends straight to the fallback model
   is priced right too. The fallback targets Opus 4.8 and Sonnet 5 join the shipped prices.
-- HIST-01: the Claude provider is an `IHistoryShortener`, by compaction on demand (beta `compact-2026-09-04`). `ModelRequest.TurnStart`
-  says where the current turn starts; the earlier turns are summarized, with the same model, instructions and tools, and the signed
-  block takes their place, alone in a user message before the current turn. Haiku has no compaction, so it is not asked.
-  `IHistoryShortener` now returns a `ShortenedHistory` with what its own model call used, which the turn spends, prices and stores as
-  a `modelCallEnded`, so a shortening's cost is in the budgets and the report (COST-02).
+- HIST-01: a model that `Summarizes` (`ProviderCapabilities`) is the provider's own shortening: the turn sends a request with
+  `Summarize` over the earlier turns (`ModelRequest.TurnStart` says where the current turn starts) through the model gateway, so the
+  call has its concurrency limit, retries and fallbacks, and is spent, priced and stored as a `modelCallEnded`, also when it fails or
+  gives no summary (COST-02). Claude's is compaction on demand (beta `compact-2026-09-04`), with the same model, instructions and tools;
+  the streamed block (`compaction_delta` pieces of its summary and opaque content, then its signature) takes the earlier turns' place
+  as an assistant message of its own, first, as documented. The operator's messages and memory changes it summarized are told again
+  after it, as the API says they stop applying. Haiku has no compaction, so an agent that has the provider shorten its history on
+  Haiku is a configuration error at start-up. A fallback model without a price is warned of. `IHistoryShortener` returns a
+  `ShortenedHistory` with what its own model call used, which the turn spends the same way.
 - S12: a model without mid-conversation system messages gets the operator's (and memory changes) as a user message starting
   `Message from the operator:`. Every retry of a model call is a `modelCallRetried` event, so a reader knows the text before it in the
   call is void; the gateway reports each retry, not only those after part of a reply.
 - Verified against the API's documentation (compaction on demand, refusals and fallback, the skill's reference for the other
   fields), not against the live API: the recordings are written from the documented shapes. The owner's first live run should
-  record one exchange of each feature (`LiveTests` shows how) before it is relied on.
+  record one exchange of each feature (`LiveTests` shows how) before it is relied on. The compaction one should also confirm two
+  points the documentation leaves open: the summary request carries the history up to the current turn, which ends with the last
+  turn's reply and so is not exactly the messages of a request already sent, as the documentation describes; and on-demand
+  compaction works on Opus 4.6 and Sonnet 4.6, which its compatibility list (not in the skill) should say.
+- Follow-up, not in v1: server tools' per-use fees (such as web search's) are priced nowhere, for a fallback attempt or any other
+  call; tokens are.
 - Not built, as the decisions above say: strict tools (DESIGN.md §9 says why), Message Batches (CLD-11) and `baseUrl`.
 - `sof config validate` does not yet run the provider checks that `sof run` does at start-up (provider tools, features, shortening);
   part 4 makes it.

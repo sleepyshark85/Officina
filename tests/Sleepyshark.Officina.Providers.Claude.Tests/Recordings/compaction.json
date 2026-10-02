@@ -23,7 +23,10 @@
           "usage": { "input_tokens": 0, "output_tokens": 0 }
         }
       },
-      { "type": "content_block_start", "index": 0, "content_block": { "type": "compaction", "content": "The entities agreed are Recipe, Ingredient and Step.", "signature": "EuYB" } },
+      { "type": "content_block_start", "index": 0, "content_block": { "type": "compaction", "content": null } },
+      { "type": "content_block_delta", "index": 0, "delta": { "type": "compaction_delta", "content": "The entities agreed are ", "encrypted_content": "Eo8" } },
+      { "type": "content_block_delta", "index": 0, "delta": { "type": "compaction_delta", "content": "Recipe, Ingredient and Step.", "encrypted_content": "Qx" } },
+      { "type": "content_block_delta", "index": 0, "delta": { "type": "signature_delta", "signature": "EuYB" } },
       { "type": "content_block_stop", "index": 0 },
       {
         "type": "message_delta",
@@ -42,7 +45,7 @@
       "tool_choice": { "type": "auto" },
       "system": [{ "type": "text", "text": "Design." }],
       "messages": [
-        { "role": "user", "content": [{ "type": "compaction", "content": "The entities agreed are Recipe, Ingredient and Step.", "signature": "EuYB" }] },
+        { "role": "assistant", "content": [{ "type": "compaction", "content": "The entities agreed are Recipe, Ingredient and Step.", "encrypted_content": "Eo8Qx", "signature": "EuYB" }] },
         { "role": "user", "content": [{ "type": "text", "text": "Now the fields of Recipe." }] }
       ]
     },

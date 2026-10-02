@@ -467,7 +467,9 @@ public sealed class AgentRunner
             var path = $"agents.{name}.context.history.shortening";
             var provider = options.Models[agent.Model].Provider;
             var id = agent.Context.History.ExtensionId();
-            if ((id is null ? providers.GetValueOrDefault(provider) as IHistoryShortener : shorteners.GetValueOrDefault(id)) is { } shortener)
+            var model = options.Models[agent.Model].Model;
+            var summarizes = id is null && providers.GetValueOrDefault(provider) is { } own && own.CapabilitiesOf(model).Summarizes;
+            if ((id is null ? (summarizes ? ProviderSummary.Instance : providers.GetValueOrDefault(provider) as IHistoryShortener) : shorteners.GetValueOrDefault(id)) is { } shortener)
             {
                 found[name] = shortener;
             }
@@ -478,7 +480,7 @@ public sealed class AgentRunner
             }
             else if (providers.ContainsKey(provider))
             {
-                errors.Add(new(ValidationPhase.Provider, path, $"provider \"{provider}\" cannot shorten history.",
+                errors.Add(new(ValidationPhase.Provider, path, $"provider \"{provider}\" cannot shorten history with model \"{model}\".",
                     "Use extension:<id> for a shortener the application registers."));
             }
         }

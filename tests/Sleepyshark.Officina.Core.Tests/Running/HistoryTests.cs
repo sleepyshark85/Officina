@@ -112,6 +112,42 @@ public class HistoryTests
             payload => payload is ModelCallEnded { Cost: 4m, Model: "claude-opus-5-5" });
     }
 
+    // HIST-01, REL-01, COST-02: when the model summarizes a conversation itself, the summary is a model call through the gateway, so a
+    // failed one is retried, and it is paid and stored. The summary, an assistant message of the provider's content, takes the earlier
+    // turns' place before the current turn, and the operator's messages it summarized are told again after it.
+    [Fact]
+    public async Task A_models_own_summary_goes_through_the_gateway_and_takes_the_earlier_turns_place()
+    {
+        var kit = new TestKit(Configure(new() { Strategy = HistoryStrategy.Shortened }), Tools(), capabilities: new() { Summarizes = true });
+        var summary = new ProviderContent(JsonDocument.Parse("""{ "type": "summary", "text": "1 is done." }""").RootElement.Clone());
+        kit.Model.Reply("one").Reply(TooLong).Fail(ModelFailure.Transient)
+            .Reply(new ContentReceived(summary), new UsageReported(new Usage(1_000_000, 0, 0, 0)), new Stopped(StopReason.Unknown)).Reply("two");
+        kit.Runner.Send(Agent, Sender.Operator, "Use SQLite.");
+        await kit.RunAsync(Agent, "1", Ct);
+        var work = new Work(Agent, "2");
+
+        var running = kit.Runner.RunAsync(work, Ct);
+        while (!running.IsCompleted)
+        {
+            await Task.Delay(10, Ct);
+            if (kit.Time.Pending.Count > 0)
+            {
+                kit.Time.Advance(kit.Time.Pending.Min()); // the gateway's wait before it tries again
+            }
+        }
+
+        var result = await running;
+        Assert.Equal((AgentOutcome.Completed, "two", 4m), (result.Outcome, result.Output, result.Statistics.Cost));
+        var asked = kit.Model.Requests[3];
+        Assert.True(asked.Summarize);
+        Assert.Equal(kit.Model.Requests[1].History[..^1], asked.History); // the earlier turns, not the current one
+        var retried = kit.Model.Requests[4].History;
+        Assert.Equal(new Message(Role.Assistant, [summary]), retried[0]);
+        Assert.Equal(["2", "<message from=\"operator\">\nUse SQLite.\n</message>"], retried.Skip(1).Select(Text));
+        Assert.Contains(
+            (await kit.Storage.Events.ReadAsync(null, work.RunId, 0, Ct)).Select(coreEvent => coreEvent.Payload), payload => payload is ModelCallRetried);
+    }
+
     // CTX-10: the call made again has no new reply, so a turn-scoped context is not sent twice.
     [Fact]
     public async Task The_call_made_again_after_shortening_keeps_one_copy_of_a_turn_scoped_context()
@@ -172,7 +208,7 @@ public class HistoryTests
 
     // HIST-02, TEST-15.
     [Theory]
-    [InlineData("does not start with a user message")]
+    [InlineData("does not start with a user message or the provider's summary")]
     [InlineData("has a tool request without its result")]
     [InlineData("changes the current turn")]
     public async Task Shortened_history_that_is_not_valid_is_rejected(string problem)
@@ -181,7 +217,7 @@ public class HistoryTests
         kit.Model.CallTools(("read", """{ "path": "a.cs" }""")).Reply("one").Reply(TooLong);
         kit.Model.Shorten(history => problem switch
         {
-            "does not start with a user message" => history[1..],
+            "does not start with a user message or the provider's summary" => history[1..],
             "has a tool request without its result" => [history[0], history[1], history[3], history[4]],
             _ => [.. history[..^1], Message.User("other work")],
         });
@@ -273,7 +309,7 @@ public class HistoryTests
         Assert.Equal(
             [
                 (ValidationPhase.References, "agents.other.context.history.shortening", "history shortener extension \"Summarizer\" is not registered."),
-                (ValidationPhase.Provider, "agents.dev.context.history.shortening", "provider \"claude\" cannot shorten history."),
+                (ValidationPhase.Provider, "agents.dev.context.history.shortening", $"provider \"claude\" cannot shorten history with model \"{options.Models[ModelProfile.DefaultName].Model}\"."),
             ],
             error.Errors.Select(error => (error.Phase, error.Path, error.Problem)));
     }

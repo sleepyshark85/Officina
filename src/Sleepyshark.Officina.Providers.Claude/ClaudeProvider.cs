@@ -13,10 +13,10 @@ namespace Sleepyshark.Officina.Providers.Claude;
 /// <summary>
 /// The Claude API (CLD-01), through the official Anthropic SDK (CLD-12), mapped as DESIGN.md §9 describes. Every call
 /// streams (CLD-09). It uses the SDK's beta API, where turn-scoped system messages are typed, and turns the SDK's own
-/// retries off, so the model gateway is the only retry policy. It shortens history with Claude's compaction (HIST-01), and
-/// uses the features its configuration switches on (CLD-06).
+/// retries off, so the model gateway is the only retry policy. A request to summarize is Claude's compaction on demand (HIST-01),
+/// and the features its configuration switches on are used (CLD-06).
 /// </summary>
-public sealed class ClaudeProvider : IModelProvider, IHistoryShortener, IDisposable
+public sealed class ClaudeProvider : IModelProvider, IDisposable
 {
     /// <summary>The models that summarize a conversation on demand, as the API's documentation lists them: all current ones but Haiku.</summary>
     private static readonly string[] Compacts =
@@ -65,6 +65,7 @@ public sealed class ClaudeProvider : IModelProvider, IHistoryShortener, IDisposa
             CacheBoundaries = 4,
             TurnScopedMessages = SystemMessages(model),
             Features = Features(model),
+            Summarizes = Compacts.Any(prefix => model.StartsWith(prefix, StringComparison.Ordinal)),
             ProviderTools = ClaudeRequest.ProviderTools.Keys.ToHashSet(StringComparer.Ordinal),
         };
     }
@@ -72,51 +73,12 @@ public sealed class ClaudeProvider : IModelProvider, IHistoryShortener, IDisposa
     public async IAsyncEnumerable<ModelEvent> StreamAsync(ModelRequest request, [EnumeratorCancellation] CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(request);
-        await foreach (var modelEvent in CallAsync(ClaudeRequest.From(request, options.Features, SystemMessages(request.Profile.Model)), request, ct).ConfigureAwait(false))
+        var system = SystemMessages(request.Profile.Model);
+        var parameters = request.Summarize ? ClaudeRequest.Compaction(request, options.Features, system) : ClaudeRequest.From(request, options.Features, system);
+        await foreach (var modelEvent in CallAsync(parameters, request, ct).ConfigureAwait(false))
         {
             yield return modelEvent;
         }
-    }
-
-    /// <summary>
-    /// HIST-01, HIST-04: Claude summarizes the earlier turns (compaction on demand), and its signed summary takes their place, in a
-    /// user message of its own before the current turn, which is kept unchanged. The summary call is paid for like any other.
-    /// </summary>
-    /// <exception cref="InvalidOperationException">There are no earlier turns, or Claude returned no summary.</exception>
-    public async ValueTask<ShortenedHistory> ShortenAsync(ModelRequest request, CancellationToken ct)
-    {
-        ArgumentNullException.ThrowIfNull(request);
-        if (!Compacts.Any(prefix => request.Profile.Model.StartsWith(prefix, StringComparison.Ordinal)))
-        {
-            throw new InvalidOperationException($"Model {request.Profile.Model} cannot summarize a conversation (compaction).");
-        }
-
-        if (request.TurnStart == 0)
-        {
-            throw new InvalidOperationException("There are no earlier turns to summarize, and the current turn is never shortened.");
-        }
-
-        var earlier = request with { History = request.History[..request.TurnStart] };
-        var (summary, usage, stop) = ((Core.Messages.Content?)null, Usage.None, StopReason.Unknown);
-        await foreach (var modelEvent in CallAsync(ClaudeRequest.Compaction(earlier, options.Features, SystemMessages(request.Profile.Model)), earlier, ct).ConfigureAwait(false))
-        {
-            switch (modelEvent)
-            {
-                case ContentReceived { Content: var content } when ClaudeRequest.TypeOf(content) == "compaction":
-                    summary = content;
-                    break;
-                case UsageReported reported:
-                    usage += reported.Usage;
-                    break;
-                case Stopped stopped:
-                    stop = stopped.Reason;
-                    break;
-            }
-        }
-
-        return summary is null
-            ? throw new InvalidOperationException($"Claude returned no summary of the earlier turns (stop reason {stop}).")
-            : new ShortenedHistory([new Message(Core.Messages.Role.User, [summary]), .. request.History[request.TurnStart..]]) { Usage = usage };
     }
 
     /// <summary>

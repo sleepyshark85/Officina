@@ -22,4 +22,10 @@ public sealed record ProviderCapabilities
     /// on for a model without it is a configuration error (MDL-06).
     /// </summary>
     public IReadOnlySet<string> Features { get; init; } = new HashSet<string>();
+
+    /// <summary>
+    /// Whether the model summarizes a conversation when a request asks it to (<see cref="ModelRequest.Summarize"/>), which is then the
+    /// provider's own history shortening (HIST-01). The summary call goes through the model gateway like any other.
+    /// </summary>
+    public bool Summarizes { get; init; }
 }

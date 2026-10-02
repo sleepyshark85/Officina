@@ -69,10 +69,12 @@ public static class HttpRecording
                 throw new InvalidOperationException($"Request {next} differs from the recording.\nRecorded: {recorded.ToJsonString(Indented)}\nSent: {body!.ToJsonString(Indented)}");
             }
 
-            // A recording made with beta features names them, and its replay checks that the same ones are asked for.
-            if (exchange["beta"] is { } beta && beta.GetValue<string>() != Beta(request))
+            // A recording names the beta features its request asked for, and none when it names none; the replay checks the same are
+            // asked for. An exchange without a request answers any, beta features too.
+            var recordedBeta = exchange["beta"]?.GetValue<string>();
+            if (exchange["request"] is not null && recordedBeta != Beta(request))
             {
-                throw new InvalidOperationException($"Request {next} asks for beta features \"{Beta(request)}\", and the recording for \"{beta}\".");
+                throw new InvalidOperationException($"Request {next} asks for beta features \"{Beta(request)}\", and the recording for \"{recordedBeta}\".");
             }
 
             return Response(exchange);
