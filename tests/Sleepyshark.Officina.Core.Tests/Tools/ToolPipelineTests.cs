@@ -264,7 +264,7 @@ public class ToolPipelineTests
         Assert.Equal([AuditOutcome.Intent, AuditOutcome.Routed], setup.Audit.Entries.Select(entry => entry.Outcome));
     }
 
-    // Row 6: audit intent, durable before the tool runs (REL-03).
+    // INV-05, REL-03; row 6: the intent is audited, durably, before the tool runs.
     [Fact]
     public async Task The_intent_is_audited_before_the_tool_runs_as_the_caller_with_the_idempotency_key()
     {

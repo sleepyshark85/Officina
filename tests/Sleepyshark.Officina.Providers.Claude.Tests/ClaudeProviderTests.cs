@@ -23,7 +23,7 @@ public sealed class ClaudeProviderTests : IDisposable
 
     public void Dispose() => File.Delete(temporary);
 
-    // CLD-01, CLD-03, CLD-05, CLD-07, CLD-09, TOOL-13: the prefix with project memory after the instructions, cache markers with
+    // MDL-02, CLD-01, CLD-03, CLD-05, CLD-07, CLD-09, TOOL-13: the prefix with project memory after the instructions, cache markers with
     // their lifetimes, a turn-scoped volatile context, an operator's system message, reasoning sent back unchanged, provider
     // limits, and the streamed reply.
     [Fact]

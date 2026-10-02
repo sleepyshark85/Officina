@@ -10,9 +10,9 @@ Prove the non-functional targets and the coding team's success rate.
 
 ## Acceptance criteria
 
-- [ ] Automated load tests measure SCALE-02, LAT-01 and LAT-02, and the targets are met.
+- [x] Automated load tests measure SCALE-02, LAT-01 and LAT-02, and the targets are met.
 - [ ] The coding team benchmark reaches at least 90% across all runs, on Linux and Windows.
-- [ ] Coverage of the core is at least 85%.
+- [x] Coverage of the core is at least 85%.
 - [ ] Every MUST is verified by a test or a recorded review (v1 acceptance).
 
 The benchmark runs against the live model, which costs money, so the owner starts it (part 1 says how). S21 stays `doing` until
@@ -23,7 +23,7 @@ its runs reach 90% on both systems.
 | Part | What | Status |
 |---|---|---|
 | 1 | The benchmark up to the live run: runner, scoring, report, reference solutions and the suites' validation (TEST-31) | done |
-| 2 | Load and latency tests (TEST-30: SCALE-01, SCALE-02, LAT-01, LAT-02, storage writes), SCALE-03, coverage (TEST-33), the MUST verification check | todo |
+| 2 | Load and latency tests (TEST-30: SCALE-01, SCALE-02, LAT-01, LAT-02, storage writes), SCALE-03, coverage (TEST-33), the MUST verification check | done |
 | 3 | The Claude provider's switches and batches (CLD-06, CLD-11), and the S12 follow-ups | todo |
 | 4 | The core follow-ups: a task's tokens, time and tool calls (RUN-05), step agents' `budget.total`, `config validate` and `extension:` ids, `config dry-run` with the workspace and sandbox tools, masking tokens in memory proposals, a cancelled turn that outlives `run.cancelWithin` | todo |
 | 5 | The sandbox follow-ups: the CPU limit with limit reporting on both systems, HTTPS through the proxy, and the Windows tests as a standard user | todo |
@@ -78,6 +78,47 @@ listing runs) and the S02 notes stay in the plan's follow-ups.
   and it may be half or twice that.
 - From the review of the protected-files fix: `protectedPaths` says to use `dir/**` for a folder's contents, as `dir` alone
   matches only the folder's own path in the file tools and at integration.
+
+## Part 2: load, latency, coverage and verification
+
+`tests/Sleepyshark.Officina.Load.Tests` runs the real runner against the scripted model, one test at a time; CI runs it in a
+step of its own after the other tests, and it prints what it measured. Measured on the development machine, and on CI's
+Linux and Windows runners where they differ much:
+
+| Requirement | Test | Target | Measured |
+|---|---|---|---|
+| LAT-01 | 50 turns of 20 model calls, each asking for a tool that reads or one that writes behind a gate, storage in memory; the time inside the model provider taken out of each iteration | p95 < 5 ms | p95 0.15 ms, p99 0.22 ms |
+| LAT-02 | 100 replies whose first text is timed from the provider handing it over to the caller reading the run's events, on SQLite. Streamed text is not stored by default, so no durable write is on its path: one interactive agent with nothing else writing | < 50 ms (p95 and p99 asserted) | p95 0.06 ms |
+| TEST-30, storage | The LAT-01 turns on SQLite with the conversation store on; each write timed | reported | a write (an event, an audit entry or a conversation turn), p50: 5.7 ms here, 1.4 ms on CI's Linux, 25 ms on CI's Windows; an iteration with its writes, p50: 20 ms, 5.6 ms, 100 ms |
+| SCALE-02 | One team run: the lead plans 500 tasks, 8 developers take them, the first 8 held until all 8 work at once; storage in memory. A second test runs the same 8 at once on SQLite, with 16 tasks | 8 at once, 500 done | 8 at once, 500 done in 9 s (18 ms a task, 7,031 events); on SQLite, 16 tasks in 4.6 s. The first version's 500 tasks on SQLite took 87 s here, 82 s on CI's Linux, 331 s on CI's Windows |
+| SCALE-03 | The same run keeps its pace: the last 100 tasks take at most half as long again as the second 100, plus 0.5 s, so a pause of the machine's of that order does not fail it | steady | 1.13 s against 1.11 s; on SQLite the pace varied with the disk by up to 60% on CI, with no trend in the core |
+| SCALE-01 | 1,000 callers' conversations with one agent, started at once, then each a second turn whose history is restored from the conversation store | all complete, restored | 2,000 turns in 0.7 s, in memory |
+
+- What the numbers say: the core's own time per iteration is far below LAT-01's target, which leaves out tool time. A team run's
+  time is mostly elsewhere: in memory, a task still costs 14 to 18 ms here and 40 to 65 ms on CI, almost all of it inside the
+  built-in board tools (`tasks.create` p50 6 ms, `tasks.submit_for_review` p50 11 ms and p95 55 to 71 ms, as the #60 review measured;
+  model time was 0.05 s of 8.7 s). On SQLite its durable writes come on top. Each write opens a
+  connection of its own (pooling is off, so nothing keeps the file open) and syncs, about 6 ms here, of which about 1 ms is the
+  sync: a held connection would cut a write to about a quarter. On Windows a write takes 25 ms, so a run of 500 tasks spends five
+  and a half minutes in storage, against hours of model calls. No requirement sets a target for it, so it is reported, not
+  changed (principle 13); the owner may set one if `sof`'s overhead on Windows matters. The scale tests use storage in memory, so
+  they measure the core, are steady on CI, and take seconds; the first version ran SCALE-02 on SQLite, and on CI its pace check
+  failed once on the disk's variance alone.
+- Follow-ups after v1, with no target set: the board tools' cost per call (the board is read and rebuilt from its change log for
+  each change); and `EventBus.PublishAsync`, which holds one runner-wide lock across each durable append, so in a team run on SQLite
+  one agent's event, a streamed text delta included, waits behind the others' writes. At about 21 ms a write on Windows, the first
+  text of an agent in a busy team there could take more than LAT-02's 50 ms, and the lock is why 500 tasks on SQLite took 331 s.
+- SCALE-01 is a SHOULD for the document Q&A application after v1. Turns of one agent run one at a time (LOOP-02), so its
+  conversations are served in turn; serving them at once is that application's work. SCALE-03's 48 hours are not run: the test
+  measures the pace over a long run's worth of work, 1,000 model calls and 7,000 events, and the heap after it.
+- TEST-33: `dotnet test --collect "Code Coverage;Format=cobertura" --results-directory <folder>`, then `python3
+  tests/core_coverage.py <folder>`, counts a line of `src/Sleepyshark.Officina.Core` as covered when any test assembly ran it:
+  96.5% of 3,758 lines, as CI's Release build measures it. CI checks it on Linux, against a threshold of 85%.
+- v1 acceptance: [`check_verification.py`](check_verification.py) finds each MUST in a test or in the reviews of
+  [`verification.md`](verification.md). 17 MUSTs had tests that did not name them, now named, and the load tests name theirs; three are
+  recorded reviews (CFG-10, EGR-01, TASK-01). Three are readings for the owner to confirm, not verified: CFG-01 (policies and
+  capabilities are the configuration's, not the agent definition's), CAP-01 (capabilities switch per application only) and TASK-02
+  (the status changes are fixed, not configured). Three are pending: TEST-31's live run, CLD-06 (part 3) and SBX-01's CPU limit (part 5).
 
 ## Notes
 

@@ -144,6 +144,7 @@ public sealed class LinuxSandboxTests : IDisposable
         Assert.Empty(HostProcesses("sleep 123456"));
     }
 
+    // SBX-06.
     [Fact(Skip = LinuxOnly, SkipUnless = nameof(OnLinux))]
     public async Task Sandboxes_cannot_see_or_affect_each_other()
     {

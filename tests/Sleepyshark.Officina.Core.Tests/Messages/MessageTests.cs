@@ -10,6 +10,7 @@ public class MessageTests
     private static readonly IEnumerable<Type> MessageTypes = typeof(Message).Assembly.GetExportedTypes()
         .Where(type => type.Namespace == typeof(Message).Namespace && !type.IsEnum);
 
+    // MSG-01.
     [Fact]
     public void A_message_has_a_role_and_content()
     {
@@ -30,6 +31,7 @@ public class MessageTests
         Assert.NotEqual(Rebuilt(), new Message(Role.Assistant, [new ToolUseContent("call-1", "read", Parse("""{ "path": "b.cs" }""")), new ProviderContent(Parse("""{ "type": "x" }"""))]));
     }
 
+    // MSG-01.
     [Fact]
     public void A_message_needs_at_least_one_piece_of_content()
     {
@@ -42,6 +44,7 @@ public class MessageTests
         Assert.Throws<ArgumentException>(() => new Message(Role.User, [null!]));
     }
 
+    // MSG-03.
     [Fact]
     public void Changing_the_source_list_does_not_change_the_message()
     {
@@ -60,6 +63,7 @@ public class MessageTests
         Assert.NotEqual(Message.Assistant("same"), Message.User("same"));
     }
 
+    // MSG-03.
     [Fact]
     public void Message_types_have_no_setters_or_mutable_fields()
     {

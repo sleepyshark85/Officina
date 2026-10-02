@@ -213,6 +213,7 @@ public sealed class RunWiringTests : IDisposable
         Assert.Equal((ExitCodes.Invalid, "error: The secret TOKEN is not set: set the environment variable TOKEN.\n"), (exitCode, error));
     }
 
+    // CFG-09: the key is a secret the configuration names, read from the secret source when it is used.
     [Fact]
     public async Task The_claude_provider_is_registered_without_the_host_and_reads_its_key_from_the_environment()
     {

@@ -36,8 +36,8 @@ public sealed class CrashAndResumeTests : IDisposable
         sof.Dispose();
     }
 
-    // The points a run dies at: before any model call; after the first step with the second not begun; in the middle of the
-    // deploy, after its intent and before its outcome; and after the deploy.
+    // RUN-02: a run spans processes. The points it dies at: before any model call; after the first step with the second not
+    // begun; in the middle of the deploy, after its intent and before its outcome; and after the deploy.
     [Theory]
     [InlineData(1, false, false)]
     [InlineData(3, false, false)]

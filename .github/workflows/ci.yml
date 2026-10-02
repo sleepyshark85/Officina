@@ -51,4 +51,16 @@ jobs:
           echo "DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$(id -u)/bus" >> "$GITHUB_ENV"
 
       - name: Test
-        run: dotnet test --no-build --configuration Release
+        if: runner.os != 'Linux'
+        run: dotnet test --no-build --configuration Release --filter "FullyQualifiedName!~Sleepyshark.Officina.Load.Tests"
+
+      # TEST-33: on Linux the tests also measure the core's coverage, which must be at least 85%.
+      - name: Test, with the core's coverage
+        if: runner.os == 'Linux'
+        run: |
+          dotnet test --no-build --configuration Release --filter "FullyQualifiedName!~Sleepyshark.Officina.Load.Tests" --collect "Code Coverage;Format=cobertura" --results-directory coverage
+          python3 tests/core_coverage.py coverage
+
+      # TEST-30: the load and latency tests measure time, so they run on their own, after the others, and print what they measured.
+      - name: Load and latency tests
+        run: dotnet test tests/Sleepyshark.Officina.Load.Tests --no-build --configuration Release --logger "console;verbosity=detailed"

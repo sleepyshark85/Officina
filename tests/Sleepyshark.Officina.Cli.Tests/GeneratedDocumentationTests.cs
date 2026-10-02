@@ -15,6 +15,7 @@ public sealed partial class GeneratedDocumentationTests
     internal static readonly string Root = FindRoot();
     private static readonly Lazy<JsonSchema> Schema = new(() => JsonSchema.FromText(SchemaGenerator.GenerateText()));
 
+    // CFG-16: the Options classes are the single source of the defaults, the schema and the reference.
     [Fact]
     public void The_committed_JSON_Schema_is_generated_from_the_Options_classes() =>
         AssertCurrent("docs/officina.schema.json", SchemaGenerator.GenerateText());

@@ -51,7 +51,7 @@ public class TaskBoardTests
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
-    // TASK-05, INV-09, TEST-20.
+    // TASK-02, TASK-05, INV-09, TEST-20: only the fixed status changes are allowed.
     [Fact]
     public async Task A_task_reaches_done_only_once_its_checks_pass_whatever_the_agent_says()
     {

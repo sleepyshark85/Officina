@@ -179,6 +179,7 @@ public sealed class LayeringTests : IDisposable
         Assert.Equal("Extract.", configuration.Options.Agents["extractor"].Instructions);
     }
 
+    // CFG-08.
     [Fact]
     public async Task Configuration_changes_apply_to_new_runs_without_a_rebuild_and_never_to_a_running_one()
     {
