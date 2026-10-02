@@ -162,7 +162,7 @@ Then `sof run --agent team --input "Add a --verbose flag to the CLI, with tests.
    network except `allowedHosts`, and you're asked about any command no rule allows.
 3. A reviewer, never the author, reads each change and approves it or asks for changes. The reviewer can't edit files
    or run commands.
-4. An approved task's change is checked with the build and tests, then squashed into one commit on your branch. A
+4. An approved task's change is squashed into one commit, checked with the build and tests, then added to your branch. A
    conflict or a failing check sends the task back to its author.
 
 Agents can't change `sof.json`, `sof.*.json` or any file they extend, and such changes are refused at integration.
@@ -198,19 +198,19 @@ Do these in order; each costs more than the last. Keep `--budget` low, watch `st
 - [ ] A tool agent in a scratch git repository with one commit. Approve one write and deny one; the kept working copy is
       under `.sof/worktrees`:
 
-      ```jsonc
-      {
-        "extends": ["preset:tool-using-assistant"],
-        "agents": { "assistant": { "instructions": "Help with the files in this folder.", "tools": ["files"] } },
-        "tools": {
-          "read_file": { "source": "extension:workspace.read_file" },
-          "write_file": { "source": "extension:workspace.write_file", "gateExemption": "Manual test in a scratch repository." }
-        },
-        "toolSets": { "files": ["read_file", "write_file"] },
-        "capabilities": { "workspace": { "enabled": true, "keepWorkingCopies": true } },
-        "run": { "budget": { "cost": 1 } }
-      }
-      ```
+  ```jsonc
+  {
+    "extends": ["preset:tool-using-assistant"],
+    "agents": { "assistant": { "instructions": "Help with the files in this folder.", "tools": ["files"] } },
+    "tools": {
+      "read_file": { "source": "extension:workspace.read_file" },
+      "write_file": { "source": "extension:workspace.write_file", "gateExemption": "Manual test in a scratch repository." }
+    },
+    "toolSets": { "files": ["read_file", "write_file"] },
+    "capabilities": { "workspace": { "enabled": true, "keepWorkingCopies": true } },
+    "run": { "budget": { "cost": 1 } }
+  }
+  ```
 
 - [ ] Break the configuration on purpose, such as an unknown model or a tool set that doesn't exist, and check that
       `config validate` names each error.
