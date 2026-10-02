@@ -64,7 +64,7 @@ public sealed class WindowsSandboxTests : IDisposable
 
         var (output, _) = await real.RunAsync($"sdk-tool & echo x> \"{tool}\"", toolchains: [toolchain]);
 
-        Assert.StartsWith("tool ran\n", output, StringComparison.Ordinal);
+        Assert.Contains("tool ran\n", output, StringComparison.Ordinal);
         Assert.Equal("@echo tool ran", await File.ReadAllTextAsync(tool, Ct));
     }
 

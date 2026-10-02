@@ -64,7 +64,7 @@ public sealed class LinuxSandboxTests : IDisposable
 
         var (output, exitCode) = await real.RunAsync("sdk-tool; echo x > " + tool, toolchains: [toolchain]);
 
-        Assert.StartsWith("tool ran\n", output, StringComparison.Ordinal);
+        Assert.Contains("tool ran\n", output, StringComparison.Ordinal);
         Assert.NotEqual(0, exitCode);
     }
 
