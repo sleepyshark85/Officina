@@ -208,6 +208,11 @@ public sealed class TaskBoard
         string? failed = null;
         foreach (var name in task.Checks)
         {
+            if (!options.Checks.ContainsKey(name))
+            {
+                return (false, $"check {name} no longer exists in the configuration.");
+            }
+
             var result = await checks[options.Checks[name].ExtensionId()!].RunAsync(new CheckContext(null, null, [], task), ct).ConfigureAwait(false);
             Telemetry.CheckEnded(context, name, result.Passed);
             if (!result.Passed)

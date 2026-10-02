@@ -29,8 +29,5 @@ Moved to the slices that add the state they need:
   volatile context holds the operating facts, in their configured order.
 
 Left to later slices:
-- S06, S18: the record's facts, findings and decisions, and the task's status join the volatile context, each
-  section with its switch (CTX-01). S10 added the passages retrieved before the turn.
-- S09: `caller.*` and `work.*` placeholders in operating facts, once work items and admission exist (CTX-09).
 - S17: project memory in the prefix, boundary ②, and the TEST-09 case that a memory change does not edit a running
   conversation's prefix.

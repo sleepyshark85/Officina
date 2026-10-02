@@ -514,7 +514,7 @@ default is `continue` on `completed` and `handoff` otherwise. A cancelled step e
     "Caller: {{caller.id}}",
     "Today: {{now:date}}"
   ],
-  "recordScope": "all",               // REC-06: all | "task" | { "kinds": [...] }
+  "recordScope": "all",               // REC-06: all | "task"
   "historyCacheLifetime": "00:05:00"  // CTX-11: at most 1 hour; the prefix is always cached for 1 hour
 }
 ```

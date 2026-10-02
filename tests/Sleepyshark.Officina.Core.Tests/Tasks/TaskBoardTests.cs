@@ -204,6 +204,18 @@ public class TaskBoardTests
         Assert.False((await without.AddAsync("t3", new() { Title = "Bad", Checks = ["tests"] }, "planned", Ct)).Accepted);
     }
 
+    [Fact]
+    public async Task Submitting_a_task_whose_check_was_removed_from_the_configuration_is_refused()
+    {
+        await AddAsync("t1", new() { Title = "Fix the parser", Checks = ["tests"] });
+        await CallAsync(Agent, "claim", """{ "id": "t1" }""");
+        var without = setup.Create(options with { Checks = new Dictionary<string, CheckOptions>() });
+
+        var refused = (await RunAsync(without, "submit", """{ "id": "t1" }""", Context)).Content;
+
+        Assert.Contains("check tests no longer exists in the configuration.", refused, StringComparison.Ordinal);
+    }
+
     // The work's task must be on the board.
     [Fact]
     public async Task Work_for_a_task_that_is_not_on_the_board_is_refused()
