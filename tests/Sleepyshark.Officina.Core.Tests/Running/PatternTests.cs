@@ -98,8 +98,9 @@ public class PatternTests
         var result = await kit.RunAsync("lead", "work", Ct);
 
         Assert.Equal("A and B", result.Output);
-        Assert.Contains("A", Text(kit.Model.Requests[^1]), StringComparison.Ordinal);
-        Assert.Contains("B", Text(kit.Model.Requests[^1]), StringComparison.Ordinal);
+        Assert.Equal(
+            "<data source=\"step:branch[0]\">\nA\n</data>\n<data source=\"step:branch[1]\">\nB\n</data>",
+            kit.Model.Requests[^1].History[^1].Content.OfType<TextContent>().Single().Text);
     }
 
     [Fact]
