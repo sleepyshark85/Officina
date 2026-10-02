@@ -26,7 +26,7 @@ its runs reach 90% on both systems.
 | 2 | Load and latency tests (TEST-30: SCALE-01, SCALE-02, LAT-01, LAT-02, storage writes), SCALE-03, coverage (TEST-33), the MUST verification check | done |
 | 3 | The Claude provider's feature switches and compaction (CLD-06), and the S12 follow-ups | done |
 | 4 | The core follow-ups: a task's tokens, time and tool calls (RUN-05), step agents' `budget.total`, `config validate` matching `sof run`, `config dry-run` with the workspace and sandbox tools, masking tokens in memory proposals, a cancelled turn that outlives `run.cancelWithin` | done |
-| 5 | The sandbox follow-ups: the CPU limit with limit reporting on both systems, HTTPS through the proxy, and the Windows tests as a standard user | todo |
+| 5 | The sandbox follow-ups: the CPU limit on both systems, HTTPS through the proxy, and the Windows tests as a standard user (prepared) | done |
 
 ## The follow-ups S21 took
 
@@ -46,8 +46,8 @@ has a reason under principle 13.
 | S16 | `sof config dry-run` with the `workspace.*` and `sandbox.*` tools over the test kit's `InMemoryWorkspace` and `FakeSandbox` (CFG-12) | Built in part 4 |
 | S17 | Masking tokens in text proposed for project memory: restore them or refuse the proposal | Built in part 4: refused |
 | S16 | A cancelled turn that outlives `run.cancelWithin` releases the agent's lock, so a next turn can overlap it, and reports zero cost | Built in part 4 |
-| S15 | The CPU limit tested on both systems with limit reporting; HTTPS through the proxy (a CONNECT tunnel) | Part 5 |
-| S15 | The Windows sandbox tests once as a standard user in CI (the S00a recipe) | Part 5 prepares it; the owner changes CI |
+| S15 | The CPU limit tested on both systems with limit reporting; HTTPS through the proxy (a CONNECT tunnel) | Built in part 5 |
+| S15 | The Windows sandbox tests once as a standard user in CI (the S00a recipe) | Part 5 prepared the script; the owner adds it to CI |
 | S20 part 1, S19 | ING-03's per-run rate limit kept across processes by a long-lived runner, with the host and serve mode | Not in v1: v1 has only the CLI, which resumes in a new process, and a team's tasks are its own work, so nothing joins a live run from outside. It comes with the host |
 | S13, S20 | The condition roots `checks.<name>`, `outcome` and `stopReason` (configuration reference §6) | Not in v1: no pattern, preset or sample needs them; the reference marks them not built |
 | S20 part 2 | A working copy of their own for fan-out branches of one agent that change files | Not in v1: no case decides what becomes of each branch's changes; the samples' branches only read |
@@ -142,7 +142,9 @@ Linux and Windows runners where they differ much:
   the streamed block (`compaction_delta` pieces of its summary and opaque content, then its signature) takes the earlier turns' place
   as an assistant message of its own, first, as documented. The operator's messages and memory changes it summarized are told again
   after it, as the API says they stop applying. Haiku has no compaction, so an agent that has the provider shorten its history on
-  Haiku is a configuration error at start-up. A fallback model without a price is warned of. `IHistoryShortener` returns a
+  Haiku is a configuration error at start-up, and so is a fallback of the agent's model that cannot summarize as it does (another
+  provider, or a model without compaction), as the summary call may be served by it. Only the provider's own content is taken as
+  the summary; text in its place is not. A fallback model without a price is warned of, in the summary call too. `IHistoryShortener` returns a
   `ShortenedHistory` with what its own model call used, which the turn spends the same way.
 - S12: a model without mid-conversation system messages gets the operator's (and memory changes) as a user message starting
   `Message from the operator:`. Every retry of a model call is a `modelCallRetried` event, so a reader knows the text before it in the
@@ -186,6 +188,29 @@ Linux and Windows runners where they differ much:
 - `sof config validate` also reports an agent's model whose provider this build of `sof` has not.
 - Follow-up, not in v1: a cancelled turn, or one whose process died, is not charged to its task (as before for cost, now for its
   tokens, tool calls and time too), since the charge is made with the turn's cancelled token at its end.
+
+## Part 5: the sandbox follow-ups
+
+- SBX-01: the processor limit is tested on both systems: work runs with half a core and measures, itself, how long it took and how
+  much processor time it used (`times` on Linux; the PowerShell process's on Windows, all its threads), and it must take at least
+  1.5 times its processor time (here 3.7 s against 1.9 s). Other load on the machine can only make it take longer, so the test does
+  not depend on a quiet runner, as one comparing two runs would. A cap slows a command rather than stopping it, so there is no limit
+  hit to report in its result, unlike the output limit (reported in the output) and the memory and process limits (a failed
+  command). For the owner to confirm when closing the follow-up: the sandbox spike (S00a, recommendation 4) named CPU throttling as
+  a limit-hit result of its own.
+- HTTPS goes through the proxy as a CONNECT tunnel: on both systems, `curl -p` reaches an allowed host's server through a tunnel
+  (which the test's client uses for plain HTTP; the proxy passes the bytes on unchanged, so TLS goes the same way), the proxy reports
+  it allowed, and a tunnel to another host is refused, which the proxy reports in the command's output.
+- The Windows tests as a standard user: [`scripts/windows-standard-user-tests.ps1`](../../scripts/windows-standard-user-tests.ps1)
+  creates a standard user (its password on no command line), runs the built Windows sandbox tests as that user in a folder only
+  it, the administrators and the system can use, with its temporary folder there (the test project is an executable, so it needs no
+  restore), prints the output, checks it ran at medium integrity and not as an administrator, and removes the user and the folder. It
+  runs only on GitHub Actions. It is not in CI: running CI's steps as another user is the owner's change, one
+  step after "Test" in the Windows job, as the script's help shows. It has not been run yet. Its first run should show: a run
+  where every test passes exits 0, and one where a test fails exits 1; the log's `whoami /groups` has Medium Mandatory Level and
+  no Administrators; the Windows tests ran, not skipped, at their expected count; and afterwards the user and the folder are gone.
+  Under PowerShell 7, `New-LocalUser` may need `Import-Module Microsoft.PowerShell.LocalAccounts -UseWindowsPowerShell`; the script
+  imports it so only when the cmdlet is missing, and the first run should show that the user is made either way.
 
 ## Notes
 

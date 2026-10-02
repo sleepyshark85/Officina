@@ -126,6 +126,32 @@ public sealed class WindowsSandboxTests : IDisposable
         Assert.Contains("[Network: refused example.com, which is not an allowed host.]", output, StringComparison.Ordinal);
     }
 
+    // HTTPS goes through the proxy as a CONNECT tunnel, which carries whatever the client sends, so the test's tunnel carries plain
+    // HTTP; the proxy checks only its host.
+    [Fact(Skip = WindowsOnly, SkipUnless = nameof(OnWindows))]
+    public async Task The_proxy_tunnels_connections_to_allowed_hosts_only()
+    {
+        using var server = new Server();
+
+        var (output, _) = await real.RunAsync($"curl -sS -m 10 -p http://127.0.0.1:{server.Port}/ & curl -sS -m 10 -p http://example.com/", ["127.0.0.1"]);
+
+        Assert.Contains(Server.Greeting, output, StringComparison.Ordinal);
+        Assert.Contains($"[Network: allowed 127.0.0.1:{server.Port}.]", output, StringComparison.Ordinal);
+        Assert.Contains("[Network: refused example.com, which is not an allowed host.]", output, StringComparison.Ordinal);
+    }
+
+    // SBX-01: the processor limit holds, as a hard cap.
+    [Fact(Skip = WindowsOnly, SkipUnless = nameof(OnWindows))]
+    public async Task A_command_gets_no_more_processor_time_than_its_limit()
+    {
+        // The processor time is the whole process's, all its threads, which the limit holds together.
+        var (wall, cpu) = await real.TimeWorkAsync(
+            "powershell -NoProfile -NonInteractive -Command \"$p = [Diagnostics.Process]::GetCurrentProcess(); $c = $p.TotalProcessorTime; $w = [Diagnostics.Stopwatch]::StartNew(); " +
+            "$i = 0; while ($i -lt 1000000) { $i++ }; $p.Refresh(); 'WALL ' + [long]$w.Elapsed.TotalMilliseconds; 'CPU ' + [long]($p.TotalProcessorTime - $c).TotalMilliseconds\"");
+
+        Assert.True(cpu > TimeSpan.FromSeconds(0.3) && wall >= cpu * 1.5, $"With half a core, the work took {wall} and used {cpu} of processor time.");
+    }
+
     [Fact(Skip = WindowsOnly, SkipUnless = nameof(OnWindows))]
     public async Task A_command_over_its_memory_limit_fails()
     {
