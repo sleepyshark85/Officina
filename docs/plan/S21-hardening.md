@@ -180,7 +180,12 @@ Linux and Windows runners where they differ much:
   refused. Restoring the value was the other way, but memory goes into every later model call's prefix, so the value would reach
   the model that masking keeps it from.
 - RUN-06, LOOP-02: a turn left behind after `run.cancelWithin` keeps the agent's lock until it stops, so the agent's next turn waits
-  for it, and the result counts what the turn had spent so far (`Turn.SoFar`).
+  for it, with no upper bound, and a warning event says so; the result counts what the turn had spent so far (`Turn.SoFar`).
+- `capabilities.taskBoard.budget` written as a number (the old form) is a configuration error that says to write `{ "cost": N }`, as
+  the binder would skip it and the default would apply. A failed task retried starts every one of its limits again.
+- `sof config validate` also reports an agent's model whose provider this build of `sof` has not.
+- Follow-up, not in v1: a cancelled turn, or one whose process died, is not charged to its task (as before for cost, now for its
+  tokens, tool calls and time too), since the charge is made with the turn's cancelled token at its end.
 
 ## Notes
 

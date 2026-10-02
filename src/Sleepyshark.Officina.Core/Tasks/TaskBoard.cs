@@ -137,7 +137,7 @@ public sealed class TaskBoard
             tasks[id] = edit.State switch
             {
                 null => task,
-                Ready when task.State == Failed => task with { State = Ready, FailedAttempts = 0, Spent = 0 },
+                Ready when task.State == Failed => task with { State = Ready, FailedAttempts = 0, Spent = 0, SpentTokens = 0, SpentToolCalls = 0, SpentTime = TimeSpan.Zero },
                 _ => task with { State = edit.State.Value },
             };
             return null;

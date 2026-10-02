@@ -294,9 +294,10 @@ public class HumanInteractionTests
     {
         var time = new FakeTimeProvider();
         var model = new StuckModel();
+        var storage = new InMemoryStorage();
         var options = Configure() with { Run = new() { CancelWithin = TimeSpan.FromSeconds(10) } };
         var runner = new AgentRunner(
-            options, new Dictionary<string, IModelProvider> { [ProviderOptions.ClaudeName] = model }, new InMemoryStorage(),
+            options, new Dictionary<string, IModelProvider> { [ProviderOptions.ClaudeName] = model }, storage,
             new Dictionary<string, ITool> { ["edit"] = edit, ["read"] = new FakeTool(ToolKind.Read) }, new Dictionary<string, IGate>(), new Dictionary<string, ICheck>(),
             new Dictionary<string, IKnowledgeSource>(), new ScriptedHuman(), new InMemorySecretSource(new Dictionary<string, string>()), time);
 
@@ -316,13 +317,17 @@ public class HumanInteractionTests
         Assert.True(waited >= TimeSpan.FromSeconds(10)); // the clock starts when the runner sees the cancellation, a moment after Cancel
         Assert.Equal(4m, result.Statistics.Cost); // a million input tokens of Opus 5.5, spent before it got stuck
 
-        var next = runner.RunAsync(Agent, "again", ct: Ct);
+        var again = new Work(Agent, "again");
+        var next = runner.RunAsync(again, Ct);
         for (var i = 0; i < 20; i++)
         {
             await Task.Yield();
         }
 
         Assert.Equal((false, 1), (next.IsCompleted, model.Calls));
+        Assert.Equal(
+            $"Agent {Agent} waits for its turn that was cancelled and has not stopped yet.",
+            Assert.Single((await storage.Events.ReadAsync(null, again.RunId, 0, Ct)).Select(read => read.Payload).OfType<Core.Events.Warning>()).Text);
         model.Unstick.SetResult();
         Assert.Equal(AgentOutcome.Completed, (await next).Outcome);
         Assert.Equal(2, model.Calls);

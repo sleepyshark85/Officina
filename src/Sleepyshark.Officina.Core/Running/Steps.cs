@@ -48,6 +48,7 @@ internal sealed class Steps(
 
     private readonly ConcurrentQueue<AgentResult> turns = new();
     private readonly ConcurrentDictionary<Turn, byte> live = new();
+    private readonly Lock ending = new(); // a turn moves from live to ended at once, as Result reads them
     private readonly ConcurrentDictionary<string, Budget> stepAgents = new(StringComparer.Ordinal);
     private long? started;
 
@@ -143,9 +144,15 @@ internal sealed class Steps(
     /// </summary>
     public AgentResult Result(StepResult ended)
     {
-        var all = turns.ToArray();
-        // A turn that did not stop within run.cancelWithin is still running: what it has used so far counts too.
-        var used = all.Select(turn => turn.Statistics).Concat(live.Keys.Select(turn => turn.SoFar())).ToList();
+        AgentResult[] all;
+        List<TurnStatistics> used;
+        lock (ending)
+        {
+            // A turn that did not stop within run.cancelWithin is still running: what it has used so far counts too.
+            all = turns.ToArray();
+            used = [.. all.Select(turn => turn.Statistics), .. live.Keys.Select(turn => turn.SoFar())];
+        }
+
         var statistics = new TurnStatistics(
             used.Sum(turn => turn.Iterations),
             used.Sum(turn => turn.ToolCalls),
@@ -186,8 +193,11 @@ internal sealed class Steps(
             result = turn.Fail(exception);
         }
 
-        turns.Enqueue(result);
-        live.TryRemove(turn, out _);
+        lock (ending)
+        {
+            turns.Enqueue(result);
+            live.TryRemove(turn, out _);
+        }
         if (!ct.IsCancellationRequested)
         {
             await checkpoint(context, CheckpointPoint.Turn, ct).ConfigureAwait(false);

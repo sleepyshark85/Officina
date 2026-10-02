@@ -394,6 +394,11 @@ public class TaskBoardTests
         Assert.Equal((HandoffReason.BudgetExhausted, $"the task's {limit} budget is used up"), (result.Handoff!.Reason, result.Handoff.Detail));
         var task = Assert.Single(await kit.Runner.Board(null, work.RunId).ReadAsync(Ct));
         Assert.Equal((TaskState.Failed, 1000L, 2, TimeSpan.FromMinutes(2)), (task.State, task.SpentTokens, task.SpentToolCalls, task.SpentTime));
+
+        // Retried, the task starts its budget again, so it can be worked.
+        Assert.True((await kit.Runner.Board(null, work.RunId).EditAsync("t1", new() { State = TaskState.Ready }, "retry", Ct)).Accepted);
+        task = Assert.Single(await kit.Runner.Board(null, work.RunId).ReadAsync(Ct));
+        Assert.Equal((TaskState.Ready, 0m, 0L, 0, TimeSpan.Zero), (task.State, task.Spent, task.SpentTokens, task.SpentToolCalls, task.SpentTime));
     }
 
     // CTX-01, CTX-09, REC-06: the agent sees its task, the work's placeholders, and only its task's record entries.

@@ -103,6 +103,41 @@ public sealed partial class ConfigCommandTests : IDisposable
             error);
     }
 
+    // CFG-06: a model whose provider this build has not is refused by sof run, so validate reports it too.
+    [Fact]
+    public async Task Validate_reports_a_model_whose_provider_is_not_in_this_build()
+    {
+        sof.Write("sof.json", """
+            {
+              "providers": { "other": { "prices": { "x": { "input": 1, "output": 2 } } } },
+              "models": { "default": { "provider": "other", "model": "x" } },
+              "agents": { "a": { "instructions": "Answer." } }
+            }
+            """);
+
+        var (exitCode, _, error) = await sof.RunAsync("config", "validate");
+
+        Assert.Equal(1, exitCode);
+        Assert.StartsWith("error: models.default.provider: provider \"other\" is not available in this build of sof. Use one it has: claude.", error, StringComparison.Ordinal);
+    }
+
+    // CFG-06, TASK-09: the task's budget was its cost, a number; it is an object now, and a number is not silently ignored.
+    [Fact]
+    public async Task Validate_reports_a_task_budget_written_as_a_number()
+    {
+        sof.Write("sof.json", """
+            {
+              "agents": { "a": { "instructions": "Answer." } },
+              "capabilities": { "taskBoard": { "enabled": true, "budget": 3 } }
+            }
+            """);
+
+        var (exitCode, _, error) = await sof.RunAsync("config", "validate");
+
+        Assert.Equal(1, exitCode);
+        Assert.Contains("error: sof.json: capabilities.taskBoard.budget: is a number, but it is now an object. Write { \"cost\": 3 }.", error, StringComparison.Ordinal);
+    }
+
     // CFG-12.
     [Fact]
     public async Task Dry_run_shows_the_configuration_and_runs_the_agent_against_scripted_replies()

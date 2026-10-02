@@ -35,6 +35,7 @@ public sealed class AgentRunner
     private readonly Admission admission;
     private readonly Checkpointer checkpointer;
     private readonly ConcurrentDictionary<string, SemaphoreSlim> turns = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, byte> leftBehindTurns = new(StringComparer.Ordinal); // agents with a turn left behind, still running
     private readonly ConcurrentDictionary<string, ConcurrentQueue<(Sender From, string Text)>> inboxes = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, TaskCompletionSource> paused = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, CancellationTokenSource> cancels = new(StringComparer.Ordinal);
@@ -628,6 +629,12 @@ public sealed class AgentRunner
         StepResult ended;
         try
         {
+            if (leftBehindTurns.ContainsKey(name))
+            {
+                // LOOP-02: the wait has no limit, as two turns of one agent never run at once; it is told, so a wait is not silent.
+                await Events.PublishAsync(context, new Warning($"Agent {name} waits for its turn that was cancelled and has not stopped yet."), stop.Token).ConfigureAwait(false);
+            }
+
             await oneAtATime.WaitAsync(stop.Token).ConfigureAwait(false);
             entered = true;
             activity = Telemetry.StartTurn(context); // after the wait, so the span covers the turn only
@@ -669,7 +676,14 @@ public sealed class AgentRunner
             if (entered && leftBehind)
             {
                 // LOOP-02: a turn left behind still runs, so the agent's next turn waits until it has stopped.
-                _ = running!.ContinueWith(_ => oneAtATime.Release(), CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+                leftBehindTurns[name] = 0;
+                _ = running!.ContinueWith(
+                    stopped =>
+                    {
+                        leftBehindTurns.TryRemove(name, out _);
+                        oneAtATime.Release();
+                    },
+                    CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
             }
             else if (entered)
             {

@@ -48,7 +48,9 @@ Dependency rules, enforced by the dependency check, which runs as a test in CI (
 <sub>[Open the HTML version](docs/diagrams/runtime.html)</sub>
 
 - **Agent actor.** Each agent has a mailbox (`Channel<T>`) and processes one turn at a time
-  (LOOP-02). Messages that arrive during a turn are appended at the next iteration (CTX-08).
+  (LOOP-02). Messages that arrive during a turn are appended at the next iteration (CTX-08). A turn
+  left behind after `run.cancelWithin` keeps the agent until it stops, so the agent's next turn waits
+  for it, with no upper bound; a warning event says it waits.
 - **Turn engine.** This is the only primitive (principle 4). Patterns, including the team, call
   `PatternContext.RunStepAsync(id, step, input)` and nothing else. A step is a turn of an agent, that
   agent's own pattern, or a nested pattern, so every leaf is a turn, and budgets (each drawn from its

@@ -26,7 +26,11 @@ internal static class ValidateCommand
             using (claude)
             {
                 IReadOnlyList<ConfigurationError> errors =
-                    [.. WorkspaceHost.RegistrationErrors(configuration.Options), .. AgentRunner.ProviderErrors(configuration.Options, providers, new Dictionary<string, IHistoryShortener>())];
+                    [
+                        .. WorkspaceHost.RegistrationErrors(configuration.Options),
+                        .. Unavailable(configuration.Options, providers),
+                        .. AgentRunner.ProviderErrors(configuration.Options, providers, new Dictionary<string, IHistoryShortener>()),
+                    ];
                 if (errors.Count > 0)
                 {
                     return ConfigurationCommandOptions.ReportErrors(errors, host);
@@ -38,4 +42,12 @@ internal static class ValidateCommand
         });
         return command;
     }
+
+    /// <summary>An agent's model whose provider this build of sof has no implementation of: sof run refuses to run the agent.</summary>
+    private static IEnumerable<ConfigurationError> Unavailable(OfficinaOptions options, IReadOnlyDictionary<string, IModelProvider> providers) =>
+        options.Agents.Values.Select(agent => agent.Model).Distinct()
+            .Where(model => !providers.ContainsKey(options.Models[model].Provider))
+            .Select(model => new ConfigurationError(
+                ValidationPhase.Provider, $"models.{model}.provider", $"provider \"{options.Models[model].Provider}\" is not available in this build of sof.",
+                $"Use one it has: {string.Join(", ", providers.Keys.Order(StringComparer.Ordinal))}."));
 }

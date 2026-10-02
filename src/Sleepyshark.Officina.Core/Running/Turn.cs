@@ -443,7 +443,11 @@ internal sealed class Turn
                     case UsageReported reported:
                         var spent = Price(served)?.Cost(reported.Usage) ?? 0m;
                         (callUsage, callCost) = (callUsage + reported.Usage, callCost + spent);
-                        (usage, cost) = (usage + reported.Usage, cost + spent);
+                        lock (spending)
+                        {
+                            (usage, cost) = (usage + reported.Usage, cost + spent);
+                        }
+
                         budget.Spend(tokens: reported.Usage.Total, cost: spent);
                         break;
                     case Stopped stopped:
