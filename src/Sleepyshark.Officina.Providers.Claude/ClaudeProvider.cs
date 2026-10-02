@@ -19,6 +19,7 @@ public sealed class ClaudeProvider : IModelProvider, IDisposable
     private readonly ProviderOptions options;
     private readonly ISecretSource secrets;
     private readonly HttpClient? http;
+    private readonly SemaphoreSlim clientGate = new(1, 1);
     private AnthropicClient? client;
 
     /// <param name="options">The provider's configuration.</param>
@@ -82,7 +83,11 @@ public sealed class ClaudeProvider : IModelProvider, IDisposable
         }
     }
 
-    public void Dispose() => client?.Dispose();
+    public void Dispose()
+    {
+        client?.Dispose();
+        clientGate.Dispose();
+    }
 
     /// <summary>
     /// CLD-08: by the SDK's exception type, then by the error type, which is all an error that arrives mid-stream has.
@@ -98,14 +103,23 @@ public sealed class ClaudeProvider : IModelProvider, IDisposable
         _ => ModelFailure.Transient,
     };
 
+    /// <summary>The client, created once by the first call, even when calls start together.</summary>
     private async ValueTask<AnthropicClient> ClientAsync(CancellationToken ct)
     {
-        if (client is null)
+        await clientGate.WaitAsync(ct).ConfigureAwait(false);
+        try
         {
-            var key = options.ApiKey is { } reference ? await secrets.GetAsync(reference.Secret, ct).ConfigureAwait(false) : null;
-            client = http is null ? new AnthropicClient { ApiKey = key, MaxRetries = 0 } : new AnthropicClient { ApiKey = key, MaxRetries = 0, HttpClient = http };
-        }
+            if (client is null)
+            {
+                var key = options.ApiKey is { } reference ? await secrets.GetAsync(reference.Secret, ct).ConfigureAwait(false) : null;
+                client = http is null ? new AnthropicClient { ApiKey = key, MaxRetries = 0 } : new AnthropicClient { ApiKey = key, MaxRetries = 0, HttpClient = http };
+            }
 
-        return client;
+            return client;
+        }
+        finally
+        {
+            clientGate.Release();
+        }
     }
 }

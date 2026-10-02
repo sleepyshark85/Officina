@@ -119,6 +119,8 @@ internal sealed class ClaudeReply(ImmutableArray<ToolDefinition> tools)
 
         var data = JsonSerializer.SerializeToElement(complete);
         yield return new ContentReceived(new ProviderContent(data));
+        // The API returns a server tool's call and result in the same reply, so matching within one reply is enough.
+        // S12 and S21 handle a call that ends a reply (pause_turn) if the API ever splits them.
         if (type == "server_tool_use")
         {
             // Claude names its tools by their own names; the core knows them by their configured ones.
