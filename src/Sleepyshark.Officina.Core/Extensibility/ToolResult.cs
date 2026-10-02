@@ -29,6 +29,9 @@ public sealed record ToolResult
     /// <summary>The agent the call was routed to, or <see cref="Human"/>; the turn ends in a handoff to it.</summary>
     public string? RouteTo { get; }
 
+    /// <summary>Whether the content comes from outside the agents' control, such as a check's findings on code they wrote (SEC-04).</summary>
+    internal bool Untrusted { get; init; }
+
     /// <summary>The <see cref="RouteTo"/> of a call that goes to a human.</summary>
     public const string Human = "human";
 

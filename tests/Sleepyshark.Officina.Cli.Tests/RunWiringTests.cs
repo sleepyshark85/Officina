@@ -70,6 +70,48 @@ public sealed class RunWiringTests : IDisposable
         Assert.False(File.Exists(Path.Combine(sof.Directory, "hello.txt"))); // nothing reaches the baseline until integration
     }
 
+    // SBX-05, WS-01: an agent of a team works in its task's working copy, and its commands get its role's secrets, by its definition.
+    [Fact]
+    public async Task An_agent_of_a_team_runs_commands_in_its_tasks_copy_with_its_roles_secrets()
+    {
+        sof.Write("sof.json", """
+            {
+              "run": { "permissionMode": "auto" },
+              "agents": {
+                "team": { "instructions": "A team.", "pattern": { "type": "team", "lead": "lead", "roles": { "developer": { "max": 2 } } } },
+                "lead": { "instructions": "Lead.", "tools": ["planning"] },
+                "developer": { "instructions": "Develop.", "tools": ["work"] }
+              },
+              "tools": {
+                "create": { "source": "builtin:tasks.create" },
+                "submit": { "source": "builtin:tasks.submit_for_review" },
+                "run": { "source": "extension:sandbox.run", "gates": ["commands"] }
+              },
+              "gates": { "commands": { "use": "extension:sandbox.commandRules" } },
+              "toolSets": { "planning": ["create"], "work": ["run", "submit"] },
+              "capabilities": {
+                "taskBoard": { "enabled": true }, "team": { "enabled": true }, "workspace": { "enabled": true },
+                "sandbox": { "enabled": true, "commandRules": [{ "match": "dotnet*", "action": "allow" }], "secrets": { "developer": ["NUGET_TOKEN"] } }
+              }
+            }
+            """).Commit();
+        sof.Variables["NUGET_TOKEN"] = "s3cret";
+        sof.Sandbox = new FakeSandbox().Reply("built", 0);
+        model.When(request => ScriptedModelProvider.WorkOf(request).StartsWith("You lead a team", StringComparison.Ordinal))
+            .CallTools(("create", """{ "id": "a", "title": "Build", "reason": "plan" }""")).Reply("Planned.");
+        model.When(request => ScriptedModelProvider.WorkOf(request).StartsWith("Every task is done", StringComparison.Ordinal)).Reply("Built.");
+        model.When(request => ScriptedModelProvider.WorkOf(request).Contains("Do task a,", StringComparison.Ordinal))
+            .CallTools(("run", """{ "command": "dotnet build" }""")).CallTools(("submit", """{ "id": "a" }""")).Reply("Submitted.");
+
+        var (exitCode, _, error) = await sof.RunAsync("run", "--agent", "team", "--input", "Build it.");
+
+        Assert.Equal((ExitCodes.Success, ""), (exitCode, error));
+        var command = Assert.Single(sof.Sandbox.Processes).Command;
+        Assert.EndsWith("-task.a", command.Directory, StringComparison.Ordinal);
+        Assert.Equal("s3cret", command.Environment["NUGET_TOKEN"]);
+        Assert.False(Directory.Exists(command.Directory)); // the task's copy went when it was done
+    }
+
     [Fact]
     public async Task A_machine_that_cannot_sandbox_commands_is_reported_and_nothing_runs()
     {

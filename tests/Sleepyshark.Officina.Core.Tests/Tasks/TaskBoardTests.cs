@@ -191,6 +191,80 @@ public class TaskBoardTests
         Assert.StartsWith("Changed: t1 state Failed → Ready", await CallAsync(Reviewer, "update", """{ "id": "t1", "state": "ready", "reason": "Retry." }""", lead: true), StringComparison.Ordinal);
     }
 
+    // TASK-05: the submit tool's own time limit does not cut its checks short, nor make them run again; each check bounds its own time.
+    [Fact]
+    public async Task A_submits_checks_are_not_cut_short_by_the_tools_time_limit()
+    {
+        var slow = new SlowCheck();
+        setup.Checks["slow"] = slow;
+        var pipeline = setup.Create(options with
+        {
+            Tools = new Dictionary<string, ToolOptions>(options.Tools) { ["submit"] = options.Tools["submit"] with { Timeout = TimeSpan.FromSeconds(1) } },
+            Checks = new Dictionary<string, CheckOptions>(options.Checks) { ["slow"] = new() { Use = "extension:slow" } },
+        });
+        Assert.True((await pipeline.Board(Owner.Tenant, Context.RunId).AddAsync("t1", new() { Title = "Run the tests", Checks = ["slow"] }, "planned", Ct)).Accepted);
+        await RunAsync(pipeline, "claim", """{ "id": "t1" }""", Context);
+
+        var submitting = RunAsync(pipeline, "submit", """{ "id": "t1" }""", Context);
+        await slow.Started.Task.WaitAsync(Ct);
+        setup.Time.Advance(TimeSpan.FromMinutes(5)); // far past the tool's limit
+        slow.Release.SetResult(new(true, []));
+
+        Assert.Equal("Changed: t1 state InProgress → InReview, verified false → true.", (await submitting).Content);
+        Assert.Equal(1, slow.Runs);
+    }
+
+    // SEC-04: a failed check's findings come from running the agent's code, so reading them marks the agent as having read
+    // untrusted content, and its next gated write asks first.
+    [Fact]
+    public async Task A_failed_checks_findings_are_untrusted_content()
+    {
+        var gated = setup.Create(options with
+        {
+            Gates = new Dictionary<string, GateOptions>(options.Gates) { ["untrusted"] = new() { Use = GateOptions.UntrustedContentApproval } },
+            Tools = new Dictionary<string, ToolOptions>(options.Tools) { ["edit"] = options.Tools["edit"] with { Gates = ["untrusted"] } },
+        });
+        setup.Human.Answer(HumanAnswer.Approve);
+        await AddAsync("t1", new() { Title = "Fix the parser", Checks = ["tests"] });
+        var context = Context with { TaskId = "t1" };
+        await RunAsync(gated, "claim", """{ "id": "t1" }""", context);
+        await RunAsync(gated, "edit", "{}", context);
+        testsPass = false;
+
+        Assert.StartsWith("check tests failed: 2 tests fail.", (await RunAsync(gated, "submit", """{ "id": "t1" }""", context)).Content, StringComparison.Ordinal);
+        await RunAsync(gated, "edit", "{}", context);
+
+        Assert.Equal("gate untrusted", Assert.Single(setup.Human.Requests).Summary); // only the write after the findings asks
+    }
+
+    // TASK-06: in a task's working copy only the agent working on the task changes files; its reviewer reads them.
+    [Fact]
+    public async Task Only_the_agent_working_on_a_task_changes_its_working_copy()
+    {
+        var workspace = new InMemoryWorkspace();
+        foreach (var (id, tool) in new WorkspaceTools(call => workspace.OpenWorkingCopyAsync(call.WorkingCopy, call.Agent, Ct)).Tools)
+        {
+            setup.Tools[id] = tool;
+        }
+
+        var files = setup.Create(options with
+        {
+            Tools = new Dictionary<string, ToolOptions>(options.Tools)
+            {
+                ["write"] = new() { Source = $"extension:{WorkspaceTools.Write}", GateExemption = "Tests only." }, ["read"] = new() { Source = $"extension:{WorkspaceTools.Read}" },
+            },
+            ToolSets = new Dictionary<string, IReadOnlyList<string>> { ["all"] = [.. options.ToolSets["all"], "write", "read"] },
+        });
+        await AddAsync("t1", new() { Title = "Fix the parser", RequiresReview = true });
+        await RunAsync(files, "claim", """{ "id": "t1" }""", Context);
+
+        var author = await RunAsync(files, "write", """{ "path": "parser.cs", "content": "fixed" }""", Context with { TaskId = "t1" });
+        var reviewer = await RunAsync(files, "write", """{ "path": "parser.cs", "content": "mine" }""", Context with { Agent = Reviewer, TaskId = "t1" });
+        var read = await RunAsync(files, "read", """{ "path": "parser.cs" }""", Context with { Agent = Reviewer, TaskId = "t1" });
+
+        Assert.Equal(("Written.", "not authorised: only the agent working on task t1 changes its working copy", "fixed"), (author.Content, reviewer.Content, read.Content));
+    }
+
     // TASK-09, WS-03: a failed check, a review that asks for changes, and a change returned by integration are failed attempts.
     [Theory]
     [InlineData("check")]
@@ -381,5 +455,22 @@ public class TaskBoardTests
             (await context.Board!.ReadAsync(ct)).Any(task => task.Id == context.Board.TaskId && task.State == TaskState.InProgress)
                 ? GateDecision.Allow
                 : GateDecision.Deny("the task must be in progress");
+    }
+
+    /// <summary>A check that runs until the test releases it.</summary>
+    private sealed class SlowCheck : ICheck
+    {
+        public TaskCompletionSource Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public TaskCompletionSource<CheckResult> Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public int Runs { get; private set; }
+
+        public async ValueTask<CheckResult> RunAsync(CheckContext context, CancellationToken ct)
+        {
+            Runs++;
+            Started.TrySetResult();
+            return await Release.Task.WaitAsync(ct);
+        }
     }
 }

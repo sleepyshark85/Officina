@@ -13,7 +13,9 @@ namespace Sleepyshark.Officina.Sandbox;
 /// <param name="options">The sandbox settings: the hosts it may reach and the toolchains.</param>
 /// <param name="workspace">The workspace settings, whose protected paths the command cannot reach (WS-05).</param>
 /// <param name="commandLine">The command.</param>
-public sealed class CommandCheck(ISandbox sandbox, SandboxOptions options, WorkspaceOptions workspace, string commandLine) : ICheck
+/// <param name="timeout">The longest the command may run; then it is stopped, and the check fails.</param>
+/// <param name="time">The clock for the time limit.</param>
+public sealed class CommandCheck(ISandbox sandbox, SandboxOptions options, WorkspaceOptions workspace, string commandLine, TimeSpan timeout, TimeProvider time) : ICheck
 {
     /// <summary>How many of the last lines of output a failure reports.</summary>
     private const int FindingLines = 20;
@@ -31,16 +33,28 @@ public sealed class CommandCheck(ISandbox sandbox, SandboxOptions options, Works
             new SandboxCommand(commandLine, directory, SandboxLimits.Default, options.AllowedHosts, new Dictionary<string, string>(), hidden, readOnly, options.Toolchains), ct)
             .ConfigureAwait(false);
         var last = new Queue<string>();
-        await foreach (var line in process.Output.ReadAllAsync(ct).ConfigureAwait(false))
+        using var limit = new CancellationTokenSource(timeout, time);
+        using var stop = CancellationTokenSource.CreateLinkedTokenSource(ct, limit.Token);
+        int exitCode;
+        try
         {
-            last.Enqueue(line);
-            if (last.Count > FindingLines)
+            await foreach (var line in process.Output.ReadAllAsync(stop.Token).ConfigureAwait(false))
             {
-                last.Dequeue();
+                last.Enqueue(line);
+                if (last.Count > FindingLines)
+                {
+                    last.Dequeue();
+                }
             }
+
+            exitCode = await process.ExitCode.WaitAsync(stop.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (limit.IsCancellationRequested && !ct.IsCancellationRequested)
+        {
+            // Leaving disposes the process, which stops it and everything it started.
+            return new(false, [$"{commandLine} timed out after {timeout}", .. last]);
         }
 
-        var exitCode = await process.ExitCode.WaitAsync(ct).ConfigureAwait(false);
         return exitCode == 0 ? new(true, []) : new(false, [$"{commandLine} exited with code {exitCode}", .. last]);
     }
 }

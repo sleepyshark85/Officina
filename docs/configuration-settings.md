@@ -97,7 +97,7 @@ It lists the settings the code has today. Settings that later slices add are spe
 | `gates` | list | `[]` | The tool's own gates, by name in `gates`. They run after the gates for all tools. | `["issue-dedupe"]` |
 | `gateExemption` | text |  | Why a write tool needs no gate of its own. Every write tool needs gates or this reason. | `"Writes only to a scratch folder."` |
 | `approval` | `"never"`, `"always"` |  | Whether each call needs a human's approval. Unset means `always` for irreversible tools, otherwise `never`. For approval by rule, give the tool a `builtin:require-approval` gate with a condition. | `"always"` |
-| `timeout` | time span (`hh:mm:ss` or `d.hh:mm:ss`) | `"00:02:00"` | The longest one call may take, as `hh:mm:ss`. | `"00:15:00"` |
+| `timeout` | time span (`hh:mm:ss` or `d.hh:mm:ss`) | `"00:02:00"` | The longest one call may take, as `hh:mm:ss`. It does not apply to `builtin:tasks.submit_for_review`, whose checks each have their own time limit. | `"00:15:00"` |
 | `maxAttempts` | whole number, ≥ 1 | `1` | How many times a call is tried. Only timeouts and unavailable errors are retried, and irreversible tools never are. | `3` |
 | `maxResultLength` | whole number, ≥ 1 | `32000` | The most characters of a result that enter the conversation. The full result is kept as an artifact, which a `builtin:artifact.page` tool reads. | `8000` |
 | `parallelSafe` | boolean |  | Whether calls may run at the same time as other calls. Unset uses the tool's declaration; `true` cannot loosen a tool that declares itself unsafe. Irreversible tools never run in parallel. | `false` |
@@ -131,6 +131,7 @@ It lists the settings the code has today. Settings that later slices add are spe
 |---|---|---|---|---|
 | `use` | text |  | The check the application registers, as `extension:<id>`. Set it or `command`. | `"extension:Acme.NoSecretsCheck"` |
 | `command` | text |  | A command that checks a working copy, run in the sandbox there: the check passes when it exits with 0, and its last lines of output are the findings. It needs the sandbox, and checks a task's work or the baseline, not an agent's output. Set it or `use`. | `"dotnet test"` |
+| `timeout` | time span (`hh:mm:ss` or `d.hh:mm:ss`) | `"00:20:00"` | For a command: the longest it may run, as `hh:mm:ss`; then it is stopped, and the check fails. | `"00:40:00"` |
 
 ## `knowledge.<name>`
 

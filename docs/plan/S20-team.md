@@ -106,7 +106,17 @@ Part 2:
   processes; each agent has its own sandbox tools in a copy, with its role's secrets (SBX-05, now by the instance's definition).
 - `checks.<name>.command` is a check the host runs in the sandbox, in the working copy it checks: a task's when submitted
   (`IWorkingCopy.Directory`, TASK-05), or the change on the baseline (WS-02). It passes on exit code 0; its last 20 lines are the
-  findings; it gets no secrets. It needs the sandbox and is refused on output, which has no working copy.
+  findings; it gets no secrets. It needs the sandbox and is refused on output, which has no working copy. It is stopped and
+  fails after `checks.<name>.timeout` (20 minutes by default: a hanging test would otherwise hold the integration queue and the
+  whole team). The submit tool's own time limit does not apply to it, so a check is never cut short or run again by the
+  pipeline. A failed check's findings, at submit or at integration, mark the run as having read untrusted content (SEC-04).
+- A change whose diff adds conflict markers (`<<<<<<< ` or `>>>>>>> ` lines) is still a conflict, so an author that submits
+  again without resolving, or a reviewer that approves it, never puts markers on the baseline (WS-03).
+- Cleaning up never loses work: the integration checkpoint is taken before the copy is closed; a copy that cannot be removed is
+  a `warning` event and the team goes on (the next run removes leftovers); a scratch folder the queue could not remove keeps the
+  result, with a warning, and is removed before the next integration.
+- TASK-06: in a task's working copy only the task's assignee changes files (`workspace.*` writes); its reviewer reads them.
+  `ToolCall.Definition` gives tools the agent's definition, which the sandbox's secrets are found by.
   `capabilities.workspace.baselineChecks` names the baseline's checks. What the sandbox set up for the scratch folder the
   baseline checks ran in is released before the folder goes.
 - `sof run`'s console: `board` shows the run's board (TASK-08); `memory` lists the proposed changes to project memory, and
@@ -131,5 +141,6 @@ Moved to S21:
 - (From part 2.) A working copy of their own for fan-out branches of one agent that change files. Branches of one agent share
   its working copy while they run at once; a copy of its own needs to start from the agent's copy as it is and to say what
   becomes of its changes, which no case decides yet (the samples' branches only read).
-- (From part 2.) A command check's time limit: a check runs until it ends or the run is cancelled, so a hanging test holds the
-  integration queue until the owner stops the run.
+- (From part 2.) `sof config validate` does not report what `sof run` refuses for an `extension:` tool, gate or check, which
+  `sof` never registers (`baselineChecks` naming one is one more case): validation could report every `extension:` id `sof`
+  does not provide.

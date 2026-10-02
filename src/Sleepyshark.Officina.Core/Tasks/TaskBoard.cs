@@ -62,6 +62,9 @@ public sealed class TaskBoard
 
     public string RunId => context.RunId;
 
+    /// <summary>How the result of a submit that a check failed begins, before the check's name and findings.</summary>
+    internal const string CheckFailed = "check ";
+
     /// <summary>The folder of a task's working copy, opened for its agent, which its verification checks look at; null without a workspace.</summary>
     internal Func<string, string, CancellationToken, Task<string?>>? CopyOf { get; init; }
 
@@ -238,7 +241,7 @@ public sealed class TaskBoard
             await events.PublishAsync(context, new CheckRan(name, result.Passed, id), ct).ConfigureAwait(false);
             if (!result.Passed)
             {
-                failed = $"check {name} failed: {string.Join("; ", result.Findings)}";
+                failed = $"{CheckFailed}{name} failed: {string.Join("; ", result.Findings)}";
                 break;
             }
         }

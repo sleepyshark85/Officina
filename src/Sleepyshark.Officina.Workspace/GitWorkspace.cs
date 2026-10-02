@@ -103,16 +103,16 @@ public sealed partial class GitWorkspace : IWorkspace, IDisposable
     /// Creates the working copy where an agent does a task, from the baseline as it is now (WS-01). One already open for the
     /// task, or brought back by <see cref="RestoreAsync"/>, is returned as it is.
     /// </summary>
-    public async Task<WorkingCopy> OpenWorkingCopyAsync(string taskId, string agent, CancellationToken ct = default)
+    public async Task<WorkingCopy> OpenWorkingCopyAsync(string name, string agent, CancellationToken ct = default)
     {
-        if (open.TryGetValue(taskId, out var existing))
+        if (open.TryGetValue(name, out var existing))
         {
             return existing;
         }
 
-        var copy = new WorkingCopy(taskId, agent, Path.Combine(WorktreeFolder, taskId), hidden, readOnly);
+        var copy = new WorkingCopy(name, agent, Path.Combine(WorktreeFolder, name), hidden, readOnly);
         await Git.RunAsync(root, ct, "worktree", "add", "-b", copy.Branch, copy.Directory, "HEAD").ConfigureAwait(false);
-        open[taskId] = copy;
+        open[name] = copy;
         return copy;
     }
 
@@ -167,7 +167,7 @@ public sealed partial class GitWorkspace : IWorkspace, IDisposable
     public async Task<IReadOnlyList<CopySnapshot>> SnapshotAsync(CancellationToken ct = default)
     {
         var snapshots = new List<CopySnapshot>();
-        foreach (var copy in open.Values.OrderBy(copy => copy.TaskId, StringComparer.Ordinal))
+        foreach (var copy in open.Values.OrderBy(copy => copy.Name, StringComparer.Ordinal))
         {
             if ((await Git.RunAsync(copy.Directory, ct, "status", "--porcelain").ConfigureAwait(false)).Length > 0)
             {
@@ -175,7 +175,7 @@ public sealed partial class GitWorkspace : IWorkspace, IDisposable
                 await Git.RunAsync(copy.Directory, ct, "-c", "user.name=Officina", "-c", "user.email=officina@localhost", "-c", "commit.gpgsign=false", "commit", "--no-verify", "--message", "Officina checkpoint").ConfigureAwait(false);
             }
 
-            snapshots.Add(new CopySnapshot(copy.TaskId, copy.Agent, (await Git.RunAsync(copy.Directory, ct, "rev-parse", "HEAD").ConfigureAwait(false)).Trim()));
+            snapshots.Add(new CopySnapshot(copy.Name, copy.Agent, (await Git.RunAsync(copy.Directory, ct, "rev-parse", "HEAD").ConfigureAwait(false)).Trim()));
         }
 
         return snapshots;
@@ -189,7 +189,7 @@ public sealed partial class GitWorkspace : IWorkspace, IDisposable
     {
         ArgumentNullException.ThrowIfNull(snapshot);
         var saved = snapshot.Select(copy => copy.TaskId).ToHashSet(StringComparer.Ordinal);
-        foreach (var added in open.Values.Where(copy => !saved.Contains(copy.TaskId)).ToList())
+        foreach (var added in open.Values.Where(copy => !saved.Contains(copy.Name)).ToList())
         {
             await CloseWorkingCopyAsync(added, ct).ConfigureAwait(false);
         }
@@ -216,13 +216,6 @@ public sealed partial class GitWorkspace : IWorkspace, IDisposable
         }
     }
 
-    /// <summary>Queues the working copy's changes for integration into the baseline, and waits for the result (WS-09).</summary>
-    public Task<IntegrationResult> IntegrateAsync(WorkingCopy copy, CancellationToken ct = default)
-    {
-        ArgumentNullException.ThrowIfNull(copy);
-        return queue.EnqueueAsync(copy, copy.TaskId, copy.Agent, ct);
-    }
-
     /// <summary>Queues a task's change for integration, attributed to the task and its author (WS-04), and waits for the result (WS-09).</summary>
     public Task<IntegrationResult> IntegrateAsync(WorkingCopy copy, string task, string author, CancellationToken ct = default)
     {
@@ -234,7 +227,7 @@ public sealed partial class GitWorkspace : IWorkspace, IDisposable
     public async Task CloseWorkingCopyAsync(WorkingCopy copy, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(copy);
-        open.TryRemove(copy.TaskId, out _);
+        open.TryRemove(copy.Name, out _);
         if (!options.KeepWorkingCopies)
         {
             await Git.RunAsync(root, ct, "worktree", "remove", "--force", copy.Directory).ConfigureAwait(false);
@@ -242,8 +235,8 @@ public sealed partial class GitWorkspace : IWorkspace, IDisposable
         }
     }
 
-    async Task<IWorkingCopy> IWorkspace.OpenWorkingCopyAsync(string taskId, string agent, CancellationToken ct) =>
-        await OpenWorkingCopyAsync(taskId, agent, ct).ConfigureAwait(false);
+    async Task<IWorkingCopy> IWorkspace.OpenWorkingCopyAsync(string name, string agent, CancellationToken ct) =>
+        await OpenWorkingCopyAsync(name, agent, ct).ConfigureAwait(false);
 
     Task IWorkspace.CloseWorkingCopyAsync(IWorkingCopy copy, CancellationToken ct) => CloseWorkingCopyAsync((WorkingCopy)copy, ct);
 

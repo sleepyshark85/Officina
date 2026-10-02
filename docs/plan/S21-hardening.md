@@ -38,4 +38,4 @@ From S20 (part 1):
 From S20 (part 2):
 - A working copy of their own for fan-out branches of one agent that change files: from the agent's copy as it is, with a rule
   for what becomes of each branch's changes. Until then branches of one agent share its working copy.
-- A time limit for command checks, so a hanging command cannot hold the integration queue.
+- `sof config validate` reports what `sof run` refuses for `extension:` tools, gates and checks, which `sof` never registers.

@@ -90,6 +90,13 @@ public sealed class WorkspaceTools(Func<ToolCall, Task<IWorkingCopy>> copyOf)
 
         public async ValueTask<ToolResult> InvokeAsync(ToolCall toolCall, CancellationToken ct)
         {
+            // TASK-06: a task's copy holds its assignee's work, which the reviewer reads and never changes.
+            if (Descriptor.Kind == ToolKind.Write && toolCall.Board is { TaskId: { } taskId } board
+                && (await board.ReadAsync(ct).ConfigureAwait(false)).FirstOrDefault(task => task.Id == taskId) is { } task && task.Assignee != toolCall.Agent)
+            {
+                return ToolResult.Failed(ToolErrorCategory.NotAuthorised, $"only the agent working on task {taskId} changes its working copy");
+            }
+
             try
             {
                 var copy = await copyOf(toolCall).ConfigureAwait(false);

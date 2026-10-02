@@ -23,6 +23,9 @@ public sealed record ToolCall(
     /// <summary>The agent that makes the call, set by the host's pipeline, so a tool shared by agents can act for each (such as in its own working copy).</summary>
     public string Agent { get; init; } = "";
 
+    /// <summary>The definition of the agent that makes the call, by its name in <c>agents</c>, whose settings, such as its role's secrets, apply.</summary>
+    public string Definition { get; init; } = "";
+
     /// <summary>
     /// The name of the working copy the call works in, which a shared tool opens by it (<see cref="WorkingCopies"/>): its task's,
     /// which the agents working on and reviewing the task share, or else the agent's own.

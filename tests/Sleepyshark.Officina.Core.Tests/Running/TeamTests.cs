@@ -350,6 +350,32 @@ public class TeamTests
         Assert.Empty(await workspace.SnapshotAsync(Ct)); // every task's copy went with its task
     }
 
+    // WS-08: a task's copy that cannot be removed is reported, and the team goes on; its integration's checkpoint is taken first.
+    [Fact]
+    public async Task A_working_copy_that_cannot_be_removed_is_reported_and_the_team_goes_on()
+    {
+        var workspace = new InMemoryWorkspace { CloseFails = new IOException("the folder is in use") };
+        var kit = Kit(options => options with
+        {
+            Capabilities = options.Capabilities with
+            {
+                Workspace = new() { Enabled = true }, ConversationStore = new() { Enabled = true },
+                Checkpoints = new() { Enabled = true, At = [CheckpointPoint.Integration] },
+            },
+        }, null, workspace: workspace);
+        Lead(kit, "You lead a team", Create("a"));
+        Lead(kit, "Every task is done").Reply("Done.");
+        Work(kit, "a").CallTools(("submit", """{ "id": "a" }""")).Reply("Submitted.");
+
+        var work = new Work("team", "Build it.") { Caller = Ann };
+        var result = await kit.Runner.RunAsync(work, Ct);
+
+        Assert.Equal(AgentOutcome.Completed, result.Outcome);
+        var events = await kit.Storage.Events.ReadAsync(null, work.RunId, 0, Ct);
+        Assert.Equal("the working copy of task a was not removed: the folder is in use", Assert.Single(events.Select(coreEvent => coreEvent.Payload).OfType<Warning>()).Text);
+        Assert.Contains(events, coreEvent => coreEvent.Payload is CheckpointTaken { Point: CheckpointPoint.Integration });
+    }
+
     // TEAM-05, TEAM-06: a message names its sender and recipient, is recorded, and reaches the recipient as data; only the team's agents receive one.
     [Fact]
     public async Task A_message_between_agents_is_recorded_and_reaches_its_recipient_as_data()

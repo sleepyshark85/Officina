@@ -10,10 +10,10 @@ namespace Sleepyshark.Officina.Core.Extensibility;
 public interface IWorkspace
 {
     /// <summary>
-    /// Creates the working copy where an agent does a task, from the baseline as it is now. A working copy that is already
-    /// open for the task is returned as it is, and so is one that a restore brought back.
+    /// Opens the working copy of the name (<see cref="WorkingCopies"/>), such as a task's, from the baseline as it is now. One that is
+    /// already open by the name is returned as it is, and so is one that a restore brought back.
     /// </summary>
-    Task<IWorkingCopy> OpenWorkingCopyAsync(string taskId, string agent, CancellationToken ct);
+    Task<IWorkingCopy> OpenWorkingCopyAsync(string name, string agent, CancellationToken ct);
 
     /// <summary>Removes the working copy when its task ends.</summary>
     Task CloseWorkingCopyAsync(IWorkingCopy copy, CancellationToken ct);
@@ -81,7 +81,11 @@ public sealed record SearchHit(string Path, int Line, string Text);
 /// <summary>How an integration ended.</summary>
 /// <param name="Outcome">Whether the change reached the baseline.</param>
 /// <param name="Details">For a conflict, the conflicting files; for failed checks, each finding after its check's name.</param>
-public sealed record IntegrationResult(IntegrationOutcome Outcome, IReadOnlyList<string> Details);
+public sealed record IntegrationResult(IntegrationOutcome Outcome, IReadOnlyList<string> Details)
+{
+    /// <summary>What went wrong cleaning up after it, which does not change how it ended; null when nothing did.</summary>
+    public string? Warning { get; init; }
+}
 
 public enum IntegrationOutcome
 {

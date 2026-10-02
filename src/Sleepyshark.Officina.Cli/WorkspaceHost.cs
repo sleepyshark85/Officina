@@ -92,7 +92,7 @@ internal sealed class WorkspaceHost : IWorkspace, IAsyncDisposable
             ? new Dictionary<string, ICheck>()
             : options.Checks.Where(check => check.Value.Command is not null).ToDictionary(
                 check => check.Value.Id(check.Key),
-                ICheck (check) => new CommandCheck(sandbox, options.Capabilities.Sandbox, options.Capabilities.Workspace, check.Value.Command!));
+                ICheck (check) => new CommandCheck(sandbox, options.Capabilities.Sandbox, options.Capabilities.Workspace, check.Value.Command!, check.Value.Timeout, time));
         // An application's check is not sof's to run: the runner refuses the configuration for it, as for any unregistered check.
         var baselineChecks = options.Capabilities.Workspace.BaselineChecks.Where(name => checks.ContainsKey(options.Checks[name].Id(name)))
             .ToDictionary(name => name, name => checks[options.Checks[name].Id(name)]);
@@ -150,17 +150,17 @@ internal sealed class WorkspaceHost : IWorkspace, IAsyncDisposable
     }
 
     /// <summary>The working copy of the name, opened once for whoever needs it first; one that failed to open is tried again next time.</summary>
-    public async Task<IWorkingCopy> OpenWorkingCopyAsync(string taskId, string agent, CancellationToken ct) => await OpenAsync(taskId, agent).ConfigureAwait(false);
+    public async Task<IWorkingCopy> OpenWorkingCopyAsync(string name, string agent, CancellationToken ct) => await OpenAsync(name, agent).ConfigureAwait(false);
 
     /// <summary>Closes a working copy when its task ends: its agents' background processes stop, and the copy goes unless the owner keeps copies (WS-08).</summary>
     public async Task CloseWorkingCopyAsync(IWorkingCopy copy, CancellationToken ct)
     {
         var closing = (WorkingCopy)copy;
-        copies.TryRemove(closing.TaskId, out _);
+        copies.TryRemove(closing.Name, out _);
         var released = false;
         try
         {
-            released = await DisposeSandboxesAsync(closing.TaskId).ConfigureAwait(false);
+            released = await DisposeSandboxesAsync(closing.Name).ConfigureAwait(false);
         }
         finally
         {
@@ -212,7 +212,7 @@ internal sealed class WorkspaceHost : IWorkspace, IAsyncDisposable
             try
             {
                 await workspace.CloseWorkingCopyAsync(copy).ConfigureAwait(false);
-                if (!released.Contains(copy.TaskId))
+                if (!released.Contains(copy.Name))
                 {
                     ReleaseLeftover(sandbox, options, copy.Directory, warnings);
                 }
@@ -268,7 +268,7 @@ internal sealed class WorkspaceHost : IWorkspace, IAsyncDisposable
         var copy = await OpenAsync(call.WorkingCopy, call.Agent).ConfigureAwait(false);
         return sandboxes.GetOrAdd(
             (call.WorkingCopy, call.Agent),
-            _ => new(() => new SandboxTools(sandbox!, options.Capabilities.Sandbox, options.Capabilities.Workspace, call.Agent, copy.Directory))).Value;
+            _ => new(() => new SandboxTools(sandbox!, options.Capabilities.Sandbox, options.Capabilities.Workspace, call.Definition, copy.Directory))).Value;
     }
 
     private sealed class SandboxTool(string id, ToolDescriptor descriptor, WorkspaceHost host) : ITool

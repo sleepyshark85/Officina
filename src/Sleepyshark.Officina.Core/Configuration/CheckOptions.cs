@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace Sleepyshark.Officina.Core.Configuration;
 
 /// <summary>
@@ -12,6 +14,10 @@ public sealed record CheckOptions
     [Setting("A command that checks a working copy, run in the sandbox there: the check passes when it exits with 0, and its last lines of output are the findings. It needs the sandbox, and checks a task's work or the baseline, not an agent's output. Set it or `use`.",
         Example = "\"dotnet test\"")]
     public string? Command { get; init; }
+
+    [Setting("For a command: the longest it may run, as `hh:mm:ss`; then it is stopped, and the check fails.", Example = "\"00:40:00\"")]
+    [Range(typeof(TimeSpan), "00:00:00", "10675199.02:48:05.4775807", MinimumIsExclusive = true, ErrorMessage = "must be greater than zero.")]
+    public TimeSpan Timeout { get; init; } = TimeSpan.FromMinutes(20);
 
     /// <summary>The id of the application's check.</summary>
     public string? ExtensionId() => Use is null ? null : ToolOptions.After(Use, "extension:");

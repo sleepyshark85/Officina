@@ -162,8 +162,18 @@ internal sealed class TeamRun
             var author = task.Assignee ?? team.Agent;
             var copy = await workspace.OpenWorkingCopyAsync(WorkingCopies.OfTask(team.RunId, task.Id), author, ct).ConfigureAwait(false);
             var result = await workspace.IntegrateAsync(copy, task.Id, author, ct).ConfigureAwait(false);
+            if (result.Warning is { } warning)
+            {
+                await steps.PublishAsync(team, new Warning(warning), ct).ConfigureAwait(false);
+            }
+
             if (result.Outcome != IntegrationOutcome.Integrated)
             {
+                if (result.Outcome == IntegrationOutcome.ChecksFailed)
+                {
+                    team.MarkUntrusted(); // SEC-04: the findings come from running the agents' code, and reach the author
+                }
+
                 var why = result.Outcome == IntegrationOutcome.Conflict
                     ? $"it conflicts with the baseline in {string.Join(", ", result.Details)}; the working copy now holds the baseline with the conflicts marked, to resolve"
                     : $"the baseline checks failed with it: {string.Join("; ", result.Details)}";
@@ -172,9 +182,9 @@ internal sealed class TeamRun
             }
 
             changed |= (await board.CompleteAsync(task.Id, "integrated", ct).ConfigureAwait(false)).Accepted;
-            closed.Add(task.Id);
-            await workspace.CloseWorkingCopyAsync(copy, ct).ConfigureAwait(false);
             await steps.CheckpointAsync(team, CheckpointPoint.Integration, ct).ConfigureAwait(false);
+            closed.Add(task.Id);
+            await CloseAsync(workspace, copy, task.Id, ct).ConfigureAwait(false);
         }
 
         return changed;
@@ -191,7 +201,23 @@ internal sealed class TeamRun
         foreach (var task in tasks.Where(task => task is { State: Cancelled, Assignee: not null } && !running.Any(job => job.Task == task.Id) && closed.Add(task.Id)))
         {
             var copy = await workspace.OpenWorkingCopyAsync(WorkingCopies.OfTask(team.RunId, task.Id), task.Assignee!, ct).ConfigureAwait(false);
+            await CloseAsync(workspace, copy, task.Id, ct).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// Closes a task's working copy once the task has ended. A failure to remove it is reported and the team goes on: the work
+    /// is integrated or no longer needed, and the next run to hold the workspace removes what is left.
+    /// </summary>
+    private async Task CloseAsync(IWorkspace workspace, IWorkingCopy copy, string taskId, CancellationToken ct)
+    {
+        try
+        {
             await workspace.CloseWorkingCopyAsync(copy, ct).ConfigureAwait(false);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException || !ct.IsCancellationRequested)
+        {
+            await steps.PublishAsync(team, new Warning($"the working copy of task {taskId} was not removed: {exception.Message}"), ct).ConfigureAwait(false);
         }
     }
 

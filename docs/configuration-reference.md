@@ -356,8 +356,10 @@ The built-in gates are:
 
 A check returns a structured result: passed or failed, with findings. A command check needs the sandbox,
 and checks a working copy: a task's when it is submitted, or the change applied to the baseline before it
-is integrated (`capabilities.workspace.baselineChecks`); it gets no secrets, and has no time limit of its
-own yet (S21). A review is a task's (`tasks.review`), by an agent other than the author (TASK-06).
+is integrated (`capabilities.workspace.baselineChecks`); it gets no secrets, and is stopped and fails after its
+`timeout` (20 minutes unless set), which the submit tool's own time limit does not cut short. Its findings come from
+running the agents' code, so they are untrusted content (SEC-04). A review is a task's (`tasks.review`), by an agent other
+than the author, who alone changes the task's working copy (TASK-06).
 
 ### 5.8 Knowledge sources
 

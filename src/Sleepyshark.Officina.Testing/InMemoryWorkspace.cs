@@ -20,13 +20,13 @@ public sealed class InMemoryWorkspace : IWorkspace
 
     private readonly Dictionary<string, (Copy Copy, string Agent)> open = new(StringComparer.Ordinal);
 
-    public Task<IWorkingCopy> OpenWorkingCopyAsync(string taskId, string agent, CancellationToken ct)
+    public Task<IWorkingCopy> OpenWorkingCopyAsync(string name, string agent, CancellationToken ct)
     {
         lock (open)
         {
-            if (!open.TryGetValue(taskId, out var found))
+            if (!open.TryGetValue(name, out var found))
             {
-                open[taskId] = found = (new Copy(new(Files)), agent);
+                open[name] = found = (new Copy(new(Files)), agent);
             }
 
             return Task.FromResult<IWorkingCopy>(found.Copy);
@@ -64,8 +64,16 @@ public sealed class InMemoryWorkspace : IWorkspace
         }
     }
 
+    /// <summary>What closing a copy throws, as removing a folder the operating system holds on to would; null for nothing.</summary>
+    public Exception? CloseFails { get; set; }
+
     public Task CloseWorkingCopyAsync(IWorkingCopy copy, CancellationToken ct)
     {
+        if (CloseFails is { } failure)
+        {
+            throw failure;
+        }
+
         lock (open)
         {
             foreach (var task in open.Where(found => found.Value.Copy == copy).Select(found => found.Key).ToList())

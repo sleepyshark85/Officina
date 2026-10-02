@@ -3,7 +3,6 @@ using System.Text;
 using System.Text.Json;
 using Sleepyshark.Officina.Core.Configuration;
 using Sleepyshark.Officina.Core.Extensibility;
-using Sleepyshark.Officina.Core.Tools;
 
 namespace Sleepyshark.Officina.Sandbox;
 
@@ -41,7 +40,7 @@ public sealed class SandboxTools : IAsyncDisposable
     /// <param name="sandbox">Where commands run.</param>
     /// <param name="options">The sandbox settings.</param>
     /// <param name="workspace">The workspace settings, whose protected paths commands cannot reach.</param>
-    /// <param name="agent">The agent the tools are for, whose secrets its commands receive.</param>
+    /// <param name="agent">The definition of the agent the tools are for, by its name in <c>agents</c>, whose role's secrets its commands receive (SBX-05).</param>
     /// <param name="directory">The agent's working copy.</param>
     /// <exception cref="InvalidOperationException">The machine cannot isolate commands, so none may run (SBX-07).</exception>
     public SandboxTools(ISandbox sandbox, SandboxOptions options, WorkspaceOptions workspace, string agent, string directory)
@@ -57,7 +56,7 @@ public sealed class SandboxTools : IAsyncDisposable
         this.sandbox = sandbox;
         this.options = options;
         this.directory = directory;
-        secrets = options.Secrets.GetValueOrDefault(ToolContext.DefinitionOf(agent)) ?? []; // secrets are per role, an agent of a team its instance
+        secrets = options.Secrets.GetValueOrDefault(agent) ?? [];
         this.workspace = workspace;
 
         Tools = new Dictionary<string, ITool>

@@ -37,7 +37,8 @@ Last updated 2026-10-02.
     the agent's own, until the run ends. The team integrates through the queue with `capabilities.workspace.baselineChecks`;
     command checks (`checks.<name>.command`) run in the sandbox; `sof run`'s console shows the board (TASK-08).
     S21 (from S20): fan-out branches of one agent share that agent's working copy while they run at the same time; a copy of
-    their own when they change files, and a time limit for command checks, wait for a case.
+    their own when they change files waits for a case. `sof config validate` does not report the `extension:` ids `sof` never
+    registers, which `sof run` refuses.
   - S21 (from S16): `sof config dry-run` cannot run a configuration that uses the `workspace.*` or `sandbox.*` tools. It
     should register them over the test kit's `InMemoryWorkspace` and `FakeSandbox` (CFG-12).
   - S20 part 3 adds the plan-approval sign-off and the model's tool to hand off to a human (EGR-04). Part 2 added integration

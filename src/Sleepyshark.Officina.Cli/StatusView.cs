@@ -29,6 +29,7 @@ internal sealed class StatusView(TextWriter output, Func<IntegrationQueueStatus>
             TurnEnded ended => $"ended: {ended.Outcome}{(ended.Reason is { } reason ? $" ({reason})" : "")}",
             AgentStatusChanged changed => $"{changed.Status.ToString().ToLowerInvariant()}{(changed.Detail is { } detail ? $": {detail}" : "")}",
             MessageSent sent => $"sent {sent.To} a message",
+            Warning warning => $"warning: {warning.Text}",
             _ => null,
         };
         lock (doing)

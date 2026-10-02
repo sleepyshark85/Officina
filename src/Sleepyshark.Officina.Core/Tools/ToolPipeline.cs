@@ -262,10 +262,10 @@ public sealed class ToolPipeline
             ? (await AskQuestionAsync(context, arguments, ct).ConfigureAwait(false), null)
             : await InvokeAsync(
                 tool, new ToolCall(real ? context.Masker!.Restore(arguments) : arguments, context.Caller, key, secrets, record, board, PublishAsync) {
-                    Agent = context.AgentId, WorkingCopy = WorkingCopyOf(context), Memory = Memory(context), Send = Messages is { } send ? (to, text, token) => send(context, to, text, token) : null,
+                    Agent = context.AgentId, Definition = context.Agent, WorkingCopy = WorkingCopyOf(context), Memory = Memory(context), Send = Messages is { } send ? (to, text, token) => send(context, to, text, token) : null,
                 }, ct).ConfigureAwait(false);
         detail = detail is null || masker is null ? detail : masker.Mask(detail);
-        if (tool.Options.Untrusted && result.Error is null)
+        if ((tool.Options.Untrusted && result.Error is null) || result.Untrusted)
         {
             context.MarkUntrusted(); // only ever set, as parallel calls share the mark
         }
@@ -391,7 +391,7 @@ public sealed class ToolPipeline
     {
         for (var attempt = 1; ; attempt++)
         {
-            using var timeout = new CancellationTokenSource(tool.Options.Timeout, time);
+            using var timeout = new CancellationTokenSource(tool.Implementation is TaskTool { RunsChecks: true } ? System.Threading.Timeout.InfiniteTimeSpan : tool.Options.Timeout, time);
             using var stop = CancellationTokenSource.CreateLinkedTokenSource(ct, timeout.Token);
             (ToolResult Result, string? Detail) outcome;
             try
