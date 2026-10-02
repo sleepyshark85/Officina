@@ -6,7 +6,7 @@
 
 Prove the non-functional targets and the coding team's success rate.
 
-**Closes:** SCALE-01, SCALE-02, SCALE-03, LAT-01, LAT-02, SEC-03, TEST-30, TEST-31, TEST-33
+**Closes:** SCALE-01, SCALE-02, SCALE-03, LAT-01, LAT-02, SEC-03, TEST-30, TEST-31, TEST-33, HITL-07
 
 ## Acceptance criteria
 
@@ -14,3 +14,8 @@ Prove the non-functional targets and the coding team's success rate.
 - [ ] The coding team benchmark reaches at least 90% across all runs, on Linux and Windows.
 - [ ] Coverage of the core is at least 85%.
 - [ ] Every MUST is verified by a test or a recorded review (v1 acceptance).
+
+## Notes
+
+- HITL-07 (a MAY: end users rate a result, linked to its run) moved here from S16: build it if time allows, or record
+  it as not in v1.

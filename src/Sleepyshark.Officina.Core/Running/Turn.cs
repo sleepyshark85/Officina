@@ -52,6 +52,8 @@ internal sealed class Turn
     private readonly string work;
     private readonly bool batch;
     private readonly bool handOffToHuman;
+    private readonly bool signOffToExceedRunBudget;
+    private readonly Func<CancellationToken, Task> whilePaused;
     private readonly List<ToolAttempt> attempts = [];
     private readonly List<CacheWarning> cacheWarnings = [];
     private readonly List<string> retrieved = [];
@@ -64,6 +66,7 @@ internal sealed class Turn
     private int toolCalls;
     private int withoutProgress;
     private int outputAttempts;
+    private int runBudgets = 1;
     private Usage usage = Usage.None;
     private decimal cost;
     private string lastText = "";
@@ -82,6 +85,7 @@ internal sealed class Turn
     /// <param name="instructions">The agent's instructions, placeholders filled.</param>
     /// <param name="work">What the turn is asked to do, as admission passed it.</param>
     /// <param name="inbox">Messages sent to the agent, which the turn adds to its history before each model call, masked like the work.</param>
+    /// <param name="whilePaused">Waits while the owner has paused the agent (RUN-06).</param>
     /// <param name="time">The clock for the time budgets and the operating facts.</param>
     public Turn(
         ToolContext context,
@@ -98,6 +102,7 @@ internal sealed class Turn
         string instructions,
         Work work,
         ConcurrentQueue<(Sender From, string Text)> inbox,
+        Func<CancellationToken, Task> whilePaused,
         TimeProvider time)
     {
         this.context = context;
@@ -124,6 +129,8 @@ internal sealed class Turn
         this.work = work.Input;
         batch = work.Trigger == Trigger.Batch;
         handOffToHuman = work.HandOffToHuman;
+        signOffToExceedRunBudget = options.Capabilities.HumanInteraction.SignsOff(SignOff.RunBudgetExceeded);
+        this.whilePaused = whilePaused;
     }
 
     public async Task<AgentResult> RunAsync(CancellationToken ct)
@@ -169,9 +176,10 @@ internal sealed class Turn
 
         while (true)
         {
-            if (Exhausted() is { } limit)
+            await whilePaused(ct).ConfigureAwait(false);
+            if (Exhausted() is { } exhausted && !(exhausted.OfRun && await SignedOffToExceedAsync(exhausted.Limit, ct).ConfigureAwait(false)))
             {
-                return HandOff(HandoffReason.BudgetExhausted, $"the {limit} budget is used up");
+                return HandOff(HandoffReason.BudgetExhausted, $"the {exhausted.Limit} budget is used up");
             }
 
             iterations++;
@@ -293,19 +301,41 @@ internal sealed class Turn
     }
 
     /// <summary>Which limit of the turn's, its task's or the run's budget is used up, if any (LOOP-06, COST-02).</summary>
-    private string? Exhausted()
+    private (string Limit, bool OfRun)? Exhausted()
     {
         var turn = agent.Budget.Turn;
         var elapsed = Elapsed;
-        return iterations >= turn.Iterations ? "turn's iteration"
-            : toolCalls >= turn.ToolCalls ? "turn's tool-call"
-            : usage.Total >= turn.Tokens ? "turn's token"
-            : cost >= turn.Cost ? "turn's cost"
-            : elapsed >= turn.Time ? "turn's time"
-            : task is not null && task.Spent + cost >= task.Budget ? "task's cost"
-            : cost >= runBudget.Cost ? "run's cost"
-            : elapsed >= runBudget.Time ? "run's time"
+        return iterations >= turn.Iterations ? ("turn's iteration", false)
+            : toolCalls >= turn.ToolCalls ? ("turn's tool-call", false)
+            : usage.Total >= turn.Tokens ? ("turn's token", false)
+            : cost >= turn.Cost ? ("turn's cost", false)
+            : elapsed >= turn.Time ? ("turn's time", false)
+            : task is not null && task.Spent + cost >= task.Budget ? ("task's cost", false)
+            : cost >= runBudget.Cost * runBudgets ? ("run's cost", true)
+            : elapsed >= runBudget.Time * runBudgets ? ("run's time", true)
             : null;
+    }
+
+    /// <summary>
+    /// RUN-05, HITL-04: with the sign-off on, the owner may let the run go on past its budget, by another budget of the
+    /// same size each time, so the run is never without a limit (INV-07).
+    /// </summary>
+    private async Task<bool> SignedOffToExceedAsync(string limit, CancellationToken ct)
+    {
+        if (!signOffToExceedRunBudget)
+        {
+            return false;
+        }
+
+        var summary = $"The {limit} budget is used up. Go on for another {runBudget.Cost} USD and {runBudget.Time}?";
+        var answer = await tools.Owner.AskAsync(context, tools.Owner.Request(context, HumanRequestKind.SignOff, summary), ct).ConfigureAwait(false);
+        if (answer is not { Approved: true })
+        {
+            return false;
+        }
+
+        runBudgets++;
+        return true;
     }
 
     /// <summary>
@@ -529,9 +559,13 @@ internal sealed class Turn
             return await FinishAsync(finish.Request.Arguments.GetRawText(), ct).ConfigureAwait(false);
         }
 
-        if (agent.HandOffOnPolicyGap && results.All(result => result.Error is ToolErrorCategory.NotAuthorised or ToolErrorCategory.PolicyViolation))
+        if (agent.HandOffOnPolicyGap
+            && results.All(result => result.Error is ToolErrorCategory.NotAuthorised or ToolErrorCategory.PolicyViolation or ToolErrorCategory.ApprovalDenied))
         {
-            return HandOff(HandoffReason.PolicyGap, "every tool call of the iteration was refused"); // LOOP-11
+            // LOOP-11; when a human refused one of the calls, or did not answer, that is the reason (EGR-03).
+            return results.Any(result => result.Error == ToolErrorCategory.ApprovalDenied)
+                ? HandOff(HandoffReason.ApprovalDeniedOrTimedOut, "every tool call of the iteration was refused, and approval was denied or not given in time")
+                : HandOff(HandoffReason.PolicyGap, "every tool call of the iteration was refused");
         }
 
         if (agent.StopWhen.ChecksPass && await OutputProblemAsync(lastText, ct).ConfigureAwait(false) is null)

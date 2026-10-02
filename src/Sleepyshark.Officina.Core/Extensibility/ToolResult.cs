@@ -48,6 +48,7 @@ public sealed record ToolResult
             ToolErrorCategory.InvalidArguments => "invalid arguments",
             ToolErrorCategory.NotAuthorised => "not authorised",
             ToolErrorCategory.PolicyViolation => "policy violation",
+            ToolErrorCategory.ApprovalDenied => "approval denied",
             ToolErrorCategory.Timeout => "timed out",
             ToolErrorCategory.Cancelled => "cancelled",
             ToolErrorCategory.Unavailable => "unavailable",

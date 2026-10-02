@@ -49,7 +49,7 @@ public sealed class InjectionTests : IAsyncDisposable
 
         Assert.Equal(
             (ToolErrorCategory.PolicyViolation, "approval denied", ToolErrorCategory.NotAuthorised),
-            (push.Error, pipe.Content.Split(": ")[1], issue.Error));
+            (push.Error, pipe.Content, issue.Error));
         Assert.Equal(commandsRun, sandbox.Processes.Count);
         Assert.Empty(dev.CreateIssue.Calls);
     }

@@ -2,7 +2,7 @@ using System.CommandLine;
 
 namespace Sleepyshark.Officina.Cli;
 
-/// <summary>The <c>sof</c> command line: for now <c>config show</c>, <c>config validate</c> and <c>config dry-run</c>.</summary>
+/// <summary>The <c>sof</c> command line: for now <c>run</c>, <c>config show</c>, <c>config validate</c> and <c>config dry-run</c>.</summary>
 public static class SofCommandLine
 {
     public static Task<int> RunAsync(IReadOnlyList<string> args, SofEnvironment host)
@@ -16,7 +16,7 @@ public static class SofCommandLine
             ValidateCommand.Create(shared, host),
             DryRunCommand.Create(shared, host),
         };
-        var root = new RootCommand("sof - the Officina coding team CLI.") { config };
+        var root = new RootCommand("sof - the Officina coding team CLI.") { config, RunCommand.Create(shared, host) };
 
         var parse = root.Parse([.. args]);
         if (parse.Errors.Count > 0)

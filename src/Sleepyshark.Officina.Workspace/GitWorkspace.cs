@@ -9,7 +9,7 @@ namespace Sleepyshark.Officina.Workspace;
 /// works in its own worktree on <c>agent/&lt;task&gt;</c>, and changes reach the baseline only through the integration
 /// queue. One run holds a workspace at a time (RUN-12); disposing it lets the next run in.
 /// </summary>
-public sealed class GitWorkspace : IDisposable
+public sealed class GitWorkspace : IWorkspace, IDisposable
 {
     private readonly string root;
     private readonly WorkspaceOptions options;
@@ -112,6 +112,11 @@ public sealed class GitWorkspace : IDisposable
             await Git.RunAsync(root, ct, "branch", "-D", copy.Branch).ConfigureAwait(false);
         }
     }
+
+    async Task<IWorkingCopy> IWorkspace.OpenWorkingCopyAsync(string taskId, string agent, CancellationToken ct) =>
+        await OpenWorkingCopyAsync(taskId, agent, ct).ConfigureAwait(false);
+
+    Task IWorkspace.CloseWorkingCopyAsync(IWorkingCopy copy, CancellationToken ct) => CloseWorkingCopyAsync((WorkingCopy)copy, ct);
 
     public void Dispose() => runLock.Dispose();
 

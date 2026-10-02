@@ -45,6 +45,6 @@ public sealed class CommandRulesTests : IAsyncDisposable
 
         var outcome = sandbox.Processes.Count == 1 ? "allowed" : dev.Human.Requests.Count == 1 ? "asked" : "denied";
         Assert.Equal(expected, outcome);
-        Assert.Equal(expected == "allowed" ? null : ToolErrorCategory.PolicyViolation, result.Error);
+        Assert.Equal(expected switch { "allowed" => null, "asked" => ToolErrorCategory.ApprovalDenied, _ => ToolErrorCategory.PolicyViolation }, result.Error);
     }
 }

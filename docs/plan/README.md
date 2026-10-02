@@ -6,9 +6,10 @@ Status: draft · 2026-10-01 · slices `REQUIREMENTS.md` (revision 2) into delive
 
 Last updated 2026-10-02.
 
-- **Done:** M0 spikes S00a and S00b; M1 slices S01 (walking skeleton) and S02 (configuration); S03 (tool pipeline); S04 (turn loop); S05 (context and caching); S06 (run record and output); S07 (history and conversation store); S08 (events, storage and observability); S09 (triggers and admission); S10 (MCP and knowledge); S14 (git workspace); S15 (sandbox); S18 (task board).
+- **Done:** M0 spikes S00a and S00b; M1 slices S01 (walking skeleton) and S02 (configuration); S03 (tool pipeline); S04 (turn loop); S05 (context and caching); S06 (run record and output); S07 (history and conversation store); S08 (events, storage and observability); S09 (triggers and admission); S10 (MCP and knowledge); S14 (git workspace); S15 (sandbox); S18 (task board); S16 (human interaction and CLI).
 - **Waiting:** the M0 design review sign-off on `REQUIREMENTS.md`, `CONFIGURATION.md` and `DESIGN.md`.
-- **Next:** S16.
+- **Doing:** S16b, the second part of S16: wiring the workspace, sandbox and tool servers into `sof run`.
+- **Next:** S11 and S17.
 - **Open follow-ups:**
   - S02 kept a `formatVersion` check, though only version 1 exists. Consider removing the setting
     until a version 2 exists (principle 13). S06 keeps `output.schema` as JSON text; when S13 or S16 want the
@@ -23,27 +24,24 @@ Last updated 2026-10-02.
   - S11: secrets declared in configuration, such as the provider API key and the tool servers' `env` and
     `headers`, must join the tool pipeline's redaction set when they are resolved, so they are removed like
     secrets tools read (INV-06).
-  - S16 connects the tool servers in `sof run`, and offers the workspace and sandbox tools only when their
-    capability is on (CAP-02).
   - S07 left memory (S17) to join the shortening test (HIST-03, TEST-15);
     S11 makes the Claude provider an `IHistoryShortener`; the capability slices (S16–S20) add their switches and
     dependencies to `CapabilitiesOptions`. Its Notes list the rest.
-  - S16 adds the approval timeout and the permission modes (HITL-01, HITL-02). A denied or timed-out approval
-    should then hand off as "approval denied or timed out"; S04 counts it as a refusal towards a policy gap.
   - S04 left parts of its requirements to the slices that add the state they need; its Notes list them
     (S06, S07, S09, S14, S16, S19).
   - S08 left parts of its requirements to the slices that add the state they need; its Notes list them
     (S06, S07, S09, S11, S13, S16, S17, S19, S20).
   - S11 ships the price table, requires a price when a cost budget is set, and splits `prices.*.cacheWrite`
     by cache lifetime (MDL-09). Until then a model without a configured price costs nothing.
-  - S16: `capabilities.workspace.baselineChecks` names checks from the `checks` section (added by S06) for
-    `GitWorkspace` to run, which the host passes in code today, with the command checks it needs (WS-02).
-  - S16 offers the `workspace.*` tools over `WorkingCopy` (read, search, edit, write; delete and
-    move with them) through `IWorkspace` in Core, with the test kit's in-memory workspace (TEST-01,
-    moved from S15: the sandbox needs only the working copy's folder). It gives each agent its working
-    copy and its `SandboxTools`, disposes them when the agent, task or run ends (SBX-03), wires the
-    sandbox tools and the command rules gate as built-ins, and shows the integration queue (WS-09).
-    It probes the sandbox once at startup (SBX-07), rather than once per agent's `SandboxTools`.
+  - S16b wires the workspace, sandbox and tool servers into `sof run`: it connects the tool servers; gives each agent
+    its working copy and its `SandboxTools`, disposed when the agent, task or run ends (SBX-03); wires the sandbox
+    tools and the command rules gate as built-ins; probes the sandbox once at startup (SBX-07); offers the workspace
+    and sandbox tools only when their capability is on (CAP-02); adds `workspace.delete_file` and
+    `workspace.move_file`; lets `capabilities.workspace.baselineChecks` name checks from `checks` (WS-02); and shows
+    the integration queue (WS-09).
+  - S11 registers the Claude provider in `sof run`, which until then reports that the provider is not available.
+  - S20 adds the plan-approval sign-off and the model's tool to hand off to a human (EGR-04). S18 and S19 add
+    integration and snapshots to `IWorkspace`.
   - S19 cleans up what the Windows sandbox leaves outside a cleaned-up working copy: its AppContainer
     profile, its home folder `%TEMP%\officina-<hash>`, and its read-and-execute grants on `toolchains` folders.
   - S21 runs the Windows sandbox tests once as a standard user in CI (the S00a recipe), tests the CPU
@@ -122,7 +120,7 @@ A slice is **done** when:
 | [S13](S13-loop-patterns.md) | Loop patterns | M4 | M | S04, S06 | [#15](https://github.com/sleepyshark85/Officina/issues/15) | todo |
 | [S14](S14-git-workspace.md) | Git workspace | M5 | M | S03 | [#16](https://github.com/sleepyshark85/Officina/issues/16) | done |
 | [S15](S15-sandbox.md) | Sandbox | M5 | M ×2 | S00a, S14 | [#17](https://github.com/sleepyshark85/Officina/issues/17) | done |
-| [S16](S16-human-interaction-cli.md) | Human interaction and CLI | M5 | M | S04, S08 | [#18](https://github.com/sleepyshark85/Officina/issues/18) | todo |
+| [S16](S16-human-interaction-cli.md) | Human interaction and CLI | M5 | M | S04, S08 | [#18](https://github.com/sleepyshark85/Officina/issues/18) | done |
 | [S17](S17-project-memory.md) | Project memory | M5 | S | S05, S16 | [#19](https://github.com/sleepyshark85/Officina/issues/19) | todo |
 | [S18](S18-task-board.md) | Task board | M6 | M | S06, S08 | [#20](https://github.com/sleepyshark85/Officina/issues/20) | done |
 | [S19](S19-checkpoints-long-runs.md) | Checkpoints and long runs | M6 | M | S08, S14 | [#21](https://github.com/sleepyshark85/Officina/issues/21) | todo |

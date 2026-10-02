@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Extensions.FileSystemGlobbing;
+using Sleepyshark.Officina.Core.Extensibility;
 
 namespace Sleepyshark.Officina.Workspace;
 
@@ -10,7 +11,7 @@ namespace Sleepyshark.Officina.Workspace;
 /// until they are integrated (WS-01). Agents reach files only through it: only inside the copy and never protected
 /// paths (WS-05), in parts and by search (WS-06), and an edit fails if the file changed since the agent read it (WS-07).
 /// </summary>
-public sealed class WorkingCopy
+public sealed class WorkingCopy : IWorkingCopy
 {
     private readonly Matcher hidden;
     private readonly Matcher readOnly;
@@ -163,9 +164,3 @@ public sealed class WorkingCopy
     // A hidden file is reported like a missing one, so agents cannot learn that it exists.
     private static WorkspaceException NotFound(string path) => new($"{path} does not exist.");
 }
-
-/// <summary>A line that matched a search.</summary>
-/// <param name="Path">The file, relative to the working copy.</param>
-/// <param name="Line">The line number, from 1.</param>
-/// <param name="Text">The line.</param>
-public sealed record SearchHit(string Path, int Line, string Text);

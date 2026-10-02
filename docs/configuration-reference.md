@@ -562,7 +562,7 @@ but it always exists. The stop condition "the output passes its checks" arrives 
   "entry": "team",                                 // the agent definition a run starts with
   "budget": { "cost": 25, "time": "08:00:00" },          // RUN-05
   "permissionMode": "ask",                         // HITL-01: ask | auto | readOnly   (live)
-  "onBudgetExhausted": "askOwner",                 // askOwner | handoff
+  "approvalTimeout": "00:30:00",                   // HITL-02: then deny
   "cancelWithin": "00:00:10"                            // RUN-06
 }
 ```
@@ -594,9 +594,7 @@ object with `"enabled"` plus its own settings.
 "capabilities": {
   "conversationStore": { "enabled": true },                         // CAP-05
   "humanInteraction": {
-    "channel": "builtin:cli",                                       // or extension:<id>
-    "approvalTimeout": "00:30:00",                                       // HITL-02
-    "signOffs": ["planApproval", "runBudgetExceeded", "irreversibleAction"]   // HITL-04
+    "signOffs": ["planApproval", "runBudgetExceeded", "irreversibleAction"]   // HITL-04; without it, an exhausted run budget hands off
   },
   "checkpoints": { "at": ["turn", "integration"] },                 // RUN-03; also "step", "tool"
   "team":        { "maxParallelAgents": 4, "helperDepth": 2, "helperCount": 4 },
@@ -640,7 +638,7 @@ Dependencies checked at validation (CAP-03):
 | `sandbox` | `workspace` |
 | `checkpoints` | `conversationStore` |
 | `projectMemory` | nothing; requires `humanInteraction` if `approveBy` is `owner` |
-| Any `signOffs`, `approval` other than `never`, or `permissionMode: ask` while an agent has a tool that may need permission | `humanInteraction` |
+| A `builtin:human.ask_owner` tool | `humanInteraction` |
 | `history.strategy` other than `none` across requests | `conversationStore` |
 
 ---

@@ -169,7 +169,7 @@ public class ToolPipelineTests
         var result = await RunAsync(pipeline, "create_issue", """{ "title": "x" }""");
 
         Assert.Equal("ok", result.Content);
-        Assert.Equal(("create_issue", "the tool needs approval"), (Assert.Single(setup.Human.Requests).Tool, setup.Human.Requests[0].Reason));
+        Assert.Equal(("create_issue", "the tool needs approval"), (Assert.Single(setup.Human.Requests).Tool, setup.Human.Requests[0].Summary));
         Assert.Equal(
             [("approval", AuditOutcome.Asked), ("human", AuditOutcome.Intent), (null, AuditOutcome.Completed)],
             setup.Audit.Entries.Select(entry => (entry.DecidedBy, entry.Outcome)));
@@ -183,14 +183,14 @@ public class ToolPipelineTests
 
         var result = await RunAsync(pipeline, "create_issue", """{ "title": "x" }""");
 
-        Assert.Equal((ToolErrorCategory.PolicyViolation, "policy violation: approval denied"), (result.Error, result.Content));
+        Assert.Equal((ToolErrorCategory.ApprovalDenied, "approval denied"), (result.Error, result.Content));
         Assert.Empty(createIssue.Calls);
         Assert.Equal(("human", AuditOutcome.Denied), (setup.Audit.Entries[^1].DecidedBy, setup.Audit.Entries[^1].Outcome));
 
         // EVT-01.
         Assert.Equal(
-            [new ToolCallStarted("create_issue", """{ "title": "x" }"""), new ApprovalRequested("create_issue", "the tool needs approval"),
-                new ApprovalAnswered("create_issue", false), new ToolCallEnded("create_issue", ToolErrorCategory.PolicyViolation)],
+            [new ToolCallStarted("create_issue", """{ "title": "x" }"""), new HumanAsked(HumanRequestKind.Approval, "the tool needs approval", "create_issue"),
+                new HumanAnswered(HumanRequestKind.Approval, false, false, "create_issue"), new ToolCallEnded("create_issue", ToolErrorCategory.ApprovalDenied)],
             (await setup.Events.ReadAsync("acme", "run-1", 0, TestContext.Current.CancellationToken)).Select(read => read.Payload));
     }
 
@@ -209,7 +209,7 @@ public class ToolPipelineTests
         await RunAsync(pipeline, "create_issue", """{ "title": "x", "branch": "dev" }""");
         await RunAsync(pipeline, "create_issue", """{ "title": "x", "branch": "main" }""");
 
-        Assert.Equal("gate main-approval", Assert.Single(setup.Human.Requests).Reason);
+        Assert.Equal("gate main-approval", Assert.Single(setup.Human.Requests).Summary);
         Assert.Equal(2, createIssue.Calls.Count);
     }
 

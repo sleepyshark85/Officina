@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Sleepyshark.Officina.Core.Configuration;
+using Sleepyshark.Officina.Core.Events;
 using Sleepyshark.Officina.Core.Extensibility;
 using Sleepyshark.Officina.Core.Messages;
 using Sleepyshark.Officina.Core.Running;
@@ -73,6 +74,26 @@ public class AdmissionTests
         Assert.Equal(Message.User($"Find {Email}."), unmasked.Model.Requests[0].History[0]);
     }
 
+    // ING-02, SBX-04: a tool's streamed output is masked under the same condition as its result.
+    [Fact]
+    public async Task Tool_output_events_are_masked_like_the_tools_results()
+    {
+        async ValueTask<ToolResult> Stream(ToolCall call, CancellationToken ct)
+        {
+            await call.Output($"to {Email}", ct);
+            return ToolResult.Success("ok");
+        }
+
+        var tools = new Dictionary<string, ITool> { ["masked"] = new FakeTool(ToolKind.Read, run: Stream), ["plain"] = new FakeTool(ToolKind.Read, run: Stream) };
+        var kit = new TestKit(Options(("masked", Extension("masked") with { MaskResults = true }), ("plain", Extension("plain"))), tools);
+        kit.Model.CallTools(("masked", "{}"), ("plain", "{}")).Reply("Done.");
+
+        await kit.RunAsync(Agent, "Go.", Ct);
+
+        var events = await kit.Storage.Events.ReadAsync(null, kit.Storage.Runs.Runs[0].RunId, 0, Ct);
+        Assert.Equal([("masked", "to [email-1]"), ("plain", $"to {Email}")], events.Select(read => read.Payload).OfType<ToolOutput>().Select(output => (output.Tool, output.Line)));
+    }
+
     // ING-03, ING-04.
     [Fact]
     public async Task Rate_limits_per_owner_and_per_tenant_reject_work_with_a_reason()
@@ -129,12 +150,17 @@ public class AdmissionTests
         };
 
         // The provider runs its own tools and gives the model their results, so the core cannot mask them.
-        var tools = new Dictionary<string, ToolOptions> { ["web_search"] = new() { Source = "provider:web_search", Reason = "Research.", MaskResults = true } };
+        // The core's own tools work on what the model has seen, masked already.
+        var tools = new Dictionary<string, ToolOptions>
+        {
+            ["web_search"] = new() { Source = "provider:web_search", Reason = "Research.", MaskResults = true },
+            ["cite"] = new() { Source = "builtin:record.cite", ReceivesMaskedValues = true },
+        };
 
         Assert.Equal(
             [
                 "policies.masking.patterns.badName-", "policies.masking.patterns.unclosed", "policies.rateLimits.perTenant.permits", "policies.rateLimits.perTenant.window",
-                "tools.web_search.maskResults",
+                "tools.cite.receivesMaskedValues", "tools.web_search.maskResults",
             ],
             new OfficinaOptions { Policies = policies, Tools = tools }.Validate().Select(error => error.Path).Order(StringComparer.Ordinal));
     }

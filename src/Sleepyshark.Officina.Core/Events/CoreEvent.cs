@@ -29,9 +29,9 @@ public sealed record CoreEvent(string RunId, string Agent, string? Step, long Se
 [JsonDerivedType(typeof(ToolCallStarted), "toolCallStarted")]
 [JsonDerivedType(typeof(ToolCallEnded), "toolCallEnded")]
 [JsonDerivedType(typeof(ToolOutput), "toolOutput")]
-[JsonDerivedType(typeof(ApprovalRequested), "approvalRequested")]
-[JsonDerivedType(typeof(ApprovalAnswered), "approvalAnswered")]
 [JsonDerivedType(typeof(TaskStatusChanged), "taskStatusChanged")]
+[JsonDerivedType(typeof(HumanAsked), "humanAsked")]
+[JsonDerivedType(typeof(HumanAnswered), "humanAnswered")]
 public abstract record EventPayload
 {
     private static readonly Dictionary<Type, string> Names = typeof(EventPayload).GetCustomAttributes<JsonDerivedTypeAttribute>()
@@ -68,9 +68,14 @@ public sealed record ToolCallEnded(string Tool, ToolErrorCategory? Error) : Even
 /// <summary>A line of output from a running tool, such as a sandboxed command (SBX-04). Known secrets are removed (INV-06).</summary>
 public sealed record ToolOutput(string Tool, string Line) : EventPayload;
 
-public sealed record ApprovalRequested(string Tool, string Reason) : EventPayload;
-
-public sealed record ApprovalAnswered(string Tool, bool Approved) : EventPayload;
+/// <summary>The agent waits for a human: an approval, a question or a sign-off (UX-01).</summary>
+/// <param name="Request">What it waits for.</param>
+/// <param name="Summary">What is asked.</param>
+/// <param name="Tool">For an approval, the tool.</param>
+public sealed record HumanAsked(HumanRequestKind Request, string Summary, string? Tool = null) : EventPayload;
 
 /// <summary>A task on the run's board has a new status (TASK-02).</summary>
 public sealed record TaskStatusChanged(string Task, TaskState Status) : EventPayload;
+
+/// <summary>The wait ended: approved (or the question answered), denied, or with no answer by the deadline.</summary>
+public sealed record HumanAnswered(HumanRequestKind Request, bool Approved, bool TimedOut, string? Tool = null) : EventPayload;

@@ -9,4 +9,7 @@ public static class ExitCodes
 
     /// <summary>The command line is wrong, or names something the configuration does not have.</summary>
     public const int Usage = 2;
+
+    /// <summary>The run ended without completing: it was handed off, rejected or failed.</summary>
+    public const int NotCompleted = 3;
 }
