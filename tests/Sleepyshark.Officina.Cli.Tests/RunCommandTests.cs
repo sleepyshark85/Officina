@@ -53,7 +53,7 @@ public sealed class RunCommandTests : IDisposable
         Assert.Equal(ExitCodes.Success, exitCode);
         Assert.Contains("[dev] waits for you: Approval note", output, StringComparison.Ordinal);
         Assert.Contains("dev: waits for you: Approval note\nwaiting for you: #1 dev asks to run note", output, StringComparison.Ordinal);
-        Assert.EndsWith("dev: Completed, cost $1.50\nDone.\n", output, StringComparison.Ordinal);
+        Assert.Contains("dev: Completed, cost $1.50\nDone.\n\nRun ", output, StringComparison.Ordinal);
         var last = model.Requests[^1].History;
         Assert.Contains("Postgres.", Assert.IsType<ToolResultContent>(last[^2].Content[0]).Text, StringComparison.Ordinal);
         Assert.Equal(Message.User("<message from=\"owner\">\nKeep it short.\n</message>"), last[^1]);
@@ -91,7 +91,7 @@ public sealed class RunCommandTests : IDisposable
         var (exitCode, output, _) = await run;
 
         Assert.Equal(ExitCodes.Success, exitCode);
-        Assert.EndsWith("Done.\n", output, StringComparison.Ordinal);
+        Assert.Contains("Done.\n\nRun ", output, StringComparison.Ordinal);
     }
 
     [Fact]

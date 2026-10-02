@@ -120,8 +120,9 @@ public sealed partial class GitWorkspace : IWorkspace, IDisposable
     /// run holds the workspace, so no other run is using any of it.
     /// </summary>
     /// <param name="keep">Whether a task's branch, with the commits of its checkpoints, is kept because its run can resume (RUN-04).</param>
+    /// <param name="removing">Called with each working copy's folder before it is removed, such as to release what a sandbox left outside it; null for nothing.</param>
     /// <param name="ct">Cancels the cleanup.</param>
-    public async Task RemoveLeftoversAsync(Func<string, Task<bool>> keep, CancellationToken ct = default)
+    public async Task RemoveLeftoversAsync(Func<string, Task<bool>> keep, Action<string>? removing, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(keep);
         if (options.KeepWorkingCopies)
@@ -134,6 +135,7 @@ public sealed partial class GitWorkspace : IWorkspace, IDisposable
         {
             foreach (var folder in Directory.EnumerateDirectories(WorktreeFolder).Where(folder => RunsCopy().IsMatch(Path.GetFileName(folder)) && !open.ContainsKey(Path.GetFileName(folder))))
             {
+                removing?.Invoke(folder);
                 await Git.TryRunAsync(root, ct, "worktree", "remove", "--force", folder).ConfigureAwait(false);
                 if (Directory.Exists(folder))
                 {

@@ -22,6 +22,7 @@ internal sealed class StatusView(TextWriter output, Func<IntegrationQueueStatus>
             TurnStarted => "working",
             ToolCallStarted started => $"running {started.Tool}",
             ToolCallEnded { Error: { } error } ended => $"{ended.Tool} failed: {error}",
+            BudgetWarning warning => $"the {warning.Level} {warning.Limit} budget is {warning.Used:P0} used",
             HumanAsked asked => $"waits for you: {asked.Request} {asked.Tool}".TrimEnd(),
             HumanAnswered { TimedOut: true } => "working; nobody answered in time",
             HumanAnswered => "working",

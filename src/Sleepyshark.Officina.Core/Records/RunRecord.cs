@@ -123,7 +123,7 @@ public sealed partial class RunRecord
     /// Facts with the same subject and different values conflict, as do current decisions with the same subject and
     /// different choices. A replaced decision is not current, so it conflicts with nothing.
     /// </summary>
-    private static bool Conflict(RecordEntry entry, RecordEntry other, IReadOnlyList<RecordEntry> record) => (entry.Item, other.Item) switch
+    internal static bool Conflict(RecordEntry entry, RecordEntry other, IReadOnlyList<RecordEntry> record) => (entry.Item, other.Item) switch
     {
         (Fact one, Fact two) => one.Subject == two.Subject && one.Value != two.Value,
         (Decision one, Decision two) => one.Subject == two.Subject && one.Choice != two.Choice && Current(entry, record) && Current(other, record),

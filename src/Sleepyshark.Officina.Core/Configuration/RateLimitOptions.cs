@@ -2,7 +2,7 @@ using System.ComponentModel.DataAnnotations;
 
 namespace Sleepyshark.Officina.Core.Configuration;
 
-/// <summary>Rate limits on admitted work (ING-03). S19 adds the per-run limit, once work can join a running run.</summary>
+/// <summary>Rate limits on admitted work (ING-03).</summary>
 public sealed record RateLimitOptions
 {
     [Setting("The limit for each owner. Anonymous callers share one. No limit when unset.", Example = """{ "permits": 20, "window": "01:00:00" }""")]
@@ -10,6 +10,10 @@ public sealed record RateLimitOptions
 
     [Setting("The limit for each tenant. Callers without a tenant share one. No limit when unset.", Example = """{ "permits": 500, "window": "01:00:00" }""")]
     public RateLimit? PerTenant { get; init; }
+
+    [Setting("The limit for each run: how many work items may join one run, such as a run that resumes or a team's tasks. A new run's first work item counts as one. No limit when unset.",
+        Example = """{ "permits": 100, "window": "01:00:00" }""")]
+    public RateLimit? PerRun { get; init; }
 }
 
 /// <summary>A fixed-window rate limit.</summary>

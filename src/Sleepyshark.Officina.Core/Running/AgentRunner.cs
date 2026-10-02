@@ -8,6 +8,7 @@ using Sleepyshark.Officina.Core.Messages;
 using Sleepyshark.Officina.Core.Memory;
 using Sleepyshark.Officina.Core.Observability;
 using Sleepyshark.Officina.Core.Records;
+using Sleepyshark.Officina.Core.Reports;
 using Sleepyshark.Officina.Core.Tasks;
 using Sleepyshark.Officina.Core.Tools;
 
@@ -146,6 +147,20 @@ public sealed class AgentRunner
     {
         var (_, context) = await FindAsync(runId, caller ?? Caller.Anonymous, ct).ConfigureAwait(false);
         return await checkpointer.TakeAsync(context, point, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// The report of a run that has ended or stopped: its outcome, work, decisions, checks, cost and open issues (RUN-11). It is
+    /// built from what is stored, so the run may have ended in another process.
+    /// </summary>
+    /// <param name="runId">The run.</param>
+    /// <param name="caller">The run's caller; anonymous when null.</param>
+    /// <param name="ct">Cancels the report.</param>
+    /// <exception cref="ArgumentException">There is no such run.</exception>
+    public async Task<RunReport> ReportAsync(string runId, Caller? caller = null, CancellationToken ct = default)
+    {
+        var (_, context) = await FindAsync(runId, caller ?? Caller.Anonymous, ct).ConfigureAwait(false);
+        return (await RunReport.BuildAsync(storage, context.Caller.Tenant, runId, ct).ConfigureAwait(false))!;
     }
 
     /// <summary>A run's checkpoints, in order (RUN-08).</summary>
@@ -442,6 +457,7 @@ public sealed class AgentRunner
         Activity? activity = null;
         Task<StepResult>? running = null;
         var recorded = false;
+        var spent = (Run: default(Spent), Agent: default(Spent));
         StepResult ended;
         try
         {
@@ -452,6 +468,9 @@ public sealed class AgentRunner
             if (resume)
             {
                 await ResumeStateAsync(context, stop.Token).ConfigureAwait(false);
+
+                // INV-07: what the run spent before it died still counts against its budgets.
+                spent = Spent.Of(await storage.Events.ReadAsync(context.Caller.Tenant, context.RunId, 0, stop.Token).ConfigureAwait(false), name);
             }
             else
             {
@@ -465,7 +484,7 @@ public sealed class AgentRunner
 
             recorded = true;
             await Events.PublishAsync(context, new TurnStarted(), stop.Token).ConfigureAwait(false);
-            running = steps.RunAsync(Budget.ForRun(Options.Run.Budget, time), stop.Token);
+            running = steps.RunAsync(Budget.ForRun(Options.Run.Budget, time, spent.Run).DrawAgent(agent.Budget.Total, spent.Agent), stop.Token);
             ended = await running.WaitAsync(stop.Token).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (stop.IsCancellationRequested)
@@ -515,17 +534,18 @@ public sealed class AgentRunner
         var interrupted = await checkpointer.InterruptedAsync(context, ct).ConfigureAwait(false);
         var saved = await storage.Checkpoints.ReadAsync(context.Caller.Tenant, context.RunId, ct).ConfigureAwait(false);
         var last = saved.Count == 0 ? null : saved[^1];
-        if (last is null)
-        {
-            // It died before its first checkpoint, so nothing was saved and nothing is restored.
-            last = await checkpointer.TakeAsync(context, CheckpointPoint.Start, ct).ConfigureAwait(false);
-        }
-        else
+        if (last is not null)
         {
             await checkpointer.RestoreAsync(context, last, ct).ConfigureAwait(false);
         }
 
-        await Events.PublishAsync(context, new RunResumed(last!.Number, interrupted), ct).ConfigureAwait(false);
+        // Published before the checkpoint below, so every event after the restart follows this one (INV-07: the budget's time).
+        await Events.PublishAsync(context, new RunResumed(last?.Number ?? 0, interrupted), ct).ConfigureAwait(false);
+        if (last is null)
+        {
+            // It died before its first checkpoint, so nothing was saved and nothing is restored.
+            await checkpointer.TakeAsync(context, CheckpointPoint.Start, ct).ConfigureAwait(false);
+        }
     }
 
     /// <summary>A run that ends in a handoff waits for a human (RUN-01).</summary>

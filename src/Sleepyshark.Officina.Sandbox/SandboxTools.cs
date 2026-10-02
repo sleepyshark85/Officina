@@ -85,6 +85,9 @@ public sealed class SandboxTools : IAsyncDisposable
                 await process.DisposeAsync().ConfigureAwait(false);
             }
         }
+
+        // Every command has ended, so what the sandbox set up for this working copy can go.
+        sandbox.Release(directory, options.Toolchains);
     }
 
     private async ValueTask<ToolResult> RunAsync(ToolCall call, CancellationToken ct)

@@ -309,12 +309,15 @@ public sealed class SqliteStorage : IStorage, IRunStore, IConversationStore, IEv
             AND position NOT IN (SELECT position FROM conversations WHERE {Conversation} ORDER BY position LIMIT $count)
             """, row => row.GetInt32(0), ct, ("$tenant", tenant), ("$agent", agent), ("$owner", owner), ("$run_id", runId), ("$count", count)).ConfigureAwait(false))[0];
 
-    public ValueTask TruncateAsync(string? tenant, string agent, string? owner, int count, CancellationToken ct) =>
+    public ValueTask TruncateAsync(string? tenant, string agent, string? owner, int count, string runId, CancellationToken ct) =>
         ExecuteAsync(
             $"""
             DELETE FROM conversations WHERE {Conversation}
             AND position NOT IN (SELECT position FROM conversations WHERE {Conversation} ORDER BY position LIMIT $count)
-            """, ct, ("$tenant", tenant), ("$agent", agent), ("$owner", owner), ("$count", count));
+            AND NOT EXISTS (
+                SELECT 1 FROM conversations WHERE {Conversation} AND run_id IS NOT $run_id
+                AND position NOT IN (SELECT position FROM conversations WHERE {Conversation} ORDER BY position LIMIT $count))
+            """, ct, ("$tenant", tenant), ("$agent", agent), ("$owner", owner), ("$run_id", runId), ("$count", count));
 
     public async ValueTask<IReadOnlyList<ConversationTurn>> ReadAsync(string? tenant, string agent, string? owner, CancellationToken ct) =>
         await QueryAsync(

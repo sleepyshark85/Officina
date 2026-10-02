@@ -56,6 +56,7 @@ internal sealed class Turn
     private readonly bool batch;
     private readonly bool handOffToHuman;
     private readonly bool signOffToExceedRunBudget;
+    private bool warnedTask;
     private readonly Func<CancellationToken, Task> whilePaused;
     private readonly List<ToolAttempt> attempts = [];
     private readonly List<CacheWarning> cacheWarnings = [];
@@ -195,6 +196,7 @@ internal sealed class Turn
                 return HandOff(HandoffReason.BudgetExhausted, $"the {exhausted.Limit} budget is used up");
             }
 
+            await WarnAsync(ct).ConfigureAwait(false);
             iterations++;
             budget.Spend(iterations: 1);
             while (inbox.TryDequeue(out var message))
@@ -357,6 +359,21 @@ internal sealed class Turn
     private (string Limit, bool OfRun)? Exhausted() =>
         task is not null && task.Spent + cost >= task.Budget ? ("task's cost", false) : budget.Exhausted();
 
+    /// <summary>Publishes a warning for each limit of the turn's, its pattern's, its agent's, its task's or the run's budget that is nearly used up (EVT-01).</summary>
+    private async Task WarnAsync(CancellationToken ct)
+    {
+        foreach (var (level, limit, used) in budget.Warnings())
+        {
+            await events.PublishAsync(context, new BudgetWarning(level, limit, used), ct).ConfigureAwait(false);
+        }
+
+        if (task is not null && (double)((task.Spent + cost) / task.Budget) is var share && share >= Budget.WarnAt && share < 1 && !warnedTask)
+        {
+            warnedTask = true;
+            await events.PublishAsync(context, new BudgetWarning("task's", "cost", share), ct).ConfigureAwait(false);
+        }
+    }
+
     /// <summary>
     /// RUN-05, HITL-04: with the sign-off on, the owner may let the run go on past its budget, by another budget of the
     /// same size each time, so the run is never without a limit (INV-07).
@@ -449,19 +466,20 @@ internal sealed class Turn
             return (HandoffReason.OutputCheckFailed, "the output cites no source");
         }
 
-        return await FailedCheckAsync(context, checks, output, artifacts, ct).ConfigureAwait(false) is { } failed
+        return await FailedCheckAsync(context, events, checks, output, artifacts, ct).ConfigureAwait(false) is { } failed
             ? (HandoffReason.OutputCheckFailed, failed)
             : null;
     }
 
     /// <summary>Runs the checks on the output in order, and says which failed first and what it found; null when all pass (OUT-03).</summary>
     internal static async Task<string?> FailedCheckAsync(
-        ToolContext context, IEnumerable<(string Name, ICheck Check)> checks, string output, IReadOnlyList<Artifact> artifacts, CancellationToken ct)
+        ToolContext context, EventBus events, IEnumerable<(string Name, ICheck Check)> checks, string output, IReadOnlyList<Artifact> artifacts, CancellationToken ct)
     {
         foreach (var (name, check) in checks)
         {
             var result = await check.RunAsync(new CheckContext(null, output, [.. artifacts]), ct).ConfigureAwait(false);
             Telemetry.CheckEnded(context, name, result.Passed);
+            await events.PublishAsync(context, new CheckRan(name, result.Passed, context.TaskId), ct).ConfigureAwait(false);
             if (!result.Passed)
             {
                 return $"check {name} failed: {string.Join("; ", result.Findings)}";
@@ -557,7 +575,7 @@ internal sealed class Turn
         }
 
         Telemetry.ModelCallEnded(activity, context, served.Provider, served.Model, stop, callUsage, callCost, time.GetElapsedTime(callStarted));
-        await events.PublishAsync(context, new ModelCallEnded(stop, callUsage, callCost), ct).ConfigureAwait(false);
+        await events.PublishAsync(context, new ModelCallEnded(stop, callUsage, callCost, served.Model, context.TaskId), ct).ConfigureAwait(false);
         AddText();
         if (CheckCacheHits(callUsage) is { } warning)
         {

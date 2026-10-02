@@ -139,10 +139,16 @@ public sealed partial record OfficinaOptions : IValidatableObject
         errors = errors.Concat(AdmissionSettings()).Concat(Annotations(Storage.Retention, "storage.retention"))
             .Concat(Storage.Unstored.Where(kind => !EventPayload.Kinds.Contains(kind)).Select(kind => new ConfigurationError(
                 ValidationPhase.Shape, "storage.unstoredEvents", $"\"{kind}\" is not a kind of event.",
-                $"Use one of: {string.Join(", ", EventPayload.Kinds.Order(StringComparer.Ordinal))}.")));
+                $"Use one of: {string.Join(", ", EventPayload.Kinds.Order(StringComparer.Ordinal))}.")))
+            .Concat(Capabilities.Checkpoints.Enabled ? Storage.Unstored.Intersect(SpentKinds).Select(kind => new ConfigurationError(
+                ValidationPhase.Capabilities, "storage.unstoredEvents", $"\"{kind}\" must be stored while checkpoints are on: a run that resumes reads what it spent from it (INV-07).",
+                "Remove it from the list.")) : []);
 
         return errors.Concat(ToolSettings()).Concat(CapabilitySettings()).Concat(InstructionPlaceholders.Check(this)).Concat(PatternCycles());
     }
+
+    /// <summary>The events a resumed run reads its spent budget from.</summary>
+    private static readonly string[] SpentKinds = ["modelCallEnded", "toolCallEnded", "runResumed", "runRolledBack", "turnStarted", "turnEnded", "budgetWarning"];
 
     /// <summary>CAP-03: every capability in use is on, and every capability on has the ones it requires.</summary>
     private IEnumerable<ConfigurationError> CapabilitySettings()
@@ -280,7 +286,7 @@ public sealed partial record OfficinaOptions : IValidatableObject
     private IEnumerable<ConfigurationError> AdmissionSettings()
     {
         var errors = Annotations(Policies, "policies");
-        foreach (var (name, limit) in new[] { ("perOwner", Policies.RateLimits?.PerOwner), ("perTenant", Policies.RateLimits?.PerTenant) })
+        foreach (var (name, limit) in new[] { ("perOwner", Policies.RateLimits?.PerOwner), ("perTenant", Policies.RateLimits?.PerTenant), ("perRun", Policies.RateLimits?.PerRun) })
         {
             errors = errors.Concat(limit is null ? [] : Annotations(limit, $"policies.rateLimits.{name}"));
         }
@@ -310,6 +316,7 @@ public sealed partial record OfficinaOptions : IValidatableObject
         var path = $"agents.{name}";
         var errors = (agent.Budget is null ? [] : Annotations(agent.Budget, $"{path}.budget", ValidationPhase.Invariants))
             .Concat(agent.Budget?.Turn is null ? [] : Annotations(agent.Budget.Turn, $"{path}.budget.turn", ValidationPhase.Invariants))
+            .Concat(agent.Budget?.Total is null ? [] : Annotations(agent.Budget.Total, $"{path}.budget.total", ValidationPhase.Invariants))
             .Concat(agent.Stall is null ? [] : Annotations(agent.Stall, $"{path}.stall"))
             .Concat(agent.Context is null ? [] : Annotations(agent.Context, $"{path}.context"))
             .Concat(agent.Context?.History is null ? [] : Annotations(agent.Context.History, $"{path}.context.history"))

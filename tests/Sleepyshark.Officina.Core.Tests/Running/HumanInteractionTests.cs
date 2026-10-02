@@ -167,6 +167,29 @@ public class HumanInteractionTests
         Assert.Equal(outcome == AgentOutcome.Completed ? null : HandoffReason.BudgetExhausted, result.Handoff?.Reason);
     }
 
+    // HITL-04, RUN-05: with nothing configured but the default run budget of $25, the owner is asked, and no agent level ends the turn first.
+    [Fact]
+    public async Task The_default_run_budget_asks_the_owner_before_any_agent_level_ends_the_turn()
+    {
+        var options = Configure() with
+        {
+            Run = new() { PermissionMode = PermissionMode.Auto },
+            Capabilities = new() { HumanInteraction = new() { Enabled = true, SignOffs = [SignOff.RunBudgetExceeded] } },
+            Providers = new Dictionary<string, ProviderOptions>
+            {
+                [ProviderOptions.ClaudeName] = ProviderOptions.Claude with { Prices = new Dictionary<string, ModelPrice> { ["claude-opus-5-5"] = new() { Input = 1 } } },
+            },
+        };
+        options = options with { Agents = options.Agents.ToDictionary(agent => agent.Key, agent => agent.Value with { Budget = new() { Turn = new() { Tokens = long.MaxValue, Cost = 100 } } }) };
+        var kit = new TestKit(options, new Dictionary<string, ITool> { ["edit"] = edit, ["read"] = new FakeTool(ToolKind.Read) });
+        kit.Human.Answer(HumanAnswer.Approve);
+        kit.Model.Reply(new TextDelta("Part one."), new UsageReported(new Usage(25_000_000, 0, 0, 0)), new Stopped(StopReason.Paused)).Reply("Done.");
+
+        var result = await kit.RunAsync(Agent, "work", Ct);
+
+        Assert.Equal((AgentOutcome.Completed, 1), (result.Outcome, kit.Human.Requests.Count));
+    }
+
     // HITL-04.
     [Theory]
     [InlineData(true)]

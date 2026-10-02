@@ -25,7 +25,7 @@ namespace is its name.
 | `Sleepyshark.Officina.Mcp` | Mcp | Own MCP client for stdio and Streamable HTTP. Turns each server tool into a core tool. | Core | `toolServers` are configured |
 | `Sleepyshark.Officina.Providers.Claude` | Providers.Claude | The Claude provider: maps requests (§9), places cache markers, streams, classifies errors. The price table ships as the `claude` provider's default prices in Core's options | Core, Anthropic C# SDK | A `claude` provider is configured (the default) |
 | `Sleepyshark.Officina.Testing` | Testing | Test kit: scripted models, controllable clock, fake tools, in-memory workspace, sandbox and storage, record and replay (TEST-01, TEST-02) | Core | In tests, and by `sof config dry-run` (CFG-12) |
-| `Sleepyshark.Officina.Cli` | Cli | The coding team CLI: `init`, `run`, `resume`, `config`; loads configuration with Microsoft.Extensions.Configuration; approvals, questions, task board and cost views; the CLI human-interaction channel | Every project, Microsoft.Extensions.Configuration and System.CommandLine (Testing only for the scripted model of `config dry-run`); it receives the Anthropic SDK only transitively, through the Claude provider | — |
+| `Sleepyshark.Officina.Cli` | Cli | The coding team CLI: `init`, `run`, `resume`, `rollback`, `report`, `config`; loads configuration with Microsoft.Extensions.Configuration; approvals, questions, task board and cost views; the CLI human-interaction channel | Every project, Microsoft.Extensions.Configuration and System.CommandLine (Testing only for the scripted model of `config dry-run`); it receives the Anthropic SDK only transitively, through the Claude provider | — |
 | `Anthropic` (NuGet) | Anthropic SDK | The official Claude SDK | `Microsoft.Extensions.AI.Abstractions` (transitive) | With the Claude provider only |
 
 Dependency rules, enforced by the dependency check, which runs as a test in CI (TEST-32):
@@ -253,7 +253,13 @@ decides the outcome.
   event numbering continued from the stored log. A run whose process died is still `running` in the store, which is how resume
   finds it. Write-tool intents without an outcome are flagged in a `runResumed` event (RUN-07), and an irreversible call is not
   repeated, because its intent is already in the audit log (TOOL-10): it goes to a human. Patterns do not resume part-way: the
-  steps run again from the first, on the state the checkpoint holds.
+  steps run again from the first, on the state the checkpoint holds. The budgets hold across the restart (INV-07): the resumed
+  run's budget starts with the cost, tokens and tool calls summed from the stored events, and the time spent inside its work
+  items, so downtime between processes does not count. Event retention shorter than a run's life would under-count it. `sof` holds a lock file for a run while it works on it, so a live run is not resumed from another process.
+- **Budgets and the report (RUN-05, RUN-10, RUN-11).** Each level draws on the one above: turn, pattern, agent, run; a task's cost
+  is checked beside them. Exhausting any ends the turn in a handoff that names the level, and the run level asks the owner. The agent level exists only when configured. A level
+  announces a `budgetWarning` once at 80% of a limit. The report is built from the stored events, record and board, so it can be
+  made for a run of another process; cost is summed from `modelCallEnded` events by their agent, task, step and model.
 
 ![Crash and resume](docs/diagrams/resume.svg)
 

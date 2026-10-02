@@ -21,8 +21,12 @@ public interface IConversationStore
     /// <summary>How many turns after the first <paramref name="count"/> were written by a run other than <paramref name="runId"/>.</summary>
     ValueTask<int> CountOtherRunsAfterAsync(string? tenant, string agent, string? owner, int count, string runId, CancellationToken ct);
 
-    /// <summary>Deletes the turns after the first <paramref name="count"/>, when a run goes back to a checkpoint (RUN-08).</summary>
-    ValueTask TruncateAsync(string? tenant, string agent, string? owner, int count, CancellationToken ct);
+    /// <summary>
+    /// Deletes the turns after the first <paramref name="count"/>, when a run goes back to a checkpoint (RUN-08), unless a run other
+    /// than <paramref name="runId"/> wrote one of them. The check and the deletion are one step, so a turn written meanwhile is never
+    /// removed; the caller counts the turns afterwards to see whether it was.
+    /// </summary>
+    ValueTask TruncateAsync(string? tenant, string agent, string? owner, int count, string runId, CancellationToken ct);
 }
 
 /// <summary>One turn of a conversation, as it was sent to the model.</summary>

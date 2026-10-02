@@ -72,7 +72,7 @@ public sealed partial class ResumeCommandTests : IDisposable
         model.CallTools(("write", """{ "path": "hello.txt", "content": "hi again" }""")).Reply("Done again.");
         var (resumeCode, resumed, _) = await sof.RunAsync("resume", runId);
         Assert.Equal(ExitCodes.Success, resumeCode);
-        Assert.EndsWith("dev: Completed, cost $0.00\nDone again.\n", resumed, StringComparison.Ordinal);
+        Assert.Contains("dev: Completed, cost $0.00\nDone again.\n\nRun ", resumed, StringComparison.Ordinal);
         var (endedCode, _, ended) = await sof.RunAsync("resume", runId);
         Assert.Equal((ExitCodes.Invalid, true), (endedCode, ended.Contains("has ended (Completed)", StringComparison.Ordinal)));
     }
@@ -103,6 +103,70 @@ public sealed partial class ResumeCommandTests : IDisposable
 
         Assert.Equal((ExitCodes.Invalid, "error: there is no run nobody.\n"), (resumeCode, resumeError));
         Assert.Equal((ExitCodes.Invalid, "error: there is no run nobody.\n"), (rollbackCode, rollbackError));
+    }
+
+    // RUN-11: the report of a stored run is shown when it ends, and later on request.
+    [Fact]
+    public async Task The_report_of_a_run_is_shown_when_it_ends_and_again_on_request()
+    {
+        model.Reply("Done.");
+        var (_, ran, _) = await sof.RunAsync("run", "--input", "Greet.");
+        var runId = RunId().Match(ran).Groups[1].Value;
+
+        var (code, report, _) = await sof.RunAsync("report", runId);
+
+        Assert.Equal(ExitCodes.Success, code);
+        Assert.Contains($"Run {runId}: Completed, Completed\n", report, StringComparison.Ordinal);
+        Assert.Contains($"Run {runId}: Completed, Completed\n", ran, StringComparison.Ordinal);
+        Assert.Contains("Work: Greet.\n", report, StringComparison.Ordinal);
+    }
+
+    // REL-04: a database in another format version is an error line, not a stack trace.
+    [Theory]
+    [InlineData("resume", "")]
+    [InlineData("rollback", "--to")]
+    [InlineData("rollback", "")]
+    [InlineData("report", "")]
+    [InlineData("run", "--input")]
+    public async Task A_database_in_another_format_version_is_an_error_line(string command, string option)
+    {
+        model.Reply("Done.");
+        var (_, ran, _) = await sof.RunAsync("run", "--input", "Greet.");
+        var runId = RunId().Match(ran).Groups[1].Value;
+        var database = Path.Combine(sof.Directory, ".sof", "sof.db");
+        await using (var connection = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={database};Pooling=False"))
+        {
+            await connection.OpenAsync(Ct);
+            await using var older = connection.CreateCommand();
+            older.CommandText = "PRAGMA user_version = 4";
+            await older.ExecuteNonQueryAsync(Ct);
+        }
+
+        var arguments = new List<string> { command };
+        arguments.AddRange(option switch { "--to" => [runId, "--to", "0"], "--input" => ["--input", "Again."], _ => [runId] });
+        var (code, _, error) = await sof.RunAsync([.. arguments]);
+
+        Assert.Equal(ExitCodes.Invalid, code);
+        Assert.StartsWith("error: ", error, StringComparison.Ordinal);
+        Assert.Contains("format version 4", error, StringComparison.Ordinal);
+        Assert.DoesNotContain("   at ", error, StringComparison.Ordinal);
+    }
+
+    // RUN-04: a run that another process still holds is not resumed or rolled back from here.
+    [Fact]
+    public async Task A_run_held_by_another_process_is_not_resumed_or_rolled_back()
+    {
+        model.Reply("Done.");
+        var (_, ran, _) = await sof.RunAsync("run", "--input", "Greet.");
+        var runId = RunId().Match(ran).Groups[1].Value;
+        await using var held = new FileStream(Path.Combine(sof.Directory, ".sof", $"{runId}.lock"), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+
+        var (resumeCode, _, resumeError) = await sof.RunAsync("resume", runId);
+        var (rollbackCode, _, rollbackError) = await sof.RunAsync("rollback", runId, "--to", "0");
+
+        Assert.Equal((ExitCodes.Invalid, ExitCodes.Invalid), (resumeCode, rollbackCode));
+        Assert.Contains("is held by another process", resumeError, StringComparison.Ordinal);
+        Assert.Contains("is held by another process", rollbackError, StringComparison.Ordinal);
     }
 
     // RUN-03: the owner takes a checkpoint at the console.

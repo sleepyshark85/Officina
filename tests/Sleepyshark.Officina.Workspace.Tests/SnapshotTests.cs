@@ -100,7 +100,7 @@ public class SnapshotTests
         {
             kept.Add(task);
             return Task.FromResult(task.StartsWith(Resumable, StringComparison.Ordinal));
-        }, Ct);
+        }, null, Ct);
 
         Assert.Empty(Directory.EnumerateDirectories(Path.Combine(repository.Root, ".sof", "worktrees")));
         Assert.Equal(
@@ -122,7 +122,7 @@ public class SnapshotTests
         }
 
         using var next = await repository.OpenAsync(new WorkspaceOptions { KeepWorkingCopies = true }, runId: "next");
-        await next.RemoveLeftoversAsync(_ => Task.FromResult(false), Ct);
+        await next.RemoveLeftoversAsync(_ => Task.FromResult(false), null, Ct);
 
         Assert.Equal("kept", File.ReadAllText(Path.Combine(repository.Root, ".sof", "worktrees", $"{Dead}-alice", "kept.txt")));
         Assert.Contains($"agent/{Dead}-alice", await repository.GitAsync("branch", "--list", "agent/*"), StringComparison.Ordinal);
@@ -138,7 +138,7 @@ public class SnapshotTests
         using var workspace = await repository.OpenAsync();
         var copy = await workspace.OpenWorkingCopyAsync("t1", "alice", Ct);
 
-        await workspace.RemoveLeftoversAsync(_ => Task.FromResult(false), Ct);
+        await workspace.RemoveLeftoversAsync(_ => Task.FromResult(false), null, Ct);
 
         Assert.True(Directory.Exists(copy.Directory));
         Assert.Contains("agent/t1", await repository.GitAsync("branch", "--list", "agent/*"), StringComparison.Ordinal);

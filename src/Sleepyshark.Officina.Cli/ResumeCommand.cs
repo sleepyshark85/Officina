@@ -3,6 +3,7 @@ using Sleepyshark.Officina.Core.Configuration;
 using Sleepyshark.Officina.Storage.Sqlite;
 using Sleepyshark.Officina.Core.Checkpoints;
 using Sleepyshark.Officina.Core.Extensibility;
+using Sleepyshark.Officina.Core.Reports;
 using Sleepyshark.Officina.Core.Running;
 
 namespace Sleepyshark.Officina.Cli;
@@ -19,7 +20,7 @@ internal static class ResumeCommand
     {
         var run = new Argument<string>("run") { Description = "The run's id." };
         var command = new Command(
-            "resume", "Continue a run that stopped without ending, from its last checkpoint. The run budget starts again from zero. Do not resume a run that is still running in another terminal.") { run };
+            "resume", "Continue a run that stopped without ending, from its last checkpoint. What the run spent before still counts against its budgets.") { run };
         shared.AddTo(command);
         command.SetAction((parse, ct) =>
         {
@@ -72,17 +73,35 @@ internal static class ResumeCommand
         return command;
     }
 
+    public static Command CreateReport(ConfigurationCommandOptions shared, SofEnvironment host)
+    {
+        var run = new Argument<string>("run") { Description = "The run's id." };
+        var command = new Command("report", "Show the report of a run: its outcome, work, decisions, checks, cost and open issues.") { run };
+        shared.AddTo(command);
+        command.SetAction(async (parse, ct) =>
+        {
+            var state = Path.Combine(shared.Directory(parse, host), WorkspaceOptions.StateFolder);
+            var runId = parse.GetValue(run)!;
+            if (await RunCommand.StoredRunAsync(state, runId, host, ct) is null)
+            {
+                return ExitCodes.Invalid;
+            }
+
+            host.Out.Write((await RunReport.BuildAsync(await SqliteStorage.OpenAsync(Path.Combine(state, "sof.db"), ct), null, runId, ct))!.ToText());
+            return ExitCodes.Success;
+        });
+        return command;
+    }
+
     /// <summary>Lists a run's checkpoints from the store alone: no tool servers, no lock on the workspace, nothing cleaned up.</summary>
     private static async Task<int> ListAsync(string directory, string runId, SofEnvironment host, CancellationToken ct)
     {
-        var database = Path.Combine(directory, WorkspaceOptions.StateFolder, "sof.db");
-        IStorage? storage = File.Exists(database) ? await SqliteStorage.OpenAsync(database, ct) : null;
-        if (storage is null || await storage.Runs.ReadAsync(null, runId, ct) is null)
+        if (await RunCommand.StoredRunAsync(Path.Combine(directory, WorkspaceOptions.StateFolder), runId, host, ct) is null)
         {
-            host.Error.WriteLine($"error: there is no run {runId}.");
             return ExitCodes.Invalid;
         }
 
+        IStorage storage = await SqliteStorage.OpenAsync(Path.Combine(directory, WorkspaceOptions.StateFolder, "sof.db"), ct);
         foreach (var checkpoint in await storage.Checkpoints.ReadAsync(null, runId, ct))
         {
             host.Out.WriteLine($"{checkpoint.Number}  {checkpoint.Time:u}  {checkpoint.Point}");

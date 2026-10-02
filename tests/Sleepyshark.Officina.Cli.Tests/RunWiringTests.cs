@@ -56,7 +56,7 @@ public sealed class RunWiringTests : IDisposable
         var (exitCode, output, error) = await run;
 
         Assert.Equal((ExitCodes.Success, ""), (exitCode, error));
-        Assert.EndsWith("Done.\n", output, StringComparison.Ordinal);
+        Assert.Contains("Done.\n\nRun ", output, StringComparison.Ordinal);
         var results = model.Requests[^1].History.SelectMany(message => message.Content).OfType<ToolResultContent>().Select(content => content.Text).ToList();
         Assert.Contains(results, text => text.Contains("hi", StringComparison.Ordinal));
         Assert.Contains(results, text => text.Contains("built\n[exit code 0]", StringComparison.Ordinal));
@@ -66,6 +66,7 @@ public sealed class RunWiringTests : IDisposable
         Assert.EndsWith("-dev", processes[0].Command.Directory, StringComparison.Ordinal);
         Assert.True(processes[1].Stopped); // SBX-03: the background process ends with the run
         Assert.False(Directory.Exists(processes[0].Command.Directory));
+        Assert.Equal([processes[0].Command.Directory], sof.Sandbox.Released); // what the sandbox left outside the copy goes with it
         Assert.False(File.Exists(Path.Combine(sof.Directory, "hello.txt"))); // nothing reaches the baseline until integration
     }
 
