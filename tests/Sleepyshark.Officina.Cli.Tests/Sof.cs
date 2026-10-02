@@ -126,13 +126,25 @@ internal sealed class Sof : IDisposable
     }
 
     /// <summary>The owner typing commands, one line at a time, as the test decides.</summary>
+    /// <summary>
+    /// Behaves like <c>Console.In</c>: its <c>ReadLineAsync</c> blocks the calling thread until a line is typed, and
+    /// ignores cancellation. It returns null once disposed.
+    /// </summary>
     internal sealed class Owner : TextReader
     {
         private readonly Channel<string> lines = Channel.CreateUnbounded<string>();
 
         public void Type(string line) => lines.Writer.TryWrite(line);
 
-        public override async ValueTask<string?> ReadLineAsync(CancellationToken cancellationToken) =>
-            await lines.Reader.WaitToReadAsync(cancellationToken) && lines.Reader.TryRead(out var line) ? line : null;
+        public override string? ReadLine() =>
+            lines.Reader.WaitToReadAsync().AsTask().GetAwaiter().GetResult() && lines.Reader.TryRead(out var line) ? line : null;
+
+        public override ValueTask<string?> ReadLineAsync(CancellationToken cancellationToken) => ValueTask.FromResult(ReadLine());
+
+        protected override void Dispose(bool disposing)
+        {
+            lines.Writer.TryComplete();
+            base.Dispose(disposing);
+        }
     }
 }

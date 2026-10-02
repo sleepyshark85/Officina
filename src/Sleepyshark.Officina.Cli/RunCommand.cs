@@ -200,8 +200,9 @@ internal static class RunCommand
         using var stop = new CancellationTokenSource();
         output.WriteLine($"run {session.RunId}");
         var watching = WatchAsync(runner, session.RunId, status, stop.Token);
-        // A read from the console cannot be cancelled, so the command loop is left to end with the process.
-        _ = CommandAsync(runner, name, session.RunId, queue, status, host.In, output, stop.Token);
+        // A read from the console blocks its thread and cannot be cancelled, so the command loop runs on a thread of its own
+        // and is left to end with the process.
+        _ = Task.Run(() => CommandAsync(runner, name, session.RunId, queue, status, host.In, output, stop.Token), CancellationToken.None);
         var result = await start();
         await stop.CancelAsync();
         await watching;
