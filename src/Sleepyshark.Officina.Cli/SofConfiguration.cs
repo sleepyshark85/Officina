@@ -152,7 +152,8 @@ public sealed class SofConfiguration
         var key = path.Replace('.', ':');
         for (var index = providers.Length - 1; index >= 0; index--)
         {
-            if (providers[index].TryGet(key, out _))
+            // A list has no value of its own: its items are keyed key:0, key:1, … (as are the objects in it).
+            if (providers[index].TryGet(key, out _) || providers[index].GetChildKeys([], key).Any())
             {
                 return describe[index](key);
             }
@@ -197,7 +198,7 @@ public sealed class SofConfiguration
         }
 
         builder.AddInMemoryCollection(values);
-        describe.Add(key => sourceOf[key]);
+        describe.Add(key => sourceOf.TryGetValue(key, out var source) ? source : sourceOf.Last(item => item.Key.StartsWith($"{key}:", StringComparison.OrdinalIgnoreCase)).Value);
     }
 
     private static void Flatten(JsonNode node, string path, List<(string, string)> settings)

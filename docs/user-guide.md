@@ -83,8 +83,8 @@ sof run --input "What is a git worktree?"
 - **Presets:** `preset:coding-team`, `preset:tool-using-assistant` and `preset:single-call-extractor`. Read them in
   [`src/Sleepyshark.Officina.Core/Presets/`](../src/Sleepyshark.Officina.Core/Presets/).
 - **Tools:** each tool is defined under `tools`, grouped under `toolSets`, and an agent's `tools` lists tool *set*
-  names. A write tool needs `gates` or a `gateExemption` with a reason. `config validate` doesn't check this yet;
-  `config dry-run` and `sof run` do.
+  names. A write tool needs `gates` or a `gateExemption` with a reason; `config validate`, `config dry-run` and
+  `sof run` all refuse it.
 - **Models:** the default profile is `claude-opus-5-5`. Name more in `models`, and point an agent at one with
   `agents.<name>.model`.
 - **Budgets:** `run.budget` defaults to $25 and 8 hours. Set it low while testing; `--budget 2` overrides it for one
@@ -116,8 +116,8 @@ While it runs, type these at the console. Numbers come from `status`.
 | `board` | Show the task board |
 | `memory`, `memory approve <n> [reason]`, `memory reject <n> <reason>` | Review project memory proposals |
 
-**To stop a run, type `cancel`.** Ctrl+C ends the process after about 2 seconds, which can leave the run marked
-running with no report (exit code 130); if that happens, use `sof resume` or `sof rollback` on it.
+**To stop a run, press Ctrl+C or type `cancel`.** Both stop it cleanly: the run has `run.cancelWithin` (10 seconds by
+default) to stop, is recorded as cancelled, and its report prints.
 
 Exit codes: 0 done; 1 configuration errors, or a failure while starting; 2 usage error; 3 the run ended without
 completing (handed off, rejected or failed).
@@ -216,6 +216,7 @@ Do these in order; each costs more than the last. Keep `--budget` low, watch `st
       `config validate` names each error.
 - [ ] Coding team on a tiny repository, such as a calculator with one failing test: plan approval, two tasks, review,
       integration, then a green build on your branch.
+- [ ] Press Ctrl+C during a run. The run stops within `run.cancelWithin`, the report prints, and the exit code is 3.
 - [ ] Kill `sof` mid-run (`kill -9`, or close the terminal), then `sof resume <run>`. The run continues from its last
       checkpoint.
 - [ ] `sof rollback <run>`, then `--to <n>`, then `sof resume <run>`; check the working copies and the report.
@@ -229,8 +230,6 @@ Write down anything surprising, with the run id; `sof report <run>` and `.sof/so
 
 - `sof init` isn't built: write `sof.json` by hand.
 - `sof.json` must sit in the git repository's top folder.
-- `config validate` doesn't yet report a write tool with no gate; `sof run` does.
-- `config show --origin` labels every list as a code default, even one set in a file.
 - The Claude feature switches (`providers.<name>.features`: structured output, clearing tool results, task budget,
   refusal fallback) and history compaction were tested against recordings written from the API docs. Try each on its own
   first.

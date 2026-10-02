@@ -117,6 +117,17 @@ internal sealed class ToolCatalog
         return tools;
     }
 
+    private static ITool Builtin(string builtin, ToolOptions tool, IReadOnlyDictionary<string, ICheck> checks, IArtifactStore artifacts) =>
+        builtin switch
+        {
+            ArtifactTool.Name => new ArtifactTool(artifacts),
+            AskOwnerTool.Name => AskOwnerTool.Instance,
+            MessageTool.Name => MessageTool.Instance,
+            HelperTool.Name => HelperTool.Instance,
+            HandOffTool.Name => HandOffTool.Instance,
+            _ => RecordTool.All.GetValueOrDefault(builtin) ?? MemoryTool.All.GetValueOrDefault(builtin) ?? (ITool)TaskTool.Create(builtin, checks, tool.Timeout),
+        };
+
     /// <summary>What runs a tool's calls; null for a provider tool, or one that is missing.</summary>
     private static ITool? Implementation(
         string name, ToolOptions tool, OfficinaOptions options, IReadOnlyDictionary<string, ITool> tools, IReadOnlyDictionary<string, IKnowledgeSource> knowledge,
@@ -124,15 +135,7 @@ internal sealed class ToolCatalog
     {
         if (tool.BuiltinTool() is { } builtin)
         {
-            return builtin switch
-            {
-                ArtifactTool.Name => new ArtifactTool(artifacts),
-                AskOwnerTool.Name => AskOwnerTool.Instance,
-                MessageTool.Name => MessageTool.Instance,
-                HelperTool.Name => HelperTool.Instance,
-                HandOffTool.Name => HandOffTool.Instance,
-                _ => RecordTool.All.GetValueOrDefault(builtin) ?? MemoryTool.All.GetValueOrDefault(builtin) ?? (ITool)TaskTool.Create(builtin, checks, tool.Timeout),
-            };
+            return Builtin(builtin, tool, checks, artifacts);
         }
 
         if (tool.KnowledgeSource() is { } source)
@@ -177,14 +180,32 @@ internal sealed class ToolCatalog
         }
 
         var tool = new CatalogTool(name, options, implementation, schema);
-        if (tool.Kind == ToolKind.Write && options.Gates.Count == 0 && string.IsNullOrWhiteSpace(options.GateExemption))
+        if (MissingGate(tool) is { } missing)
         {
-            errors.Add(new(ValidationPhase.Tools, $"tools.{name}", "write tool has no gate of its own.",
-                "Add \"gates\": [...] or \"gateExemption\": \"<reason>\"."));
+            errors.Add(missing);
         }
 
         return tool;
     }
+
+    /// <summary>INV-04: a write tool has gates of its own or an exemption.</summary>
+    private static ConfigurationError? MissingGate(CatalogTool tool) =>
+        tool.Kind == ToolKind.Write && tool.Options.Gates.Count == 0 && string.IsNullOrWhiteSpace(tool.Options.GateExemption)
+            ? new(ValidationPhase.Tools, $"tools.{tool.Name}", "write tool has no gate of its own.", "Add \"gates\": [...] or \"gateExemption\": \"<reason>\".")
+            : null;
+
+    /// <summary>
+    /// The write tools that have no gate of their own and no exemption (INV-04), as building the catalog reports them, without
+    /// the tool servers' tools being connected: they are writes unless configured as reads. A host's <c>config validate</c> reports them.
+    /// </summary>
+    /// <param name="options">The configuration, which has no other errors.</param>
+    /// <param name="tools">The application's tools, by id, which <c>extension:</c> sources name; only their descriptors are read.</param>
+    internal static IReadOnlyList<ConfigurationError> MissingGates(OfficinaOptions options, IReadOnlyDictionary<string, ITool> tools) =>
+        [.. options.Tools.Select(tool => MissingGate(new CatalogTool(
+            tool.Key, tool.Value,
+            tool.Value.BuiltinTool() is { } builtin ? Builtin(builtin, tool.Value, new Dictionary<string, ICheck>(), null!) // only the descriptor is read
+                : tool.Value.ExtensionId() is { } id ? tools.GetValueOrDefault(id) : null,
+            null))).OfType<ConfigurationError>()];
 
     /// <summary>The problems of the conditions that read a tool's arguments: its permission rules and its gates.</summary>
     private static IEnumerable<ConfigurationError> Conditions(CatalogTool tool, OfficinaOptions options)
