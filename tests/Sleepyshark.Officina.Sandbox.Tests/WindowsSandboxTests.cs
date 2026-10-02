@@ -126,7 +126,8 @@ public sealed class WindowsSandboxTests : IDisposable
         Assert.Contains("[Network: refused example.com, which is not an allowed host.]", output, StringComparison.Ordinal);
     }
 
-    // HTTPS goes through the proxy as a CONNECT tunnel, which carries whatever the client sends; the proxy checks only its host.
+    // HTTPS goes through the proxy as a CONNECT tunnel, which carries whatever the client sends, so the test's tunnel carries plain
+    // HTTP; the proxy checks only its host.
     [Fact(Skip = WindowsOnly, SkipUnless = nameof(OnWindows))]
     public async Task The_proxy_tunnels_connections_to_allowed_hosts_only()
     {
@@ -135,7 +136,7 @@ public sealed class WindowsSandboxTests : IDisposable
         var (output, _) = await real.RunAsync($"curl -sS -m 10 -p http://127.0.0.1:{server.Port}/ & curl -sS -m 10 -p http://example.com/", ["127.0.0.1"]);
 
         Assert.Contains(Server.Greeting, output, StringComparison.Ordinal);
-        Assert.Contains("403", output, StringComparison.Ordinal);
+        Assert.Contains($"[Network: allowed 127.0.0.1:{server.Port}.]", output, StringComparison.Ordinal);
         Assert.Contains("[Network: refused example.com, which is not an allowed host.]", output, StringComparison.Ordinal);
     }
 
@@ -143,9 +144,12 @@ public sealed class WindowsSandboxTests : IDisposable
     [Fact(Skip = WindowsOnly, SkipUnless = nameof(OnWindows))]
     public async Task A_command_gets_no_more_processor_time_than_its_limit()
     {
-        var (two, half) = await real.TimeWorkAsync("for /l %i in (1,1,3000000) do @rem");
+        // The processor time is the whole process's, all its threads, which the limit holds together.
+        var (wall, cpu) = await real.TimeWorkAsync(
+            "powershell -NoProfile -NonInteractive -Command \"$p = Get-Process -Id $PID; $c = $p.TotalProcessorTime; $w = [Diagnostics.Stopwatch]::StartNew(); " +
+            "$i = 0; while ($i -lt 1000000) { $i++ }; $p.Refresh(); 'WALL ' + [long]$w.Elapsed.TotalMilliseconds; 'CPU ' + [long]($p.TotalProcessorTime - $c).TotalMilliseconds\"");
 
-        Assert.True(half >= two * 1.5, $"Half a core took {half}, two cores {two}.");
+        Assert.True(cpu > TimeSpan.FromSeconds(0.3) && wall >= cpu * 1.5, $"With half a core, the work took {wall} and used {cpu} of processor time.");
     }
 
     [Fact(Skip = WindowsOnly, SkipUnless = nameof(OnWindows))]

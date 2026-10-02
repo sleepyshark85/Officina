@@ -104,7 +104,8 @@ public sealed class LinuxSandboxTests : IDisposable
         Assert.Contains("[Network: refused example.com, which is not an allowed host.]", output, StringComparison.Ordinal);
     }
 
-    // HTTPS goes through the proxy as a CONNECT tunnel, which carries whatever the client sends; the proxy checks only its host.
+    // HTTPS goes through the proxy as a CONNECT tunnel, which carries whatever the client sends, so the test's tunnel carries plain
+    // HTTP; the proxy checks only its host.
     [Fact(Skip = LinuxOnly, SkipUnless = nameof(OnLinux))]
     public async Task The_proxy_tunnels_connections_to_allowed_hosts_only()
     {
@@ -113,7 +114,7 @@ public sealed class LinuxSandboxTests : IDisposable
         var (output, _) = await real.RunAsync($"curl -sS -m 10 -p http://127.0.0.1:{server.Port}/; curl -sS -m 10 -p http://example.com/", ["127.0.0.1"]);
 
         Assert.Contains(Server.Greeting, output, StringComparison.Ordinal);
-        Assert.Contains("403", output, StringComparison.Ordinal);
+        Assert.Contains($"[Network: allowed 127.0.0.1:{server.Port}.]", output, StringComparison.Ordinal);
         Assert.Contains("[Network: refused example.com, which is not an allowed host.]", output, StringComparison.Ordinal);
     }
 
@@ -121,9 +122,10 @@ public sealed class LinuxSandboxTests : IDisposable
     [Fact(Skip = LinuxOnly, SkipUnless = nameof(OnLinux))]
     public async Task A_command_gets_no_more_processor_time_than_its_limit()
     {
-        var (two, half) = await real.TimeWorkAsync("i=0; while [ $i -lt 2000000 ]; do i=$((i+1)); done");
+        var (wall, cpu) = await real.TimeWorkAsync(
+            "s=$(date +%s%N); i=0; while [ $i -lt 2000000 ]; do i=$((i+1)); done; e=$(date +%s%N); echo WALL $(((e - s) / 1000000)); times");
 
-        Assert.True(half >= two * 1.5, $"Half a core took {half}, two cores {two}.");
+        Assert.True(cpu > TimeSpan.FromSeconds(0.3) && wall >= cpu * 1.5, $"With half a core, the work took {wall} and used {cpu} of processor time.");
     }
 
     [Fact(Skip = LinuxOnly, SkipUnless = nameof(OnLinux))]
@@ -157,13 +159,15 @@ public sealed class LinuxSandboxTests : IDisposable
     [Fact(Skip = LinuxOnly, SkipUnless = nameof(OnLinux))]
     public async Task Stopping_a_command_stops_everything_it_started()
     {
-        // A new session, a double fork and a plain child: all must end.
-        var process = await real.StartAsync("setsid sleep 1234561 & (sleep 1234562 &); sleep 1234563 & echo started; wait");
+        // A new session, a double fork and a plain child: all must end. The host's processes are looked at, so the sleeps' times are
+        // this run's own: another run of these tests on the machine at the same time would otherwise be seen too.
+        var tag = Random.Shared.Next(100_000, 1_000_000);
+        var process = await real.StartAsync($"setsid sleep {tag}1 & (sleep {tag}2 &); sleep {tag}3 & echo started; wait");
         Assert.Equal("started", await process.Output.ReadAsync(Ct));
 
         await process.DisposeAsync();
 
-        Assert.Empty(HostProcesses("sleep 123456"));
+        Assert.Empty(HostProcesses($"sleep {tag}"));
     }
 
     // SBX-06.
@@ -191,17 +195,20 @@ public sealed class LinuxSandboxTests : IDisposable
         }
     }
 
-    /// <summary>The host's processes whose command line contains the text.</summary>
+    /// <summary>The host's processes whose command line contains the text, each with its state and parent, so a failure says why.</summary>
     private static List<string> HostProcesses(string text) =>
-        [.. Directory.EnumerateDirectories("/proc").Where(path => int.TryParse(Path.GetFileName(path), out _)).Where(path =>
+        [.. Directory.EnumerateDirectories("/proc").Where(path => int.TryParse(Path.GetFileName(path), out _)).Select(path =>
         {
             try
             {
-                return File.ReadAllText(Path.Combine(path, "cmdline")).Contains(text, StringComparison.Ordinal);
+                var commandLine = File.ReadAllText(Path.Combine(path, "cmdline")).Replace('\0', ' ');
+                return commandLine.Contains(text, StringComparison.Ordinal)
+                    ? $"{path}: {commandLine}; {string.Join(", ", File.ReadLines(Path.Combine(path, "status")).Where(line => line.Split(':')[0] is "State" or "PPid" or "NSpid"))}"
+                    : null;
             }
             catch (IOException)
             {
-                return false;
+                return null;
             }
-        })];
+        }).OfType<string>()];
 }

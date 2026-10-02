@@ -189,16 +189,24 @@ Linux and Windows runners where they differ much:
 
 ## Part 5: the sandbox follow-ups
 
-- SBX-01: the processor limit is tested on both systems: the same single-threaded work runs with two cores and with half a core,
-  the test reports both times, and half a core must take at least half as long again (here 1.7 s against 4.3 s). A cap slows a
-  command rather than stopping it, so there is no limit hit to report in its result, unlike the output limit (reported in the output)
-  and the memory and process limits (a failed command).
-- HTTPS goes through the proxy as a CONNECT tunnel: on both systems, `curl -p` reaches an allowed host's server through a tunnel, and
-  a tunnel to another host is refused with 403, which the proxy reports in the command's output.
+- SBX-01: the processor limit is tested on both systems: work runs with half a core and measures, itself, how long it took and how
+  much processor time it used (`times` on Linux; the PowerShell process's on Windows, all its threads), and it must take at least
+  1.5 times its processor time (here 3.7 s against 1.9 s). Other load on the machine can only make it take longer, so the test does
+  not depend on a quiet runner, as one comparing two runs would. A cap slows a command rather than stopping it, so there is no limit
+  hit to report in its result, unlike the output limit (reported in the output) and the memory and process limits (a failed
+  command). For the owner to confirm when closing the follow-up: the sandbox spike (S00a, recommendation 4) named CPU throttling as
+  a limit-hit result of its own.
+- HTTPS goes through the proxy as a CONNECT tunnel: on both systems, `curl -p` reaches an allowed host's server through a tunnel
+  (which the test's client uses for plain HTTP; the proxy passes the bytes on unchanged, so TLS goes the same way), the proxy reports
+  it allowed, and a tunnel to another host is refused, which the proxy reports in the command's output.
 - The Windows tests as a standard user: [`scripts/windows-standard-user-tests.ps1`](../../scripts/windows-standard-user-tests.ps1)
-  creates a standard user, runs the built Windows sandbox tests as that user (the test project is an executable, so it needs no
-  restore), prints the output and removes the user. It is not in CI: running CI's steps as another user is the owner's change, one
-  step after "Test" in the Windows job, as the script's help shows. It has not been run yet.
+  creates a standard user (its password on no command line), runs the built Windows sandbox tests as that user in a folder only
+  it, the administrators and the system can use, with its temporary folder there (the test project is an executable, so it needs no
+  restore), prints the output, checks it ran at medium integrity and not as an administrator, and removes the user and the folder. It
+  runs only on GitHub Actions. It is not in CI: running CI's steps as another user is the owner's change, one
+  step after "Test" in the Windows job, as the script's help shows. It has not been run yet. Its first run should show: a run
+  where every test passes exits 0, and one where a test fails exits 1; the log's `whoami /groups` has Medium Mandatory Level and
+  no Administrators; the Windows tests ran, not skipped, at their expected count; and afterwards the user and the folder are gone.
 
 ## Notes
 

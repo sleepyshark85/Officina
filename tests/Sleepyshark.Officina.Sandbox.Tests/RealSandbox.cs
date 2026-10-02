@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
@@ -55,22 +56,26 @@ internal sealed class RealSandbox(ISandbox sandbox) : IDisposable
     }
 
     /// <summary>
-    /// SBX-01: how long the same single-threaded work takes with two cores and with half a core, which the test output reports. Half a
-    /// core gives it half the processor time of the one core it can use, so it takes about twice as long.
+    /// SBX-01: runs work with half a core, and returns how long it took and how much processor time it used, as it measured them
+    /// itself: lines <c>WALL &lt;ms&gt;</c> and <c>CPU &lt;ms&gt;</c>, or the shell's <c>times</c> for the processor time. Held to half
+    /// a core, work takes at least twice its processor time; other load on the machine can only make it take longer. The test
+    /// output reports both.
     /// </summary>
-    public async Task<(TimeSpan Two, TimeSpan Half)> TimeWorkAsync(string work)
+    public async Task<(TimeSpan Wall, TimeSpan Cpu)> TimeWorkAsync(string work)
     {
-        var times = new List<TimeSpan>();
-        foreach (var cpus in new[] { 2.0, 0.5 })
-        {
-            var started = System.Diagnostics.Stopwatch.GetTimestamp();
-            var (output, exitCode) = await RunAsync(work, limits: SandboxLimits.Default with { Cpus = cpus });
-            Assert.True(exitCode == 0, output);
-            times.Add(System.Diagnostics.Stopwatch.GetElapsedTime(started));
-        }
+        var (output, exitCode) = await RunAsync(work, limits: SandboxLimits.Default with { Cpus = 0.5 });
+        Assert.True(exitCode == 0, output);
+        var wall = Milliseconds(output, "WALL");
+        var times = System.Text.RegularExpressions.Regex.Match(output, @"^(\d+)m([\d.]+)s (\d+)m([\d.]+)s$", System.Text.RegularExpressions.RegexOptions.Multiline);
+        var cpu = times.Success
+            ? TimeSpan.FromMinutes(int.Parse(times.Groups[1].Value, CultureInfo.InvariantCulture) + int.Parse(times.Groups[3].Value, CultureInfo.InvariantCulture))
+                + TimeSpan.FromSeconds(double.Parse(times.Groups[2].Value, CultureInfo.InvariantCulture) + double.Parse(times.Groups[4].Value, CultureInfo.InvariantCulture))
+            : Milliseconds(output, "CPU");
+        TestContext.Current.TestOutputHelper?.WriteLine($"With half a core, the work took {wall.TotalSeconds:0.00} s and used {cpu.TotalSeconds:0.00} s of processor time.");
+        return (wall, cpu);
 
-        TestContext.Current.TestOutputHelper?.WriteLine($"The work took {times[0].TotalSeconds:0.00} s with 2 cores and {times[1].TotalSeconds:0.00} s with half a core.");
-        return (times[0], times[1]);
+        static TimeSpan Milliseconds(string output, string name) => TimeSpan.FromMilliseconds(long.Parse(
+            output.Split('\n').Select(line => line.Trim()).Single(line => line.StartsWith(name + " ", StringComparison.Ordinal))[(name.Length + 1)..], CultureInfo.InvariantCulture));
     }
 
     /// <summary>
