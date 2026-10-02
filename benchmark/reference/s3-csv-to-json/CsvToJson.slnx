@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="src/CsvToJson/CsvToJson.csproj" />
+  <Project Path="tests/CsvToJson.Tests/CsvToJson.Tests.csproj" />
+</Solution>

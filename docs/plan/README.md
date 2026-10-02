@@ -8,9 +8,12 @@ Last updated 2026-10-02.
 
 - **Done:** M0 spikes S00a and S00b; M1 slices S01 (walking skeleton) and S02 (configuration); S03 (tool pipeline); S04 (turn loop); S05 (context and caching); S06 (run record and output); S07 (history and conversation store); S08 (events, storage and observability); S09 (triggers and admission); S10 (MCP and knowledge); S11 (Claude provider); S12 (model gateway); S13 (loop patterns); S14 (git workspace); S15 (sandbox); S16 (human interaction and CLI); S17 (project memory); S18 (task board); S19 (checkpoints and long runs: part 1, checkpoints, resume and rollback; part 2, budgets, report and cleanup); S20 (team: part 1, the team runs; part 2, integration and the scripted team simulation; part 3, `extends`, the three presets, helpers, the plan sign-off, the hand-off tool and the TEST-31 benchmark goals).
 - **Waiting:** the M0 design review sign-off on `REQUIREMENTS.md`, `CONFIGURATION.md` and `DESIGN.md`.
-- **Next:** S21 (hardening and benchmark, [#23](https://github.com/sleepyshark85/Officina/issues/23)), which runs the TEST-31
-  benchmark in [`benchmark/`](../../benchmark/README.md) against the live model.
-- **Open follow-ups:**
+- **Doing:** S21 (hardening and benchmark, [#23](https://github.com/sleepyshark85/Officina/issues/23)), in five parts. Part 1
+  built the TEST-31 benchmark up to the live run: the runner, scoring, report, reference solutions and the suites' validation.
+  The live run, on Linux and Windows, is the owner's to start, as it costs money ([`benchmark/`](../../benchmark/README.md)).
+- **Next:** S21 part 2, the load and latency tests (TEST-30), coverage (TEST-33) and the MUST verification check.
+- **Open follow-ups:** every item below that names S21 is triaged in [S21](S21-hardening.md): built in one of its parts, or
+  proposed as not in v1 for the owner to confirm.
   - After S20 (fix): integration refuses a change that adds, changes or removes a protected path, since a command can create a
     configuration file such as `sof.<environment>.json` that the sandbox could not protect; a workspace in a subfolder of its
     git repository is refused, as protected paths are relative to the top.
@@ -140,7 +143,7 @@ A slice is **done** when:
 | [S18](S18-task-board.md) | Task board | M6 | M | S06, S08 | [#20](https://github.com/sleepyshark85/Officina/issues/20) | done |
 | [S19](S19-checkpoints-long-runs.md) | Checkpoints and long runs | M6 | M ×2 | S08, S14 | [#21](https://github.com/sleepyshark85/Officina/issues/21) | done |
 | [S20](S20-team.md) | Team | M6 | M ×3 | S13, S18, S19 | [#22](https://github.com/sleepyshark85/Officina/issues/22) | done |
-| [S21](S21-hardening.md) | Hardening and benchmark | M7 | M | S20 | [#23](https://github.com/sleepyshark85/Officina/issues/23) | todo |
+| [S21](S21-hardening.md) | Hardening and benchmark | M7 | M ×5 | S20 | [#23](https://github.com/sleepyshark85/Officina/issues/23) | doing |
 
 ## Order
 

@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="src/Taskr.Core/Taskr.Core.csproj" />
+  <Project Path="src/Taskr/Taskr.csproj" />
+  <Project Path="tests/Taskr.Tests/Taskr.Tests.csproj" />
+</Solution>

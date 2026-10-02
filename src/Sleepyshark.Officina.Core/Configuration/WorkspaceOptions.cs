@@ -40,7 +40,7 @@ public sealed record WorkspaceOptions
 /// <summary>A path agents cannot see or change (WS-05).</summary>
 public sealed record ProtectedPath
 {
-    [Setting("A glob relative to the workspace root, where `**` matches any number of folders.", Example = "\"secrets/**\"")]
+    [Setting("A glob relative to the workspace root, where `**` matches any number of folders. Use `dir/**` to protect a folder's contents: `dir` alone matches only the folder's own path.", Example = "\"secrets/**\"")]
     [Required(ErrorMessage = Messages.Required)]
     public required string Path { get; init; }
 

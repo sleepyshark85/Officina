@@ -479,7 +479,7 @@ It lists the settings the code has today. Settings that later slices add are spe
 
 | Setting | Allowed values | Default | Description | Example |
 |---|---|---|---|---|
-| `path` | text |  | A glob relative to the workspace root, where `**` matches any number of folders. Required. | `"secrets/**"` |
+| `path` | text |  | A glob relative to the workspace root, where `**` matches any number of folders. Use `dir/**` to protect a folder's contents: `dir` alone matches only the folder's own path. Required. | `"secrets/**"` |
 | `access` | `"hidden"`, `"readOnly"` | `"hidden"` | `hidden`: agents cannot see it at all; `readOnly`: they can read it but not change it. | `"readOnly"` |
 
 ## `capabilities.sandbox.commandRules[]`
