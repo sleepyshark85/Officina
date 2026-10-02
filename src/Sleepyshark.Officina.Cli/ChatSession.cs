@@ -496,14 +496,19 @@ internal sealed class ChatSession
         }
 
         status.WriteLine("Cancelling. Press Ctrl+C again to end the session.");
-        try
+
+        // Off the signal's thread: cancelling runs the reply's cancellation callbacks, which the signal need not wait for.
+        _ = Task.Run(() =>
         {
-            reply.Cancel();
-        }
-        catch (ObjectDisposedException)
-        {
-            // It ended meanwhile.
-        }
+            try
+            {
+                reply.Cancel();
+            }
+            catch (ObjectDisposedException)
+            {
+                // It ended meanwhile.
+            }
+        });
     }
 
     /// <summary>Ends the session: a reply or command that runs is cancelled, and the messages that wait are dropped.</summary>
