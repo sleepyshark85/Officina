@@ -1,5 +1,10 @@
 # Spike S00a: Sandbox
 
+These are the spike's findings, kept as a record. **Outcome:** S15 built the sandbox as recommended below, with a
+PowerShell forwarder on Windows instead of a self-contained exe, and proved what the spike left open (SBX-06, output caps,
+background processes); S21 tested the CPU limit and HTTPS through the proxy on both systems. DESIGN.md §7 describes what
+is built.
+
 Prototype: `spikes/sandbox/SandboxSpike`. It is one .NET 10 console app. The OS-specific code is in
 `LinuxSandbox.cs` and `WindowsSandbox.cs`. The filtering proxy in `FilterProxy.cs` is shared, and the
 misbehaving payloads are in `Payload.cs`. The sample projects are in `spikes/sandbox/sample`.

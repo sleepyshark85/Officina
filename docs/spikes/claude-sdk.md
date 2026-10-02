@@ -3,6 +3,10 @@
 **Date:** 2026-10-01 · **SDK:** NuGet `Anthropic` 12.53.0 (latest), .NET 10 · **Model:** `claude-opus-5-5`
 **Code:** [`spikes/claude-sdk/Program.cs`](../../spikes/claude-sdk/Program.cs) · **Output:** [`spikes/claude-sdk/run-output.txt`](../../spikes/claude-sdk/run-output.txt) · **API cost:** about $0.07
 
+These are the spike's findings, kept as a record. **Outcome:** S11 built the provider as recommended below; DESIGN.md §9
+describes it. Two findings changed later: only some models take a mid-conversation system message (the others get the
+volatile context in the history and operator messages as user messages), and strict tools are not used.
+
 **Verdict:** the SDK covers everything the Claude provider needs. Only two things need the raw-data
 option: `additionalProperties: false` in a tool's input schema (needed for strict tools), and
 fields that exist only on the beta request type when you call the non-beta endpoint. Nothing is
