@@ -1,6 +1,6 @@
 # S16 — Human interaction and CLI
 
-**Milestone:** M5 · **Size:** M · **Depends on:** S04, S08 · **Issue:** [#18](https://github.com/sleepyshark85/Officina/issues/18) · **Status:** done
+**Milestone:** M5 · **Size:** M · **Depends on:** S04, S08 · **Issue:** [#18](https://github.com/sleepyshark85/Officina/issues/18) · **Status:** doing (part 1 done; S16b left)
 
 ## Goal
 
@@ -32,7 +32,7 @@ The owner in the loop, through the `sof` CLI.
   and S19 (snapshots) need more.
 - HITL-07 (a MAY: rating results) moved to S21.
 
-Left to S16b (a second pull request, part of #18): wiring the workspace, sandbox and tool servers into `sof run` —
+Left to S16b (part 2, a second pull request that closes #18): wiring the workspace, sandbox and tool servers into `sof run` —
 connecting the tool servers, a working copy and `SandboxTools` per agent disposed when it ends (SBX-03), the sandbox
 tools and command rules gate as built-ins, probing the sandbox once at startup (SBX-07), the workspace and sandbox tools
 only when their capability is on (CAP-02), `workspace.delete_file` and `workspace.move_file`, `baselineChecks` naming

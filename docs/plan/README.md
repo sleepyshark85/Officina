@@ -6,10 +6,10 @@ Status: draft · 2026-10-01 · slices `REQUIREMENTS.md` (revision 2) into delive
 
 Last updated 2026-10-02.
 
-- **Done:** M0 spikes S00a and S00b; M1 slices S01 (walking skeleton) and S02 (configuration); S03 (tool pipeline); S04 (turn loop); S05 (context and caching); S06 (run record and output); S07 (history and conversation store); S08 (events, storage and observability); S09 (triggers and admission); S10 (MCP and knowledge); S14 (git workspace); S15 (sandbox); S18 (task board); S16 (human interaction and CLI).
+- **Done:** M0 spikes S00a and S00b; M1 slices S01 (walking skeleton) and S02 (configuration); S03 (tool pipeline); S04 (turn loop); S05 (context and caching); S06 (run record and output); S07 (history and conversation store); S08 (events, storage and observability); S09 (triggers and admission); S10 (MCP and knowledge); S14 (git workspace); S15 (sandbox); S18 (task board); S16 part 1 (human interaction).
 - **Waiting:** the M0 design review sign-off on `REQUIREMENTS.md`, `CONFIGURATION.md` and `DESIGN.md`.
-- **Doing:** S16b, the second part of S16: wiring the workspace, sandbox and tool servers into `sof run`.
-- **Next:** S11 and S17.
+- **Doing:** S16, part 2 (S16b): wiring the workspace, sandbox and tool servers into `sof run` (see the follow-ups).
+- **Next:** S16b, then S11 and S17.
 - **Open follow-ups:**
   - S02 kept a `formatVersion` check, though only version 1 exists. Consider removing the setting
     until a version 2 exists (principle 13). S06 keeps `output.schema` as JSON text; when S13 or S16 want the
@@ -120,7 +120,7 @@ A slice is **done** when:
 | [S13](S13-loop-patterns.md) | Loop patterns | M4 | M | S04, S06 | [#15](https://github.com/sleepyshark85/Officina/issues/15) | todo |
 | [S14](S14-git-workspace.md) | Git workspace | M5 | M | S03 | [#16](https://github.com/sleepyshark85/Officina/issues/16) | done |
 | [S15](S15-sandbox.md) | Sandbox | M5 | M ×2 | S00a, S14 | [#17](https://github.com/sleepyshark85/Officina/issues/17) | done |
-| [S16](S16-human-interaction-cli.md) | Human interaction and CLI | M5 | M | S04, S08 | [#18](https://github.com/sleepyshark85/Officina/issues/18) | done |
+| [S16](S16-human-interaction-cli.md) | Human interaction and CLI | M5 | M | S04, S08 | [#18](https://github.com/sleepyshark85/Officina/issues/18) | doing |
 | [S17](S17-project-memory.md) | Project memory | M5 | S | S05, S16 | [#19](https://github.com/sleepyshark85/Officina/issues/19) | todo |
 | [S18](S18-task-board.md) | Task board | M6 | M | S06, S08 | [#20](https://github.com/sleepyshark85/Officina/issues/20) | done |
 | [S19](S19-checkpoints-long-runs.md) | Checkpoints and long runs | M6 | M | S08, S14 | [#21](https://github.com/sleepyshark85/Officina/issues/21) | todo |
