@@ -105,5 +105,8 @@ public sealed record CheckpointTaken(int Number, CheckpointPoint Point) : EventP
 /// </summary>
 public sealed record RunResumed(int Checkpoint, IReadOnlyList<ToolEffect> Interrupted) : EventPayload;
 
-/// <summary>The run was rolled back to a checkpoint (RUN-08). The effects outside the core's state made since are listed; they are not undone.</summary>
-public sealed record RunRolledBack(int Checkpoint, IReadOnlyList<ToolEffect> NotUndone) : EventPayload;
+/// <summary>
+/// The run was rolled back to a checkpoint (RUN-08). The effects outside the core's state made since are listed; they are not
+/// undone, and neither are the project memory changes made since, which are counted.
+/// </summary>
+public sealed record RunRolledBack(int Checkpoint, IReadOnlyList<ToolEffect> NotUndone, int MemoryChanges) : EventPayload;

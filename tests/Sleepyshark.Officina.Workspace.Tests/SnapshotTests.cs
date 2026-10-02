@@ -88,22 +88,48 @@ public class SnapshotTests
         using var repository = await CreateAsync();
         using (var dead = await repository.OpenAsync(runId: "dead"))
         {
-            await dead.OpenWorkingCopyAsync("dead-alice", "alice", Ct);
-            await dead.OpenWorkingCopyAsync("resumable-bob", "bob", Ct);
+            await dead.OpenWorkingCopyAsync($"{Dead}-alice", "alice", Ct);
+            await dead.OpenWorkingCopyAsync($"{Resumable}-bob", "bob", Ct);
         }
+
+        await repository.GitAsync("branch", "agent/new-feature"); // the owner's own branch
 
         using var next = await repository.OpenAsync(runId: "next");
         var kept = new List<string>();
         await next.RemoveLeftoversAsync(task =>
         {
             kept.Add(task);
-            return Task.FromResult(task.StartsWith("resumable", StringComparison.Ordinal));
+            return Task.FromResult(task.StartsWith(Resumable, StringComparison.Ordinal));
         }, Ct);
 
         Assert.Empty(Directory.EnumerateDirectories(Path.Combine(repository.Root, ".sof", "worktrees")));
-        Assert.Equal(["agent/resumable-bob"], (await repository.GitAsync("branch", "--list", "agent/*")).Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
-        Assert.Equal(["dead-alice", "resumable-bob"], kept.Order());
+        Assert.Equal(
+            [$"agent/{Resumable}-bob", "agent/new-feature"],
+            (await repository.GitAsync("branch", "--list", "agent/*")).Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+        Assert.Equal([$"{Dead}-alice", $"{Resumable}-bob"], kept.Order()); // the owner's branch was never even asked about
     }
+
+    // WS-08.
+    [Fact]
+    public async Task Working_copies_the_owner_keeps_are_not_leftovers()
+    {
+        using var repository = await CreateAsync();
+        using (var ended = await repository.OpenAsync(new WorkspaceOptions { KeepWorkingCopies = true }, runId: "ended"))
+        {
+            var copy = await ended.OpenWorkingCopyAsync($"{Dead}-alice", "alice", Ct);
+            await copy.WriteAsync("kept.txt", "kept", Ct);
+            await ended.CloseWorkingCopyAsync(copy, Ct);
+        }
+
+        using var next = await repository.OpenAsync(new WorkspaceOptions { KeepWorkingCopies = true }, runId: "next");
+        await next.RemoveLeftoversAsync(_ => Task.FromResult(false), Ct);
+
+        Assert.Equal("kept", File.ReadAllText(Path.Combine(repository.Root, ".sof", "worktrees", $"{Dead}-alice", "kept.txt")));
+        Assert.Contains($"agent/{Dead}-alice", await repository.GitAsync("branch", "--list", "agent/*"), StringComparison.Ordinal);
+    }
+
+    private const string Dead = "0198a000-0000-7000-8000-000000000001";
+    private const string Resumable = "0198a000-0000-7000-8000-000000000002";
 
     [Fact]
     public async Task A_copy_the_run_holds_is_not_a_leftover()

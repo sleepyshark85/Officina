@@ -2,6 +2,7 @@ using System.Diagnostics.CodeAnalysis;
 using Sleepyshark.Officina.Core.Configuration;
 using Sleepyshark.Officina.Core.Events;
 using Sleepyshark.Officina.Core.Extensibility;
+using Sleepyshark.Officina.Core.Memory;
 using Sleepyshark.Officina.Core.Tools;
 
 namespace Sleepyshark.Officina.Core.Checkpoints;
@@ -19,7 +20,10 @@ public sealed record ToolEffect(string Agent, string Tool, string Arguments, boo
 /// <summary>What a rollback did (RUN-08).</summary>
 /// <param name="To">The checkpoint the run is back at.</param>
 /// <param name="NotUndone">The effects outside the core's state made since the checkpoint, which a rollback cannot undo.</param>
-public sealed record RollbackReport(Checkpoint To, IReadOnlyList<ToolEffect> NotUndone);
+/// <param name="MemoryChanges">
+/// The changes to project memory since the checkpoint. Memory outlives runs and is shared, so a rollback leaves it as it is.
+/// </param>
+public sealed record RollbackReport(Checkpoint To, IReadOnlyList<ToolEffect> NotUndone, IReadOnlyList<MemoryChange> MemoryChanges);
 
 /// <summary>
 /// Takes a run's checkpoints and returns the run to one (RUN-03, RUN-04, RUN-08). A checkpoint holds a position in each
@@ -70,11 +74,29 @@ internal sealed class Checkpointer(OfficinaOptions options, IStorage storage, IW
     }
 
     /// <summary>
-    /// Returns the run's state and working copies to a checkpoint: each store is truncated to its position, and the
-    /// checkpoints after it are deleted. The effects it cannot undo are returned (RUN-08).
+    /// Refuses to go back when another run has written to a conversation since the checkpoint: the conversation is shared,
+    /// and removing only this run's turns would change the prefix the other run's turns were built on.
     /// </summary>
-    public async Task<IReadOnlyList<ToolEffect>> RestoreAsync(ToolContext context, Checkpoint to, CancellationToken ct)
+    /// <exception cref="InvalidOperationException">Another run's turns come after the checkpoint's.</exception>
+    public async Task EnsureNoOtherRunsAsync(ToolContext context, Checkpoint to, CancellationToken ct)
     {
+        foreach (var (name, count) in to.Conversations)
+        {
+            if (await storage.Conversations.CountOtherRunsAfterAsync(context.Caller.Tenant, name, context.Caller.Id, count, context.RunId, ct).ConfigureAwait(false) > 0)
+            {
+                throw new InvalidOperationException(
+                    $"Another run has written to {name}'s conversation since checkpoint {to.Number}, so run {context.RunId} cannot go back without removing its turns.");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Returns the run's state and working copies to a checkpoint: each store is truncated to its position, and the
+    /// checkpoints after it are deleted. The effects it cannot undo are returned (RUN-08), and so are the memory changes, which stay.
+    /// </summary>
+    public async Task<(IReadOnlyList<ToolEffect> NotUndone, IReadOnlyList<MemoryChange> MemoryChanges)> RestoreAsync(ToolContext context, Checkpoint to, CancellationToken ct)
+    {
+        await EnsureNoOtherRunsAsync(context, to, ct).ConfigureAwait(false);
         await one.WaitAsync(ct).ConfigureAwait(false);
         try
         {
@@ -88,18 +110,16 @@ internal sealed class Checkpointer(OfficinaOptions options, IStorage storage, IW
 
             await storage.Records.TruncateAsync(tenant, runId, to.Record, ct).ConfigureAwait(false);
             await storage.Tasks.TruncateAsync(tenant, runId, to.Board, ct).ConfigureAwait(false);
-            if (pipeline.Memory(context) is { } memory)
-            {
-                await storage.Memory.TruncateAsync(tenant, memory.Scope, to.Memory, ct).ConfigureAwait(false);
-            }
-
+            IReadOnlyList<MemoryChange> memoryChanges = pipeline.Memory(context) is { } memory
+                ? [.. (await memory.ReadAsync(ct).ConfigureAwait(false)).Log.Where(change => change.Revision > to.Memory)]
+                : [];
             await storage.Checkpoints.TruncateAsync(tenant, runId, to.Number, ct).ConfigureAwait(false);
             if (workspace is not null)
             {
                 await workspace.RestoreAsync(to.Workspace, ct).ConfigureAwait(false);
             }
 
-            return notUndone;
+            return (notUndone, memoryChanges);
         }
         finally
         {

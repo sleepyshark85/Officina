@@ -1,4 +1,6 @@
 using System.Text.RegularExpressions;
+using Sleepyshark.Officina.Core.Extensibility;
+using Sleepyshark.Officina.Storage.Sqlite;
 using Sleepyshark.Officina.Testing;
 
 namespace Sleepyshark.Officina.Cli.Tests;
@@ -73,6 +75,24 @@ public sealed partial class ResumeCommandTests : IDisposable
         Assert.EndsWith("dev: Completed, cost $0.00\nDone again.\n", resumed, StringComparison.Ordinal);
         var (endedCode, _, ended) = await sof.RunAsync("resume", runId);
         Assert.Equal((ExitCodes.Invalid, true), (endedCode, ended.Contains("has ended (Completed)", StringComparison.Ordinal)));
+    }
+
+    // RUN-09: a rollback from a new process continues the run's event numbering, so the run reads in order.
+    [Fact]
+    public async Task A_rollback_in_a_new_process_stores_its_event_with_the_next_sequence_number()
+    {
+        model.Reply("Done.");
+        var (_, ran, _) = await sof.RunAsync("run", "--input", "Greet.");
+        var runId = RunId().Match(ran).Groups[1].Value;
+        IStorage Open() => SqliteStorage.OpenAsync(Path.Combine(sof.Directory, ".sof", "sof.db"), Ct).GetAwaiter().GetResult();
+        var last = (await Open().Events.ReadAsync(null, runId, 0, Ct))[^1].Sequence;
+
+        var (code, _, _) = await sof.RunAsync("rollback", runId, "--to", "0");
+
+        var events = await Open().Events.ReadAsync(null, runId, 0, Ct);
+        Assert.Equal(ExitCodes.Success, code);
+        Assert.Equal((last + 1, true), (events[^1].Sequence, events[^1].Payload is Core.Events.RunRolledBack));
+        Assert.Equal(events.Count, events.Select(coreEvent => coreEvent.Sequence).Distinct().Count());
     }
 
     [Fact]

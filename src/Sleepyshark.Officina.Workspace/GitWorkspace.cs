@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Text.RegularExpressions;
 using Microsoft.Extensions.FileSystemGlobbing;
 using Sleepyshark.Officina.Core.Checkpoints;
 using Sleepyshark.Officina.Core.Configuration;
@@ -11,7 +12,7 @@ namespace Sleepyshark.Officina.Workspace;
 /// works in its own worktree on <c>agent/&lt;task&gt;</c>, and changes reach the baseline only through the integration
 /// queue. One run holds a workspace at a time (RUN-12); disposing it lets the next run in.
 /// </summary>
-public sealed class GitWorkspace : IWorkspace, IDisposable
+public sealed partial class GitWorkspace : IWorkspace, IDisposable
 {
     private readonly string root;
     private readonly WorkspaceOptions options;
@@ -114,17 +115,24 @@ public sealed class GitWorkspace : IWorkspace, IDisposable
 
     /// <summary>
     /// Removes what a run that died left behind: its working copies' folders, and the branches of runs that cannot resume.
-    /// Call it once the run holds the workspace, so no other run is using any of it.
+    /// Only working copies named as the host names them, <c>&lt;run id&gt;-&lt;agent&gt;</c> with a GUID run id, are touched: other
+    /// <c>agent/*</c> branches are the owner's. Nothing is removed when the owner keeps working copies (WS-08). Call it once the
+    /// run holds the workspace, so no other run is using any of it.
     /// </summary>
     /// <param name="keep">Whether a task's branch, with the commits of its checkpoints, is kept because its run can resume (RUN-04).</param>
     /// <param name="ct">Cancels the cleanup.</param>
     public async Task RemoveLeftoversAsync(Func<string, Task<bool>> keep, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(keep);
+        if (options.KeepWorkingCopies)
+        {
+            return;
+        }
+
         await Git.RunAsync(root, ct, "worktree", "prune").ConfigureAwait(false);
         if (Directory.Exists(WorktreeFolder))
         {
-            foreach (var folder in Directory.EnumerateDirectories(WorktreeFolder).Where(folder => !open.ContainsKey(Path.GetFileName(folder))))
+            foreach (var folder in Directory.EnumerateDirectories(WorktreeFolder).Where(folder => RunsCopy().IsMatch(Path.GetFileName(folder)) && !open.ContainsKey(Path.GetFileName(folder))))
             {
                 await Git.TryRunAsync(root, ct, "worktree", "remove", "--force", folder).ConfigureAwait(false);
                 if (Directory.Exists(folder))
@@ -140,7 +148,7 @@ public sealed class GitWorkspace : IWorkspace, IDisposable
             .Split('\n', StringSplitOptions.RemoveEmptyEntries))
         {
             var task = branch.Trim()[prefix.Length..];
-            if (!open.ContainsKey(task) && !await keep(task).ConfigureAwait(false))
+            if (RunsCopy().IsMatch(task) && !open.ContainsKey(task) && !await keep(task).ConfigureAwait(false))
             {
                 await Git.RunAsync(root, ct, "branch", "-D", branch.Trim()).ConfigureAwait(false);
             }
@@ -232,6 +240,10 @@ public sealed class GitWorkspace : IWorkspace, IDisposable
     Task IWorkspace.RestoreAsync(IReadOnlyList<CopySnapshot> snapshot, CancellationToken ct) => RestoreAsync(snapshot, ct);
 
     public void Dispose() => runLock.Dispose();
+
+    /// <summary>The name of a working copy a run opens: its GUID id, then the agent.</summary>
+    [GeneratedRegex("^[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}-.+$")]
+    private static partial Regex RunsCopy();
 
     private static Matcher Globs(IEnumerable<ProtectedPath> paths)
     {

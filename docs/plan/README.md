@@ -55,12 +55,14 @@ Last updated 2026-10-02.
     requires `taskBoard`. A failed task goes back to the lead, who retries it (only the owner can for now). S18's Notes list the rest.
   - S18 moved the SQLite format version to 3. A slice that adds a table bumps it again, unless an unmerged PR has
     already bumped it past the version on main.
-  - S19, part 1, left open (S19's Notes list them): a pattern resumes from its first step, not part-way; masking tokens from
-    before a crash are not restored; the host passes the `Caller` to `ResumeAsync`, because only its id and tenant are stored; a
-    crashed run's branches are kept until it ends, and nothing lists runs yet.
+  - S19, part 2, also: a resumed pattern runs again from its first step, redoing the steps already done (resume part-way);
+    nothing checks that a run is dead when the workspace is off, so the owner must not resume a live run; old checkpoint commits
+    are kept only by the reflog after a squash, so `git gc` can break restoring them. Open, for a case (S19's Notes list them):
+    masking tokens from before a crash are not restored; the host passes the `Caller` to `ResumeAsync`, because only its id and
+    tenant are stored; a crashed run's branches are kept until it ends, and nothing lists runs yet.
   - S05 moved CTX-06 to S07 and CTX-07 to S06.
   - S17 left the owner's CLI commands for memory proposals and tying `memory.review` to the lead (S20), unmasking
-    proposed text (S21) and the checkpoint's memory revision (S19); their slice files say so.
+    proposed text (S21); their slice files say so.
   - S09 left parts of its requirements to the slices that add the state they need; its Notes list them
     (S06, S19, S20, and S21 for Message Batches).
   - REQUIREMENTS.md §4.3 lists masking as replaceable, but DESIGN.md §4 keeps it in Core and not replaceable in v1.

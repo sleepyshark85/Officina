@@ -24,8 +24,8 @@ Runs that survive crashes, roll back, and last for days.
 
 ## Notes
 
-From S17: a checkpoint records memory's revision (DESIGN.md §8), and a rollback resets it, so a conversation's prefix
-revision and the revision it was told of stay valid.
+From S17: a checkpoint records memory's log position (DESIGN.md §8). A rollback does not reset memory, which runs share, so a
+conversation's prefix revision and the revision it was told of stay valid; the report lists the changes made since.
 
 Part 1:
 - `capabilities.checkpoints` (`enabled`, `at`: `turn` by default, `step`, `integration`; it needs the conversation store).
@@ -37,9 +37,11 @@ Part 1:
   commit on the copy's branch, and restores with `reset --hard` and `clean -fd`, opening a copy again from its branch, or from
   the commit when the branch is gone, and removing a copy that did not exist then. Integration squashes the checkpoint
   commits into the change's one commit. `OpenWorkingCopyAsync` returns a copy that is already open for the task.
-- `RollbackAsync` truncates every store to the checkpoint, deletes later checkpoints, resets the working copies, sets the run
-  back to running and returns the write-tool attempts made since that are outside the core's state (all but the built-in
-  tools and `workspace.*`) in a `RollbackReport` and a `runRolledBack` event. `ResumeAsync` is a rollback to the last
+- `RollbackAsync` truncates the conversations, record and board to the checkpoint, deletes later checkpoints, resets the working
+  copies, sets the run back to running and returns the write-tool attempts made since that are outside the core's state (all but
+  the built-in tools and `workspace.*`) in a `RollbackReport` and a `runRolledBack` event. Conversation turns carry their run
+  id, and a rollback or resume is refused when another run wrote to the conversation since the checkpoint. Memory is shared, so
+  it is left alone and the report lists the changes since. `ResumeAsync` is a rollback to the last
   checkpoint, then the run's work starts again on the restored state; a run killed before its first checkpoint just starts
   again. Unfinished write-tool intents are flagged in a `runResumed` event (RUN-07). The irreversible-call rule of S03 needed
   no change: its intent is in the audit log, so the call goes to a human.
@@ -50,10 +52,15 @@ Part 1:
 - SQLite format version 5: `checkpoints` table, and the status and work columns of `runs`.
 - `sof resume <run>`, `sof rollback <run> [--to <n>]` (lists the checkpoints without `--to`), and `sof run` prints its run id.
   Opening the git workspace removes what a dead run left (its worktrees, and the branches of runs that cannot resume).
+- Left for part 2 (besides the list below): a resumed pattern runs again from its first step, redoing the steps already done,
+  so `at: step` buys little until a pattern resumes part-way; with the workspace off nothing checks that a run is dead (the
+  workspace's lock does), so the owner must not resume a live run, and a lock in `.sof` would close that; after a squash or
+  a branch's deletion old checkpoint commits live only in the reflog, so `git gc` can break restoring them; the budget restarts
+  from zero when a run resumes.
 - Left for part 2, or open: the budget already spent is not restored when a run resumes; the Windows sandbox leftovers
   (the AppContainer profile, the `%TEMP%\officina-<hash>` home folder, the read-and-execute grants on `toolchains` folders);
   budget warnings (S08); the per-run rate limit (ING-03, S09).
-- Open, for a case: a pattern resumes from its first step, not part-way; masking tokens from before the crash are not restored,
+- Open, for a case: masking tokens from before the crash are not restored,
   so a masked input is run as stored; only the caller's id and tenant are stored, so the host passes the `Caller` when it
   resumes; resume uses the runner's configuration, not the run's stored one; a rollback needs no turn running in the runner;
   a crashed run's branches are kept until it ends, and nothing lists runs yet. S20's team calls `CheckpointAsync` with

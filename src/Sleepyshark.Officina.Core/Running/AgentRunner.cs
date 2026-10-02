@@ -179,10 +179,10 @@ public sealed class AgentRunner
         var (_, context) = await FindAsync(runId, caller ?? Caller.Anonymous, ct).ConfigureAwait(false);
         var to = (await storage.Checkpoints.ReadAsync(context.Caller.Tenant, runId, ct).ConfigureAwait(false)).FirstOrDefault(checkpoint => checkpoint.Number == number)
             ?? throw new ArgumentException($"Run {runId} has no checkpoint {number}.", nameof(number));
-        var notUndone = await checkpointer.RestoreAsync(context, to, ct).ConfigureAwait(false);
+        var (notUndone, memoryChanges) = await checkpointer.RestoreAsync(context, to, ct).ConfigureAwait(false);
         await storage.Runs.RecordStatusAsync(context.Caller.Tenant, runId, RunStatus.Running, ct).ConfigureAwait(false);
-        await Events.PublishAsync(context, new RunRolledBack(number, notUndone), ct).ConfigureAwait(false);
-        return new RollbackReport(to, notUndone);
+        await Events.PublishAsync(context, new RunRolledBack(number, notUndone, memoryChanges.Count), ct).ConfigureAwait(false);
+        return new RollbackReport(to, notUndone, memoryChanges);
     }
 
     /// <summary>
@@ -208,6 +208,13 @@ public sealed class AgentRunner
 
         var started = stored.Started;
         KnownAgent(started.Agent);
+        var saved = await storage.Checkpoints.ReadAsync(caller.Tenant, runId, ct).ConfigureAwait(false);
+        if (saved.Count > 0)
+        {
+            // Refused here, not in the run, which would end in a failed result.
+            await checkpointer.EnsureNoOtherRunsAsync(new ToolContext(runId, started.Agent, caller), saved[^1], ct).ConfigureAwait(false);
+        }
+
         var work = new Work(started.Agent, started.Input) { Trigger = started.Trigger, Caller = caller, TaskId = started.TaskId, RunId = runId };
         return await RunCoreAsync(work, ct, resume: true).ConfigureAwait(false);
     }
@@ -505,7 +512,6 @@ public sealed class AgentRunner
     /// </summary>
     private async Task ResumeStateAsync(ToolContext context, CancellationToken ct)
     {
-        await Events.ContinueAsync(context.Caller.Tenant, context.RunId, ct).ConfigureAwait(false);
         var interrupted = await checkpointer.InterruptedAsync(context, ct).ConfigureAwait(false);
         var saved = await storage.Checkpoints.ReadAsync(context.Caller.Tenant, context.RunId, ct).ConfigureAwait(false);
         var last = saved.Count == 0 ? null : saved[^1];

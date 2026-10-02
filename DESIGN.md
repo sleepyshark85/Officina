@@ -242,10 +242,13 @@ decides the outcome.
   A run takes one when it starts, then where `capabilities.checkpoints.at` says (after each turn by default), and on demand.
 - **Rollback (RUN-08)** truncates each store to those positions and resets the worktrees, opening again any that are gone, from
   their branch or from the commit alone, and removing any that did not exist then. The restored history is byte-identical to
-  what was sent earlier, so it is still valid for the provider, and memory's revision goes back with it, so a conversation's
-  prefix revision and the revision it was told of stay valid. Events and the audit log are history and are never truncated; the
-  rollback is an event, and it lists the write-tool attempts made since that are outside the core's state (everything but the
-  built-in tools and the `workspace.*` tools). Integration squashes the checkpoint commits into the change's one commit.
+  what was sent earlier, so it is still valid for the provider. A conversation is shared by every run of the agent and caller,
+  so a rollback or resume is refused when another run has written to it since the checkpoint. Project memory is shared too
+  (S17) and is left as it is: the checkpoint records its log position, and the rollback lists the changes made since as not
+  undone. Events and the audit log are history and are never truncated; the rollback is an event, and it lists the write-tool
+  attempts made since that are outside the core's state (everything but the built-in tools and the `workspace.*` tools).
+  Integration squashes the checkpoint commits into the change's one commit, so older checkpoints' commits are then kept only by
+  the reflog, and `git gc` can make restoring them fail.
 - **Resume (RUN-04)** is a rollback to the run's last checkpoint, then the run's work starts again on the restored state, with the
   event numbering continued from the stored log. A run whose process died is still `running` in the store, which is how resume
   finds it. Write-tool intents without an outcome are flagged in a `runResumed` event (RUN-07), and an irreversible call is not

@@ -81,30 +81,20 @@ public sealed class EventBus
         }
     }
 
-    /// <summary>
-    /// Makes the run's next event follow the last one stored, when the run starts again in a new process (RUN-04). Events a
-    /// crashed process published before it died keep their numbers, so readers that saw them catch up without a gap or a repeat.
-    /// </summary>
-    internal async ValueTask ContinueAsync(string? tenant, string runId, CancellationToken ct)
-    {
-        var stored = await log.ReadAsync(tenant, runId, 0, ct).ConfigureAwait(false);
-        await order.WaitAsync(ct).ConfigureAwait(false);
-        try
-        {
-            sequences[runId] = Math.Max(sequences.GetValueOrDefault(runId), stored.Count == 0 ? 0 : stored[^1].Sequence);
-        }
-        finally
-        {
-            order.Release();
-        }
-    }
-
     internal async ValueTask PublishAsync(ToolContext context, EventPayload payload, CancellationToken ct)
     {
         await order.WaitAsync(ct).ConfigureAwait(false);
         try
         {
-            var next = sequences.GetValueOrDefault(context.RunId) + 1;
+            if (!sequences.TryGetValue(context.RunId, out var last))
+            {
+                // The first event this process publishes for the run continues the stored numbering: the run may have started
+                // in a process that died (RUN-04), or be rolled back from a new one (RUN-08).
+                var stored = await log.ReadAsync(context.Caller.Tenant, context.RunId, 0, ct).ConfigureAwait(false);
+                last = stored.Count == 0 ? 0 : stored[^1].Sequence;
+            }
+
+            var next = last + 1;
             sequences[context.RunId] = next;
             var coreEvent = new CoreEvent(context.RunId, context.Agent, context.Step, next, time.GetUtcNow(), payload);
             if (!unstored.Contains(payload.Kind))

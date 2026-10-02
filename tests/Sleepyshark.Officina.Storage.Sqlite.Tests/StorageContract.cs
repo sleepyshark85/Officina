@@ -301,9 +301,25 @@ public abstract class StorageContract
         Assert.Single(await storage.Checkpoints.ReadAsync("acme", "run-2", Ct));
     }
 
+    // RUN-08: a conversation is shared by the runs of an agent and caller, so a run can tell whose turns come after a position.
+    [Fact]
+    public async Task A_conversation_tells_which_turns_after_a_position_belong_to_other_runs()
+    {
+        var storage = await CreateAsync();
+        foreach (var run in new[] { "run-1", "run-2", "run-1" })
+        {
+            await storage.Conversations.AppendAsync("acme", Turn("ann", Message.User(run)) with { RunId = run }, Ct);
+        }
+
+        Assert.Equal(1, await storage.Conversations.CountOtherRunsAfterAsync("acme", "extractor", "ann", 0, "run-1", Ct));
+        Assert.Equal(3, await storage.Conversations.CountOtherRunsAfterAsync("acme", "extractor", "ann", 0, "run-3", Ct));
+        Assert.Equal(0, await storage.Conversations.CountOtherRunsAfterAsync("acme", "extractor", "ann", 2, "run-1", Ct));
+        Assert.Equal(0, await storage.Conversations.CountOtherRunsAfterAsync("other", "extractor", "ann", 0, "run-3", Ct));
+    }
+
     // RUN-08: going back deletes what came after a position, and only there.
     [Fact]
-    public async Task Going_back_deletes_the_conversation_record_board_and_memory_after_a_position()
+    public async Task Going_back_deletes_the_conversation_record_and_board_after_a_position()
     {
         var storage = await CreateAsync();
         foreach (var revision in new[] { 1, 2, 3 })
@@ -311,7 +327,6 @@ public abstract class StorageContract
             await storage.Records.TryAppendAsync("acme", Fact("run-1", revision), Ct);
             await storage.Records.TryAppendAsync("acme", Fact("run-2", revision), Ct);
             await storage.Tasks.TryAppendAsync("acme", Change("run-1", revision), Ct);
-            await storage.Memory.TryAppendAsync("acme", Proposed("project:x", revision), Ct);
             await storage.Conversations.AppendAsync("acme", Turn("ann", Message.User($"turn {revision}")), Ct);
         }
 
@@ -319,13 +334,11 @@ public abstract class StorageContract
 
         await storage.Records.TruncateAsync("acme", "run-1", 1, Ct);
         await storage.Tasks.TruncateAsync("acme", "run-1", 2, Ct);
-        await storage.Memory.TruncateAsync("acme", "project:x", 0, Ct);
         await storage.Conversations.TruncateAsync("acme", "extractor", "ann", 1, Ct);
 
         Assert.Equal([1L], (await storage.Records.ReadAsync("acme", "run-1", Ct)).Select(entry => entry.Revision));
         Assert.Equal(3, (await storage.Records.ReadAsync("acme", "run-2", Ct)).Count);
         Assert.Equal([1L, 2], (await storage.Tasks.ReadAsync("acme", "run-1", Ct)).Select(change => change.Revision));
-        Assert.Empty(await storage.Memory.ReadAsync("acme", "project:x", Ct));
         Assert.Equal(1, await storage.Conversations.CountAsync("acme", "extractor", "ann", Ct));
         Assert.Equal(1, await storage.Conversations.CountAsync("acme", "extractor", "bob", Ct));
         Assert.Equal(0, await storage.Conversations.CountAsync("other", "extractor", "ann", Ct));

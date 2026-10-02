@@ -166,7 +166,7 @@ internal sealed class Turn
         if (history.Strategy != HistoryStrategy.None)
         {
             var messages = conversation.Shortened ? conversation.History : conversation.CurrentTurn;
-            var turn = new ConversationTurn(context.Agent, context.Caller.Id, time.GetUtcNow(), messages, conversation.Shortened, prefixMemory, seenMemory);
+            var turn = new ConversationTurn(context.Agent, context.Caller.Id, time.GetUtcNow(), messages, conversation.Shortened, prefixMemory, seenMemory, context.RunId);
             await conversations.AppendAsync(context.Caller.Tenant, turn, ct).ConfigureAwait(false);
         }
 

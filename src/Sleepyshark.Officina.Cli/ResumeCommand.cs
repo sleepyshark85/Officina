@@ -1,4 +1,6 @@
 using System.CommandLine;
+using Sleepyshark.Officina.Core.Configuration;
+using Sleepyshark.Officina.Storage.Sqlite;
 using Sleepyshark.Officina.Core.Checkpoints;
 using Sleepyshark.Officina.Core.Extensibility;
 using Sleepyshark.Officina.Core.Running;
@@ -16,7 +18,8 @@ internal static class ResumeCommand
     public static Command CreateResume(ConfigurationCommandOptions shared, SofEnvironment host)
     {
         var run = new Argument<string>("run") { Description = "The run's id." };
-        var command = new Command("resume", "Continue a run that stopped without ending, from its last checkpoint.") { run };
+        var command = new Command(
+            "resume", "Continue a run that stopped without ending, from its last checkpoint. The run budget starts again from zero. Do not resume a run that is still running in another terminal.") { run };
         shared.AddTo(command);
         command.SetAction((parse, ct) =>
         {
@@ -47,15 +50,17 @@ internal static class ResumeCommand
         {
             var runId = parse.GetValue(run)!;
             var number = parse.GetValue(to);
+            if (number is null)
+            {
+                return ListAsync(shared.Directory(parse, host), runId, host, ct);
+            }
 
             // The working copies stay: the run goes on from the checkpoint with `sof resume`.
             return RunCommand.ExecuteAsync(parse, shared, host, runId, agentName: null, existing: true, leaveWorkingCopies: true, async (session, token) =>
             {
                 try
                 {
-                    return number is { } checkpoint
-                        ? Report(session, await session.Runner.RollbackAsync(runId, checkpoint, ct: token))
-                        : List(session, await session.Runner.CheckpointsAsync(runId, ct: token));
+                    return Report(session, await session.Runner.RollbackAsync(runId, number.Value, ct: token));
                 }
                 catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
                 {
@@ -67,11 +72,20 @@ internal static class ResumeCommand
         return command;
     }
 
-    private static int List(RunCommand.Session session, IReadOnlyList<Checkpoint> checkpoints)
+    /// <summary>Lists a run's checkpoints from the store alone: no tool servers, no lock on the workspace, nothing cleaned up.</summary>
+    private static async Task<int> ListAsync(string directory, string runId, SofEnvironment host, CancellationToken ct)
     {
-        foreach (var checkpoint in checkpoints)
+        var database = Path.Combine(directory, WorkspaceOptions.StateFolder, "sof.db");
+        IStorage? storage = File.Exists(database) ? await SqliteStorage.OpenAsync(database, ct) : null;
+        if (storage is null || await storage.Runs.ReadAsync(null, runId, ct) is null)
         {
-            session.Output.WriteLine($"{checkpoint.Number}  {checkpoint.Time:u}  {checkpoint.Point}");
+            host.Error.WriteLine($"error: there is no run {runId}.");
+            return ExitCodes.Invalid;
+        }
+
+        foreach (var checkpoint in await storage.Checkpoints.ReadAsync(null, runId, ct))
+        {
+            host.Out.WriteLine($"{checkpoint.Number}  {checkpoint.Time:u}  {checkpoint.Point}");
         }
 
         return ExitCodes.Success;
@@ -88,6 +102,11 @@ internal static class ResumeCommand
                 session.Output.WriteLine(
                     $"  {effect.Agent} called {effect.Tool} {effect.Arguments}{(effect.Irreversible ? " (irreversible)" : "")}{(effect.Finished ? "" : ", outcome unknown")}");
             }
+        }
+
+        if (report.MemoryChanges.Count > 0)
+        {
+            session.Output.WriteLine($"Project memory is not rolled back: it has {report.MemoryChanges.Count} changes since the checkpoint.");
         }
 
         return ExitCodes.Success;

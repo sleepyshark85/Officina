@@ -81,6 +81,8 @@ public sealed class CrashAndResumeTests : IDisposable
         Assert.Equal(dieInDeploy ? ["deploy"] : [], resumed.Interrupted.Select(effect => effect.Tool));
 
         // No lost checkpointed work: the record up to the last checkpoint is as it was, and so are the working copy's files.
+        // Known gap (part 2): a pattern resumes from its first step, so work after step one's checkpoint is redone and so is step
+        // one itself, which records its fact again as an entry of its own; only the checkpointed prefix is compared.
         var after = await second.Storage.Records.ReadAsync(null, work.RunId, Ct);
         Assert.Equal(before.Take((int)last.Record), after.Take((int)last.Record));
         Assert.Equal(last.Record > 0, last.Workspace.Count == 1);
@@ -89,6 +91,35 @@ public sealed class CrashAndResumeTests : IDisposable
             Assert.Equal("one", await File.ReadAllTextAsync(Path.Combine(second.Workspace.OpenCopies.Single().Directory, "a.txt"), Ct));
         }
 
+        await processes.CancelAsync();
+        await zombie;
+        second.Workspace.Dispose();
+    }
+
+    // RUN-08: a conversation is shared by every run of the agent, so a run is not resumed over another run's turns.
+    [Fact]
+    public async Task A_run_is_not_resumed_over_turns_another_run_wrote_to_the_same_conversation()
+    {
+        sof.Write("README.md", "A project.\n").Commit();
+        var work = new Work("lead", "go");
+        var arrived = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var first = await StartAsync(work.RunId, new DyingModel(Script(), 3, arrived), new FakeTool(ToolKind.Write));
+        var zombie = first.Runner.RunAsync(work, processes.Token);
+        await arrived.Task.WaitAsync(Ct);
+        first.Workspace.Dispose();
+        var other = new Work("dev", "other work");
+        var between = await StartAsync(other.RunId, new ScriptedModelProvider().Reply("done"), new FakeTool(ToolKind.Write));
+        await between.Runner.RunAsync(other, Ct);
+        between.Workspace.Dispose();
+        var turns = await between.Storage.Conversations.CountAsync(null, "dev", null, Ct);
+
+        var second = await StartAsync(work.RunId, Script(), new FakeTool(ToolKind.Write));
+        var refused = await Assert.ThrowsAsync<InvalidOperationException>(() => second.Runner.ResumeAsync(work.RunId, ct: Ct));
+        var rolledBack = await Assert.ThrowsAsync<InvalidOperationException>(() => second.Runner.RollbackAsync(work.RunId, 1, ct: Ct));
+
+        Assert.Contains("Another run has written to dev's conversation since checkpoint 1", refused.Message, StringComparison.Ordinal);
+        Assert.Equal(refused.Message, rolledBack.Message);
+        Assert.Equal((turns, RunStatus.Running), (await second.Storage.Conversations.CountAsync(null, "dev", null, Ct), (await second.Storage.Runs.ReadAsync(null, work.RunId, Ct))!.Status));
         await processes.CancelAsync();
         await zombie;
         second.Workspace.Dispose();

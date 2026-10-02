@@ -88,7 +88,7 @@ public class CheckpointTests
         Assert.True(report.NotUndone[0].Finished);
         Assert.Single(deployed.Calls);
         var rolledBack = (await kit.Storage.Events.ReadAsync(null, work.RunId, 0, Ct)).Select(coreEvent => coreEvent.Payload).OfType<RunRolledBack>().Single();
-        Assert.Equal(("deploy", 1), (rolledBack.NotUndone[0].Tool, rolledBack.Checkpoint));
+        Assert.Equal(("deploy", 1, 0), (rolledBack.NotUndone[0].Tool, rolledBack.Checkpoint, rolledBack.MemoryChanges));
         Assert.Equal(RunStatus.Running, (await kit.Storage.Runs.ReadAsync(null, work.RunId, Ct))!.Status);
     }
 
@@ -108,9 +108,9 @@ public class CheckpointTests
         Assert.Empty((await workspace.OpenWorkingCopyAsync("w", "dev", Ct) as InMemoryWorkspace.Copy)!.Files);
     }
 
-    // MEM-03, DESIGN.md §8: a rollback resets memory's revision with the conversations, so the prefix revision and the revision they were told of stay valid.
+    // Memory outlives runs and is shared, so a rollback leaves it alone and reports the changes made since.
     [Fact]
-    public async Task A_checkpoint_records_memorys_revision_and_a_rollback_resets_it()
+    public async Task A_rollback_leaves_project_memory_as_it_is_and_reports_the_changes_since_the_checkpoint()
     {
         var kit = Kit(Checkpoints("step"), out _, memory: true);
         TwoSteps(kit);
@@ -122,10 +122,12 @@ public class CheckpointTests
         await kit.Runner.Memory(Ann).ApproveAsync(2, null, Ct);
         var revision = (await kit.Runner.Memory(Ann).ReadAsync(Ct)).Revision;
 
-        await kit.Runner.RollbackAsync(work.RunId, 0, Ann, Ct);
+        var report = await kit.Runner.RollbackAsync(work.RunId, 0, Ann, Ct);
 
-        Assert.Equal(2, (await kit.Runner.CheckpointsAsync(work.RunId, Ann, Ct))[0].Memory);
-        Assert.Equal((4, 2), (revision, (await kit.Runner.Memory(Ann).ReadAsync(Ct)).Revision));
+        Assert.Equal(2, report.To.Memory);
+        Assert.Equal([3L, 4], report.MemoryChanges.Select(change => change.Revision));
+        Assert.Equal(4, revision);
+        Assert.Equal(4, (await kit.Runner.Memory(Ann).ReadAsync(Ct)).Revision);
     }
 
     // RUN-04, RUN-07, TOOL-10, REL-03, TEST-12.

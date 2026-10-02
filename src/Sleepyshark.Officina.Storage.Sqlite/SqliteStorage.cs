@@ -40,7 +40,7 @@ public sealed class SqliteStorage : IStorage, IRunStore, IConversationStore, IEv
         CREATE INDEX audit_run ON audit (tenant, run_id);
         CREATE TABLE conversations (
             position INTEGER PRIMARY KEY, tenant TEXT, owner TEXT, agent TEXT NOT NULL, time INTEGER NOT NULL,
-            shortened INTEGER NOT NULL, messages TEXT NOT NULL, prefix_memory INTEGER NOT NULL, seen_memory INTEGER NOT NULL);
+            shortened INTEGER NOT NULL, messages TEXT NOT NULL, prefix_memory INTEGER NOT NULL, seen_memory INTEGER NOT NULL, run_id TEXT);
         CREATE INDEX conversations_owner ON conversations (tenant, owner, agent);
         CREATE TABLE record (
             tenant TEXT, run_id TEXT NOT NULL, revision INTEGER NOT NULL, agent TEXT NOT NULL, time INTEGER NOT NULL, item TEXT NOT NULL, task TEXT,
@@ -230,11 +230,6 @@ public sealed class SqliteStorage : IStorage, IRunStore, IConversationStore, IEv
             "SELECT * FROM memory_changes WHERE tenant IS $tenant AND scope = $scope ORDER BY revision", ReadMemoryChange, ct,
             ("$tenant", tenant), ("$scope", scope)).ConfigureAwait(false);
 
-    ValueTask IMemoryStore.TruncateAsync(string? tenant, string scope, long revision, CancellationToken ct) =>
-        ExecuteAsync(
-            "DELETE FROM memory_changes WHERE tenant IS $tenant AND scope = $scope AND revision > $revision", ct,
-            ("$tenant", tenant), ("$scope", scope), ("$revision", revision));
-
     public ValueTask AppendAsync(string? tenant, Checkpoint checkpoint, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(checkpoint);
@@ -298,14 +293,21 @@ public sealed class SqliteStorage : IStorage, IRunStore, IConversationStore, IEv
     {
         ArgumentNullException.ThrowIfNull(turn);
         return ExecuteAsync(
-            "INSERT INTO conversations (tenant, owner, agent, time, shortened, messages, prefix_memory, seen_memory) VALUES ($tenant, $owner, $agent, $time, $shortened, $messages, $prefix_memory, $seen_memory)", ct,
+            "INSERT INTO conversations (tenant, owner, agent, time, shortened, messages, prefix_memory, seen_memory, run_id) VALUES ($tenant, $owner, $agent, $time, $shortened, $messages, $prefix_memory, $seen_memory, $run_id)", ct,
             ("$tenant", tenant), ("$owner", turn.Owner), ("$agent", turn.Agent), ("$time", turn.Time.UtcTicks), ("$shortened", turn.Shortened),
-            ("$messages", JsonSerializer.Serialize(turn.Messages, StoredJson)), ("$prefix_memory", turn.PrefixMemory), ("$seen_memory", turn.SeenMemory));
+            ("$messages", JsonSerializer.Serialize(turn.Messages, StoredJson)), ("$prefix_memory", turn.PrefixMemory), ("$seen_memory", turn.SeenMemory), ("$run_id", turn.RunId));
     }
 
     public async ValueTask<int> CountAsync(string? tenant, string agent, string? owner, CancellationToken ct) =>
         (await QueryAsync(
             $"SELECT COUNT(*) FROM conversations WHERE {Conversation}", row => row.GetInt32(0), ct, ("$tenant", tenant), ("$agent", agent), ("$owner", owner)).ConfigureAwait(false))[0];
+
+    public async ValueTask<int> CountOtherRunsAfterAsync(string? tenant, string agent, string? owner, int count, string runId, CancellationToken ct) =>
+        (await QueryAsync(
+            $"""
+            SELECT COUNT(*) FROM conversations WHERE {Conversation} AND run_id IS NOT $run_id
+            AND position NOT IN (SELECT position FROM conversations WHERE {Conversation} ORDER BY position LIMIT $count)
+            """, row => row.GetInt32(0), ct, ("$tenant", tenant), ("$agent", agent), ("$owner", owner), ("$run_id", runId), ("$count", count)).ConfigureAwait(false))[0];
 
     public ValueTask TruncateAsync(string? tenant, string agent, string? owner, int count, CancellationToken ct) =>
         ExecuteAsync(
@@ -383,7 +385,7 @@ public sealed class SqliteStorage : IStorage, IRunStore, IConversationStore, IEv
     private static ConversationTurn ReadTurn(SqliteDataReader row) => new(
         row.GetString(row.GetOrdinal("agent")), Text(row, "owner"), Time(row),
         JsonSerializer.Deserialize<ImmutableArray<Message>>(row.GetString(row.GetOrdinal("messages")), StoredJson), row.GetBoolean(row.GetOrdinal("shortened")),
-        row.GetInt64(row.GetOrdinal("prefix_memory")), row.GetInt64(row.GetOrdinal("seen_memory")));
+        row.GetInt64(row.GetOrdinal("prefix_memory")), row.GetInt64(row.GetOrdinal("seen_memory")), Text(row, "run_id"));
 
     private static AuditEntry ReadAuditEntry(SqliteDataReader row) => new(
         row.GetString(row.GetOrdinal("run_id")), row.GetString(row.GetOrdinal("agent")), Text(row, "caller"), row.GetString(row.GetOrdinal("tool")),

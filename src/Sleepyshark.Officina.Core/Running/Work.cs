@@ -27,5 +27,5 @@ public sealed record Work(string Agent, string Input)
     /// A copy made with <c>with</c> keeps it, so make a new work item for new work. A run that starts again after a crash
     /// keeps its own id (RUN-04).
     /// </summary>
-    public string RunId { get; init; } = Guid.CreateVersion7().ToString();
+    public string RunId { get; internal init; } = Guid.CreateVersion7().ToString();
 }
