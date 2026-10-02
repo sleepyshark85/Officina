@@ -35,13 +35,37 @@ internal sealed class OwnerQueue(TextWriter output) : IHumanChannel
         }
     }
 
-    /// <summary>Answers a waiting request; false when none has that number.</summary>
-    public bool Answer(int number, HumanAnswer answer) => waiting.TryGetValue(number, out var entry) && entry.Answer.TrySetResult(answer);
+    /// <summary>
+    /// Answers a waiting request with a command (approve, deny, change or answer); returns what was wrong, if anything. A
+    /// command of the wrong kind is refused and the request keeps waiting, so a reply never approves an approval.
+    /// </summary>
+    public string? Answer(int number, string command, HumanAnswer answer)
+    {
+        if (!waiting.TryGetValue(number, out var entry))
+        {
+            return "error: nothing waits for you with that number.";
+        }
+
+        var kind = entry.Request.Kind;
+        var fits = command switch
+        {
+            "approve" => kind != HumanRequestKind.Question,
+            "deny" => true, // on a question, it declines
+            "change" => kind == HumanRequestKind.Approval,
+            _ => kind == HumanRequestKind.Question,
+        };
+        if (!fits)
+        {
+            return $"error: #{number} is {Describe(entry.Request)}";
+        }
+
+        return entry.Answer.TrySetResult(answer) ? null : "error: nothing waits for you with that number.";
+    }
 
     public static string Describe(HumanRequest request) => request.Kind switch
     {
         HumanRequestKind.Approval => $"{request.Agent} asks to run {request.Tool} {request.Arguments?.GetRawText()}: {request.Summary}. Answer with approve, deny or change.",
-        HumanRequestKind.Question => $"{request.Agent} asks: {request.Summary} Answer with answer.",
+        HumanRequestKind.Question => $"{request.Agent} asks: {request.Summary} Answer with answer or deny.",
         _ => $"{request.Agent} needs your sign-off: {request.Summary} Answer with approve or deny.",
     };
 }

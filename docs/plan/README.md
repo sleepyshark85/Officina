@@ -40,8 +40,11 @@ Last updated 2026-10-02.
     `workspace.move_file`; lets `capabilities.workspace.baselineChecks` name checks from `checks` (WS-02); and shows
     the integration queue (WS-09).
   - S11 registers the Claude provider in `sof run`, which until then reports that the provider is not available.
+  - S20 also adds pausing the whole run (RUN-06); S16 pauses one agent at a time.
   - S20 adds the plan-approval sign-off and the model's tool to hand off to a human (EGR-04). S18 and S19 add
     integration and snapshots to `IWorkspace`.
+  - S21 (from S16): when a cancelled turn outlives `run.cancelWithin`, the agent's lock is released, so its next turn
+    can overlap with the left-behind one, and the left-behind turn reports zero cost.
   - S19 cleans up what the Windows sandbox leaves outside a cleaned-up working copy: its AppContainer
     profile, its home folder `%TEMP%\officina-<hash>`, and its read-and-execute grants on `toolchains` folders.
   - S21 runs the Windows sandbox tests once as a standard user in CI (the S00a recipe), tests the CPU

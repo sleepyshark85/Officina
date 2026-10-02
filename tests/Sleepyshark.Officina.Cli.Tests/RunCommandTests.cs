@@ -77,6 +77,24 @@ public sealed class RunCommandTests : IDisposable
     }
 
     [Fact]
+    public async Task An_answer_of_the_wrong_kind_is_refused_and_the_request_keeps_waiting()
+    {
+        model.CallTools(("note", """{ "text": "Uses SQLite." }""")).Reply("Done.");
+
+        var run = sof.RunAsync("run", "--input", "Pick a database.");
+        await sof.Out.WaitForAsync("#1 dev asks to run note", Ct);
+        sof.In.Type("answer 1 no, don't");
+        await sof.Out.WaitForAsync("error: #1 is dev asks to run note", Ct);
+        sof.In.Type("status");
+        await sof.Out.WaitForAsync("waiting for you: #1 dev asks to run note", Ct);
+        sof.In.Type("approve 1");
+        var (exitCode, output, _) = await run;
+
+        Assert.Equal(ExitCodes.Success, exitCode);
+        Assert.EndsWith("Done.\n", output, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task A_provider_this_build_does_not_have_is_reported()
     {
         sof.Providers.Clear();

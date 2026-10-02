@@ -130,13 +130,13 @@ internal static class RunCommand
                     status.Print(queue);
                     return null;
                 case "approve":
-                    return Answer(words, queue, HumanAnswer.Approve);
+                    return Answer(words, queue, words[0], HumanAnswer.Approve);
                 case "deny":
-                    return Answer(words, queue, HumanAnswer.Deny);
+                    return Answer(words, queue, words[0], HumanAnswer.Deny);
                 case "change" when words.Length == 3:
-                    return Answer(words, queue, HumanAnswer.ApproveChanged(JsonDocument.Parse(words[2]).RootElement.Clone()));
+                    return Answer(words, queue, words[0], HumanAnswer.ApproveChanged(JsonDocument.Parse(words[2]).RootElement.Clone()));
                 case "answer" when words.Length == 3:
-                    return Answer(words, queue, HumanAnswer.Reply(words[2]));
+                    return Answer(words, queue, words[0], HumanAnswer.Reply(words[2]));
                 case "tell" when words.Length == 3:
                     runner.Send(words[1], Sender.Owner, words[2]); // HITL-03
                     return null;
@@ -162,6 +162,8 @@ internal static class RunCommand
         }
     }
 
-    private static string? Answer(string[] words, OwnerQueue queue, HumanAnswer answer) =>
-        words.Length > 1 && int.TryParse(words[1].TrimStart('#'), out var number) && queue.Answer(number, answer) ? null : "error: nothing waits for you with that number.";
+    private static string? Answer(string[] words, OwnerQueue queue, string command, HumanAnswer answer) =>
+        words.Length > 1 && int.TryParse(words[1].TrimStart('#'), out var number)
+            ? queue.Answer(number, command, answer)
+            : "error: nothing waits for you with that number.";
 }

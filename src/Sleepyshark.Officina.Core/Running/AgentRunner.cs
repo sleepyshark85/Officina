@@ -326,7 +326,7 @@ public sealed class AgentRunner
             return new AgentResult(AgentOutcome.HandedOff, detail, new TurnStatistics(0, 0, Usage.None, 0m, TimeSpan.Zero), [], [], [], [],
                 new Handoff(HandoffReason.RequestedByHuman, null, detail, work.Input, [], null, ""));
         }
-        catch (Exception exception) when (exception is not TimeoutException)
+        catch
         {
             // The turn stopped, as it should, with its cancellation.
         }
