@@ -107,7 +107,9 @@ public sealed class TelemetryTests : IDisposable
         kit.Model.Reply(new Stopped(StopReason.Refused));
 
         await RunAsync();
-        await kit.Runner.RunAsync(new Work(Observed, Content) { TaskId = "t1" }, Ct); // handed off
+        var work = new Work(Observed, Content) { TaskId = "t1" };
+        await kit.Runner.Board(null, work.RunId).AddAsync("t1", new() { Title = "Observe" }, "planned", Ct);
+        await kit.Runner.RunAsync(work, Ct); // handed off
 
         var mine = measurements.Where(measurement => (string?)measurement.Tags.GetValueOrDefault("gen_ai.agent.name") == Observed).ToList();
         Assert.Equal(

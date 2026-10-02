@@ -30,13 +30,17 @@ Tasks, dependencies, verification and review.
   (`ReturnAsync`), which counts as a failed attempt (WS-03, TASK-05).
 - A turn on a task (`Work.TaskId`) checks the task's budget, a budget level between the turn and the run (COST-02),
   and charges its cost to the task when it ends. Its volatile context shows the task's status and acceptance criteria
-  (`context.currentTask`, CTX-01); `context.recordScope: task` limits the record to the task's entries (REC-06); and
+  (`context.currentTask`, CTX-01; the reference §7.3 follows this name, as `context.sections` does not exist); `context.recordScope: task` limits the record to the task's entries (REC-06); and
   operating facts may use `{{work.id}}` and `{{work.task.id|title|status}}` (CTX-09).
 - Gates and tools read the board, with the agent's task, through `GateContext.Board` and `ToolCall.Board` (TOOL-06).
   Status changes are events (`taskStatusChanged`, EVT-01), and model-call metrics carry `officina.task.id` (OBS-02).
 - The SQLite format version is now 3, so a version-2 file, which has no `task_changes` table, is refused.
 
 Left to later slices:
+- S20: a failed task goes back to the lead: only the owner retries it for now, so the lead role takes that over. A turn
+  on a failed, done or cancelled task still runs; refuse it when the team runtime assigns work. Agents can still
+  rewrite the title, acceptance criteria and dependencies of any task, including their own in review; restrict that
+  when the team shows a case.
 - S20: the team runtime claims and assigns tasks, gives each a working copy and passes it to the checks
   (`CheckContext.Directory`), integrates verified tasks through the queue, and calls `CompleteAsync` or
   `ReturnAsync`; agents of a team share one run, and so one board; `team` requires `taskBoard` (CAP-03); messages

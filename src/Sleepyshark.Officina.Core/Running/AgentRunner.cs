@@ -101,16 +101,25 @@ public sealed class AgentRunner
     /// <summary>Runs one work item, however it arrived.</summary>
     /// <param name="work">The work.</param>
     /// <param name="ct">Cancels the run, which then ends in a handoff.</param>
-    public Task<AgentResult> RunAsync(Work work, CancellationToken ct = default)
+    /// <exception cref="ArgumentException">The work is for a task, and the task board is off or has no such task.</exception>
+    public async Task<AgentResult> RunAsync(Work work, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(work);
         KnownAgent(work.Agent);
-        if (work.TaskId is not null && !Options.Capabilities.TaskBoard.Enabled)
+        if (work.TaskId is not null)
         {
-            throw new ArgumentException("The work is for a task, but the task board is off.", nameof(work));
+            if (!Options.Capabilities.TaskBoard.Enabled)
+            {
+                throw new ArgumentException("The work is for a task, but the task board is off.", nameof(work));
+            }
+
+            if (!(await Board(work.Caller.Tenant, work.RunId).ReadAsync(ct).ConfigureAwait(false)).Any(task => task.Id == work.TaskId))
+            {
+                throw new ArgumentException($"The work is for task {work.TaskId}, which is not on the board.", nameof(work));
+            }
         }
 
-        return RunCoreAsync(work, ct);
+        return await RunCoreAsync(work, ct).ConfigureAwait(false);
     }
 
     /// <summary>

@@ -24,6 +24,7 @@ public class TaskBoardTests
     private readonly ToolSetup setup = new();
     private readonly ToolPipeline pipeline;
     private readonly TaskBoard owner;
+    private readonly OfficinaOptions options;
     private bool testsPass = true;
 
     public TaskBoardTests()
@@ -43,6 +44,7 @@ public class TaskBoardTests
             Gates = new Dictionary<string, GateOptions> { ["in-progress"] = new() { Use = "extension:in-progress" } },
         };
         setup.Tools["edit"] = new FakeTool(ToolKind.Write);
+        this.options = options;
         pipeline = setup.Create(options);
         owner = pipeline.Board(Owner.Tenant, Context.RunId);
     }
@@ -186,7 +188,31 @@ public class TaskBoardTests
 
         Assert.Equal([(TaskState.InProgress, Agent), (TaskState.Failed, null)], states);
         Assert.Equal(
-            "Changed: t1 state Failed → Ready, failedAttempts 2 → 0.", await CallAsync(Agent, "update", """{ "id": "t1", "state": "ready", "reason": "retry" }"""));
+            "invalid arguments: a failed task goes back to the lead; only the owner retries it.", await CallAsync(Agent, "update", """{ "id": "t1", "state": "ready", "reason": "retry" }"""));
+        Assert.Equal(
+            (true, "Changed: t1 state Failed → Ready, failedAttempts 2 → 0."), await owner.EditAsync("t1", new() { State = TaskState.Ready }, "retry", Ct));
+    }
+
+    // TASK-08: a check removed from the configuration does not lock the board.
+    [Fact]
+    public async Task A_check_removed_from_the_configuration_does_not_lock_the_board()
+    {
+        await AddAsync("t1", new() { Title = "Fix the parser", Checks = ["tests"] });
+        var without = setup.Create(options with { Checks = new Dictionary<string, CheckOptions>() }).Board(Owner.Tenant, Context.RunId);
+
+        Assert.True((await without.AddAsync("t2", new() { Title = "Another" }, "planned", Ct)).Accepted);
+        Assert.False((await without.AddAsync("t3", new() { Title = "Bad", Checks = ["tests"] }, "planned", Ct)).Accepted);
+    }
+
+    // The work's task must be on the board.
+    [Fact]
+    public async Task Work_for_a_task_that_is_not_on_the_board_is_refused()
+    {
+        var kit = Kit(new() { Enabled = true });
+
+        var refused = await Assert.ThrowsAsync<ArgumentException>(() => kit.Runner.RunAsync(new Work(Agent, "Fix it.") { TaskId = "t9" }, Ct));
+
+        Assert.StartsWith("The work is for task t9, which is not on the board.", refused.Message);
     }
 
     // TASK-09, COST-02: the task's budget is a budget level of the turns on it.

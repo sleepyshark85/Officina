@@ -100,7 +100,7 @@ public sealed class TaskBoard
     /// <summary>
     /// Changes a task's fields, and blocks, unblocks, retries or cancels it. A retried task starts again with no failed
     /// attempts and nothing spent. The owner may change anything (TASK-08); agents may not change a task's checks,
-    /// budget, assignee or review requirement, nor cancel it.
+    /// budget, assignee or review requirement, nor cancel it, nor retry a failed task.
     /// </summary>
     public Task<(bool Accepted, string Text)> EditAsync(string id, TaskEdit edit, string reason, CancellationToken ct)
     {
@@ -115,6 +115,11 @@ public sealed class TaskBoard
             if (!owner && (edit.Checks is not null || edit.Budget is not null || edit.Assignee is not null || edit.RequiresReview is not null || edit.State == Cancelled))
             {
                 return "only the owner changes a task's checks, budget, assignee or review requirement, or cancels it.";
+            }
+
+            if (!owner && task.State == Failed && edit.State is not null)
+            {
+                return "a failed task goes back to the lead; only the owner retries it.";
             }
 
             if (edit.State is { } state && state is not (Blocked or Ready or Cancelled))
@@ -300,11 +305,12 @@ public sealed class TaskBoard
         }
     }
 
-    /// <summary>Why the board after a change breaks a rule, or null when it breaks none.</summary>
+    /// <summary>Why the board after a change breaks a rule, or null when it breaks none. Only the tasks changed are checked against the configuration, so removing a check from it does not lock the board (TASK-08).</summary>
     private string? Problem(Dictionary<string, BoardTask> before, Dictionary<string, BoardTask> after)
     {
         foreach (var task in after.Values)
         {
+            var unchanged = before.TryGetValue(task.Id, out var old) && Same(old, task);
             var from = before.GetValueOrDefault(task.Id)?.State ?? Proposed; // a new task starts proposed
             if (from != task.State && !Transitions.Contains((from, task.State)))
             {
@@ -321,7 +327,7 @@ public sealed class TaskBoard
                 return $"task {task.Id} depends on {missing}, which is not on the board.";
             }
 
-            if (task.Checks.FirstOrDefault(check => !options.Checks.ContainsKey(check)) is { } unknown)
+            if (!unchanged && task.Checks.FirstOrDefault(check => !options.Checks.ContainsKey(check)) is { } unknown)
             {
                 return $"check {unknown} does not exist. Use one of: {string.Join(", ", options.Checks.Keys.Order(StringComparer.Ordinal))}.";
             }

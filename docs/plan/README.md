@@ -51,7 +51,7 @@ Last updated 2026-10-02.
   - S20 runs the team on the task board: it claims and assigns tasks, gives each a working copy that its checks
     look at, integrates a task in review once verified and approved, then calls `CompleteAsync`, or `ReturnAsync` on
     a conflict or failed baseline check (WS-03, TASK-05). A team's agents share one run, and so one board, and `team`
-    requires `taskBoard`. S18's Notes list the rest.
+    requires `taskBoard`. A failed task goes back to the lead, who retries it (only the owner can for now). S18's Notes list the rest.
   - S18 moved the SQLite format version to 3. A slice that adds a table bumps it again, unless an unmerged PR has
     already bumped it past the version on main.
   - S19 snapshots and restores the workspace, and cleans up worktrees left by a crash.
