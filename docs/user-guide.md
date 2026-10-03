@@ -218,7 +218,7 @@ preset's `git push` and `git remote` denies, as the list replaces the preset's. 
 
 A working copy has only what git tracks, so no `node_modules` or virtual environment. If the build needs installed
 packages, it must install them first, as `sof init` suggests for Node with a lock file. Edit `sof.json` for anything else; the [team guide](team-guide.md) explains each part.
-For .NET, its section 1 shows what the sandbox needs beyond `sof init`: Source Link turned off, and where the SDK is.
+For .NET, its section 1 shows where the sandbox needs the SDK to be.
 
 The team guide sets up a lead, developers and a reviewer step by step, and runs them on a small .NET project. When you
 type a goal:
