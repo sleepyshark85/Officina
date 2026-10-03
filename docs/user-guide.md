@@ -105,8 +105,9 @@ off, or if the agent's `triggers` leave out `conversation`; `config validate` no
 `assistant: Completed, cost $0.03; this session $0.05`. There is no limit for the session as a whole: queued messages
 or a piped script can each spend a full budget without asking you. A team's message starts from the task board its
 last message left, as its lead remembers it: done tasks stay done, and new ones can depend on them; failed ones can be
-retried; and a task still in progress or in review there is failed, as its work stayed in that run. After `/new` the
-board starts empty.
+retried; and a task still in progress or in review there is failed, as its work stayed in that run. A task keeps its
+checks: if you removed a check from `sof.json`, change the task's checks with `/task edit <id> --checks …` before it is
+retried. A run still running, such as another session's, is not carried over. After `/new` the board starts empty.
 
 **Typing during a reply.** Commands work at once. A message waits, and is sent when the reply ends; to reach an agent
 now, use `/tell`. `/status` lists the messages that wait, and `/drop` drops them without cancelling the reply. A line
@@ -395,7 +396,8 @@ completing (handed off, rejected, failed or cancelled).
   call for each agent working at once. To watch spend, each call prints
   `[agent] model call: N tokens, $x; cost so far $y`.
 - **Time waiting for you is free:** while an agent waits for your approval, answer or sign-off, or is paused, its turn's
-  and task's time budgets don't run, and neither does the run's, so a slow answer never fails the work. Each wait is
+  and task's time budgets don't run, so a slow answer never fails the work. The run's time stops too while every agent at
+  work waits, but runs while one waits and another works. Each wait is
   still bounded by `run.approvalTimeout`. The report's running time leaves the waits out too.
 - **Structured output:** an agent with `output.format: structured` is told its `output.schema` and must reply with
   JSON that matches it. Say the shape in its instructions too, such as `{"steps": ["…"]}`; see `samples/`.

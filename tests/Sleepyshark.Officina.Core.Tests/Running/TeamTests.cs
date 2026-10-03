@@ -686,21 +686,152 @@ public class TeamTests
         Assert.Contains("b Task b: Failed, role developer", told, StringComparison.Ordinal);
     }
 
-    // TEAM-02: a message that asks the team for no work, on a board carried over where nothing can start, is the lead's to answer.
+    // TEAM-02: a message that asks the team for no work, on a board carried over where nothing is ready, is the lead's to answer,
+    // also when a task there waits for one that failed.
     [Fact]
     public async Task A_message_the_lead_answers_without_changing_the_board_carried_over_ends_with_its_reply()
     {
         var kit = Kit(LeadKeepsItsConversation, null);
+        Turn(kit, "You lead a team: lead (the lead), developer[1], developer[2], reviewer[1]. Turn the goal",
+            Create("a"), ("create", """{ "id": "c", "title": "Task c", "role": "developer", "dependsOn": ["a"], "reason": "plan" }"""));
+        Turn(kit, "Tasks failed and came back to you").Reply("Leave it for the owner.");
+        Turn(kit, "No task can start").Reply("Leave it.");
+        Work(kit, "a").Reply("I give up.");
+        Assert.Equal(HandoffReason.NoProgress, (await kit.Runner.RunAsync(new Work("team", "Build a, then c.") { Caller = Ann }, Ct)).Handoff?.Reason);
+        Turn(kit, "You lead a team: lead (the lead), developer[1], developer[2], reviewer[1]. The board below").Reply("a failed as its developer gave up.");
+
+        var result = await kit.Runner.RunAsync(new Work("team", "Why did a fail?") { Caller = Ann }, Ct);
+
+        Assert.Equal((AgentOutcome.Completed, "a failed as its developer gave up."), (result.Outcome, result.Output));
+    }
+
+    // TEAM-02, TEAM-09: the owner's own case. A message's run stops while a task is in progress and another in review; the next
+    // message's board has both, failed, with nobody on them and nothing verified or approved, as their work is in the old run's copies.
+    [Fact]
+    public async Task Tasks_in_progress_or_in_review_when_the_run_stopped_are_carried_over_failed()
+    {
+        var kit = Kit(options => { var chat = LeadKeepsItsConversation(options); return chat with
+        {
+            Agents = new Dictionary<string, AgentDefinition>(chat.Agents)
+            {
+                ["team"] = chat.Agents["team"] with
+                {
+                    Pattern = chat.Agents["team"].Pattern with { Roles = new Dictionary<string, RoleOptions> { ["developer"] = new() { Max = 2 } } },
+                },
+            },
+        }; }, null);
+        using var stop = CancellationTokenSource.CreateLinkedTokenSource(Ct);
+        var first = new Work("team", "Build a and b.") { Caller = Ann };
+        var inReview = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _ = WatchAsync(kit, first.RunId, coreEvent => coreEvent.Payload is TaskStatusChanged { Task: "a", Status: TaskState.InReview }, inReview);
+        hold = async (_, ct) =>
+        {
+            await inReview.Task.WaitAsync(ct);
+            await stop.CancelAsync(); // the run stops while b is in progress, and a waits for a review nobody in the team can give
+            await Task.Delay(Timeout.Infinite, ct);
+        };
+        Turn(kit, "You lead a team: lead (the lead), developer[1], developer[2]. Turn the goal", Create("a", review: true), Create("b"));
+        Work(kit, "a").CallTools(("submit", """{ "id": "a" }""")).Reply("Submitted.");
+        Work(kit, "b").CallTools(("hold", "{}"));
+        await kit.Runner.RunAsync(first, stop.Token);
+        Turn(kit, "You lead a team: lead (the lead), developer[1], developer[2]. The board below").Reply("Both stopped; say if I should retry them.");
+
+        var next = new Work("team", "Where are we?") { Caller = Ann };
+        var result = await kit.Runner.RunAsync(next, Ct);
+
+        Assert.Equal((AgentOutcome.Completed, "Both stopped; say if I should retry them."), (result.Outcome, result.Output));
+        Assert.Equal(
+            [("a", TaskState.Failed, null, false, false), ("b", TaskState.Failed, null, false, false)],
+            (await kit.Runner.Board(null, next.RunId).ReadAsync(Ct)).Select(task => (task.Id, task.State, task.Assignee, task.Verified, task.Approved)));
+    }
+
+    // TEAM-02: the board of a run still running, such as another session's, whose team still works on it, is not carried over.
+    [Fact]
+    public async Task The_board_of_a_run_still_running_is_not_carried_over()
+    {
+        var kit = Kit(options => { var chat = LeadKeepsItsConversation(options); return chat with { Capabilities = chat.Capabilities with { Checkpoints = new() { Enabled = true } } }; }, null);
         Turn(kit, "You lead a team: lead (the lead), developer[1], developer[2], reviewer[1]. Turn the goal", Create("a"));
         Turn(kit, "Every task is done").Reply("a is done.");
         Work(kit, "a").CallTools(("submit", """{ "id": "a" }""")).Reply("Submitted.");
-        await kit.Runner.RunAsync(new Work("team", "Build a.") { Caller = Ann }, Ct);
-        Turn(kit, "You lead a team: lead (the lead), developer[1], developer[2], reviewer[1]. The board below").Reply("a parses the input.");
+        var first = new Work("team", "Build a.") { Caller = Ann };
+        await kit.Runner.RunAsync(first, Ct);
+        await kit.Runner.RollbackAsync(first.RunId, 1, Ann, Ct); // back to just after the lead's plan: running, as far as the store knows
+        Turn(kit, "You lead a team: lead (the lead), developer[1], developer[2], reviewer[1]. Turn the goal", Create("x"));
+        Turn(kit, "Every task is done").Reply("x is done.");
+        Work(kit, "x").CallTools(("submit", """{ "id": "x" }""")).Reply("Submitted.");
 
-        var result = await kit.Runner.RunAsync(new Work("team", "What does a do?") { Caller = Ann }, Ct);
+        var next = new Work("team", "Build x.") { Caller = Ann };
+        var result = await kit.Runner.RunAsync(next, Ct);
 
-        Assert.Equal((AgentOutcome.Completed, "a parses the input."), (result.Outcome, result.Output));
+        Assert.Equal((AgentOutcome.Completed, "x is done."), (result.Outcome, result.Output));
+        Assert.Equal(["x"], (await kit.Runner.Board(null, next.RunId).ReadAsync(Ct)).Select(task => task.Id));
     }
+
+    // RUN-05: while one agent of the team waits for the owner and another works, the run's time runs: a run of an hour is used up
+    // by two hours of work beside a wait, and its report counts them.
+    [Fact]
+    public async Task While_one_agent_waits_for_the_owner_and_another_works_the_runs_time_runs()
+    {
+        var kit = Kit(options => { var approving = Approving(options); return approving with { Run = approving.Run with { Budget = new() { Time = TimeSpan.FromHours(1) } } }; }, new SilentHuman(),
+            developer => developer with { Budget = new() { Turn = new() { Time = TimeSpan.FromHours(10) } } });
+        var work = new Work("team", "Build it.") { Caller = Ann };
+        var asked = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _ = WatchAsync(kit, work.RunId, coreEvent => coreEvent.Payload is HumanAsked, asked);
+        hold = async (_, ct) =>
+        {
+            await asked.Task.WaitAsync(ct); // a waits for the owner from now
+            kit.Time.Advance(TimeSpan.FromHours(2));
+        };
+        Lead(kit, "You lead a team", Create("a"), Create("b"));
+        Lead(kit, "Tasks failed and came back to you").Reply("Leave it.");
+        Work(kit, "a").CallTools(("write", "{}")).Reply("Written.");
+        Work(kit, "b").CallTools(("hold", "{}")).CallTools(("submit", """{ "id": "b" }""")).Reply("Submitted.");
+
+        var result = await kit.Runner.RunAsync(work, Ct);
+
+        Assert.Equal(HandoffReason.BudgetExhausted, result.Handoff?.Reason);
+        var history = await kit.Runner.Board(null, work.RunId).HistoryAsync(Ct);
+        Assert.Contains(history, change => change.Reason == "developer[2]: the run's time budget is used up");
+        Assert.Equal(TimeSpan.FromHours(2), (await kit.Runner.ReportAsync(work.RunId, Ann, Ct)).Running);
+    }
+
+    // RUN-06, INV-07: an agent stopped while it waits for the owner ends its wait in the events too, so the time the run works after
+    // it counts, as a resumed run and the report read it.
+    [Fact]
+    public async Task An_agent_stopped_while_it_waits_for_the_owner_ends_its_wait_and_later_work_counts()
+    {
+        var kit = Kit(Approving, new SilentHuman(), developer => developer with { Budget = new() { Turn = new() { Time = TimeSpan.FromHours(10) } } });
+        var work = new Work("team", "Build it.") { Caller = Ann };
+        var asked = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _ = WatchAsync(kit, work.RunId, coreEvent => coreEvent.Payload is HumanAsked, asked);
+        hold = (_, _) =>
+        {
+            kit.Time.Advance(TimeSpan.FromHours(2));
+            return Task.CompletedTask;
+        };
+        Lead(kit, "You lead a team", Create("a"));
+        Lead(kit, "Tasks failed and came back to you").CallTools(("update", """{ "id": "a", "state": "ready", "reason": "Try again." }""")).Reply("Retried.");
+        Lead(kit, "Every task is done").Reply("Done.");
+        Work(kit, "a").CallTools(("write", "{}")).CallTools(("hold", "{}")).CallTools(("submit", """{ "id": "a" }""")).Reply("Submitted.");
+
+        var running = kit.Runner.RunAsync(work, Ct);
+        await asked.Task.WaitAsync(Ct);
+        kit.Runner.Cancel(work.RunId, "developer[1]");
+        var result = await running;
+
+        Assert.Equal((AgentOutcome.Completed, "Done."), (result.Outcome, result.Output));
+        var events = await kit.Storage.Events.ReadAsync(null, work.RunId, 0, Ct);
+        Assert.Contains(events, coreEvent => coreEvent is { Agent: "developer[1]", Payload: HumanAnswered { Approved: false, TimedOut: false } });
+        Assert.Equal(TimeSpan.FromHours(2), (await kit.Runner.ReportAsync(work.RunId, Ann, Ct)).Running);
+    }
+
+    /// <summary>The team, whose developers' <c>write</c> always asks the owner, who has longer to answer than any test waits.</summary>
+    private static OfficinaOptions Approving(OfficinaOptions options) => options with
+    {
+        Run = options.Run with { ApprovalTimeout = TimeSpan.FromHours(10) },
+        Tools = new Dictionary<string, ToolOptions>(options.Tools) { ["write"] = options.Tools["write"] with { Approval = Approval.Always } },
+        Capabilities = options.Capabilities with { HumanInteraction = new() { Enabled = true, SignOffs = [] } },
+    };
 
     // RUN-05, TASK-09: the time an agent's turn waits for the owner uses none of its turn's time (45 minutes by default), nor its task's.
     [Fact]
@@ -708,15 +839,13 @@ public class TeamTests
     {
         TestKit? kit = null;
         var owner = new SlowOwner(() => kit!.Time.Advance(TimeSpan.FromMinutes(50)));
-        kit = Kit(options => options with
+        kit = Kit(options => { var approving = Approving(options); return approving with
         {
-            Tools = new Dictionary<string, ToolOptions>(options.Tools) { ["write"] = options.Tools["write"] with { Approval = Approval.Always } },
-            Capabilities = options.Capabilities with
+            Capabilities = approving.Capabilities with
             {
-                HumanInteraction = new() { Enabled = true },
-                TaskBoard = options.Capabilities.TaskBoard with { Budget = new() { Time = TimeSpan.FromMinutes(45) } },
+                TaskBoard = approving.Capabilities.TaskBoard with { Budget = new() { Time = TimeSpan.FromMinutes(45) } },
             },
-        }, owner);
+        }; }, owner);
         Lead(kit, "You lead a team", Create("a"));
         Lead(kit, "Every task is done").Reply("Done.");
         Work(kit, "a").CallTools(("write", "{}")).CallTools(("submit", """{ "id": "a" }""")).Reply("Submitted.");

@@ -31,8 +31,13 @@ internal sealed class OwnerChannel(IHumanChannel human, EventBus events, TimeSpa
         catch (OperationCanceledException) when (deadline.IsCancellationRequested && !ct.IsCancellationRequested)
         {
         }
+        finally
+        {
+            // Also when the agent is cancelled meanwhile: a resumed run reads from the events when its agents waited (INV-07).
+            await events.PublishAsync(context, new HumanAnswered(request.Kind, answer?.Approved == true, answer is null && deadline.IsCancellationRequested, request.Tool), CancellationToken.None)
+                .ConfigureAwait(false);
+        }
 
-        await events.PublishAsync(context, new HumanAnswered(request.Kind, answer?.Approved == true, answer is null, request.Tool), ct).ConfigureAwait(false);
         return answer;
     }
 

@@ -330,7 +330,7 @@ public class BudgetTests
         var options = Options(("read", Extension("read") with { Approval = owner is null ? null : Approval.Always }));
         options = options with
         {
-            Run = options.Run with { Budget = run ?? new() },
+            Run = options.Run with { Budget = run ?? new(), ApprovalTimeout = TimeSpan.FromHours(10) }, // longer than any wait a test makes
             Policies = policies ?? new(),
             Agents = new Dictionary<string, AgentDefinition>
             {

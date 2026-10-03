@@ -16,9 +16,10 @@ namespace Sleepyshark.Officina.Core.Running;
 /// <param name="CancelOf">The owner's cancellation of an agent, by its id (RUN-06).</param>
 /// <param name="Members">Registers the team's agents for the run, so they can message each other; null ends the team and drops its messages.</param>
 /// <param name="Conversations">The stored conversations, whose lead's says which run's board a new run carries on.</param>
+/// <param name="Runs">The stored runs, whose status says whether that run still works on its board.</param>
 internal sealed record TeamServices(
     ToolPipeline Pipeline, IWorkspace? Workspace, IEventLog Log, Func<string, CancellationToken> CancelOf, Action<string, IReadOnlySet<string>?> Members,
-    IConversationStore Conversations);
+    IConversationStore Conversations, IRunStore Runs);
 
 /// <summary>
 /// The team pattern (TEAM): a lead and agents of several roles over the run's task board. The lead turns the goal into tasks,
@@ -401,8 +402,9 @@ internal sealed class TeamRun
     }
 
     /// <summary>
-    /// Whether the lead's plan gave the team nothing to do: it changed nothing on a board where no task is ready or waits for
-    /// others, such as when the goal is a question. The lead's reply is then the team's.
+    /// Whether the lead's plan gave the team nothing to do: it changed nothing on a board where no task is ready, such as when the
+    /// goal is a question. Nothing works on a board before the plan, so a task that waits for others waits for a ready one, or
+    /// for one that failed. The lead's reply is then the team's.
     /// </summary>
     private async Task<bool> NothingPlannedAsync(TaskBoard board, CancellationToken ct)
     {
@@ -413,12 +415,13 @@ internal sealed class TeamRun
 
         planFrom = null;
         var history = await board.HistoryAsync(ct).ConfigureAwait(false);
-        return history.Count == from && TaskBoard.Current(history).All(task => task.State is not (Ready or Proposed));
+        return history.Count == from && TaskBoard.Current(history).All(task => task.State != Ready);
     }
 
     /// <summary>
     /// Starts the board with the tasks of the run whose turn the lead's conversation ended with, when it is another run's: a chat's
-    /// earlier message, whose team the lead remembers. Without a conversation of its own the lead remembers none, so none is carried.
+    /// earlier message, whose team the lead remembers. Without a conversation of its own the lead remembers none, so none is carried;
+    /// nor is the board of a run still running, such as another session's, whose team works on it.
     /// </summary>
     /// <returns>Whether tasks were carried over.</returns>
     private async Task<bool> CarryOverAsync(TaskBoard board, CancellationToken ct)
@@ -426,6 +429,11 @@ internal sealed class TeamRun
         if (options.Agents[lead].Context.History.Strategy == HistoryStrategy.None
             || (await services.Conversations.ReadAsync(team.Caller.Tenant, lead, team.Caller.Id, ct).ConfigureAwait(false)) is not [.., { RunId: { } earlier }]
             || earlier == team.RunId)
+        {
+            return false;
+        }
+
+        if ((await services.Runs.ReadAsync(team.Caller.Tenant, earlier, ct).ConfigureAwait(false))?.Status is null or RunStatus.Running)
         {
             return false;
         }

@@ -58,7 +58,8 @@ Part 1:
   `ToolContext.Instance` holds it, and `AgentId` (the instance, or the definition outside a team) is who acts: on the board, in
   the audit log, in events, in the record, in memory, and for tools (`ToolCall.Agent`). The definition still selects the
   settings. Events carry the id, so cost is broken down by agent and, new, by definition (`ByDefinition`, RUN-10).
-- `TeamRun` works from the board as it is: with an empty board the lead plans; then each ready task goes to a free agent of
+- `TeamRun` works from the board as it is: with an empty board, or one carried over from the run the lead's conversation
+  ended with (a chat's earlier message), the lead plans; then each ready task goes to a free agent of
   its role (or the agent the lead assigned it to), which the team claims for it, and the agent works on it in a turn with the
   task as data; a task that needs a review goes to a free agent other than its author whose tools hold `tasks.review`, the
   lead last; a verified, approved task is done (with no workspace there is nothing to integrate). At most

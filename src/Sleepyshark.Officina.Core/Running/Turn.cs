@@ -158,6 +158,7 @@ internal sealed class Turn
     public async Task<AgentResult> RunAsync(CancellationToken ct)
     {
         started = true;
+        using var working = budget.Working(); // RUN-05: a level's clock stops only while every turn drawing on it waits
         var history = agent.Context.History;
         IReadOnlyList<ConversationTurn> earlier = [];
         if (history.Strategy != HistoryStrategy.None)

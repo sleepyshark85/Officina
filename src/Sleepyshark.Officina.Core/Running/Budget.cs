@@ -6,8 +6,8 @@ namespace Sleepyshark.Officina.Core.Running;
 /// <summary>
 /// What one level of a run may spend, and has spent: the run, an agent (RUN-05), a pattern, or a turn (LOOP-06). What a
 /// level spends counts at every level above it, so a step draws on its pattern's budget, the agent's and the run's (PAT-06).
-/// Its time is the time it has run, less the time it waited for the owner: while a turn under it waits for an answer or is
-/// paused, no level it draws on uses time, so how quickly the owner answers never uses up a budget.
+/// Its time is the time it has run, less the time it waited for the owner: while every turn drawing on it waits for an answer
+/// or is paused, it uses no time, so how quickly the owner answers never uses up a budget, but the agents that work meanwhile do.
 /// </summary>
 internal sealed class Budget
 {
@@ -25,8 +25,9 @@ internal sealed class Budget
     private long tokens;
     private decimal cost;
     private int allowances = 1;
+    private int working;
     private int waits;
-    private long waitStarted;
+    private long? stoppedAt;
     private TimeSpan waited;
 
     private Budget(string level, TurnBudget limits, Budget? parent, TimeProvider time, Spent before, Budget? alongside = null)
@@ -74,32 +75,41 @@ internal sealed class Budget
         Iterations = int.MaxValue, ToolCalls = total.ToolCalls ?? int.MaxValue, Tokens = total.Tokens ?? long.MaxValue, Cost = total.Cost ?? decimal.MaxValue, Time = TimeSpan.MaxValue,
     };
 
+    /// <summary>A turn drawing on this level, and so on every level it draws on, works until the result is disposed.</summary>
+    public IDisposable Working() => Change(working: 1);
+
     /// <summary>
-    /// Stops this level's clock, and every level's it draws on, until the result is disposed: a turn under it waits for the owner,
-    /// to answer or to resume it. Waits that overlap stop the clock once.
+    /// A turn drawing on this level waits for the owner, to answer or to resume it, until the result is disposed. A level's clock
+    /// stops while every turn drawing on it waits, or, with none working, while anything waits, such as for the plan's approval.
     /// </summary>
-    public IDisposable WaitForOwner()
+    public IDisposable WaitForOwner() => Change(waits: 1);
+
+    private Ended Change(int working = 0, int waits = 0)
     {
-        Waiting(1);
-        return new Waited(this);
+        Count(working, waits);
+        return new Ended(() => Count(-working, -waits));
     }
 
-    private void Waiting(int change)
+    private void Count(int working, int waits)
     {
         lock (gate)
         {
-            if (change > 0 && waits++ == 0)
+            this.working += working;
+            this.waits += waits;
+            var stopped = this.waits > 0 && this.waits >= this.working;
+            if (stopped && stoppedAt is null)
             {
-                waitStarted = time.GetTimestamp();
+                stoppedAt = time.GetTimestamp();
             }
-            else if (change < 0 && --waits == 0)
+            else if (!stopped && stoppedAt is { } at)
             {
-                waited += time.GetElapsedTime(waitStarted);
+                waited += time.GetElapsedTime(at);
+                stoppedAt = null;
             }
         }
 
-        parent?.Waiting(change);
-        alongside?.Waiting(change);
+        parent?.Count(working, waits);
+        alongside?.Count(working, waits);
     }
 
     /// <summary>The time the level has used: since it started, with what it used before, less its waits for the owner.</summary>
@@ -115,7 +125,7 @@ internal sealed class Budget
     }
 
     /// <summary><see cref="Time"/>, read under the lock.</summary>
-    private TimeSpan Used() => timeBefore + time.GetElapsedTime(started) - waited - (waits > 0 ? time.GetElapsedTime(waitStarted) : TimeSpan.Zero);
+    private TimeSpan Used() => timeBefore + time.GetElapsedTime(started) - waited - (stoppedAt is { } at ? time.GetElapsedTime(at) : TimeSpan.Zero);
 
     public void Spend(int iterations = 0, int toolCalls = 0, long tokens = 0, decimal cost = 0m)
     {
@@ -208,8 +218,8 @@ internal sealed class Budget
     /// <summary>The share of a limit at which a budget warns.</summary>
     public const double WarnAt = 0.8;
 
-    /// <summary>A wait for the owner, which ends once.</summary>
-    private sealed class Waited(Budget budget) : IDisposable
+    /// <summary>A turn's work or wait, which ends once.</summary>
+    private sealed class Ended(Action end) : IDisposable
     {
         private int ended;
 
@@ -217,7 +227,7 @@ internal sealed class Budget
         {
             if (Interlocked.Exchange(ref ended, 1) == 0)
             {
-                budget.Waiting(-1);
+                end();
             }
         }
     }
@@ -228,8 +238,8 @@ internal readonly record struct Spent(decimal Cost, long Tokens, int ToolCalls, 
 {
     /// <summary>
     /// What a run and its agent spent, from the run's stored events: the cost and tokens of its model calls, its tool calls,
-    /// the budget warnings given, and the time its turns ran, less the time they waited for the owner to answer, as the budget
-    /// counts it. Time outside turns is not counted, and neither is the time between a process dying and the run being rolled
+    /// the budget warnings given, and the time its turns ran, less the time in which every agent at work waited for the owner to
+    /// answer, as the budget counts it: a team's agents work from their <c>working</c> status to their step's end. Time outside turns is not counted, and neither is the time between a process dying and the run being rolled
     /// back or resumed, so a turn that never ended counts up to its last event only. The owner's pauses are not stored, so those
     /// before a restart count. A run is one agent's work, its pattern's steps and its team's agents included, so the agent has
     /// spent all the run has.
@@ -238,21 +248,30 @@ internal readonly record struct Spent(decimal Cost, long Tokens, int ToolCalls, 
     {
         var time = TimeSpan.Zero;
         var (turns, asked) = (0, 0);
+        var members = new HashSet<string>(StringComparer.Ordinal);
         for (var i = 0; i < events.Count; i++)
         {
             if (events[i].Payload is RunResumed or RunRolledBack)
             {
                 (turns, asked) = (0, 0); // a new process: whatever was open when the last one died is over
+                members.Clear();
                 continue;
             }
 
-            if (i > 0 && turns > 0 && asked == 0)
+            // An agent outside a team, or the run's own pattern, is one at work; a team is as many as work, maybe none.
+            if (i > 0 && turns > 0 && (asked == 0 || asked < members.Count))
             {
                 time += events[i].Time - events[i - 1].Time;
             }
 
             turns += events[i].Payload switch { TurnStarted => 1, TurnEnded when turns > 0 => -1, _ => 0 };
             asked += events[i].Payload switch { HumanAsked => 1, HumanAnswered when asked > 0 => -1, _ => 0 };
+            _ = events[i].Payload switch
+            {
+                AgentStatusChanged { Status: AgentStatus.Working } => members.Add(events[i].Agent),
+                StepEnded => members.Remove(events[i].Agent),
+                _ => false,
+            };
         }
 
         var run = Of(events, "run's") with { Time = time };
