@@ -628,6 +628,27 @@ public class TeamTests
         Assert.StartsWith("The work is for task a, which is Cancelled", refused.Message, StringComparison.Ordinal);
     }
 
+    // TASK-03, LOOP-08: board calls in one reply take effect in the order they were made, so a task may depend on one created just before it.
+    [Fact]
+    public async Task A_task_may_depend_on_one_the_lead_creates_in_the_same_reply()
+    {
+        var kit = Kit();
+        Lead(kit, "You lead a team", Create("a"), ("create", """{ "id": "b", "title": "Task b", "role": "developer", "dependsOn": ["a"], "reason": "plan" }"""));
+        Lead(kit, "Every task is done").Reply("Done.");
+        foreach (var task in new[] { "a", "b" })
+        {
+            Work(kit, task).CallTools(("submit", $$"""{ "id": "{{task}}" }""")).Reply("Submitted.");
+        }
+
+        var work = new Work("team", "Build it.") { Caller = Ann };
+        var result = await kit.Runner.RunAsync(work, Ct);
+
+        Assert.Equal((AgentOutcome.Completed, "Done."), (result.Outcome, result.Output));
+        var history = await kit.Runner.Board(null, work.RunId).HistoryAsync(Ct);
+        Assert.Equal(["a added as Ready", "b added as Proposed"], history.Take(2).Select(change => change.What));
+        Assert.All(await kit.Runner.Board(null, work.RunId).ReadAsync(Ct), task => Assert.Equal(TaskState.Done, task.State));
+    }
+
     private static (string, string) Create(string id, bool review = false) =>
         ("create", $$"""{ "id": "{{id}}", "title": "Task {{id}}", "role": "developer", "requiresReview": {{(review ? "true" : "false")}}, "reason": "plan" }""");
 

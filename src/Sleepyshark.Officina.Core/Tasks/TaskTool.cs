@@ -7,7 +7,8 @@ namespace Sleepyshark.Officina.Core.Tasks;
 /// <summary>
 /// A built-in task tool, through which agents act on the run's task board (TASK). Like the record tools, it declares
 /// itself a read: it changes only the board, which checks every change against its rules and keeps it with its agent
-/// and revision, so it needs no gate, and calls are safe to make in parallel.
+/// and revision, so it needs no gate, and calls are safe to make in parallel with other tools. The pipeline runs one
+/// reply's task calls in the order they were made, so a task may depend on one created just before it.
 /// </summary>
 internal sealed class TaskTool : ITool
 {
