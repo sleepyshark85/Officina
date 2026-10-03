@@ -87,7 +87,7 @@ The coding team:
 | `capabilities.workspace.protectedPaths` | `.git`, `.env*` and `.sof/` hidden; `sof.json` and `sof.*.json` read-only | More files must stay out of reach |
 | `capabilities.humanInteraction.signOffs` | run budget exceeded and irreversible action; the coding team adds plan approval | You want more or fewer checkpoints with the owner |
 | `capabilities.checkpoints.at` | after each turn | You want one after each step of a pattern or each integration, as well |
-| `operations.storage` | `.sof/sof.db`, with artifacts as files in `.sof/artifacts` | The storage belongs elsewhere: another folder in `.sof/`, or an absolute path outside the project |
+| `operations.storage` | `.sof/sof.db`, with artifacts as files in `.sof/artifacts` | The storage belongs elsewhere: another folder in `.sof/`, or an absolute path outside the project. The artifacts stay in `artifacts` beside the database |
 | `agents.<team>.pattern.maxParallel` | 4, the lead included | Your machine or budget allows more or fewer agents at once |
 
 ## Defaults are the safe choice

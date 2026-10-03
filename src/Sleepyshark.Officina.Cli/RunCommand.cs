@@ -196,7 +196,7 @@ internal static class RunCommand
     {
         try
         {
-            if (File.Exists(LocalStorage.Locate(options, directory).Database)
+            if (File.Exists(LocalStorage.Database(options, directory))
                 && await ((IStorage)await LocalStorage.OpenAsync(options, directory, ct)).Runs.ReadAsync(null, runId, ct) is { } stored)
             {
                 return stored;

@@ -38,15 +38,15 @@ public sealed partial class LocalStorageTests : IDisposable
         Assert.StartsWith($"Run {RunId().Match(output).Groups[1].Value}: Complete", report, StringComparison.Ordinal);
     }
 
-    // STO-01: the artifacts' folder can be set apart from the database, and an absolute path outside the project is the owner's choice.
+    // STO-01: an absolute path outside the project is the owner's choice, and the artifacts' folder goes with the database.
     [Fact]
-    public async Task The_artifacts_folder_can_be_set_and_an_absolute_path_can_lead_out_of_the_project()
+    public async Task An_absolute_path_can_lead_out_of_the_project_with_the_artifacts_beside_the_database()
     {
         var outside = Directory.CreateTempSubdirectory("officina-storage-").FullName;
         try
         {
             var database = JsonSerializer.Serialize(Path.Combine(outside, "sof.db"));
-            sof.Write("sof.json", Configuration($$""" "operations": { "storage": { "path": {{database}}, "artifacts": ".sof/files" } }, """));
+            sof.Write("sof.json", Configuration($$""" "operations": { "storage": { "path": {{database}} } }, """));
             model.CallTools(("ask", """{ "question": "Which database?" }""")).Reply("Done.");
 
             var run = sof.RunAsync("run", "--input", "Pick a database.");
@@ -56,7 +56,8 @@ public sealed partial class LocalStorageTests : IDisposable
 
             Assert.Equal(ExitCodes.Success, exitCode);
             Assert.True(File.Exists(Path.Combine(outside, "sof.db")));
-            Assert.True(File.Exists(Path.Combine(sof.Directory, ".sof", "files", "1")));
+            Assert.True(File.Exists(Path.Combine(outside, "artifacts", "1")));
+            Assert.False(Directory.Exists(Path.Combine(sof.Directory, ".sof", "artifacts")));
         }
         finally
         {
@@ -69,8 +70,8 @@ public sealed partial class LocalStorageTests : IDisposable
     [Theory]
     [InlineData("path", "data/sof.db", "\"data/sof.db\" leads out of .sof/: a relative path must stay in it, where agents cannot see the storage.")]
     [InlineData("path", "../sof.db", "\"../sof.db\" leads out of .sof/: a relative path must stay in it, where agents cannot see the storage.")]
-    [InlineData("artifacts", ".sof", "\".sof\" leads out of .sof/: a relative path must stay in it, where agents cannot see the storage.")]
-    [InlineData("artifacts", "{project}/artifacts", "\"{project}/artifacts\" is in the project but not in .sof/, so agents could see the storage.")]
+    [InlineData("path", ".sof", "\".sof\" leads out of .sof/: a relative path must stay in it, where agents cannot see the storage.")]
+    [InlineData("path", "{project}/data/sof.db", "\"{project}/data/sof.db\" is in the project but not in .sof/, so agents could see the storage.")]
     public async Task Config_validate_refuses_a_storage_path_agents_could_reach_or_that_leaves_the_project_unasked(string setting, string value, string message)
     {
         var path = value.Replace("{project}", sof.Directory, StringComparison.Ordinal);
@@ -87,7 +88,7 @@ public sealed partial class LocalStorageTests : IDisposable
         Assert.False(Directory.Exists(Path.Combine(sof.Directory, "data")));
     }
 
-    // STO-01, CFG-06: the database's path is required; the artifacts' folder may be left unset.
+    // STO-01, CFG-06: the database's path is required.
     [Fact]
     public async Task Config_validate_refuses_an_empty_database_path()
     {

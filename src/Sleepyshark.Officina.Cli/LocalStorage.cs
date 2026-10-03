@@ -4,49 +4,35 @@ using Sleepyshark.Officina.Storage.Sqlite;
 namespace Sleepyshark.Officina.Cli;
 
 /// <summary>
-/// Where <c>sof</c> keeps its storage (STO-01): the SQLite database and the artifacts' folder that <c>operations.storage</c>
-/// names, <c>.sof/sof.db</c> and <c>.sof/artifacts</c> in the project directory unless configured otherwise. A relative path
-/// must stay in <c>.sof/</c>, which agents cannot see (WS-05); an absolute path must lead into the project's <c>.sof/</c> or out of
-/// the project, so the storage is never where agents can read or change it.
+/// Where <c>sof</c> keeps its storage (STO-01): the SQLite database that <c>operations.storage.path</c> names, <c>.sof/sof.db</c> in
+/// the project directory unless configured otherwise, with the artifacts' files in the folder <c>artifacts</c> beside it. A relative
+/// path must stay in <c>.sof/</c>, which agents cannot see (WS-05); an absolute path must lead into the project's <c>.sof/</c> or out
+/// of the project, so the storage is never where agents can read or change it.
 /// </summary>
 internal static class LocalStorage
 {
+    private const string Setting = "operations.storage.path";
+
     private static readonly StringComparison PathComparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
 
-    /// <summary>The storage's paths that lead somewhere they must not, for <c>config validate</c> and every command that opens it (CFG-06).</summary>
-    public static IEnumerable<ConfigurationError> Errors(OfficinaOptions options, string directory)
-    {
-        if (options.Operations.Storage is not { } storage)
-        {
-            yield break;
-        }
+    /// <summary>A database path that leads somewhere it must not, for <c>config validate</c> and every command that opens the storage (CFG-06).</summary>
+    public static IEnumerable<ConfigurationError> Errors(OfficinaOptions options, string directory) =>
+        options.Operations.Storage?.Path is { Length: > 0 } path && Problem(path, directory) is { } problem
+            ? [new ConfigurationError(
+                ValidationPhase.Shape, Setting, problem,
+                $"Keep it in {WorkspaceOptions.StateFolder}/, as in \"{WorkspaceOptions.StateFolder}/sof.db\", or give an absolute path outside the project.")]
+            : [];
 
-        foreach (var (setting, value) in new[] { ("path", storage.Path), ("artifacts", storage.Artifacts) })
-        {
-            if (value is { Length: > 0 } && Problem(value, directory) is { } problem)
-            {
-                yield return new ConfigurationError(
-                    ValidationPhase.Shape, $"operations.storage.{setting}", problem,
-                    $"Keep it in {WorkspaceOptions.StateFolder}/, as in \"{WorkspaceOptions.StateFolder}/{(setting == "path" ? "sof.db" : "artifacts")}\", or give an absolute path outside the project.");
-            }
-        }
-    }
-
-    /// <summary>The database file and the artifacts' folder, as full paths.</summary>
-    public static (string Database, string Artifacts) Locate(OfficinaOptions options, string directory)
-    {
-        var database = Path.GetFullPath(options.Operations.Storage.Path, Path.GetFullPath(directory));
-        return (database, options.Operations.Storage.Artifacts is { Length: > 0 } artifacts
-            ? Path.GetFullPath(artifacts, Path.GetFullPath(directory))
-            : SqliteStorage.ArtifactsBeside(database));
-    }
+    /// <summary>The database file, as a full path.</summary>
+    public static string Database(OfficinaOptions options, string directory) =>
+        Path.GetFullPath(options.Operations.Storage.Path, Path.GetFullPath(directory));
 
     /// <summary>Opens the storage, making the database's folder if there is none.</summary>
     public static async Task<SqliteStorage> OpenAsync(OfficinaOptions options, string directory, CancellationToken ct)
     {
-        var (database, artifacts) = Locate(options, directory);
+        var database = Database(options, directory);
         Directory.CreateDirectory(Path.GetDirectoryName(database)!);
-        return await SqliteStorage.OpenAsync(database, artifacts, ct);
+        return await SqliteStorage.OpenAsync(database, ct);
     }
 
     private static string? Problem(string value, string directory)

@@ -46,7 +46,7 @@ public sealed class SqliteStorageTests : StorageContract, IDisposable
         var error = await Assert.ThrowsAsync<InvalidDataException>(() => CreateAsync());
 
         Assert.Equal(
-            $"{File} holds data in format version 3, and this core reads format version 6 only. Move it aside, with its artifacts folder, to start with empty storage, or use the version that wrote it.",
+            $"{File} holds data in format version 3, and this core reads format version 6 only. Move it aside to start with empty storage, or use the version that wrote it.",
             error.Message);
     }
 
@@ -66,18 +66,18 @@ public sealed class SqliteStorageTests : StorageContract, IDisposable
         Assert.Equal(Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData("# Ünïcødé"u8)), sha256);
     }
 
-    // STO-01: the folder can be anywhere the host says.
+    // STO-01: a file already under the id an artifact gets is never replaced; the save fails loudly and leaves no row.
     [Fact]
-    public async Task Artifacts_are_kept_in_the_folder_given()
+    public async Task A_file_already_under_an_artifacts_id_is_never_replaced()
     {
-        var elsewhere = Path.Combine(folder, "elsewhere", "files");
-        IStorage storage = await SqliteStorage.OpenAsync(File, elsewhere, Ct);
+        var storage = await CreateAsync();
+        Directory.CreateDirectory(Artifacts);
+        await System.IO.File.WriteAllTextAsync(Path.Combine(Artifacts, "1"), "not this storage's", Ct);
 
-        var id = await storage.Artifacts.SaveAsync("acme", "run-1", new("report.md", "text"), Start, Ct);
+        await Assert.ThrowsAnyAsync<IOException>(async () => await storage.Artifacts.SaveAsync("acme", "run-1", new("report.md", "text"), Start, Ct));
 
-        Assert.True(System.IO.File.Exists(Path.Combine(elsewhere, $"{id}")));
-        Assert.False(Directory.Exists(Artifacts));
-        Assert.Equal(new Artifact("report.md", "text"), await ((IStorage)await SqliteStorage.OpenAsync(File, elsewhere, Ct)).Artifacts.ReadAsync("acme", "run-1", id, Ct));
+        Assert.Equal("not this storage's", await System.IO.File.ReadAllTextAsync(Path.Combine(Artifacts, "1"), Ct));
+        Assert.Empty(await QueryAsync("SELECT name, sha256 FROM artifacts"));
     }
 
     // STO-01, REL-04: the file is written before its row is committed, so a failed write leaves no row behind.

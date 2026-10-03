@@ -74,11 +74,14 @@ sof                                     # type a message; /quit or Ctrl+D ends t
 ```
 
 Runs are stored in `.sof/sof.db` next to `sof.json`, and artifacts, such as the full text of a long tool result, as
-files in `.sof/artifacts`. Add `.sof/` to `.gitignore`; agents cannot see it. `operations.storage` moves them
+files in `.sof/artifacts`. Add `.sof/` to `.gitignore`; agents cannot see it. `operations.storage.path` moves them
 (configuration reference §12).
 
 If `ANTHROPIC_API_KEY` isn't set, a message ends with
 `HandedOff (ProviderFailure: the model call failed: KeyNotFoundException)`: set the key and send it again.
+
+An older `.sof/sof.db` is refused ("holds data in format version 5"); it isn't migrated. Move it aside
+(`mv .sof/sof.db .sof/sof.db.v5`) to start fresh.
 
 ## 4. Chatting: `sof`
 

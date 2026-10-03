@@ -11,7 +11,7 @@ public sealed record OperationsOptions
 
     // STO-01.
     [Setting("Where the default local storage keeps its files, for a host that uses it, such as `sof`. A host that supplies its own storage in code has no use for it.",
-        Example = """{ "path": ".sof/sof.db", "artifacts": ".sof/artifacts" }""")]
+        Example = """{ "path": ".sof/sof.db" }""")]
     [Required(ErrorMessage = Messages.Required)]
     public LocalStorageOptions Storage { get; init; } = new();
 }
@@ -27,17 +27,13 @@ public sealed record TelemetryOptions
 }
 
 /// <summary>
-/// Where the default local storage keeps its files (STO-01): a SQLite database, and a folder with a file for each artifact.
-/// The host that opens it resolves the paths and checks where they lead.
+/// Where the default local storage keeps its files (STO-01): a SQLite database, and beside it the folder <c>artifacts</c>, with a
+/// file for each artifact. The host that opens it resolves the path and checks where it leads.
 /// </summary>
 public sealed record LocalStorageOptions
 {
-    [Setting("The database file (SQLite). A relative path is relative to the project directory and must stay in `.sof/`, which agents cannot see. An absolute path must lead into the project's `.sof/` or out of the project.",
+    [Setting("The database file (SQLite); the artifacts' files are in the folder `artifacts` beside it. A relative path is relative to the project directory and must stay in `.sof/`, which agents cannot see. An absolute path must lead into the project's `.sof/` or out of the project.",
         Example = "\".sof/sof.db\"")]
     [Required(ErrorMessage = Messages.Required)]
     public string Path { get; init; } = $"{WorkspaceOptions.StateFolder}/sof.db";
-
-    [Setting("The folder for the artifacts' files, one file each, under the same rules as `path`. Unset, it is the folder `artifacts` beside the database.",
-        Example = "\".sof/artifacts\"")]
-    public string? Artifacts { get; init; }
 }

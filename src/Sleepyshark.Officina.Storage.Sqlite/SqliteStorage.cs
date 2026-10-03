@@ -73,7 +73,7 @@ public sealed class SqliteStorage : IStorage, IRunStore, IConversationStore, IEv
 
     private const string TemporaryExtension = ".tmp";
 
-    private const string OwnerRuns ="SELECT run_id FROM runs WHERE tenant IS $tenant AND owner = $owner";
+    private const string OwnerRuns = "SELECT run_id FROM runs WHERE tenant IS $tenant AND owner = $owner";
 
     private static readonly JsonSerializerOptions StoredJson = new(JsonSerializerDefaults.Web) { Converters = { new JsonStringEnumConverter() } };
 
@@ -105,19 +105,16 @@ public sealed class SqliteStorage : IStorage, IRunStore, IConversationStore, IEv
 
     ICheckpointStore IStorage.Checkpoints => this;
 
-    /// <summary>Opens the storage in a file, creating it if it does not exist, with the artifacts' files in a folder <c>artifacts</c> beside it.</summary>
-    /// <exception cref="InvalidDataException">The file holds data in another format version.</exception>
-    public static Task<SqliteStorage> OpenAsync(string path, CancellationToken ct) => OpenAsync(path, ArtifactsBeside(path), ct);
-
     /// <summary>
-    /// Opens the storage in a file, creating it if it does not exist, with the artifacts' files in the folder <paramref name="artifacts"/>,
-    /// which is made when the first artifact is saved. Files a crash left there without a row are removed.
+    /// Opens the storage in a file, creating it if it does not exist, with the artifacts' files in the folder <c>artifacts</c> beside it,
+    /// which is made when the first artifact is saved. The folder is the database's alone. Files a crash left there without a row are removed.
     /// </summary>
     /// <exception cref="InvalidDataException">The file holds data in another format version.</exception>
-    public static async Task<SqliteStorage> OpenAsync(string path, string artifacts, CancellationToken ct)
+    public static async Task<SqliteStorage> OpenAsync(string path, CancellationToken ct)
     {
         // Without pooling, no connection keeps the file open after use, so it can be moved or deleted.
-        var storage = new SqliteStorage(new SqliteConnectionStringBuilder { DataSource = path, Pooling = false }.ToString(), Path.GetFullPath(artifacts));
+        var storage = new SqliteStorage(
+            new SqliteConnectionStringBuilder { DataSource = path, Pooling = false }.ToString(), Path.Combine(Path.GetDirectoryName(Path.GetFullPath(path))!, "artifacts"));
         await using var connection = await storage.ConnectAsync(ct).ConfigureAwait(false);
         await using var command = Command(connection, "PRAGMA user_version");
         var version = (long)(await command.ExecuteScalarAsync(ct).ConfigureAwait(false))!;
@@ -130,7 +127,9 @@ public sealed class SqliteStorage : IStorage, IRunStore, IConversationStore, IEv
         {
             throw new InvalidDataException(
                 $"{path} holds data in format version {version}, and this core reads format version {FormatVersion} only. " +
-                "Move it aside, with its artifacts folder, to start with empty storage, or use the version that wrote it.");
+                (version < FormatVersion
+                    ? "Move it aside to start with empty storage, or use the version that wrote it."
+                    : "Move it aside, with the artifacts folder beside it, to start with empty storage, or use the version that wrote it."));
         }
 
         command.CommandText = "PRAGMA journal_mode = WAL";
@@ -138,9 +137,6 @@ public sealed class SqliteStorage : IStorage, IRunStore, IConversationStore, IEv
         await storage.RemoveFilesWithoutRowsAsync(connection, ct).ConfigureAwait(false);
         return storage;
     }
-
-    /// <summary>The folder <c>artifacts</c> beside a database file: where its artifacts' files are kept unless another is given.</summary>
-    public static string ArtifactsBeside(string path) => Path.Combine(Path.GetDirectoryName(Path.GetFullPath(path))!, "artifacts");
 
     public ValueTask RecordStartAsync(string? tenant, RunStarted run, CancellationToken ct)
     {
@@ -294,7 +290,17 @@ public sealed class SqliteStorage : IStorage, IRunStore, IConversationStore, IEv
             ("$sha256", Convert.ToHexStringLower(SHA256.HashData(content))));
         var id = (long)(await command.ExecuteScalarAsync(ct).ConfigureAwait(false))!;
         await WriteFileAsync(id, content, ct).ConfigureAwait(false);
-        await transaction.CommitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            await transaction.CommitAsync(ct).ConfigureAwait(false);
+        }
+        catch
+        {
+            // The id goes back unused, so its file goes too, or the next save of that id would find it in the way.
+            DeleteFile(FilePath(id));
+            throw;
+        }
+
         return id;
     }
 
@@ -467,7 +473,10 @@ public sealed class SqliteStorage : IStorage, IRunStore, IConversationStore, IEv
 
     private string FilePath(long id) => Path.Combine(artifacts, id.ToString(CultureInfo.InvariantCulture));
 
-    /// <summary>Writes an artifact's file whole: to a temporary file, flushed to the disk, then renamed over any file a crash left.</summary>
+    /// <summary>
+    /// Writes an artifact's file whole: to a temporary file, flushed to the disk, then renamed. A file already there under that id is
+    /// never replaced: ids are not reused and the folder is the database's alone, so one there means something is wrong, and the rename fails.
+    /// </summary>
     private async Task WriteFileAsync(long id, byte[] content, CancellationToken ct)
     {
         Directory.CreateDirectory(artifacts);
@@ -479,7 +488,7 @@ public sealed class SqliteStorage : IStorage, IRunStore, IConversationStore, IEv
             stream.Flush(flushToDisk: true);
         }
 
-        File.Move(temporary, path, overwrite: true);
+        File.Move(temporary, path, overwrite: false);
     }
 
     /// <exception cref="InvalidDataException">The file is not the one the row describes.</exception>
@@ -527,14 +536,17 @@ public sealed class SqliteStorage : IStorage, IRunStore, IConversationStore, IEv
         await transaction.CommitAsync(ct).ConfigureAwait(false);
     }
 
-    /// <summary>Deletes a file; one that is open, which Windows does not delete, is left for the next open to remove.</summary>
+    /// <summary>
+    /// Deletes a file; one that is open or locked, which Windows does not delete, is left for the next open to remove, so a delete whose
+    /// rows are committed never fails over its files.
+    /// </summary>
     private static void DeleteFile(string path)
     {
         try
         {
             File.Delete(path);
         }
-        catch (IOException)
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
         }
     }

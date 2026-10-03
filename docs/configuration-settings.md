@@ -157,7 +157,7 @@ It lists the settings the code has today. Settings that later slices add are spe
 | Setting | Allowed values | Default | Description | Example |
 |---|---|---|---|---|
 | `telemetry` | section | `{"cacheHitWarning":0.7}` | Measurements and the warnings raised from them. Required. | `{"cacheHitWarning":0.7}` |
-| `storage` | section | `{"path":".sof/sof.db"}` | Where the default local storage keeps its files, for a host that uses it, such as `sof`. A host that supplies its own storage in code has no use for it. Required. | `{"path":".sof/sof.db","artifacts":".sof/artifacts"}` |
+| `storage` | section | `{"path":".sof/sof.db"}` | Where the default local storage keeps its files, for a host that uses it, such as `sof`. A host that supplies its own storage in code has no use for it. Required. | `{"path":".sof/sof.db"}` |
 
 ## `storage`
 
@@ -350,8 +350,7 @@ It lists the settings the code has today. Settings that later slices add are spe
 
 | Setting | Allowed values | Default | Description | Example |
 |---|---|---|---|---|
-| `path` | text | `".sof/sof.db"` | The database file (SQLite). A relative path is relative to the project directory and must stay in `.sof/`, which agents cannot see. An absolute path must lead into the project's `.sof/` or out of the project. Required. | `".sof/sof.db"` |
-| `artifacts` | text |  | The folder for the artifacts' files, one file each, under the same rules as `path`. Unset, it is the folder `artifacts` beside the database. | `".sof/artifacts"` |
+| `path` | text | `".sof/sof.db"` | The database file (SQLite); the artifacts' files are in the folder `artifacts` beside it. A relative path is relative to the project directory and must stay in `.sof/`, which agents cannot see. An absolute path must lead into the project's `.sof/` or out of the project. Required. | `".sof/sof.db"` |
 
 ## `storage.retention`
 

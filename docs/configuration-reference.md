@@ -625,8 +625,7 @@ workspace and sandbox tools, the command rules gate and the command checks.
 "operations": {
   "telemetry": { "cacheHitWarning": 0.7 },          // COST-01
   "storage": {                                      // STO-01: the default local storage, for sof
-    "path": ".sof/sof.db",                          // the SQLite database
-    "artifacts": ".sof/artifacts"                   // a file per artifact; unset, `artifacts` beside the database
+    "path": ".sof/sof.db"                           // the SQLite database; the folder `artifacts` beside it
   }
 }
 ```
@@ -634,7 +633,8 @@ workspace and sandbox tools, the command rules gate and the command checks.
 - `sof` keeps its storage in `.sof/sof.db` (SQLite) next to `sof.json`, with each artifact, such as the full text of a
   trimmed tool result, as a file in `.sof/artifacts`, and the working copies in `.sof/worktrees`. Add `.sof/` to
   `.gitignore`; the workspace hides it from agents.
-- `operations.storage` moves the storage. A relative path is relative to the project directory and must stay in `.sof/`;
+- `operations.storage.path` moves the storage, the artifacts' folder with it: that folder is always `artifacts` beside
+  the database, and the database's alone. A relative path is relative to the project directory and must stay in `.sof/`;
   an absolute path must lead into the project's `.sof/` or out of the project. So the storage is never where agents can
   see it, and leaving the project takes an absolute path, which says the owner meant it. `config validate` and every
   command refuse any other path. A host that supplies its own `IStorage` in code ignores the setting, so there is no
