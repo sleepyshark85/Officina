@@ -5,16 +5,19 @@ namespace Sleepyshark.Officina.Cli;
 
 /// <summary>
 /// What the chat session suggests for the word being typed: the <c>/</c> commands, a command's subcommands and options from the
-/// command line's own tree, the agents' names, and the ids of the session's runs. It knows nothing of the terminal; the line
+/// command line's own tree and <c>/task</c>'s, the agents' names, the ids of the session's runs, and the ids of the board's tasks. It knows nothing of the terminal; the line
 /// editor asks it (<see cref="TerminalReader"/>).
 /// </summary>
 /// <param name="root">The command line, whose commands and options are suggested.</param>
 /// <param name="agents">The agents' names, and in a team the ids of its agents, as the run's commands take them.</param>
 /// <param name="runs">The ids of the runs the session's messages started, the latest first.</param>
-internal sealed class ChatCompletion(RootCommand root, Func<IEnumerable<string>> agents, Func<IEnumerable<string>> runs)
+/// <param name="tasks">The ids of the tasks on the board of the reply that runs, or of the last message's run.</param>
+internal sealed class ChatCompletion(RootCommand root, Func<IEnumerable<string>> agents, Func<IEnumerable<string>> runs, Func<IEnumerable<string>> tasks)
 {
+    private readonly Command task = new TaskCommand().Command;
+
     /// <summary>The session's own commands, which are not in the command line.</summary>
-    private static readonly string[] SessionCommands = ["status", "approve", "deny", "change", "answer", "tell", "mode", "pause", "cancel", "checkpoint", "board", "memory", "new", "help", "quit"];
+    private static readonly string[] SessionCommands = ["status", "approve", "deny", "change", "answer", "tell", "mode", "pause", "cancel", "checkpoint", "board", "task", "memory", "new", "help", "quit"];
 
     private static readonly string[] Modes = ["ask", "auto", "readOnly"];
 
@@ -41,7 +44,7 @@ internal sealed class ChatCompletion(RootCommand root, Func<IEnumerable<string>>
         switch (words)
         {
             case ["help", ..]:
-                return words.Count == 1 ? root.Subcommands.Select(command => command.Name) : [];
+                return words.Count == 1 ? root.Subcommands.Append(task).Select(command => command.Name) : [];
             case ["tell" or "pause" or "cancel"]:
                 return agents();
             case ["resume"]:
@@ -52,21 +55,25 @@ internal sealed class ChatCompletion(RootCommand root, Func<IEnumerable<string>>
                 return agents();
             case [.., "--permission-mode"]:
                 return Modes;
+            case ["task", ..] and [.., "--depends"]:
+                return tasks();
         }
 
-        // A command of the command line: walk its tree as far as the words go.
-        Command command = root;
+        // A command of the command line, or /task: walk its tree as far as the words go.
+        Command? command = null;
+        var walked = 0;
         foreach (var name in words.TakeWhile(name => !name.StartsWith('-')))
         {
-            if (command.Subcommands.FirstOrDefault(sub => sub.Name == name) is not { } sub)
+            if ((command?.Subcommands ?? root.Subcommands.Append(task)).FirstOrDefault(sub => sub.Name == name) is not { } sub)
             {
                 break;
             }
 
             command = sub;
+            walked++;
         }
 
-        if (command == root)
+        if (command is null)
         {
             return [];
         }
@@ -79,6 +86,18 @@ internal sealed class ChatCompletion(RootCommand root, Func<IEnumerable<string>>
         if (command.Subcommands.Count > 0)
         {
             return command.Subcommands.Select(sub => sub.Name);
+        }
+
+        // A task's id is the first argument of a /task command, and an agent the second of /task assign.
+        var arguments = words.Skip(walked).Count(name => !name.StartsWith('-'));
+        if (command.Parents.Contains(task))
+        {
+            return (arguments, command.Name) switch
+            {
+                (0, not "add") => tasks(),
+                (1, "assign") => agents(),
+                _ => [],
+            };
         }
 
         // A run's id is the argument of report, resume and rollback.

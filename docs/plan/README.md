@@ -7,8 +7,8 @@ Slices `REQUIREMENTS.md` (revision 2) into deliverable work.
 Last updated 2026-10-02.
 
 - **Done:** every slice, S00a to S20, and S21's five parts. S21 stays `doing` only for the live TEST-31 benchmark run, its
-  last acceptance criterion. `check_coverage.py` passes; `check_verification.py` lists TEST-31 and three MUST gaps
-  (CFG-17, TASK-08, STO-01) as pending, and three readings for the owner.
+  last acceptance criterion. `check_coverage.py` passes; `check_verification.py` lists TEST-31 and two MUST gaps
+  (CFG-17, STO-01) as pending, and three readings for the owner.
 - **For the owner, next:**
   1. Run the live benchmark on Linux and Windows: a pilot first, then the full set, then `report.py` over both
      ([`benchmark/`](../../benchmark/README.md)). It is estimated at about $1,200 for both systems.
@@ -20,8 +20,9 @@ Last updated 2026-10-02.
      result of its own (S21 part 5).
   5. Confirm the readings of CFG-01, CAP-01 and TASK-02 ([`verification.md`](verification.md)), or change them at
      revision 3, with the other questions in REQUIREMENTS.md §13.
-  6. Decide the three MUST gaps in [`verification.md`](verification.md): CFG-17 (`sof` does not detect the build and
-     test commands), TASK-08 (`sof`'s console cannot change tasks) and STO-01 (artifacts are SQLite rows, not files).
+  6. Decide the two MUST gaps in [`verification.md`](verification.md): CFG-17 (`sof` does not detect the build and
+     test commands) and STO-01 (artifacts are SQLite rows, not files). TASK-08 is built: `/board` and `/task` at the
+     console, during a run and between a chat's replies.
      Build each, or change it at revision 3. The configuration reference §17 keeps their spec.
   7. Sign off the M0 design review of `REQUIREMENTS.md`, `CONFIGURATION.md` and `DESIGN.md`.
 - **After the plan:** `sof chat` (plain `sof`), an interactive session that keeps its context: each message is a run of

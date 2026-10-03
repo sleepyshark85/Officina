@@ -60,6 +60,22 @@ public sealed class TaskBoard
         this.owner = owner;
     }
 
+    /// <summary>
+    /// A run's board as the owner acts on it straight from storage, with no runner, such as between a chat's replies (TASK-08).
+    /// Its status changes are added to the run's stored events. The host holds the run, so no other process changes it meanwhile.
+    /// </summary>
+    /// <param name="storage">Where the run is stored.</param>
+    /// <param name="options">The configuration: the board's settings and the checks tasks may name.</param>
+    /// <param name="tenant">The run's tenant.</param>
+    /// <param name="runId">The run.</param>
+    /// <param name="time">The clock for change times.</param>
+    public static TaskBoard ForOwner(IStorage storage, OfficinaOptions options, string? tenant, string runId, TimeProvider time)
+    {
+        ArgumentNullException.ThrowIfNull(storage);
+        ArgumentNullException.ThrowIfNull(options);
+        return new(storage.Tasks, new ToolContext(runId, Owner, Caller.Anonymous with { Tenant = tenant }), options, new EventBus(storage.Events, options.Storage, time), time, owner: true);
+    }
+
     public string RunId => context.RunId;
 
     /// <summary>How the result of a submit that a check failed begins, before the check's name and findings.</summary>

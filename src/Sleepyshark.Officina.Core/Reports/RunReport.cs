@@ -67,6 +67,9 @@ public sealed record RunReport(
     IReadOnlyList<ReportedCheck> Checks,
     IReadOnlyList<string> OpenIssues)
 {
+    /// <summary>The owner's changes to the board, each with when, what and why (TASK-07, TASK-08).</summary>
+    public IReadOnlyList<string> OwnerChanges { get; init; } = [];
+
     /// <summary>Builds the report of a stored run; null when the tenant has no such run.</summary>
     public static async Task<RunReport?> BuildAsync(IStorage storage, string? tenant, string runId, CancellationToken ct = default)
     {
@@ -78,7 +81,8 @@ public sealed record RunReport(
 
         var events = await storage.Events.ReadAsync(tenant, runId, 0, ct).ConfigureAwait(false);
         var record = await storage.Records.ReadAsync(tenant, runId, ct).ConfigureAwait(false);
-        var tasks = (await storage.Tasks.ReadAsync(tenant, runId, ct).ConfigureAwait(false)).SelectMany(change => change.Tasks)
+        var board = await storage.Tasks.ReadAsync(tenant, runId, ct).ConfigureAwait(false);
+        var tasks = board.SelectMany(change => change.Tasks)
             .GroupBy(task => task.Id, StringComparer.Ordinal).Select(group => group.Last())
             .Select(task => new ReportedTask(task.Id, task.Title, task.State, task.Spent, task.Budget)).ToList();
         var ended = events.Select(coreEvent => coreEvent.Payload).OfType<TurnEnded>().LastOrDefault();
@@ -101,7 +105,10 @@ public sealed record RunReport(
         return new(
             runId, stored.Started.Agent, stored.Started.Input, stored.Started.Time, stored.Status, outcome, Spent.Of(events).Run.Time,
             events.Count(coreEvent => coreEvent.Payload is RunResumed), CostBreakdown.Of(events), tasks,
-            [.. record.Where(entry => entry.Item is Decision).Select(entry => RunRecord.Describe(entry, record))], checks, issues);
+            [.. record.Where(entry => entry.Item is Decision).Select(entry => RunRecord.Describe(entry, record))], checks, issues)
+        {
+            OwnerChanges = [.. board.Where(change => change.By == TaskBoard.Owner).Select(change => string.Create(CultureInfo.InvariantCulture, $"{change.Time:u} {change.What}: {change.Reason}"))],
+        };
     }
 
     /// <summary>The report as text, for the owner to read.</summary>
@@ -118,6 +125,7 @@ public sealed record RunReport(
         }
 
         Section(text, "Tasks", Tasks.Select(task => $"{task.Id} {task.Title}: {task.State}, ${task.Spent:0.00} of ${task.Budget:0.00}"));
+        Section(text, "Owner's changes", OwnerChanges);
         Section(text, "Decisions", Decisions);
         Section(text, "Checks", Checks.Select(check => $"{check.Check}{(check.Task is null ? "" : $" on {check.Task}")}: {check.Passed} passed, {check.Failed} failed"));
         Section(text, "Open", OpenIssues);

@@ -6,7 +6,8 @@ public sealed class ChatCompletionTests
     private readonly ChatCompletion completion = new(
         SofCommandLine.Create(new ConfigurationCommandOptions(), new SofEnvironment(TextWriter.Null, TextWriter.Null, ".", new Dictionary<string, string>())),
         () => ["dev", "developer[1]", "lead", "team"],
-        () => ["run-2", "run-1"]);
+        () => ["run-2", "run-1"],
+        () => ["fix-divide", "average"]);
 
     [Theory]
     [InlineData("", "/con", "/config")]
@@ -26,6 +27,15 @@ public sealed class ChatCompletionTests
     [InlineData("/run --agent ", "l", "lead")]
     [InlineData("/help ", "ro", "rollback")]
     [InlineData("Tell me about /config ", "", "")]
+    [InlineData("", "/ta", "/task")] // TASK-08: the owner's task commands, their options, the board's tasks and the team's agents
+    [InlineData("/task ", "", "add|edit|priority|assign|cancel|show")]
+    [InlineData("/task edit ", "", "fix-divide|average")]
+    [InlineData("/task cancel ", "a", "average")]
+    [InlineData("/task assign average ", "dev", "dev|developer[1]")]
+    [InlineData("/task add Fix it ", "--dep", "--depends")]
+    [InlineData("/task edit average --depends ", "f", "fix-divide")]
+    [InlineData("/task add ", "", "")]
+    [InlineData("/help ", "ta", "task")]
     public void Suggests_commands_options_agents_and_runs(string prefix, string word, string expected)
     {
         var suggested = completion.Complete(prefix, word);

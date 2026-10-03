@@ -8,6 +8,7 @@ using Sleepyshark.Officina.Core.Configuration;
 using Sleepyshark.Officina.Core.Extensibility;
 using Sleepyshark.Officina.Core.Reports;
 using Sleepyshark.Officina.Core.Running;
+using Sleepyshark.Officina.Core.Tasks;
 using Sleepyshark.Officina.Storage.Sqlite;
 
 namespace Sleepyshark.Officina.Cli;
@@ -24,7 +25,7 @@ namespace Sleepyshark.Officina.Cli;
 internal sealed class ChatSession
 {
     /// <summary>The commands that act on the run of the reply that runs (<see cref="RunCommand.CarryOutAsync"/>).</summary>
-    private static readonly HashSet<string> RunCommands = ["approve", "deny", "change", "answer", "tell", "pause", "resume", "cancel", "checkpoint", "board", "memory"];
+    private static readonly HashSet<string> RunCommands = ["approve", "deny", "change", "answer", "tell", "pause", "resume", "cancel", "checkpoint", "board", "task", "memory"];
 
     /// <summary>The <c>sof</c> commands that take the console or the workspace, so they work only between replies.</summary>
     private static readonly HashSet<string> Between = ["run", "rollback"];
@@ -37,8 +38,8 @@ internal sealed class ChatSession
                   | /new | /report [run] | /resume <run> | /rollback <run> [--to <n>] | /run --input <text>
                   | /config validate | /config show [--origin] | /config dry-run ... | /help [command] | /quit (or Ctrl+D)
         A line that does not start with / is a message. While a reply runs, a message waits until it ends, and /tell reaches an
-        agent at once. /approve to /memory act on the reply that runs. /resume <run>, /rollback and /run work only between
-        replies; type them again when the reply ends.
+        agent at once. /approve to /memory act on the reply that runs; between replies, /board and /task act on the last
+        message's run. /resume <run>, /rollback and /run work only between replies; type them again when the reply ends.
         """;
 
     private readonly ParseResult parse;
@@ -154,7 +155,7 @@ internal sealed class ChatSession
             agent = name;
             if (input is TerminalReader terminal)
             {
-                var completion = new ChatCompletion(SofCommandLine.Create(new ConfigurationCommandOptions(), host), () => Agents(options, name), RunsLatestFirst);
+                var completion = new ChatCompletion(SofCommandLine.Create(new ConfigurationCommandOptions(), host), () => Agents(options, name), RunsLatestFirst, TaskIds);
                 terminal.Complete = completion.Complete;
             }
 
@@ -456,6 +457,9 @@ internal sealed class ChatSession
                 case "help" when words.Count == 1:
                     status.WriteLine(Help);
                     break;
+                case "help" when words is [_, "task" or "board"]:
+                    status.WriteLine(TaskCommand.HelpText());
+                    break;
                 case "help":
                     await SofAsync([.. words.Skip(1), "--help"], session);
                     break;
@@ -475,6 +479,9 @@ internal sealed class ChatSession
                     break;
                 case var _ when session is not null && RunCommands.Contains(word):
                     await RunCommand.CarryOutAsync(command, session, status, Help, ending.Token);
+                    break;
+                case "board" or "task" when session is null:
+                    await StoredBoardAsync(words, ending.Token);
                     break;
                 case var _ when session is not null && Between.Contains(word):
                     status.WriteLine($"error: /{word} works only between replies; type it again when the reply ends.");
@@ -533,6 +540,88 @@ internal sealed class ChatSession
         status.WriteLine(await RunReport.BuildAsync(storage, null, run, ct) is { } report
             ? report.ToText().TrimEnd()
             : $"Run {run} has not been recorded yet; try again in a moment.");
+    }
+
+    /// <summary>
+    /// TASK-08: <c>/board</c> and <c>/task</c> between replies act on the last message's run, straight from storage: no run, tool
+    /// server or workspace is opened, as a board change touches none of the workspace. A change takes the run's lock, so a run held
+    /// by another process, such as one resumed in another terminal, is refused. The run has ended, so no agent works on its board
+    /// again: the change is recorded and shows in its report. A run that stopped without ending, as a rollback leaves it, is refused
+    /// too, as its resume goes back to its last checkpoint's board and would undo the change.
+    /// </summary>
+    private async Task StoredBoardAsync(List<string> words, CancellationToken ct)
+    {
+        if (LastRun is not { } run)
+        {
+            status.WriteLine("error: no message has been sent in this session yet, so there is no board.");
+            return;
+        }
+
+        var configuration = shared.Load(parse, host);
+        if (ConfigurationCommandOptions.ReportErrors(configuration, host) != ExitCodes.Success)
+        {
+            return;
+        }
+
+        var state = Path.Combine(shared.Directory(parse, host), WorkspaceOptions.StateFolder);
+        var changes = TaskCommand.Changes(words);
+        FileStream? held = null;
+        if (changes)
+        {
+            try
+            {
+                held = new FileStream(Path.Combine(state, $"{run}.lock"), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None, 1, FileOptions.DeleteOnClose);
+            }
+            catch (IOException)
+            {
+                status.WriteLine($"error: run {run} is held by another process, so its board is changed there.");
+                return;
+            }
+        }
+
+        await using (held)
+        {
+            IStorage storage = await SqliteStorage.OpenAsync(Path.Combine(state, "sof.db"), ct);
+            if (await storage.Runs.ReadAsync(null, run, ct) is not { } stored)
+            {
+                status.WriteLine($"error: run {run} was not recorded, so it has no board.");
+                return;
+            }
+
+            if (changes && stored.Status == RunStatus.Running)
+            {
+                status.WriteLine(
+                    $"error: run {run} stopped without ending, so /resume {run} goes back to its last checkpoint's board and would undo the change. Resume it, and change its board while it runs.");
+                return;
+            }
+
+            var options = configuration.Options;
+            var note = $"note: run {run} has ended, so no agent works on this board again; ask for the work in your next message.";
+            status.WriteLine(await TaskCommand.CarryOutAsync(
+                words, new OwnerBoard(() => TaskBoard.ForOwner(storage, options, null, run, host.Time), options, agent, Live: false, "/", note), ct));
+        }
+    }
+
+    /// <summary>The ids of the tasks on the board of the reply that runs, or of the last message's run, for completion; none if it cannot be read.</summary>
+    private List<string> TaskIds()
+    {
+        try
+        {
+            var session = Volatile.Read(ref current);
+            if ((session?.RunId ?? LastRun) is not { } run)
+            {
+                return [];
+            }
+
+            IStorage storage = session?.Storage
+                ?? SqliteStorage.OpenAsync(Path.Combine(shared.Directory(parse, host), WorkspaceOptions.StateFolder, "sof.db"), CancellationToken.None).GetAwaiter().GetResult();
+            var history = storage.Tasks.ReadAsync(null, run, CancellationToken.None).AsTask().GetAwaiter().GetResult();
+            return [.. history.SelectMany(change => change.Tasks).Select(task => task.Id).Distinct()];
+        }
+        catch (Exception exception) when (exception is not OutOfMemoryException)
+        {
+            return []; // completion only suggests; the command itself says what is wrong
+        }
     }
 
     /// <summary>The agents the run's commands name: the configuration's, and in a team the ids of its agents, such as <c>developer[1]</c>.</summary>
