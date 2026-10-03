@@ -19,7 +19,7 @@ namespace Sleepyshark.Officina.Cli;
 /// <see cref="LongLines"/> lines shows its first <see cref="ShownLines"/>, then one line, <c>… (folded; /show to read)</c>, and
 /// nothing more until the call ends, which says <c>… N more lines</c>. Text of up to <see cref="LongLines"/> lines is printed in
 /// full: its lines after the first <see cref="ShownLines"/> once the call ends, as until then it may still grow long. Before
-/// the owner is asked something, what the asking agent's last call folded is printed (<see cref="Unfold"/>).
+/// the owner is asked something, what the asking agent folded since it last asked is printed (<see cref="Unfold"/>).
 /// </param>
 internal sealed class StatusView(TextWriter output, Func<IntegrationQueueStatus?>? queue = null, bool stream = false, bool fold = false)
 {
@@ -44,7 +44,7 @@ internal sealed class StatusView(TextWriter output, Func<IntegrationQueueStatus?
     /// <summary>The text of each model call of the run that has ended, in order, with its agent.</summary>
     private readonly List<(string Agent, string Text)> written = [];
 
-    /// <summary>What each agent's last model call folded and is not shown, until the agent writes again.</summary>
+    /// <summary>What each agent folded and is not shown, in each of its model calls since it last asked the owner something.</summary>
     private readonly Dictionary<string, string> unshown = new(StringComparer.Ordinal);
 
     /// <summary>The lines of the run's text folded and not shown.</summary>
@@ -115,26 +115,28 @@ internal sealed class StatusView(TextWriter output, Func<IntegrationQueueStatus?
     }
 
     /// <summary>
-    /// Before the owner is asked something by <paramref name="agent"/>: what its model call now, or its last one, folded is
-    /// printed, as the owner must see what the agent said before deciding.
+    /// Before the owner is asked something by <paramref name="agent"/>: what it folded since it last asked, in its model calls
+    /// that ended and in the one now, is printed, as the owner must see what the agent said before deciding.
     /// </summary>
     public void Unfold(string agent)
     {
         lock (doing)
         {
-            string rest;
-            if (blocks.TryGetValue(agent, out var block) && block.Printed < block.Text.Length)
-            {
-                var all = block.Text.ToString();
-                rest = all[block.Printed..];
-                (block.Printed, block.Folded, block.Live) = (all.Length, false, true);
-            }
-            else if (unshown.Remove(agent, out var folded))
+            var rest = "";
+            if (unshown.Remove(agent, out var folded))
             {
                 rest = folded;
                 hidden -= LineCount(folded);
             }
-            else
+
+            if (blocks.TryGetValue(agent, out var block) && block.Printed < block.Text.Length)
+            {
+                var all = block.Text.ToString();
+                rest = Joined(rest, all[block.Printed..]);
+                (block.Printed, block.Folded, block.Live) = (all.Length, false, true);
+            }
+
+            if (rest.Length == 0)
             {
                 return;
             }
@@ -214,6 +216,10 @@ internal sealed class StatusView(TextWriter output, Func<IntegrationQueueStatus?
     /// <summary>How many more lines there are, such as <c>9 more lines</c>.</summary>
     internal static string More(int lines) => lines == 1 ? "1 more line" : $"{lines} more lines";
 
+    /// <summary>Two texts, the second on a line of its own.</summary>
+    private static string Joined(string first, string second) =>
+        first.Length == 0 || first.EndsWith('\n') ? first + second : $"{first}\n{second}";
+
     /// <summary>The text of model calls, one after another; with more than one agent, each after its agent's name.</summary>
     private static string Transcript(List<(string Agent, string Text)> calls)
     {
@@ -228,7 +234,6 @@ internal sealed class StatusView(TextWriter output, Func<IntegrationQueueStatus?
         if (!blocks.TryGetValue(agent, out var block))
         {
             blocks[agent] = block = new Block();
-            unshown.Remove(agent);
         }
 
         block.Text.Append(text);
@@ -275,7 +280,7 @@ internal sealed class StatusView(TextWriter output, Func<IntegrationQueueStatus?
             var rest = all[block.Printed..];
             var more = LineCount(all) - LineCount(all[..block.Printed]);
             hidden += more;
-            unshown[agent] = rest;
+            unshown[agent] = Joined(unshown.GetValueOrDefault(agent, ""), rest);
             Line($"[{agent}] … {More(more)}");
         }
         else if (block.Printed < all.Length)

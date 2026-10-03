@@ -249,6 +249,50 @@ public sealed class LongReplyTests : IDisposable
         Assert.DoesNotContain("/show to read all", output, StringComparison.Ordinal); // nothing is left folded
     }
 
+    // A warning folded in an earlier model call is printed before the request too: the agent reads, explains at length, calls
+    // a tool it needs no approval for, and only then asks to write.
+    [Fact]
+    public async Task Text_folded_in_an_earlier_call_is_printed_before_the_owner_is_asked()
+    {
+        sof.Interactive = true;
+        sof.Write("sof.json", """
+            {
+              "providers": { "claude": { "prices": { "claude-opus-5-5": { "input": 1 } } } },
+              "agents": { "dev": { "instructions": "Work.", "tools": ["work"] } },
+              "tools": {
+                "read_file": { "source": "builtin:record.propose_fact" },
+                "write_file": { "source": "builtin:record.propose_finding", "approval": "always" }
+              },
+              "toolSets": { "work": ["read_file", "write_file"] },
+              "capabilities": { "humanInteraction": { "enabled": true } }
+            }
+            """);
+        var warning = "IMPORTANT: the next write will wipe your notes.txt.";
+        var text = string.Join("\n", Enumerable.Range(1, 30).Select(number => number == 26 ? warning : $"Step {number}."));
+        model.Reply([
+            .. Streamed(text).SkipLast(1),
+            new ContentReceived(new ToolUseContent("call-1", "read_file", System.Text.Json.JsonDocument.Parse("""{ "text": "notes" }""").RootElement)),
+            new Stopped(StopReason.WantsTools)]);
+        model.Reply(
+            new TextDelta("Now writing."),
+            new ContentReceived(new ToolUseContent("call-2", "write_file", System.Text.Json.JsonDocument.Parse("""{ "text": "notes" }""").RootElement)),
+            new Stopped(StopReason.WantsTools)).Reply("Done.");
+
+        var chat = sof.RunAsync("chat");
+        sof.In.Type("Write the file.");
+        await sof.Out.WaitForAsync("#1 dev asks to run write_file", Ct);
+        sof.In.Type("/approve 1");
+        await sof.Out.WaitForAsync("dev: Completed", Ct);
+        sof.In.Type("/quit");
+        var (_, output, _) = await sof.EndedAsync(chat);
+
+        Assert.DoesNotContain("asks to run read_file", output, StringComparison.Ordinal); // it needs no approval
+        Assert.True(output.IndexOf("[dev] Now writing.", StringComparison.Ordinal) < output.IndexOf(warning, StringComparison.Ordinal));
+        Assert.True(output.IndexOf(warning, StringComparison.Ordinal) < output.IndexOf("#1 dev asks to run write_file", StringComparison.Ordinal));
+        Assert.Contains("[dev] … the folded lines, as you are asked:\n[dev] Step 13.\n", output, StringComparison.Ordinal);
+        Assert.DoesNotContain("/show to read all", output, StringComparison.Ordinal);
+    }
+
     // With piped input, or output that is not a terminal, every reply prints in full, and /show prints, without a pager.
     [Fact]
     public async Task Without_a_terminal_replies_print_in_full_and_show_prints()

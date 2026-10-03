@@ -162,7 +162,7 @@ short Markdown document still fits on the screen.
 
   If you saved it, the line names the file: `… 240 more lines (18 KB), saved as docs/login-requirements.md. /show to
   read all`.
-- **Before an agent asks you something,** such as to approve a write, what it folded in its last model call is printed
+- **Before an agent asks you something,** such as to approve a write, what it folded since it last asked you is printed
   in full, so you see what it said before you decide. A request itself, such as the lead's plan to sign off, is never
   folded: you see every task and acceptance criterion you approve.
 - **Every agent's text folds the same way,** one model call at a time. In a team, a developer's long text folds, and so

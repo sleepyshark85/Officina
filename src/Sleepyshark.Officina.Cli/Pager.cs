@@ -137,9 +137,9 @@ internal static class Pager
             process.Kill(entireProcessTree: true);
             process.WaitForExit(TimeSpan.FromSeconds(1));
         }
-        catch (InvalidOperationException)
+        catch (Exception)
         {
-            // It has ended meanwhile.
+            // It has ended meanwhile, or could not be stopped: either way the cancellation stands, and the session ends.
         }
     }
 

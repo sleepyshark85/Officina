@@ -83,6 +83,26 @@ public class StatusViewTests
         Assert.Equal(0, view.EndRun().Hidden);
     }
 
+    // What the agent folded in every call since it last asked is printed before it asks, each call's on lines of its own.
+    [Fact]
+    public void Folded_text_of_every_call_since_the_agent_last_asked_is_printed_before_it_asks()
+    {
+        using var output = new StringWriter { NewLine = "\n" };
+        var view = new StatusView(output, stream: true, fold: true);
+
+        view.Apply(Event("dev", new TextGenerated(string.Join("\n", Enumerable.Range(1, 22).Select(number => $"A{number}")))));
+        view.Apply(Event("dev", new ModelCallEnded(StopReason.WantsTools, new Usage(1, 0, 0, 0), 0m)));
+        view.Apply(Event("dev", new TextGenerated("Short.")));
+        view.Apply(Event("dev", new ModelCallEnded(StopReason.WantsTools, new Usage(1, 0, 0, 0), 0m)));
+        Stream(view, "dev", 21);
+        view.Apply(Event("dev", new ModelCallEnded(StopReason.WantsTools, new Usage(1, 0, 0, 0), 0m)));
+        view.Unfold("dev");
+
+        var unfolded = string.Join("\n", Enumerable.Range(13, 10).Select(number => $"A{number}")) + "\n" + Lines(13, 21);
+        Assert.EndsWith($"[dev] … the folded lines, as you are asked:\n[dev] {unfolded}", output.ToString(), StringComparison.Ordinal);
+        Assert.Equal(0, view.EndRun().Hidden);
+    }
+
     // Two agents' text interleaved: each keeps its name where its text starts a line again, and each folds on its own. A run's
     // text has each model call's text, after its agent's name.
     [Fact]
