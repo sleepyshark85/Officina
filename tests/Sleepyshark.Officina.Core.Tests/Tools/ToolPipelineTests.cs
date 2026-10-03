@@ -170,6 +170,7 @@ public class ToolPipelineTests
 
         Assert.Equal("ok", result.Content);
         Assert.Equal(("create_issue", "the tool needs approval"), (Assert.Single(setup.Human.Requests).Tool, setup.Human.Requests[0].Summary));
+        Assert.Equal(irreversibleByDefault, setup.Human.Requests[0].Irreversible); // so the owner names it to approve it
         Assert.Equal(
             [("approval", AuditOutcome.Asked), ("human", AuditOutcome.Intent), (null, AuditOutcome.Completed)],
             setup.Audit.Entries.Select(entry => (entry.DecidedBy, entry.Outcome)));

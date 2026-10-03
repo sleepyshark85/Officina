@@ -15,6 +15,9 @@ internal sealed class OwnerQueue(TextWriter output, string prefix = "") : IHuman
     private readonly ConcurrentDictionary<int, (HumanRequest Request, TaskCompletionSource<HumanAnswer> Answer)> waiting = new();
     private int numbered;
 
+    /// <summary>The numbers of the requests shown since the owner's last answer; under its own lock.</summary>
+    private readonly HashSet<int> announced = [];
+
     /// <summary>What the owner types before a command.</summary>
     public string Prefix => prefix;
 
@@ -30,8 +33,13 @@ internal sealed class OwnerQueue(TextWriter output, string prefix = "") : IHuman
         ArgumentNullException.ThrowIfNull(request);
         var number = Interlocked.Increment(ref numbered);
         var answer = new TaskCompletionSource<HumanAnswer>(TaskCreationOptions.RunContinuationsAsynchronously);
+        lock (announced)
+        {
+            announced.Add(number);
+        }
+
         waiting[number] = (request, answer);
-        output.WriteLine($"#{number} {Describe(request)}");
+        output.WriteLine($"#{number} {Describe(number, request)}");
         try
         {
             return await answer.Task.WaitAsync(ct).ConfigureAwait(false);
@@ -43,14 +51,44 @@ internal sealed class OwnerQueue(TextWriter output, string prefix = "") : IHuman
     }
 
     /// <summary>
-    /// Answers a waiting request with a command (approve, deny, change or answer); returns what was wrong, if anything. A
-    /// command of the wrong kind is refused and the request keeps waiting, so a reply never approves an approval.
+    /// Answers a waiting request with a command (approve, deny, change or answer); returns what to tell the owner: what was
+    /// answered, or what was wrong. A command of the wrong kind is refused and the request keeps waiting, so a reply never
+    /// approves an approval. Without a <paramref name="number"/>, the request that waits is answered only when it is the one
+    /// the owner has seen: the only one that waits, with no other shown since the owner's last answer, so a request that
+    /// arrived as another went away is refused. The first request to arrive alone after an answer can still be answered by
+    /// a recalled or repeated line; the reply names it, and an irreversible call always needs its number.
     /// </summary>
-    public string? Answer(int number, string command, HumanAnswer answer)
+    public string Answer(int? number, string command, HumanAnswer answer)
     {
-        if (!waiting.TryGetValue(number, out var entry))
+        if (number is null)
         {
-            return "error: nothing waits for you with that number.";
+            var all = Waiting.ToList();
+            List<int> gone;
+            lock (announced)
+            {
+                gone = [.. announced.Where(shown => all.All(entry => entry.Number != shown)).Order()];
+            }
+
+            switch (all)
+            {
+                case []:
+                    return "error: nothing waits for you.";
+                case [var only] when gone.Count == 0 && !only.Request.Irreversible:
+                    number = only.Number;
+                    break;
+                case [var only] when gone.Count == 0:
+                    return $"error: #{only.Number} is irreversible, so type its number: {prefix}{command} {only.Number}.";
+                case [var only]:
+                    return $"error: {Numbers(gone)} {(gone.Count == 1 ? "is" : "are")} no longer waiting; #{only.Number} is new: {What(only.Request)}. Type {prefix}{command} {only.Number}.";
+                default:
+                    return $"error: {all.Count} requests wait for you; type {prefix}{command} with the number of one:\n"
+                        + string.Join("\n", all.Select(entry => $"  #{entry.Number} {Kind(entry.Request.Kind)}, {What(entry.Request)}"));
+            }
+        }
+
+        if (!waiting.TryGetValue(number.Value, out var entry))
+        {
+            return NotWaiting();
         }
 
         var kind = entry.Request.Kind;
@@ -67,14 +105,53 @@ internal sealed class OwnerQueue(TextWriter output, string prefix = "") : IHuman
             return $"error: #{number} is not {needs}.";
         }
 
-        return entry.Answer.TrySetResult(answer) ? null : "error: nothing waits for you with that number.";
+        if (!entry.Answer.TrySetResult(answer))
+        {
+            return NotWaiting();
+        }
+
+        waiting.TryRemove(number.Value, out _); // at once, as the asker's own removal may come after the owner's next command
+        lock (announced)
+        {
+            announced.Clear();
+        }
+
+        var done = command switch { "approve" => "approved", "deny" => "denied", "change" => "approved with your change", _ => "answered" };
+        return $"{done} #{number}: {What(entry.Request)}";
     }
 
-    public string Describe(HumanRequest request) => request.Kind switch
+    /// <summary>A request, and how to answer it by its number.</summary>
+    public string Describe(int number, HumanRequest request) => request.Kind switch
     {
-        HumanRequestKind.Approval => Lines($"{request.Agent} asks to run {request.Tool} {request.Arguments?.GetRawText()}: {request.Summary}.", $"Answer with {prefix}approve, {prefix}deny or {prefix}change."),
-        HumanRequestKind.Question => Lines($"{request.Agent} asks: {request.Summary}", $"Answer with {prefix}answer or {prefix}deny."),
-        _ => Lines($"{request.Agent} needs your sign-off: {request.Summary}", $"Answer with {prefix}approve or {prefix}deny."),
+        HumanRequestKind.Approval => Lines(
+            $"{request.Agent} asks to run {request.Tool} {request.Arguments?.GetRawText()}: {request.Summary}.",
+            $"Answer with {prefix}approve {number}, {prefix}deny {number} or {prefix}change {number} <json>."),
+        HumanRequestKind.Question => Lines($"{request.Agent} asks: {request.Summary}", $"Answer with {prefix}answer {number} <text> or {prefix}deny {number}."),
+        _ => Lines($"{request.Agent} needs your sign-off: {request.Summary}", $"Answer with {prefix}approve {number} or {prefix}deny {number}."),
+    };
+
+    /// <summary>A request in a few words: the agent and the call it asks to make, or the first line of what it asks.</summary>
+    private static string What(HumanRequest request) => request.Kind == HumanRequestKind.Approval
+        ? Short($"{request.Agent} {request.Tool} {request.Arguments?.GetRawText()}".TrimEnd())
+        : Short($"{request.Agent}: {request.Summary.Split('\n')[0]}");
+
+    private static string Short(string text) => text.Length > 100 ? $"{text[..100]}…" : text;
+
+    /// <summary>That nothing waits with the number typed, and which numbers do.</summary>
+    private string NotWaiting() => Waiting.Select(entry => entry.Number).ToList() switch
+    {
+        [] => "error: nothing waits for you.",
+        [var one] => $"error: nothing waits for you with that number; #{one} does.",
+        var numbers => $"error: nothing waits for you with that number; {Numbers(numbers)} do.",
+    };
+
+    private static string Numbers(IEnumerable<int> numbers) => string.Join(", ", numbers.Select(number => $"#{number}"));
+
+    private static string Kind(HumanRequestKind kind) => kind switch
+    {
+        HumanRequestKind.Approval => "approval",
+        HumanRequestKind.Question => "question",
+        _ => "sign-off",
     };
 
     /// <summary>

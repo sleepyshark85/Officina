@@ -255,7 +255,7 @@ public sealed class ToolPipeline
 
                 // LOOP-12: only this call waits; the agent continues the same turn with the answer.
                 var answer = await Owner.AskAsync(
-                    context, Owner.Request(context, HumanRequestKind.Approval, stop.Reason) with { Tool = tool.Name, Arguments = arguments }, ct).ConfigureAwait(false);
+                    context, Owner.Request(context, HumanRequestKind.Approval, stop.Reason) with { Tool = tool.Name, Arguments = arguments, Irreversible = tool.Options.Irreversible }, ct).ConfigureAwait(false);
                 if (answer is not { Approved: true })
                 {
                     await AuditAsync(context, tool, arguments, "human", AuditOutcome.Denied, ct).ConfigureAwait(false);

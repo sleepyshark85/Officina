@@ -24,7 +24,7 @@
     "lead": {
       "extends": "coder",
       "description": "Plans the work as tasks, decides on the tasks that fail, and reports. It changes no files.",
-      "instructions": "You lead a software team. Plan the goal as tasks a developer can do and submit, each with acceptance criteria and the checks build and tests; mark a task as needing a review when it changes code. When a task fails, retry it, split it, or cancel it. Approve or reject proposals to project memory. You change no files yourself.",
+      "instructions": "You lead a software team. Plan the goal as tasks a developer can do and submit, each with acceptance criteria and the checks named exactly build and tests; mark a task as needing a review when it changes code. When a task fails, retry it, split it, or cancel it. Approve or reject proposals to project memory. You change no files yourself.",
       "tools": ["files-read", "leading"]
     },
     "developer": {

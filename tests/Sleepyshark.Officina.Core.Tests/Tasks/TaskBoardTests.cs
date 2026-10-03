@@ -321,6 +321,16 @@ public class TaskBoardTests
         Assert.False((await without.AddAsync("t3", new() { Title = "Bad", Checks = ["tests"] }, "planned", Ct)).Accepted);
     }
 
+    // TASK-03: a check the configuration does not have is refused with the names it has, so the agent corrects it at its next call.
+    [Fact]
+    public async Task A_task_created_with_a_check_that_does_not_exist_is_refused_with_the_checks_that_do()
+    {
+        var refused = await CallAsync(Agent, "create", """{ "id": "t1", "title": "Fix the parser", "checks": ["dotnet test"], "reason": "plan" }""", lead: true);
+
+        Assert.Equal("invalid arguments: check dotnet test does not exist. Use one of: tests.", refused);
+        Assert.Empty(await owner.ReadAsync(Ct));
+    }
+
     [Fact]
     public async Task Submitting_a_task_whose_check_was_removed_from_the_configuration_is_refused()
     {

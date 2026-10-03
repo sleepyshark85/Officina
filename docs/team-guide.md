@@ -108,7 +108,7 @@ Save this as `sof.json` in the `calc` folder. Each part is explained below it.
     },
     "lead": {
       "description": "Plans the goal as tasks and decides on tasks that fail. Changes no files.",
-      "instructions": "You lead a small software team. Read the code, then plan the goal as small tasks, each with acceptance criteria, the checks build and tests, and requiresReview set to true. Order the tasks with dependencies when one needs another. When a task fails, retry it, split it or cancel it. You change no files yourself.",
+      "instructions": "You lead a small software team. Read the code, then plan the goal as small tasks, each with acceptance criteria, the checks named exactly build and tests, and requiresReview set to true. Order the tasks with dependencies when one needs another. When a task fails, retry it, split it or cancel it. You change no files yourself.",
       "tools": ["files-read", "leading"]
     },
     "developer": {
@@ -359,13 +359,13 @@ What to expect:
    #1 lead needs your sign-off: Approve the lead's plan before work starts?
      average Add Average: Proposed, role developer, depends on fix-divide, needs a review
      fix-divide Fix Divide: Ready, role developer, needs a review
-   Answer with /approve or /deny.
+   Answer with /approve 1 or /deny 1.
    ```
 
    `/status` shows the waiting request and its number again. Check that `average` depends on `fix-divide`; if it
-   doesn't, fix it yourself with `/task edit average --depends fix-divide`. Type `/approve 1`. To change the plan,
-   `/tell lead <what to change>`, then `/deny 1`; the lead plans again. With no answer within `run.approvalTimeout`
-   (30 minutes), the team stops.
+   doesn't, fix it yourself with `/task edit average --depends fix-divide`. Type `/approve 1` (or just `/approve`, as no
+   other request was shown since). To change the plan, `/tell lead <what to change>`, then `/deny 1`; the lead plans
+   again. With no answer within `run.approvalTimeout` (30 minutes), the team stops.
 2. **Tasks.** A developer takes each ready task, in `.sof/worktrees/<run>-task.<task id>`. Lines such as
    `[developer[1]] running run_command` show what it does. A command no rule allows waits for `/approve` or `/deny`. The
    task with a dependency waits until the one it needs is done.

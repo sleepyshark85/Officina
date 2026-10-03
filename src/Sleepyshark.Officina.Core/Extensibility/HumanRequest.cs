@@ -22,4 +22,8 @@ public enum HumanRequestKind
 /// <param name="Tool">For an approval, the tool, by its configured name.</param>
 /// <param name="Arguments">For an approval, the arguments to approve.</param>
 public sealed record HumanRequest(
-    HumanRequestKind Kind, string Agent, string Summary, DateTimeOffset Deadline, string? Tool = null, JsonElement? Arguments = null);
+    HumanRequestKind Kind, string Agent, string Summary, DateTimeOffset Deadline, string? Tool = null, JsonElement? Arguments = null)
+{
+    /// <summary>For an approval, whether the tool is irreversible, so its effect cannot be taken back (TOOL-10).</summary>
+    public bool Irreversible { get; init; }
+}
