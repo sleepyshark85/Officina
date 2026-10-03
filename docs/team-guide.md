@@ -25,7 +25,7 @@ rm Calc/Class1.cs
 rm Calc.Tests/UnitTest1.cs
 ```
 
-That makes `Calc.slnx` with a class library and an xUnit test project. Then add four files.
+That makes `Calc.slnx` with a class library and an xUnit test project. Then add three files.
 
 `Calc/Calculator.cs`:
 
@@ -55,18 +55,6 @@ public class CalculatorTests
 }
 ```
 
-`Directory.Build.props`. A build reads `.git` to record the commit (Source Link), and the sandbox hides `.git`, so
-without this file every build in the Linux sandbox fails with `Access to the path '…/.git' is denied`:
-
-```xml
-<Project>
-  <PropertyGroup>
-    <!-- The sandbox hides .git, so the build must not read it for Source Link. -->
-    <EnableSourceControlManagerQueries>false</EnableSourceControlManagerQueries>
-  </PropertyGroup>
-</Project>
-```
-
 `.gitignore`, so build output doesn't end up in a commit:
 
 ```
@@ -85,7 +73,13 @@ dotnet test    # Divide fails (Expected: 2, Actual: 18); Add passes
 ### Where is your SDK?
 
 On Linux, the sandbox shows only the system folders (`/usr`, `/bin`, `/lib` and a few more), and finds programs only in
-`/usr/local/bin`, `/usr/bin` and `/bin`. Run `which dotnet` and `dotnet --list-sdks`:
+`/usr/local/bin`, `/usr/bin` and `/bin`. `sof init` (section 3) notes an SDK the sandbox can't run, such as
+
+```
+note: your dotnet is at /usr/lib/dotnet, where the sandbox doesn't look. Add /usr/lib/dotnet to capabilities.sandbox.toolchains, so that commands in the sandbox run it.
+```
+
+To check by hand, run `which dotnet` and `dotnet --list-sdks`:
 
 - `/usr/bin/dotnet`, as a distribution's package installs it: nothing to do.
 - Anywhere else, such as `~/.dotnet/dotnet` from Microsoft's install script, or `/usr/lib/dotnet/dotnet` with no link in
@@ -223,11 +217,7 @@ allowed, each as itself and followed by arguments (`dotnet test *` allows `dotne
 asked about** (`/approve` or `/deny`). Git itself can't run in the sandbox, because `.git` is hidden, so there's no
 point allowing `git status` or `git diff`. Don't allow `dotnet *`: that allows `dotnet run` and every tool.
 
-**Allowed hosts** are the only network the sandbox has: NuGet, so the build can restore packages. The sandbox keeps no
-package cache between commands, so each build and test restores again (a few seconds here). Restore also checks
-certificates at `crl3.digicert.com`, `crl4.digicert.com`, `ocsp.digicert.com` and `www.microsoft.com`. The sandbox
-refuses those, restore goes on, and the command's output shows `[Network: refused …]` lines. Add those hosts to quiet
-them.
+**Allowed hosts** are the only network the sandbox has: NuGet, so the build can restore packages. Each working copy keeps its packages between commands, so only its first build downloads them.
 
 **Masking** is off because it would replace things that look like emails or phone numbers in source code.
 
@@ -329,9 +319,9 @@ the fix, goes back. That's why the lead's instructions ask it to order tasks wit
 **The fast path:** `sof init` in the `calc` folder writes most of this for you. It says
 `Found .NET (Calc.slnx): dotnet build and dotnet test.`, and asks for each command; press Enter twice to take them. It
 writes the two commands, `run.budget` at $3, the NuGet hosts and the same six command rules, then validates the file.
-It leaves out the time limit, the team size and the task board's limits, which you add by hand. If `dotnet` is on your
-`PATH` outside the system folders, such as `~/.dotnet`, it says to add that folder to `toolchains`; it doesn't add it
-itself, and it doesn't say so for `/usr/lib/dotnet`, so check section 1. See the [user guide](user-guide.md), section 6.
+It leaves out the time limit, the team size and the task board's limits, which you add by hand. If the sandbox can't
+run the `dotnet` on your `PATH`, such as `~/.dotnet/dotnet` or `/usr/lib/dotnet/dotnet`, it says to add that folder to
+`toolchains` (section 1); it doesn't add it itself. See the [user guide](user-guide.md), section 6.
 
 Objects merge key by key, so `"roles": { "developer": { "max": 2 } }` keeps the preset's lead and reviewer. A list, such
 as `commandRules`, a sign-off list or an agent's `tools`, replaces the preset's whole. Run `sof config show --origin` to
@@ -415,7 +405,7 @@ branch has its commits. `sof --agent team --new` starts the lead afresh.
 ## 6. Safety
 
 - **Sandbox:** commands and checks run without network (unless `allowedHosts`), with limits on CPU, memory and
-  processes. On Linux, only system folders, the toolchains and the working copy are visible.
+  processes. On Linux, only system folders, the toolchains, the working copy and its own home folder are visible.
 - **Command rules:** anything not allowed is asked about. The git deny rules are a convenience; the sandbox is the
   boundary.
 - **Protected files:** `.git`, `.env*` and `.sof/` are hidden from agents, and `sof.json`, `sof.*.json` and the files
