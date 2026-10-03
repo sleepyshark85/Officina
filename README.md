@@ -7,6 +7,7 @@ Status: v1 is built and passes its offline tests on Linux and Windows. The live 
 run; see the [plan's status](docs/plan/README.md#status).
 
 - [User guide](docs/user-guide.md): set up `sof` and use it
+- [Team guide](docs/team-guide.md): set up a small coding team, with a worked example
 - [Requirements](REQUIREMENTS.md)
 - [Configuration](CONFIGURATION.md), the [configuration reference](docs/configuration-reference.md) and the generated
   [settings reference](docs/configuration-settings.md)
