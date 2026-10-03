@@ -148,7 +148,7 @@ internal static class Pager
 
     /// <summary>The program's full path when it is in a folder of <c>PATH</c>; null otherwise.</summary>
     private static string? OnPath(string program, IReadOnlyDictionary<string, string> variables, bool windows) =>
-        (Variable(variables, "PATH", windows) ?? "").Split(windows ? ';' : ':', StringSplitOptions.RemoveEmptyEntries)
+        (Variable(variables, "PATH", windows) ?? "").Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries)
             .Select(folder => Path.Combine(folder, windows ? $"{program}.exe" : program))
             .FirstOrDefault(File.Exists);
 
