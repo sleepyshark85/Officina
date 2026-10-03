@@ -26,7 +26,7 @@ internal sealed class ChatSession
     /// <summary>The commands that act on the run of the reply that runs (<see cref="RunCommand.CarryOutAsync"/>).</summary>
     private static readonly HashSet<string> RunCommands = ["approve", "deny", "change", "answer", "tell", "pause", "resume", "cancel", "checkpoint", "board", "memory"];
 
-    /// <summary>The <c>sof</c> commands that take the console or the workspace, so they wait until no reply runs.</summary>
+    /// <summary>The <c>sof</c> commands that take the console or the workspace, so they work only between replies.</summary>
     private static readonly HashSet<string> Between = ["run", "rollback"];
 
     /// <summary>How soon after a Ctrl+C a console read that ends is taken for the Ctrl+C rather than the end of the input.</summary>
@@ -37,7 +37,8 @@ internal sealed class ChatSession
                   | /new | /report [run] | /resume <run> | /rollback <run> [--to <n>] | /run --input <text>
                   | /config validate | /config show [--origin] | /config dry-run ... | /help [command] | /quit (or Ctrl+D)
         A line that does not start with / is a message. While a reply runs, a message waits until it ends, and /tell reaches an
-        agent at once. /approve to /memory act on the reply that runs; /resume <run>, /rollback and /run wait until none does.
+        agent at once. /approve to /memory act on the reply that runs. /resume <run>, /rollback and /run work only between
+        replies; type them again when the reply ends.
         """;
 
     private readonly ParseResult parse;
@@ -469,14 +470,14 @@ internal sealed class ChatSession
                     await ReportAsync(session, ending.Token);
                     break;
                 case "resume" when session is not null && words.Count > 1 && !Agents(session.Runner.Options, session.Agent).Contains(words[1]):
-                    // A run, not an agent of the reply's run: it is sof resume, which waits as /rollback does.
-                    status.WriteLine("error: /resume <run> waits until no reply runs, as it takes the console and may need the workspace the reply holds.");
+                    // A run, not an agent of the reply's run: it is sof resume, which works only between replies, as /rollback does.
+                    status.WriteLine("error: /resume <run> works only between replies; type it again when the reply ends.");
                     break;
                 case var _ when session is not null && RunCommands.Contains(word):
                     await RunCommand.CarryOutAsync(command, session, status, Help, ending.Token);
                     break;
                 case var _ when session is not null && Between.Contains(word):
-                    status.WriteLine($"error: /{word} waits until no reply runs, as it takes the console and may need the workspace the reply holds.");
+                    status.WriteLine($"error: /{word} works only between replies; type it again when the reply ends.");
                     break;
                 case "resume" or "config" or "report" or "rollback" or "run" or "chat":
                     await SofAsync(words, session);

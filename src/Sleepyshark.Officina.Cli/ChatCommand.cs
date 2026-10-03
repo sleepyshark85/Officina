@@ -1,5 +1,6 @@
 using System.CommandLine;
 using Sleepyshark.Officina.Core.Configuration;
+using Sleepyshark.Officina.Core.Extensibility;
 
 namespace Sleepyshark.Officina.Cli;
 
@@ -76,20 +77,37 @@ internal static class ChatCommand
         options.Agents[agent].Pattern is { Type: PatternOptions.Team, Lead: { } lead } ? lead : agent;
 
     /// <summary>
-    /// What a chat with an agent that works in the workspace outside a team loses: each message's run works in a fresh working copy
-    /// of the branch, and what it changes and does not integrate goes when the reply ends. Only a team integrates its work. Whether a
-    /// chat should keep one working copy for the session, or integrate at the end of each message, is the owner's open question.
+    /// What a chat with an agent that changes the workspace outside a team loses: each message's run works in a fresh working copy
+    /// of the branch, and what it changes and does not integrate goes when the reply ends, unless the owner keeps the copies. Only
+    /// a team integrates its work. Whether a chat should keep one working copy for the session, or integrate at the end of each
+    /// message, is the owner's open question.
     /// </summary>
     internal static string? WorkspaceWarning(OfficinaOptions options, string agent) =>
-        options.Capabilities.Workspace.Enabled && options.Agents[agent].Pattern.Type != PatternOptions.Team
+        options.Capabilities.Workspace is { Enabled: true, KeepWorkingCopies: false } && options.Agents[agent].Pattern.Type != PatternOptions.Team
+        && ChangesWorkspace(options, agent)
             ? $"agent \"{agent}\" works in the workspace, and each message works in a fresh working copy of the branch: what it changes " +
               "and does not integrate is lost when the reply ends, unless capabilities.workspace.keepWorkingCopies is on, which keeps " +
               "each message's copy, though the next message does not see it."
             : null;
 
-    /// <summary>Every agent a chat with which loses its edits between messages, and why, for <c>config validate</c>.</summary>
-    internal static IEnumerable<string> WorkspaceWarnings(OfficinaOptions options) =>
-        options.Agents.Keys.Order(StringComparer.Ordinal).Select(agent => WorkspaceWarning(options, agent)).OfType<string>();
+    /// <summary>
+    /// Every agent a chat with which loses its edits between messages, and why, for <c>config validate</c>. A team's lead and
+    /// roles are left out: they work in the team, which integrates their work.
+    /// </summary>
+    internal static IEnumerable<string> WorkspaceWarnings(OfficinaOptions options)
+    {
+        var members = options.Agents.Values.Select(definition => definition.Pattern).Where(pattern => pattern.Type == PatternOptions.Team)
+            .SelectMany(pattern => pattern.Roles.Keys.Append(pattern.Lead)).ToHashSet(StringComparer.Ordinal);
+        return options.Agents.Keys.Where(agent => !members.Contains(agent)).Order(StringComparer.Ordinal).Select(agent => WorkspaceWarning(options, agent)).OfType<string>();
+    }
+
+    /// <summary>Whether the agent has a tool of the workspace or the sandbox that changes the working copy.</summary>
+    private static bool ChangesWorkspace(OfficinaOptions options, string agent)
+    {
+        var registered = WorkspaceHost.RegisteredTools(options);
+        return options.Agents[agent].Tools.Where(options.ToolSets.ContainsKey).SelectMany(set => options.ToolSets[set])
+            .Any(tool => options.Tools.GetValueOrDefault(tool)?.ExtensionId() is { } id && registered.GetValueOrDefault(id)?.Descriptor.Kind == ToolKind.Write);
+    }
 
     private static string? StoreRefusal(SofConfiguration configuration) =>
         configuration.Sets(Store) && !configuration.Options.Capabilities.ConversationStore.Enabled

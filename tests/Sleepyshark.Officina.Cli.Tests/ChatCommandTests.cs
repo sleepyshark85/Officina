@@ -175,10 +175,10 @@ public sealed class ChatCommandTests : IDisposable
         Assert.Contains("[dev] Hi.", output, StringComparison.Ordinal);
     }
 
-    // RUN-04: while a reply runs, /resume with a run waits, as it is sof resume; /resume with an agent resumes what /pause paused.
+    // RUN-04: while a reply runs, /resume with a run is refused, as it is sof resume; /resume with an agent resumes what /pause paused.
     // /report then says the reply's run has not been recorded yet, or reports it.
     [Fact]
-    public async Task While_a_reply_runs_resume_with_a_run_waits_and_with_an_agent_resumes_it()
+    public async Task While_a_reply_runs_resume_with_a_run_is_refused_and_with_an_agent_resumes_it()
     {
         model.CallTools(("note", """{ "text": "Uses SQLite." }""")).Reply("Noted.");
 
@@ -186,7 +186,7 @@ public sealed class ChatCommandTests : IDisposable
         sof.In.Type("Note the database.");
         await sof.Out.WaitForAsync("#1 dev asks to run note", Ct);
         sof.In.Type("/resume 01a0fdcd-0000-0000-0000-000000000000");
-        await sof.Out.WaitForAsync("error: /resume <run> waits until no reply runs", Ct);
+        await sof.Out.WaitForAsync("error: /resume <run> works only between replies; type it again when the reply ends.", Ct);
         sof.In.Type("/pause dev");
         sof.In.Type("/resume dev");
         sof.In.Type("/approve 1");
@@ -197,27 +197,45 @@ public sealed class ChatCommandTests : IDisposable
         Assert.Equal(ExitCodes.Success, exitCode);
     }
 
-    // A single agent that works in the workspace gets a fresh working copy for each message, so the session and config validate warn.
+    // A single agent that changes the workspace gets a fresh working copy for each message, so the session and config validate warn,
+    // unless the owner keeps the working copies. An agent that only reads it, and a team's lead and roles, are not warned about.
     [Fact]
     public async Task A_single_agent_in_the_workspace_is_warned_that_each_message_has_a_fresh_working_copy()
     {
-        sof.Write("sof.json", """
+        const string Configuration = """
             {
               "providers": { "claude": { "prices": { "claude-opus-5-5": { "input": 1 } } } },
-              "agents": { "dev": { "instructions": "Work." } },
-              "capabilities": { "workspace": { "enabled": true } }
+              "agents": {
+                "dev": { "instructions": "Work.", "tools": ["write"] },
+                "reader": { "instructions": "Read.", "tools": ["read"] },
+                "team": { "instructions": "A team.", "pattern": { "type": "team", "lead": "lead", "roles": { "developer": { "max": 1 } } } },
+                "lead": { "instructions": "Lead.", "tools": ["read"] },
+                "developer": { "instructions": "Develop.", "tools": ["write"] }
+              },
+              "tools": {
+                "read_file": { "source": "extension:workspace.read_file" },
+                "write_file": { "source": "extension:workspace.write_file", "gateExemption": "A test." }
+              },
+              "toolSets": { "read": ["read_file"], "write": ["write_file"] },
+              "capabilities": { "workspace": { "enabled": true{{keep}} }, "taskBoard": { "enabled": true }, "team": { "enabled": true } }
             }
-            """).Commit();
+            """;
+        sof.Write("sof.json", Configuration.Replace("{{keep}}", "", StringComparison.Ordinal)).Commit();
 
         sof.In.Dispose();
-        var (exitCode, output, _) = await sof.EndedAsync(sof.RunAsync("chat"));
+        var (exitCode, output, _) = await sof.EndedAsync(sof.RunAsync("chat", "--agent", "dev"));
         sof.NewConsole();
         var (_, notes, _) = await sof.EndedAsync(sof.RunAsync("config", "validate"));
+        sof.Write("sof.json", Configuration.Replace("{{keep}}", """, "keepWorkingCopies": true""", StringComparison.Ordinal));
+        sof.NewConsole();
+        var (_, kept, _) = await sof.EndedAsync(sof.RunAsync("config", "validate"));
 
         const string Warning = "agent \"dev\" works in the workspace, and each message works in a fresh working copy of the branch";
         Assert.Equal(ExitCodes.Success, exitCode);
         Assert.Contains($"warning: {Warning}", output, StringComparison.Ordinal);
         Assert.Contains($"note: in sof chat, {Warning}", notes, StringComparison.Ordinal);
+        Assert.Single(notes.Split('\n'), line => line.Contains("fresh working copy", StringComparison.Ordinal));
+        Assert.DoesNotContain("fresh working copy", kept, StringComparison.Ordinal);
     }
 
     // SIGTERM, or the command line's cancellation, ends the session at once, and the reply that runs is cancelled cleanly.
@@ -444,7 +462,7 @@ public sealed class ChatCommandTests : IDisposable
     }
 
     // Every sof command can be typed after a /, parsed by the same command line. Between replies the session holds no run, lock or
-    // store, so /rollback and /resume run as from another terminal; while a reply runs, they wait, and /report shows the reply's run.
+    // store, so /rollback and /resume run as from another terminal; while a reply runs, they are refused, and /report shows the reply's run.
     [Fact]
     public async Task Every_sof_command_works_in_the_session_and_those_that_take_the_console_wait_for_the_reply()
     {
@@ -467,7 +485,7 @@ public sealed class ChatCommandTests : IDisposable
         sof.In.Type("Note it.");
         await sof.Out.WaitForAsync("#1 dev asks to run note", Ct);
         sof.In.Type("/rollback 0 --to 0"); // /resume while a reply runs resumes what /pause paused
-        await sof.Out.WaitForAsync("error: /rollback waits until no reply runs", Ct);
+        await sof.Out.WaitForAsync("error: /rollback works only between replies; type it again when the reply ends.", Ct);
         sof.In.Type("/report");
         await sof.Out.WaitForAsync("Work: Note it.", Ct);
         sof.In.Type("/approve 1");
