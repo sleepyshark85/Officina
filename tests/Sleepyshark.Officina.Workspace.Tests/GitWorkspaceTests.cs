@@ -60,6 +60,7 @@ public class GitWorkspaceTests
         File.WriteAllText(Path.Combine(alice.Directory, "bin", "app.dll"), "built");
         Assert.Equal(IntegrationOutcome.Integrated, (await workspace.IntegrateAsync(alice, alice.Name, alice.Agent, submitted, Ct)).Outcome);
         Assert.Equal("two\n", repository.Baseline("a.txt"));
+        Assert.Equal(submitted, (await repository.GitAsync("rev-parse", "main^{tree}")).Trim()); // the very tree that was sealed
     }
 
     // TEST-22, first half.

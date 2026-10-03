@@ -160,15 +160,17 @@ public sealed class RunWiringTests : IDisposable
         model.When(request => ScriptedModelProvider.WorkOf(request).StartsWith("Every task is done", StringComparison.Ordinal)).Reply("Built.");
         model.When(request => ScriptedModelProvider.WorkOf(request).Contains("Do task a,", StringComparison.Ordinal))
             .CallTools([.. Enumerable.Range(1, 5).Select(n => ("start", $$"""{ "command": "sleep 300; echo planted >> src/{{n}}.cs" }"""))])
-            .CallTools(("submit", """{ "id": "a" }""")).Reply("Submitted.");
+            .CallTools(("submit", """{ "id": "a" }""")).CallTools(("start", """{ "command": "sleep 1; echo planted >> src/late.cs" }""")).Reply("Submitted.");
 
         var (exitCode, _, error) = await sof.RunAsync("run", "--agent", "team", "--input", "Build it.");
 
         Assert.Equal((ExitCodes.Success, ""), (exitCode, error));
         Assert.True(stoppedBeforeChecks);
+        Assert.DoesNotContain(sandbox.Processes, process => process.Command.CommandLine.Contains("late.cs", StringComparison.Ordinal)); // refused after submit
         Assert.Equal(4, sandbox.Processes.Count(process => process.Command.CommandLine.StartsWith("sleep", StringComparison.Ordinal)));
         var results = model.Requests.SelectMany(request => request.History).SelectMany(message => message.Content).OfType<ToolResultContent>().Select(content => content.Text);
         Assert.Contains(results, text => text.Contains("4 background processes already run; stop one with stop_process first", StringComparison.Ordinal));
+        Assert.Contains(results, text => text.Contains("task a is InReview, so no command runs in its working copy until it is in progress again", StringComparison.Ordinal));
     }
 
     [Fact]

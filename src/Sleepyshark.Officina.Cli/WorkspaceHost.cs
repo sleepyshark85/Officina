@@ -213,19 +213,27 @@ internal sealed class WorkspaceHost : IWorkspace, IAsyncDisposable
         }
     }
 
-    public Task<IntegrationResult> IntegrateAsync(IWorkingCopy copy, string task, string author, string? submitted, CancellationToken ct) =>
-        workspace.IntegrateAsync((WorkingCopy)copy, task, author, submitted, ct);
+    /// <summary>Stops the background processes in the copy, so nothing changes it while it is integrated, then integrates it (WS-09).</summary>
+    public async Task<IntegrationResult> IntegrateAsync(IWorkingCopy copy, string task, string author, string? submitted, CancellationToken ct)
+    {
+        await StopBackgroundAsync(((WorkingCopy)copy).Name).ConfigureAwait(false);
+        return await workspace.IntegrateAsync((WorkingCopy)copy, task, author, submitted, ct).ConfigureAwait(false);
+    }
 
     /// <summary>Stops the background processes of every agent in the copy (SBX-03), then says what the copy holds (TASK-05).</summary>
     public async Task<string> SealAsync(IWorkingCopy copy, CancellationToken ct)
     {
-        var sealing = (WorkingCopy)copy;
-        foreach (var tools in sandboxes.Where(entry => entry.Key.Copy == sealing.Name && entry.Value.IsValueCreated).Select(entry => entry.Value.Value).ToList())
+        await StopBackgroundAsync(((WorkingCopy)copy).Name).ConfigureAwait(false);
+        return await GitWorkspace.SealAsync((WorkingCopy)copy, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>Stops every agent's background processes in the working copy of the name.</summary>
+    private async Task StopBackgroundAsync(string name)
+    {
+        foreach (var tools in sandboxes.Where(entry => entry.Key.Copy == name && entry.Value.IsValueCreated).Select(entry => entry.Value.Value).ToList())
         {
             await tools.StopBackgroundAsync().ConfigureAwait(false);
         }
-
-        return await GitWorkspace.SealAsync(sealing, ct).ConfigureAwait(false);
     }
 
     public Task<IReadOnlyList<CopySnapshot>> SnapshotAsync(CancellationToken ct) => workspace.SnapshotAsync(ct);

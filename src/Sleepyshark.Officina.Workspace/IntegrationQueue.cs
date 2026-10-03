@@ -72,11 +72,11 @@ internal sealed class IntegrationQueue(
         ct.ThrowIfCancellationRequested();
 
         // Only what the task's checks and review saw is integrated, never what changed in the copy since, such as by a process left running.
-        if (submitted is not null && await TreeAsync(copy.Directory, ct).ConfigureAwait(false) != submitted)
+        if (await CommitAsync(copy, task, author, submitted, ct).ConfigureAwait(false) is not { } branchPoint)
         {
             return new(IntegrationOutcome.Changed, []);
         }
-        var branchPoint = await CommitAsync(copy, task, author, ct).ConfigureAwait(false);
+
         if (await MarkedAsync(copy, branchPoint, ct).ConfigureAwait(false) is { Count: > 0 } unresolved)
         {
             // WS-03: a conflict is never resolved silently, so markers left in the change are a conflict still.
@@ -216,10 +216,20 @@ internal sealed class IntegrationQueue(
     /// Commits what the agent changed as one commit, attributed to the run, the agent and the task (WS-04). The checkpoint
     /// commits on the branch (RUN-03) are squashed into it, so the baseline's history holds none of them.
     /// </summary>
-    /// <returns>The commit the change is on top of.</returns>
-    private async Task<string> CommitAsync(WorkingCopy copy, string task, string author, CancellationToken ct)
+    /// <returns>
+    /// The commit the change is on top of; null, with nothing committed, when the copy holds another tree than the one it was
+    /// sealed with at submit, if it was.
+    /// </returns>
+    private async Task<string?> CommitAsync(WorkingCopy copy, string task, string author, string? submitted, CancellationToken ct)
     {
-        await Git.RunAsync(copy.Directory, ct, "add", "--all").ConfigureAwait(false);
+        // The tree compared is the index that is committed: only git changes the index, and nothing in the sandbox can reach git,
+        // so a file that changes in the copy after this add cannot slip in between the comparison and the commit.
+        var tree = await TreeAsync(copy.Directory, ct).ConfigureAwait(false);
+        if (submitted is not null && tree != submitted)
+        {
+            return null;
+        }
+
         var branchPoint = (await Git.RunAsync(copy.Directory, ct, "merge-base", "HEAD", baseline).ConfigureAwait(false)).Trim();
         await Git.RunAsync(copy.Directory, ct, "reset", "--soft", branchPoint).ConfigureAwait(false);
         if ((await Git.TryRunAsync(copy.Directory, ct, "diff", "--cached", "--quiet").ConfigureAwait(false)).ExitCode != 0)

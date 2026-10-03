@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using Sleepyshark.Officina.Core.Configuration;
 using Sleepyshark.Officina.Core.Extensibility;
+using Sleepyshark.Officina.Core.Tasks;
 
 namespace Sleepyshark.Officina.Sandbox;
 
@@ -99,6 +100,11 @@ public sealed class SandboxTools : IAsyncDisposable
 
     private async ValueTask<ToolResult> RunAsync(ToolCall call, CancellationToken ct)
     {
+        if (await Submitted(call, ct).ConfigureAwait(false) is { } refused)
+        {
+            return refused;
+        }
+
         // Leaving early, at the time limit or on cancellation, stops the command.
         await using var process = await StartCommandAsync(call, ct).ConfigureAwait(false);
         var output = new StringBuilder();
@@ -113,6 +119,11 @@ public sealed class SandboxTools : IAsyncDisposable
 
     private async ValueTask<ToolResult> StartAsync(ToolCall call, CancellationToken ct)
     {
+        if (await Submitted(call, ct).ConfigureAwait(false) is { } refused)
+        {
+            return refused;
+        }
+
         if (background.Values.Count(process => process.Running) >= MaxBackground)
         {
             return ToolResult.Failed(ToolErrorCategory.Failed, $"{MaxBackground} background processes already run; stop one with stop_process first");
@@ -150,6 +161,15 @@ public sealed class SandboxTools : IAsyncDisposable
         return await sandbox.StartAsync(
             new SandboxCommand(command, directory, SandboxLimits.Default, options.AllowedHosts, environment, hiddenPaths, readOnlyPaths, options.Toolchains), ct).ConfigureAwait(false);
     }
+
+    /// <summary>
+    /// A refusal when the agent's task is no longer in progress, such as once it is submitted: what runs in its copy then could
+    /// change it after its checks (TASK-05); null when commands may run.
+    /// </summary>
+    private static async Task<ToolResult?> Submitted(ToolCall call, CancellationToken ct) =>
+        call.Board is { TaskId: { } id } board && (await board.ReadAsync(ct).ConfigureAwait(false)).FirstOrDefault(task => task.Id == id) is { State: not TaskState.InProgress } task
+            ? ToolResult.Failed(ToolErrorCategory.Failed, $"task {id} is {task.State}, so no command runs in its working copy until it is in progress again")
+            : null;
 
     private static string Id(ToolCall call) => call.Arguments.GetProperty("id").GetString()!;
 
