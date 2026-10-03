@@ -203,10 +203,7 @@ public class OutputTests
         Assert.Equal(("checks.style.use", "check extension \"Style\" is not registered."), (Assert.Single(error.Errors).Path, error.Errors[0].Problem));
     }
 
-    private const string ToldSchema = """
-        Reply with JSON only, matching this JSON Schema:
-        {"type":"object","properties":{"total":{"type":"number"}},"required":["total"]}
-        """;
+    private const string ToldSchema = "Reply with JSON only, matching this JSON Schema:\n" + """{"type":"object","properties":{"total":{"type":"number"}},"required":["total"]}""";
 
     private static AgentDefinition Structured(AgentDefinition agent) => agent with { Output = new() { Format = OutputFormat.Structured, Schema = Schema } };
 
