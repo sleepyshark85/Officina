@@ -163,6 +163,10 @@ Instructions, operating facts and checks' commands may contain placeholders writ
   configuration error (MDL-06). Mid-conversation and turn-scoped system messages are used wherever the model takes them,
   with no setting. History shortening by the provider (`context.history.shortening: provider`) is Claude's compaction,
   which every current model but Haiku has (HIST-01).
+- `structuredOutput` sends `output.schema` as Claude's `output_config.format`, so Claude's reply matches it, and the
+  schema is no longer told in the instructions. Claude takes an object schema only with `additionalProperties: false`,
+  which the provider adds where it is unset. It refuses some keywords, such as `minLength`, `minimum` or
+  `additionalProperties: true`: such a call fails as an invalid request, so leave the feature off for those schemas.
 - Rate limits are shared across the process (MDL-08, CLD-10). Calls over `maxConcurrentCalls` wait, the team lead's
   first. A wait the provider asks for (`Retry-After`) holds back every agent. `retry` covers transient and rate-limited
   failures: each wait doubles up to `maxDelay`, or is the provider's if longer; `maxAttempts` counts the first call.
@@ -407,7 +411,8 @@ draws on the pattern's budget, which is the agent's turn budget (PAT-06). Runnab
 
 { "type": "evaluateAndRevise", "generate": { "agent": "developer" }, "checks": ["build", "tests"], "maxRevisions": 3 }
 
-{ "type": "planAndExecute", "planner": { "agent": "planner" }, "executor": { "agent": "developer" }, "maxReplans": 2 }
+{ "type": "planAndExecute",         // the planner's output has a "steps" list; the executor does each item in turn
+  "planner": { "agent": "planner" }, "executor": { "agent": "developer" }, "maxReplans": 2 }
 
 { "type": "team",                   // an agent's own pattern, never a step; needs capabilities.team
   "lead": "lead",                   // plans, decides on failed tasks, reports
@@ -416,6 +421,11 @@ draws on the pattern's budget, which is the agent's turn budget (PAT-06). Runnab
 
 { "type": "extension:Acme.CanaryPattern" }     // PAT-07; reads the settings above that it needs
 ```
+
+In `planAndExecute`, the planner's input starts with a note that it only plans, in short steps a worker carries out one
+at a time. Each item's input holds the work, the plan, every earlier item's output, each labelled with its source, and
+then the item. A long plan of long outputs makes long inputs, so ask the planner for few steps, and the executor for
+short replies.
 
 A workflow step's `input` lists `input` (the workflow's input) or earlier steps' ids; several are each labelled with
 their source, and a step skipped by a `goto` gives empty input. `onOutcome` maps `completed`, `handedOff` and `failed` to
@@ -453,6 +463,12 @@ request starts a new conversation with the last turns (CTX-10).
   "citations": "resolve"                             // OUT-04: off | resolve | required
 }
 ```
+
+The output is checked against `schema` after every reply; output that does not match goes back to the model with the
+errors and the schema, within `attempts`, and is then handed off (OUT-02). Unless the provider constrains output to the
+schema itself (`providers.<name>.features.structuredOutput`, on every model the agent may use), the model is told the
+schema after its instructions, so it is part of the cached prefix. Describe the shape briefly in the instructions all
+the same, such as `{"steps": ["…"]}`.
 
 No setting accepts work while a configured check fails (INV-09).
 

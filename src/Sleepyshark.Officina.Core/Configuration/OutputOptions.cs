@@ -11,7 +11,7 @@ public sealed record OutputOptions
     [Setting("`text`, or `structured`: JSON that must match `schema`.", Example = "\"structured\"")]
     public OutputFormat Format { get; init; } = OutputFormat.Text;
 
-    [Setting("The JSON Schema that structured output must match, as JSON text.",
+    [Setting("The JSON Schema that structured output must match, as JSON text. The output is checked against it after every reply. Unless the provider constrains output to it (`features.structuredOutput`), the model is told it after the instructions: describe the shape briefly in the instructions too.",
         Example = """ "{ \"type\": \"object\", \"required\": [\"total\"] }" """)]
     public string? Schema { get; init; }
 

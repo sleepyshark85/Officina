@@ -9,7 +9,11 @@
       "system": [{ "type": "text", "text": "Extract." }],
       "messages": [{ "role": "user", "content": [{ "type": "text", "text": "Invoice A-17." }] }],
       "output_config": {
-        "format": { "type": "json_schema", "schema": { "type": "object", "properties": { "number": { "type": "string" } }, "required": ["number"], "additionalProperties": false } },
+        "format": { "type": "json_schema", "schema": {
+          "type": "object",
+          "properties": { "number": { "type": "string" }, "lines": { "type": "array", "items": { "type": "object", "properties": { "amount": { "type": "number" } }, "additionalProperties": false } } },
+          "required": ["number"], "additionalProperties": false
+        } },
         "task_budget": { "type": "tokens", "total": 64000 }
       },
       "context_management": { "edits": [{ "type": "clear_tool_uses_20250919" }] },
@@ -69,7 +73,11 @@
         { "role": "user", "content": [{ "type": "text", "text": "And the date?" }] }
       ],
       "output_config": {
-        "format": { "type": "json_schema", "schema": { "type": "object", "properties": { "number": { "type": "string" } }, "required": ["number"], "additionalProperties": false } },
+        "format": { "type": "json_schema", "schema": {
+          "type": "object",
+          "properties": { "number": { "type": "string" }, "lines": { "type": "array", "items": { "type": "object", "properties": { "amount": { "type": "number" } }, "additionalProperties": false } } },
+          "required": ["number"], "additionalProperties": false
+        } },
         "task_budget": { "type": "tokens", "total": 64000 }
       },
       "context_management": { "edits": [{ "type": "clear_tool_uses_20250919" }] },

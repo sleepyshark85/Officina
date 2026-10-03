@@ -43,21 +43,47 @@ public class OutputTests
 
         var result = await kit.RunAsync(Agent, "Total?", Ct);
 
-        Assert.Equal((HandoffReason.InvalidStructuredOutput, "/: Required properties [\"total\"] are not present"), (result.Handoff!.Reason, result.Handoff.Detail));
+        Assert.Equal(
+            (HandoffReason.InvalidStructuredOutput, "the output does not match its JSON Schema after 3 replies: /: Required properties [\"total\"] are not present"),
+            (result.Handoff!.Reason, result.Handoff.Detail));
         Assert.Equal(3, kit.Model.Requests.Count);
         Assert.Contains(
             "/total: Value is \"string\" but should be \"number\"",
             Assert.IsType<TextContent>(Assert.Single(kit.Model.Requests[1].History[^1].Content)).Text);
-        Assert.Equal(Message.User("The output does not match its schema: it is not JSON. Reply again with output that does."), kit.Model.Requests[2].History[^1]);
+        Assert.Equal(Message.User($"The output does not match its JSON Schema: it is not JSON.\n{ToldSchema}"), kit.Model.Requests[2].History[^1]);
     }
 
+    // OUT-02: the next attempt gets the exact errors and the schema, and a corrected reply completes the turn.
     [Fact]
-    public async Task Corrected_structured_output_completes_the_turn()
+    public async Task Structured_output_of_the_wrong_shape_is_corrected_from_its_errors_and_schema()
     {
         var kit = Kit(agent => Structured(agent) with { Output = Structured(agent).Output with { Attempts = 1 } });
-        kit.Model.Reply("forty-two").Reply("""{ "total": 42 }""");
+        kit.Model.Reply("""{ "total": { "amount": 42 } }""").Reply("""{ "total": 42 }""");
 
-        Assert.Equal(AgentOutcome.Completed, (await kit.RunAsync(Agent, "Total?", Ct)).Outcome);
+        var result = await kit.RunAsync(Agent, "Total?", Ct);
+
+        Assert.Equal((AgentOutcome.Completed, """{ "total": 42 }"""), Outcome(result));
+        var retry = Assert.IsType<TextContent>(Assert.Single(kit.Model.Requests[1].History[^1].Content)).Text;
+        Assert.StartsWith("The output does not match its JSON Schema: ", retry, StringComparison.Ordinal);
+        Assert.Contains("; /total: Value is \"object\" but should be \"number\".\n", retry, StringComparison.Ordinal);
+        Assert.EndsWith($".\n{ToldSchema}", retry, StringComparison.Ordinal);
+    }
+
+    // OUT-01, CLD-06: the model is told the schema in its instructions, which are cached, unless the provider constrains the output to it.
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task The_model_is_told_the_schema_unless_the_provider_enforces_it(bool enforced)
+    {
+        var kit = Kit(Structured, structuredOutput: enforced);
+        kit.Model.Reply("""{ "total": 42 }""");
+
+        await kit.RunAsync(Agent, "Total?", Ct);
+
+        var request = Assert.Single(kit.Model.Requests);
+        Assert.Equal(!enforced, request.Instructions.Contains(ToldSchema, StringComparison.Ordinal));
+        Assert.StartsWith("Work.\n\n", request.Instructions, StringComparison.Ordinal);
+        Assert.NotNull(request.OutputSchema);
     }
 
     // OUT-03: in order, and the first failure decides.
@@ -177,6 +203,11 @@ public class OutputTests
         Assert.Equal(("checks.style.use", "check extension \"Style\" is not registered."), (Assert.Single(error.Errors).Path, error.Errors[0].Problem));
     }
 
+    private const string ToldSchema = """
+        Reply with JSON only, matching this JSON Schema:
+        {"type":"object","properties":{"total":{"type":"number"}},"required":["total"]}
+        """;
+
     private static AgentDefinition Structured(AgentDefinition agent) => agent with { Output = new() { Format = OutputFormat.Structured, Schema = Schema } };
 
     private static (AgentOutcome, string) Outcome(AgentResult result) => (result.Outcome, result.Output);
@@ -184,7 +215,10 @@ public class OutputTests
     private static ContentReceived CallReport() =>
         new(new ToolUseContent($"call-{Guid.NewGuid()}", "report", Args("""{ "verdict": "ok" }""")));
 
-    private TestKit Kit(Func<AgentDefinition, AgentDefinition>? configure = null, bool knowledge = false)
+    /// <param name="configure">Changes the agent's definition.</param>
+    /// <param name="knowledge">Whether the knowledge source <c>handbook</c> is on.</param>
+    /// <param name="structuredOutput">Whether the provider's structured output feature is on; the model has it.</param>
+    private TestKit Kit(Func<AgentDefinition, AgentDefinition>? configure = null, bool knowledge = false, bool structuredOutput = false)
     {
         var options = Options(
             ("cite", new() { Source = "builtin:record.cite" }),
@@ -196,7 +230,11 @@ public class OutputTests
                 : new Dictionary<string, KnowledgeOptions>(),
             Capabilities = new() { Knowledge = new() { Enabled = knowledge } },
         };
-        options = options with { Agents = new Dictionary<string, AgentDefinition> { [Agent] = (configure ?? (agent => agent))(options.Agents[Agent]) } };
+        options = options with
+        {
+            Agents = new Dictionary<string, AgentDefinition> { [Agent] = (configure ?? (agent => agent))(options.Agents[Agent]) },
+            Providers = options.Providers.ToDictionary(provider => provider.Key, provider => provider.Value with { Features = new() { StructuredOutput = structuredOutput } }),
+        };
         return new TestKit(
             options,
             new Dictionary<string, ITool>
@@ -204,7 +242,8 @@ public class OutputTests
                 ["report"] = new FakeTool(ToolKind.Read, run: (_, _) => ValueTask.FromResult(ToolResult.Success("written", new Artifact("report.md", "# Report")))),
             },
             knowledge: new Dictionary<string, IKnowledgeSource> { ["handbook"] = new FakeKnowledgeSource(Coverage.Covered, ("hb-1", "Total: 42")) },
-            checks: options.Checks.Keys.ToDictionary(name => name, ICheck (name) => new NamedCheck(name, ran)));
+            checks: options.Checks.Keys.ToDictionary(name => name, ICheck (name) => new NamedCheck(name, ran)),
+            capabilities: new() { Features = new HashSet<string> { "structuredOutput" } });
     }
 
     /// <summary>Fails when the output contains <c>fail:</c> and its name; it remembers every run.</summary>

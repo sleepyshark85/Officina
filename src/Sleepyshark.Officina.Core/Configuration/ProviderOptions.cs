@@ -55,7 +55,7 @@ public sealed record ProviderOptions
 /// <summary>Features of a provider's own API, switched on in configuration (CLD-06).</summary>
 public sealed record ProviderFeatures
 {
-    [Setting("Whether the model's output is constrained to the agent's `output.schema` natively (Claude's `output_config.format`). The core checks the output against the schema either way. The provider may not accept every JSON Schema keyword.",
+    [Setting("Whether the model's output is constrained to the agent's `output.schema` natively (Claude's `output_config.format`); then the schema is not repeated in the instructions. The core checks the output against the schema either way. Claude adds `additionalProperties: false` to each object schema without it, and refuses the call for a keyword it does not take, such as `minLength` or `additionalProperties: true`.",
         Example = "true")]
     public bool StructuredOutput { get; init; }
 

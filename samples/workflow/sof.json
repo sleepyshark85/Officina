@@ -12,7 +12,7 @@
       }
     },
     "triager": {
-      "instructions": "Classify the request.",
+      "instructions": "Classify the request: {\"kind\": \"question\"} or {\"kind\": \"spam\"}.",
       "output": {
         "format": "structured",
         "schema": "{ \"type\": \"object\", \"properties\": { \"kind\": { \"enum\": [\"question\", \"spam\"] } }, \"required\": [\"kind\"] }"

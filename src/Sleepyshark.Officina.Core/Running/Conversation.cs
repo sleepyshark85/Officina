@@ -31,12 +31,18 @@ internal sealed class Conversation
     /// <param name="context">The agent's context settings.</param>
     /// <param name="capabilities">What the provider supports.</param>
     /// <param name="outputSchema">The JSON Schema of the agent's structured output, if it has one.</param>
+    /// <param name="schemaEnforced">
+    /// Whether the provider constrains the output to <paramref name="outputSchema"/> on every model that may serve the call. When it
+    /// does not, the schema is told to the model after the instructions, so it is part of the cached prefix (OUT-01).
+    /// </param>
     public Conversation(
-        ModelProfile profile, ImmutableArray<ToolDefinition> tools, string instructions, ContextOptions context, ProviderCapabilities capabilities, System.Text.Json.JsonElement? outputSchema = null)
+        ModelProfile profile, ImmutableArray<ToolDefinition> tools, string instructions, ContextOptions context, ProviderCapabilities capabilities,
+        System.Text.Json.JsonElement? outputSchema = null, bool schemaEnforced = false)
     {
         historyLifetime = context.HistoryCacheLifetime;
         boundaryLimit = capabilities.CacheBoundaries;
-        prefix = new ModelRequest(profile, tools, $"{instructions}\n\n{Labels.Policy}", [], Boundaries(memory: false)) { OutputSchema = outputSchema };
+        var format = outputSchema is { } schema && !schemaEnforced ? $"{Labels.OutputSchema(schema)}\n\n" : "";
+        prefix = new ModelRequest(profile, tools, $"{instructions}\n\n{format}{Labels.Policy}", [], Boundaries(memory: false)) { OutputSchema = outputSchema };
         turnScoped = capabilities.TurnScopedMessages;
     }
 

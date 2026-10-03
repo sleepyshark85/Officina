@@ -1,7 +1,7 @@
 {
   "agents": {
     "helpdesk": {
-      "instructions": "Say which desk the request is for.",
+      "instructions": "Say which desk the request is for: {\"desk\": \"billing\"} or {\"desk\": \"technical\"}.",
       "pattern": {
         "type": "router",
         "on": "output.desk",

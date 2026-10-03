@@ -10,7 +10,7 @@
       }
     },
     "judge": {
-      "instructions": "Judge whether the claim is true.",
+      "instructions": "Judge whether the claim is true: {\"verdict\": true} or {\"verdict\": false}.",
       "output": {
         "format": "structured",
         "schema": "{ \"type\": \"object\", \"properties\": { \"verdict\": { \"type\": \"boolean\" } }, \"required\": [\"verdict\"] }"
