@@ -136,15 +136,18 @@ internal static class InitCommand
         }
     }
 
-    /// <summary>The commands the rules allow for <paramref name="line"/>: its detector's, or each command of it as typed, with a warning for a broad one.</summary>
+    /// <summary>
+    /// The commands the rules allow for <paramref name="line"/>: its detector's, for the suggestion or the suggestion with more
+    /// arguments, such as <c>python3 -m unittest -v</c>; or each command of it as typed, with a warning for a broad one.
+    /// </summary>
     private static IEnumerable<string> Allowed(SofEnvironment host, string line, Suggestion? suggestion)
     {
-        if (suggestion is not null && line == suggestion.Line)
+        var commands = CommandDetection.Parts([line]).ToList();
+        if (suggestion is not null && (line == suggestion.Line || (line.StartsWith($"{suggestion.Line} ", StringComparison.Ordinal) && commands.Count == CommandDetection.Parts([suggestion.Line]).Count())))
         {
             return suggestion.Rules;
         }
 
-        var commands = CommandDetection.Parts([line]).ToList();
         foreach (var broad in commands.Select(CommandDetection.Broad).OfType<string>())
         {
             host.Error.WriteLine($"warning: {broad}");

@@ -37,9 +37,13 @@ internal static partial class CommandDetection
     private static readonly HashSet<string> Interpreters =
         ["python", "python3", "py", "node", "deno", "bun", "ruby", "perl", "php", "sh", "bash", "zsh", "dash", "pwsh", "powershell", "cmd"];
 
-    /// <summary>Commands that install or run any package named after them.</summary>
+    /// <summary>Commands that install or run any package named after them, by their first one, two or three words.</summary>
     private static readonly HashSet<string> Runners =
-        ["npx", "pnpx", "bunx", "uvx", "npm exec", "npm install", "npm i", "npm add", "pnpm dlx", "pnpm add", "yarn dlx", "yarn add", "pip install", "pip3 install", "uv run"];
+        ["npx", "pnpx", "bunx", "uvx", "dnx", "npm exec", "npm install", "npm i", "npm add", "pnpm dlx", "pnpm exec", "pnpm add", "yarn dlx", "yarn exec",
+         "yarn add", "bun x", "deno run", "dotnet dnx", "dotnet tool run", "pip install", "pip3 install", "uv run"];
+
+    /// <summary>Programs that run any program named after them.</summary>
+    private static readonly HashSet<string> Wrappers = ["env", "xargs"];
 
     /// <summary>Every toolchain found in <paramref name="directory"/>, the most certain first; <paramref name="notes"/> gets why one was skipped.</summary>
     public static IReadOnlyList<Detection> Detect(string directory, List<string> notes) =>
@@ -58,19 +62,24 @@ internal static partial class CommandDetection
     {
         var words = command.Split(' ', StringSplitOptions.RemoveEmptyEntries);
         var program = Program(command);
-        var subcommand = words.Length > 1 ? $"{program} {words[1]}" : program;
         if (Interpreters.Contains(program) && !(words.Length > 2 && words[1] == "-m") && !(words.Length > 1 && !words[1].StartsWith('-')))
         {
             return $"\"{command}\" with any arguments lets an agent run any code with {program}. Name a script or a module after it instead.";
         }
 
-        if (Runners.Contains(program) || Runners.Contains(subcommand))
+        if (Enumerable.Range(1, Math.Min(3, words.Length)).Any(count => Runners.Contains(string.Join(' ', words.Take(count).Skip(1).Prepend(program)))))
         {
             return $"\"{command}\" with any arguments lets an agent install or run any package. Use the lock file's install, such as npm ci, and a script of the project.";
         }
 
-        return program == "make" && words.Length == 1
-            ? "\"make\" with any arguments lets an agent run any target. Name the target, such as make build."
+        if (Wrappers.Contains(program))
+        {
+            return $"\"{command}\" with any arguments lets an agent run any program with {program}. Name the program instead.";
+        }
+
+        // Only options or variables, such as make -j4: no target is named, so any can follow.
+        return program == "make" && words.Skip(1).All(word => word.StartsWith('-') || word.Contains('=', StringComparison.Ordinal))
+            ? $"\"{command}\" with any arguments lets an agent run any target. Name the target, such as make build."
             : null;
     }
 

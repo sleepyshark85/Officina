@@ -70,6 +70,7 @@ public sealed class InitCommandTests : IDisposable
     }
 
     // CFG-17: the owner confirms one suggestion with an empty line and edits the other; declining, .gitignore stays as it was.
+    // A command typed in place of a suggestion is allowed as typed.
     [Fact]
     public async Task The_owner_confirms_or_edits_each_command_at_the_console()
     {
@@ -86,10 +87,29 @@ public sealed class InitCommandTests : IDisposable
         Assert.Contains("Build command [dotnet build]: \nTest command [dotnet test]: \n", output, StringComparison.Ordinal);
         Assert.Equal(("dotnet build", "dotnet test --no-build"), Commands());
         Assert.Equal(
-            ["dotnet build", "dotnet build *", "dotnet test --no-build", "dotnet test --no-build *", .. Denied],
-            Load().Capabilities.Sandbox.CommandRules.Select(rule => rule.Match));
+            ["dotnet build", "dotnet build *", "dotnet test", "dotnet test *", .. Denied],
+            Load().Capabilities.Sandbox.CommandRules.Select(rule => rule.Match)); // --no-build is arguments added to the suggestion
         Assert.False(File.Exists(Path.Combine(sof.Directory, ".gitignore")));
         Assert.Contains("note: add .sof/ to .gitignore yourself", output, StringComparison.Ordinal);
+    }
+
+    // CFG-17: arguments added to a suggestion keep its detector's rules, so python3 -m unittest test_calc stays allowed after
+    // python3 -m unittest -v; a command added after it, or one typed in its place, is allowed as typed.
+    [Fact]
+    public async Task Arguments_added_to_a_suggestion_keep_its_rules()
+    {
+        sof.Write("test_calc.py", "");
+        sof.In.Type($"{Python} -m compileall -q . && ./lint.sh");
+        sof.In.Type($"{Python} -m unittest -v");
+        sof.In.Type("n");
+
+        var (exitCode, _, error) = await sof.EndedAsync(sof.RunAsync("init"));
+
+        Assert.Equal(ExitCodes.Success, exitCode);
+        Assert.Equal("", error);
+        Assert.Equal(
+            [$"{Python} -m compileall -q .", $"{Python} -m compileall -q . *", "./lint.sh", "./lint.sh *", $"{Python} -m unittest", $"{Python} -m unittest *", .. Denied],
+            Load().Capabilities.Sandbox.CommandRules.Select(rule => rule.Match));
     }
 
     // CFG-17: with several projects and no solution, sof init says so and asks, rather than taking one of them.
@@ -164,6 +184,28 @@ public sealed class InitCommandTests : IDisposable
         Assert.DoesNotContain("-m unittest", error, StringComparison.Ordinal); // a module is named
         Assert.DoesNotContain("sh test.sh", error, StringComparison.Ordinal); // a script is named
         Assert.Equal(5, error.Split('\n').Count(line => line.StartsWith("warning: ", StringComparison.Ordinal)));
+    }
+
+    // CFG-17: the rest of the warning table: make with options but no target, the package runners of pnpm, yarn, bun, deno and
+    // dotnet, and programs that run any program named after them.
+    [Theory]
+    [InlineData("make -j4", "run any target")]
+    [InlineData("make -j4 CC=clang", "run any target")]
+    [InlineData("pnpm exec", "install or run any package")]
+    [InlineData("yarn exec", "install or run any package")]
+    [InlineData("bun x", "install or run any package")]
+    [InlineData("deno run", "install or run any package")]
+    [InlineData("dotnet tool run", "install or run any package")]
+    [InlineData("dotnet dnx", "install or run any package")]
+    [InlineData("env", "run any program with env")]
+    [InlineData("xargs -n1", "run any program with xargs")]
+    public async Task Package_runners_wrappers_and_make_with_no_target_are_warned_about(string command, string why)
+    {
+        var (exitCode, _, error) = await sof.EndedAsync(sof.RunAsync("init", "--build", command, "--test", "make test -j4"));
+
+        Assert.Equal(ExitCodes.Success, exitCode);
+        Assert.Contains($"warning: \"{command}\" with any arguments lets an agent {why}", error, StringComparison.Ordinal);
+        Assert.Single(error.Split('\n'), line => line.StartsWith("warning: ", StringComparison.Ordinal)); // make test -j4 names a target
     }
 
     // CFG-17: with nothing detected, the owner is asked; an empty line asks again. Agreeing adds .sof/ to .gitignore.

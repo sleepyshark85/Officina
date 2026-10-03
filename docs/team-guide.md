@@ -291,7 +291,9 @@ the fix, goes back. That's why the lead's instructions ask it to order tasks wit
 **The fast path:** `sof init` in the `calc` folder writes the preset variant for you. It finds `test_calc.py` and
 suggests `python3 -m compileall -q .` and `python3 -m unittest`; type `python3 -m unittest -v` to edit the second. It
 writes the two commands, `run.budget` at $3, and command rules that allow `python3 -m compileall` and
-`python3 -m unittest`, each as itself and followed by arguments (`python3 -m unittest *`), then the two git denies. Add
+`python3 -m unittest`, each as itself and followed by arguments (`python3 -m unittest *`, which allows
+`python3 -m unittest -v` and `python3 -m unittest test_calc`), then the two git denies. Arguments added to a suggestion
+keep its rules; a command typed in its place is allowed as typed. Add
 the team size and the task board's limits by hand.
 See the [user guide](user-guide.md), section 6.
 
