@@ -26,6 +26,13 @@ internal sealed class ChatSession
     /// <summary>The commands that act on the run of the reply that runs (<see cref="RunCommand.CarryOutAsync"/>).</summary>
     private static readonly HashSet<string> RunCommands = ["approve", "deny", "change", "answer", "tell", "pause", "resume", "cancel", "checkpoint", "board", "task", "memory"];
 
+    /// <summary>
+    /// The first words of the console's commands: a plain line typed during a reply that starts with one is likely a command typed
+    /// without its <c>/</c>, so it is not queued as a message until it is typed again.
+    /// </summary>
+    private static readonly HashSet<string> CommandWords =
+        ["approve", "deny", "answer", "change", "status", "tell", "mode", "pause", "resume", "cancel", "board", "task", "memory", "report", "help", "quit", "drop"];
+
     /// <summary>The <c>sof</c> commands that take the console or the workspace, so they work only between replies.</summary>
     private static readonly HashSet<string> Between = ["run", "rollback"];
 
@@ -34,11 +41,13 @@ internal sealed class ChatSession
 
     private static readonly string Help = $"""
         {RunCommand.Help("/")}
-                  | /new | /report [run] | /resume <run> | /rollback <run> [--to <n>] | /run --input <text>
+                  | /new | /drop | /report [run] | /resume <run> | /rollback <run> [--to <n>] | /run --input <text>
                   | /config validate | /config show [--origin] | /config dry-run ... | /help [command] | /quit (or Ctrl+D)
-        A line that does not start with / is a message. While a reply runs, a message waits until it ends, and /tell reaches an
-        agent at once. /approve to /memory act on the reply that runs; between replies, /board and /task act on the last
-        message's run. /resume <run>, /rollback and /run work only between replies; type them again when the reply ends.
+        A line that does not start with / is a message. While a reply runs, a message waits until it ends (/status lists the
+        waiting messages, /drop drops them), and /tell reaches an agent at once; a message that starts with a command's name,
+        such as "approve", waits only once you type it a second time. /approve to /memory act on the reply that runs; between
+        replies, /board and /task act on the last message's run. /resume <run>, /rollback and /run work only between replies;
+        type them again when the reply ends.
         """;
 
     private readonly ParseResult parse;
@@ -408,21 +417,35 @@ internal sealed class ChatSession
         await session.Storage.Conversations.AppendAsync(null, new ConversationTurn(keeps, null, host.Time.GetUtcNow(), [], true, memory, memory, session.RunId), ct);
     }
 
-    /// <summary>Takes the owner's lines while a reply runs: a command is carried out at once, and a message waits for the reply to end.</summary>
+    /// <summary>
+    /// Takes the owner's lines while a reply runs: a command is carried out at once, and a message waits for the reply to end. A
+    /// message that starts with a command's name is likely that command without its <c>/</c>, which would start a run of its own once
+    /// the reply ends, so it waits only when it is typed again as the next line.
+    /// </summary>
     private async Task DuringAsync(RunCommand.Session session, CancellationToken stop)
     {
+        string? warned = null;
         try
         {
             while (await ReadAsync(lines.Reader, stop) is { } line)
             {
+                var again = line.Trim() == warned;
+                warned = null;
                 if (line.StartsWith('/'))
                 {
                     await CommandAsync(line[1..].Trim(), session);
                 }
                 else if (line.Trim() is { Length: > 0 } message)
                 {
+                    if (!again && CommandWords.Contains(message.Split(' ', 2)[0].ToLowerInvariant()))
+                    {
+                        warned = message;
+                        status.WriteLine($"That looks like a command: type /{message}. To send it as a message instead, type it again.");
+                        continue;
+                    }
+
                     queued.Enqueue(message);
-                    status.WriteLine("(it is sent when this reply ends; /tell <agent> <text> reaches an agent now)");
+                    status.WriteLine("(it is sent when this reply ends; /drop drops it, and /tell <agent> <text> reaches an agent now)");
                 }
             }
 
@@ -464,6 +487,15 @@ internal sealed class ChatSession
                     break;
                 case "status":
                     status.Print(owner);
+                    if (queued.Count > 0)
+                    {
+                        status.WriteLine($"sent when the reply ends (/drop drops them):{string.Concat(queued.Select((message, index) => $"\n  {index + 1}. {message}"))}");
+                    }
+
+                    break;
+                case "drop":
+                    status.WriteLine(queued.Count == 0 ? "No message waits to be sent." : $"Dropped the {queued.Count} message(s) that waited for the reply to end.");
+                    queued.Clear();
                     break;
                 case "mode" when ModeOf(words) is { } chosen:
                     mode = chosen;

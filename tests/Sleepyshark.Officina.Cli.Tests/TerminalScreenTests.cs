@@ -48,6 +48,17 @@ public sealed class TerminalScreenTests : IDisposable
         Assert.Equal($"> {ClearLine}[dev] Hello.\n", terminal.ToString());
     }
 
+    // The editor pads the line it draws with spaces to the terminal's width; it clears the line first and places the cursor by
+    // its column, so the padding is left out, and a copy of the screen has no runs of spaces after what was typed.
+    [Fact]
+    public void The_editor_s_padding_to_the_terminal_s_width_is_left_out()
+    {
+        screen.Draw("\u001b[2K\u001b[1G> approve 1                    \u001b[12G");
+        screen.Draw("\u001b[2K\u001b[1G> approve 1                    \u001b[3G");
+
+        Assert.Equal("\u001b[2K\u001b[1G> approve 1\u001b[12G\u001b[2K\u001b[1G> approve 1\u001b[3G", terminal.ToString());
+    }
+
     // Standard error shares the screen: an error clears the prompt line too, and goes to its own stream.
     [Fact]
     public void An_error_clears_the_prompt_line_and_goes_to_standard_error()

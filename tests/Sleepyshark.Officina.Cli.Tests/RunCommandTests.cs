@@ -46,6 +46,8 @@ public sealed class RunCommandTests : IDisposable
         await sof.Out.WaitForAsync("[dev] waits for you: Approval note", Ct);
         sof.In.Type("status");
         await sof.Out.WaitForAsync("cost so far: $1.50", Ct);
+        sof.In.Type("approve 7");
+        await sof.Out.WaitForAsync("error: nothing waits for you with that number; #1 does.", Ct);
         sof.In.Type("approve 1");
         await sof.Out.WaitForAsync("#2 dev asks: Which database?", Ct);
         sof.In.Type("tell dev Keep it short.");
@@ -274,8 +276,8 @@ public sealed class RunCommandTests : IDisposable
             .CallTools(("submit", """{ "id": "a" }""")).Reply("Submitted.").CallTools(("submit", """{ "id": "b" }""")).Reply("Submitted.");
 
         var run = sof.RunAsync("run", "--agent", "team", "--input", "Write a parser.");
-        await sof.Out.WaitForAsync("Answer with approve or deny.", Ct);
-        sof.In.Type("approve 1");
+        await sof.Out.WaitForAsync("Answer with approve 1 or deny 1.", Ct);
+        sof.In.Type("approve"); // the only request that waits
         var (exitCode, output, _) = await run;
 
         Assert.Equal(ExitCodes.Success, exitCode);
@@ -286,10 +288,11 @@ public sealed class RunCommandTests : IDisposable
                 Acceptance criteria:
                 - It parses.
               b Print: Ready
-            Answer with approve or deny.
+            Answer with approve 1 or deny 1.
             """.ReplaceLineEndings("\n"),
             output,
             StringComparison.Ordinal);
+        Assert.Contains("\napproved #1.\n", output, StringComparison.Ordinal);
     }
 
     private static string Work(ModelRequest request) =>

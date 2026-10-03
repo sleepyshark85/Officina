@@ -96,7 +96,7 @@ internal sealed class StatusView(TextWriter output, Func<IntegrationQueueStatus?
 
             foreach (var (number, request) in owner.Waiting)
             {
-                Line($"waiting for you: #{number} {owner.Describe(request)}");
+                Line($"waiting for you: #{number} {owner.Describe(number, request)}");
             }
 
             if (queue?.Invoke() is { } integration)

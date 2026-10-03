@@ -43,7 +43,7 @@ public sealed class TaskCommandTests : IDisposable
         model.When(request => Work(request).StartsWith("Every task is done", StringComparison.Ordinal)).Reply("All done.");
 
         var run = sof.RunAsync("run", "--agent", "team", "--input", "Write a calculator.");
-        await sof.Out.WaitForAsync("Answer with approve or deny.", Ct);
+        await sof.Out.WaitForAsync("Answer with approve 1 or deny 1.", Ct);
         sof.In.Type("task priority c 5");
         await sof.Out.WaitForAsync("Changed: c priority 0 → 5.", Ct);
         sof.In.Type("task cancel b Not needed.");

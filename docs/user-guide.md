@@ -106,7 +106,11 @@ off, or if the agent's `triggers` leave out `conversation`; `config validate` no
 or a piped script can each spend a full budget without asking you.
 
 **Typing during a reply.** Commands work at once. A message waits, and is sent when the reply ends; to reach an agent
-now, use `/tell`. The reply never loses text: when you type, the line it is writing ends and your prompt is drawn below.
+now, use `/tell`. `/status` lists the messages that wait, and `/drop` drops them without cancelling the reply. A line
+whose first word is a command's name, such as `approve` or `status`, is probably that command without its `/`, and as a
+message it would start a run of its own: it isn't queued, and the session says `That looks like a command: type
+/approve.` To send it as a message anyway, type it again as your next line. The reply never loses text: when you type,
+the line it is writing ends and your prompt is drawn below.
 
 **Keys.** At a terminal, lines are edited with a line editor:
 
@@ -134,26 +138,29 @@ unknown `--agent`, or when no agent was picked; 3 if the session itself fails.
 ## 5. Commands
 
 In a session, type each after a `/`. In `sof run` (section 8), type the first table's commands, `status`, `mode`,
-`board` and `task` without the `/`. Numbers come from `/status`, and keep growing through a session.
+`board` and `task` without the `/`. Numbers come from `/status`, and keep growing through a session. When one request
+waits for you, `/approve`, `/deny`, `/change` and `/answer` act on it without its number, and say which they answered;
+when several wait, they list them and ask for the number.
 
 **While a reply runs** (between replies they say no reply is running):
 
 | Command | What it does |
 |---|---|
-| `/approve <n>` / `/deny <n>` | Answer an approval or a sign-off |
-| `/change <n> <json>` | Approve a tool call with changed arguments |
-| `/answer <n> <text>` | Answer a question an agent asked you |
+| `/approve [n]` / `/deny [n]` | Answer an approval or a sign-off |
+| `/change [n] <json>` | Approve a tool call with changed arguments |
+| `/answer [n] <text>` | Answer a question an agent asked you |
 | `/tell <agent> <text>` | Send an agent a message, such as `/tell lead focus on the parser` |
 | `/pause [agent]` / `/resume [agent]` | Pause or resume the whole run, or one agent such as `developer[2]` |
 | `/cancel [agent]` | Stop one agent, or the whole run cleanly |
 | `/checkpoint` | Take a checkpoint now |
 | `/memory`, `/memory approve <n> [reason]`, `/memory reject <n> <reason>` | Review project memory proposals |
+| `/drop` | Drop the messages that wait for the reply to end; the reply goes on |
 
 **At any time:**
 
 | Command | What it does |
 |---|---|
-| `/status` | Each agent's status, what waits for you (numbered), and the session's cost |
+| `/status` | Each agent's status, what waits for you (numbered), the messages that wait for the reply to end, and the session's cost |
 | `/mode <ask\|auto\|readOnly>` | Change the permission mode, for this reply and the rest of the session |
 | `/new` | The next message starts a new conversation |
 | `/report [run]` | The report of the reply that runs or the last message's run, or of any run |

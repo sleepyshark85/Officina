@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.RegularExpressions;
 using RadLine;
 using Spectre.Console;
 
@@ -8,10 +9,12 @@ namespace Sleepyshark.Officina.Cli;
 /// The interactive terminal a chat session runs at: what the session prints and what the line editor draws share it under one
 /// lock, so neither cuts into the other. The editor's prompt sits on the last line while a read waits. Printed text clears that
 /// line before it starts a line, and when the editor draws while printed text has left a line unfinished, the line is ended
-/// first, so the editor redraws its prompt below the text rather than over it. Nothing printed is lost.
+/// first, so the editor redraws its prompt below the text rather than over it. Nothing printed is lost. The editor pads each
+/// line it draws with spaces to the terminal's width, which a copy of the screen would keep; as it clears the line before it
+/// draws and then places the cursor by its column, the padding is left out.
 /// </summary>
 /// <param name="console">Where both write: the terminal's standard output.</param>
-internal sealed class TerminalScreen(TextWriter console)
+internal sealed partial class TerminalScreen(TextWriter console)
 {
     private readonly Lock gate = new();
 
@@ -64,10 +67,14 @@ internal sealed class TerminalScreen(TextWriter console)
                 midLine = false;
             }
 
-            console.Write(text);
+            console.Write(Padding().Replace(text, ""));
             console.Flush();
         }
     }
+
+    /// <summary>The spaces at the end of a line the editor draws, before it moves the cursor to a column.</summary>
+    [GeneratedRegex(@" +(?=\u001b\[\d+G)")]
+    private static partial Regex Padding();
 
     private IAnsiConsole EditorConsole() => AnsiConsole.Create(new AnsiConsoleSettings
     {

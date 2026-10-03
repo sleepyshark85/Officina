@@ -24,10 +24,11 @@ internal static class RunCommand
 {
     /// <summary>The console's commands, each written after <paramref name="prefix"/>; <c>sof chat</c>'s start with a slash.</summary>
     internal static string Help(string prefix = "") => $"""
-        Commands: {prefix}status | {prefix}approve <n> | {prefix}deny <n> | {prefix}change <n> <json> | {prefix}answer <n> <text> | {prefix}tell <agent> <text>
+        Commands: {prefix}status | {prefix}approve [n] | {prefix}deny [n] | {prefix}change [n] <json> | {prefix}answer [n] <text> | {prefix}tell <agent> <text>
                   | {prefix}mode <ask|auto|readOnly> | {prefix}pause [agent] | {prefix}resume [agent] | {prefix}cancel [agent] | {prefix}checkpoint | {prefix}board
                   | {prefix}task add|edit|priority|assign|cancel|show ... ({prefix}task --help) | {prefix}memory | {prefix}memory approve <n> [reason]
                   | {prefix}memory reject <n> <reason>
+        Without a number, approve, deny, change and answer act on the only request that waits for you.
         """;
 
     public static Command Create(ConfigurationCommandOptions shared, SofEnvironment host)
@@ -374,7 +375,7 @@ internal static class RunCommand
         return text + "\n";
     }
 
-    /// <summary>Carries out one command; returns what was wrong with it, if anything.</summary>
+    /// <summary>Carries out one command; returns what to tell the owner, such as what was wrong with it, if anything.</summary>
     private static string? Apply(string line, Session session, StatusView status, string help)
     {
         var (runner, agent, runId, queue) = (session.Runner, session.Agent, session.RunId, session.Queue);
@@ -390,14 +391,8 @@ internal static class RunCommand
                 case "status":
                     status.Print(queue);
                     return null;
-                case "approve":
-                    return Answer(words, queue, words[0], HumanAnswer.Approve);
-                case "deny":
-                    return Answer(words, queue, words[0], HumanAnswer.Deny);
-                case "change" when words.Length == 3:
-                    return Answer(words, queue, words[0], HumanAnswer.ApproveChanged(JsonDocument.Parse(words[2]).RootElement.Clone()));
-                case "answer" when words.Length == 3:
-                    return Answer(words, queue, words[0], HumanAnswer.Reply(words[2]));
+                case "approve" or "deny" or "change" or "answer" when Answer(words[0], line[words[0].Length..].Trim()) is { } answer:
+                    return queue.Answer(answer.Number, words[0], answer.Answer);
                 case "tell" when words.Length == 3 && team:
                     runner.Send(runId, words[1], Sender.Owner, words[2]); // HITL-03: an agent of the run's team, by its id
                     return null;
@@ -441,8 +436,29 @@ internal static class RunCommand
         }
     }
 
-    private static string? Answer(string[] words, OwnerQueue queue, string command, HumanAnswer answer) =>
-        words.Length > 1 && int.TryParse(words[1].TrimStart('#'), out var number)
-            ? queue.Answer(number, command, answer)
-            : "error: nothing waits for you with that number.";
+    /// <summary>
+    /// <c>approve [n]</c>, <c>deny [n]</c>, <c>change [n] &lt;json&gt;</c> and <c>answer [n] &lt;text&gt;</c>: the number of the request, if
+    /// typed, and the answer; null when the command is not typed as one of these. In change and answer a number is the request's
+    /// only when something follows it, so <c>answer 42</c> answers the only question with 42.
+    /// </summary>
+    private static (int? Number, HumanAnswer Answer)? Answer(string command, string rest)
+    {
+        int? number = null;
+        if (rest.Split(' ', 2, StringSplitOptions.RemoveEmptyEntries) is [var first, .. var after]
+            && int.TryParse(first.TrimStart('#'), NumberStyles.None, CultureInfo.InvariantCulture, out var typed) && (after.Length > 0 || command is "approve" or "deny"))
+        {
+            number = typed;
+            rest = after.Length > 0 ? after[0].Trim() : "";
+        }
+
+        HumanAnswer? answer = (command, rest) switch
+        {
+            ("approve", "") => HumanAnswer.Approve,
+            ("deny", "") => HumanAnswer.Deny,
+            ("change", { Length: > 0 }) => HumanAnswer.ApproveChanged(JsonDocument.Parse(rest).RootElement.Clone()),
+            ("answer", { Length: > 0 }) => HumanAnswer.Reply(rest),
+            _ => null,
+        };
+        return answer is null ? null : (number, answer);
+    }
 }
