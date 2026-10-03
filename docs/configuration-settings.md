@@ -208,7 +208,7 @@ It lists the settings the code has today. Settings that later slices add are spe
 
 | Setting | Allowed values | Default | Description | Example |
 |---|---|---|---|---|
-| `structuredOutput` | boolean | `false` | Whether the model's output is constrained to the agent's `output.schema` natively (Claude's `output_config.format`). The core checks the output against the schema either way. The provider may not accept every JSON Schema keyword. | `true` |
+| `structuredOutput` | boolean | `false` | Whether the model's output is constrained to the agent's `output.schema` natively (Claude's `output_config.format`); then the schema is not repeated in the instructions. The core checks the output against the schema either way. Claude adds `additionalProperties: false` to each object schema without it, and refuses the call for a keyword it does not take, such as `minLength` or `additionalProperties: true`. | `true` |
 | `clearToolResults` | boolean | `false` | Whether the provider clears the results of old tool calls from what the model reads once the conversation grows long (Claude's `clear_tool_uses` context editing). The stored history keeps them. | `true` |
 | `taskBudget` | whole number, ≥ 20000 |  | The tokens a turn may generate and read from tool results, told to the model so it paces its work (Claude's task budget, at least 20,000). It is advice to the model: the limits in `budget` are what stop a turn. Unset means none. | `200000` |
 | `refusalFallback` | boolean | `false` | Whether a call the model's safety classifiers decline is served by the fallback model the provider recommends for the refusal's category (Claude's server-side `fallbacks`, on the Claude API). Each model is priced as it serves, so every model it may use needs a price; a `modelFallback` event names it. | `true` |
@@ -255,7 +255,7 @@ It lists the settings the code has today. Settings that later slices add are spe
 | Setting | Allowed values | Default | Description | Example |
 |---|---|---|---|---|
 | `format` | `"text"`, `"structured"` | `"text"` | `text`, or `structured`: JSON that must match `schema`. | `"structured"` |
-| `schema` | text |  | The JSON Schema that structured output must match, as JSON text. | `"{ \u0022type\u0022: \u0022object\u0022, \u0022required\u0022: [\u0022total\u0022] }"` |
+| `schema` | text |  | The JSON Schema that structured output must match, as JSON text. The output is checked against it after every reply. Unless the provider constrains output to it (`features.structuredOutput`), the model is told it after the instructions: describe the shape briefly in the instructions too. | `"{ \u0022type\u0022: \u0022object\u0022, \u0022required\u0022: [\u0022total\u0022] }"` |
 | `attempts` | whole number, ≥ 0 | `2` | How many times output goes back to the model with its problems before the turn is handed off: structured output that does not match the schema and, with `onCheckFailure: revise`, output that fails a check. | `3` |
 | `checks` | list | `[]` | Checks, by name in `checks`, that the output must pass, run in this order. The first that fails decides. | `["no-secrets","style"]` |
 | `onCheckFailure` | `"handoff"`, `"revise"` | `"handoff"` | What a failed check, or citation rule, does: `handoff` the turn, or `revise`: its findings, masked, go back to the model, which replies again, within `attempts`. | `"revise"` |

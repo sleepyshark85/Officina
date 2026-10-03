@@ -141,6 +141,38 @@ public class PatternTests
         Assert.Contains("executor[1] did not complete", Text(kit.Model.Requests[3]), StringComparison.Ordinal);
     }
 
+    // PAT-01, PAT-04: the planner is told it only plans; each item gets the work, the plan and the earlier items' outputs, labelled.
+    [Fact]
+    public async Task Plan_and_execute_gives_each_item_the_work_the_plan_and_the_earlier_outputs()
+    {
+        var kit = PlanKit(maxReplans: 0);
+        kit.Model.Reply("""{ "steps": ["parse", "print"] }""").Reply("parsed 1 and 2").Reply("3");
+
+        var result = await kit.RunAsync("lead", "Build a calculator.", Ct);
+
+        Assert.Equal((AgentOutcome.Completed, """["parsed 1 and 2","3"]"""), (result.Outcome, result.Output));
+        Assert.Equal(
+            "Write the plan for the work below, and do not do the work yourself: short steps, in order, that a worker carries out one at a time. "
+            + "Each step's worker sees the work, the plan and the earlier steps' results.\n\nBuild a calculator.",
+            ScriptedModelProvider.WorkOf(kit.Model.Requests[0]));
+        Assert.Equal(
+            """
+            <data source="input">
+            Build a calculator.
+            </data>
+            <data source="step:planner">
+            { "steps": ["parse", "print"] }
+            </data>
+            <data source="step:executor[0]">
+            parsed 1 and 2
+            </data>
+
+            Your step (2 of 2):
+            print
+            """.ReplaceLineEndings("\n"),
+            ScriptedModelProvider.WorkOf(kit.Model.Requests[2]));
+    }
+
     [Fact]
     public async Task Plan_and_execute_stops_planning_again_at_the_limit()
     {

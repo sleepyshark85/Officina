@@ -1,13 +1,13 @@
 {
   "agents": {
     "builder": {
-      "instructions": "Plan the work as a list of steps.",
+      "instructions": "Plan the work in at most 5 steps, each a short sentence saying what to do, such as {\"steps\": [\"Write the parser.\", \"Test it.\"]}.",
       "pattern": { "type": "planAndExecute", "executor": { "agent": "worker" } },
       "output": {
         "format": "structured",
         "schema": "{ \"type\": \"object\", \"properties\": { \"steps\": { \"type\": \"array\", \"items\": { \"type\": \"string\" } } }, \"required\": [\"steps\"] }"
       }
     },
-    "worker": { "instructions": "Carry out the step." }
+    "worker": { "instructions": "Carry out your step of the plan, building on the earlier steps' results. Reply with a short account of what you did." }
   }
 }

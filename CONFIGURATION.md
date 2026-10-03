@@ -90,6 +90,7 @@ the sandbox (see the [user guide](docs/user-guide.md), section 6):
 | `capabilities.humanInteraction.signOffs` | run budget exceeded and irreversible action; the coding team adds plan approval | You want more or fewer checkpoints with the owner |
 | `capabilities.checkpoints.at` | after each turn | You want one after each step of a pattern or each integration, as well |
 | `operations.storage` | `.sof/sof.db`, with artifacts as files in `.sof/artifacts` | The storage belongs elsewhere: another folder in `.sof/`, or an absolute path outside the project. The artifacts stay in `artifacts` beside the database |
+| `agents.<name>.output` | free text | Another step reads the output: `format: structured` with a `schema`. Say the shape briefly in the instructions too; the model is also told the schema, unless `providers.<name>.features.structuredOutput` has the provider enforce it |
 | `agents.<team>.pattern.maxParallel` | 4, the lead included | Your machine or budget allows more or fewer agents at once |
 
 ## Defaults are the safe choice

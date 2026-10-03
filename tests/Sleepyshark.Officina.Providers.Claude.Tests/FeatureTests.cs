@@ -18,8 +18,20 @@ public sealed class FeatureTests
 {
     private static readonly ModelProfile Profile = new() { Model = "claude-opus-5-5" };
 
-    private static readonly JsonElement Schema =
-        Json("""{ "type": "object", "properties": { "number": { "type": "string" } }, "required": ["number"], "additionalProperties": false }""");
+    // Claude takes an object schema only with additionalProperties false, so the request adds it to each object that leaves it unset:
+    // in items, in anyOf and in $defs too, and to no schema without an object type.
+    private static readonly JsonElement Schema = Json("""
+        {
+          "type": "object",
+          "properties": {
+            "number": { "type": "string" },
+            "lines": { "type": "array", "items": { "$ref": "#/$defs/line" } },
+            "payer": { "anyOf": [{ "type": "object", "properties": { "name": { "type": "string" } } }, { "type": "null" }] }
+          },
+          "required": ["number"],
+          "$defs": { "line": { "type": ["object"], "properties": { "amount": { "type": "number" } } } }
+        }
+        """);
 
     private static readonly ProviderOptions AllOn = ProviderOptions.Claude with
     {

@@ -1,7 +1,7 @@
 {
   "agents": {
     "extractor": {
-      "instructions": "Extract the invoice total. Reply with JSON only.",
+      "instructions": "Extract the invoice total, as a number: {\"total\": 42.5}.",
       "pattern": { "type": "singleCall" },
       "output": {
         "format": "structured",

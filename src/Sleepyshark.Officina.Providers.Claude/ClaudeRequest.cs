@@ -65,7 +65,7 @@ internal static class ClaudeRequest
             Messages = [.. request.History.Select((message, index) =>
                 Message(message, index == cached?.Message ? (cached.Value.Block, markers[CachePoint.History]) : null, systemMessages))],
         };
-        var format = features.StructuredOutput && request.OutputSchema is { } schema ? new BetaJsonOutputFormat { Schema = Properties(schema) } : null;
+        var format = features.StructuredOutput && request.OutputSchema is { } schema ? new BetaJsonOutputFormat { Schema = Properties(Closed(schema)) } : null;
         var taskBudget = features.TaskBudget is { } total ? new BetaTokenTaskBudget { Total = total } : null;
         if (profile.Effort is not null || format is not null || taskBudget is not null)
         {
@@ -141,6 +141,55 @@ internal static class ClaudeRequest
         }
 
         return MessageCreateParams.FromRawUnchecked(parameters.RawHeaderData, parameters.RawQueryData, body);
+    }
+
+    /// <summary>
+    /// Claude's structured output takes an object schema only with <c>additionalProperties: false</c>, so it is added to each schema
+    /// whose <c>type</c> is or includes <c>object</c> and that leaves it unset, as the Anthropic SDKs do. A reply this allows also matches the schema as written, which the core
+    /// checks. Any other keyword Claude does not take, such as <c>additionalProperties: true</c> or <c>minLength</c>, is sent as it is,
+    /// and Claude refuses the call as an invalid request.
+    /// </summary>
+    private static JsonElement Closed(JsonElement schema)
+    {
+        var node = JsonNode.Parse(schema.GetRawText());
+        Close(node);
+        return JsonSerializer.SerializeToElement(node);
+
+        static void Close(JsonNode? node)
+        {
+            if (node is not JsonObject schema)
+            {
+                return;
+            }
+
+            var type = schema["type"];
+            // Only a schema whose type says object: allOf branches that list properties without a type stay open, since closing
+            // each would allow no property of the others.
+            var isObject = type is JsonValue value && value.TryGetValue<string>(out var name) && name == "object"
+                || type is JsonArray types && types.Any(each => each?.GetValueKind() == JsonValueKind.String && each.GetValue<string>() == "object");
+            if (isObject && !schema.ContainsKey("additionalProperties"))
+            {
+                schema["additionalProperties"] = false;
+            }
+
+            foreach (var key in new[] { "properties", "$defs", "definitions" })
+            {
+                foreach (var (_, child) in schema[key] as JsonObject ?? [])
+                {
+                    Close(child);
+                }
+            }
+
+            foreach (var key in new[] { "anyOf", "allOf", "prefixItems" })
+            {
+                foreach (var child in schema[key] as JsonArray ?? [])
+                {
+                    Close(child);
+                }
+            }
+
+            Close(schema["items"]);
+        }
     }
 
     private static Dictionary<string, JsonElement> Properties(JsonElement schema) =>

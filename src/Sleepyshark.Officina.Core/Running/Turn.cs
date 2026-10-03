@@ -45,6 +45,7 @@ internal sealed class Turn
     private readonly TaskBoard? board;
     private readonly ProjectMemory? memory;
     private readonly JsonSchema? outputSchema;
+    private readonly JsonElement? outputSchemaJson;
     private readonly CitationRule citations;
     private readonly IReadOnlyList<(string Name, ICheck Check)> checks;
     private readonly IReadOnlyList<(string Name, IKnowledgeSource Source, bool Mask)> beforeTurn;
@@ -127,9 +128,11 @@ internal sealed class Turn
         runBudget = options.Run.Budget;
         cacheHitWarning = options.Operations.Telemetry.CacheHitWarning;
         var profile = options.Models[agent.Model];
+        outputSchemaJson = agent.Output.Format == OutputFormat.Structured ? JsonElement.Parse(agent.Output.Schema!) : null;
         conversation = new Conversation(
-            profile, [.. tools.Offered(context.Agent)], instructions, agent.Context, gateway.CapabilitiesOf(profile),
-            agent.Output.Format == OutputFormat.Structured ? System.Text.Json.JsonDocument.Parse(agent.Output.Schema!).RootElement.Clone() : null);
+            profile, [.. tools.Offered(context.Agent)], instructions, agent.Context, gateway.CapabilitiesOf(profile), outputSchemaJson,
+            schemaEnforced: profile.Fallbacks.Select(name => options.Models[name]).Prepend(profile).All(served =>
+                options.Providers[served.Provider].Features.StructuredOutput && gateway.CapabilitiesOf(served).Features.Contains("structuredOutput")));
         this.inbox = inbox;
         this.gateway = gateway;
         this.options = options;
@@ -607,12 +610,12 @@ internal sealed class Turn
 
             // A check sees the artifacts as tools produced them, so its findings are masked before the model sees them (ING-02).
             conversation.Add(Message.User(invalid
-                ? $"The output does not match its schema: {problem}. Reply again with output that does."
+                ? $"The output does not match its JSON Schema: {problem}.\n{Labels.OutputSchema(outputSchemaJson!.Value)}"
                 : $"The output fails its checks: {Mask(problem)}. Revise it, and reply again with the whole output."));
             return null;
         }
 
-        return HandOff(reason, problem);
+        return HandOff(reason, invalid ? $"the output does not match its JSON Schema after {(outputAttempts == 0 ? "1 reply" : $"{outputAttempts + 1} replies")}: {problem}" : problem);
     }
 
     /// <summary>

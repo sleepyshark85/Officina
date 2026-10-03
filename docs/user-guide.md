@@ -286,6 +286,8 @@ completing (handed off, rejected, failed or cancelled).
   testing; `--budget 2` overrides it. The budget is checked between model calls, so a run can go past it by about one
   call for each agent working at once. To watch spend, each call prints
   `[agent] model call: N tokens, $x; cost so far $y`.
+- **Structured output:** an agent with `output.format: structured` is told its `output.schema` and must reply with
+  JSON that matches it. Say the shape in its instructions too, such as `{"steps": ["…"]}`; see `samples/`.
 - **Permission mode:** `ask` (default; you approve writes no rule allows), `auto` or `readOnly`. Set it with
   `--permission-mode`, or change it with `/mode`.
 - **Options every command takes:** `--dir <folder with sof.json>`, `--environment <name>`, `--budget <usd>`,
