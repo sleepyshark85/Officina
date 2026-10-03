@@ -59,6 +59,46 @@ public sealed class TerminalScreenTests : IDisposable
         Assert.Equal("\u001b[2K\u001b[1G> approve 1\u001b[12G\u001b[2K\u001b[1G> approve 1\u001b[3G", terminal.ToString());
     }
 
+    // While the terminal is handed over to a pager, nothing is printed or drawn over it; what came meanwhile follows, in order,
+    // once it is taken back.
+    [Fact]
+    public void What_comes_while_the_terminal_is_handed_over_waits_and_then_follows_in_order()
+    {
+        var output = screen.Writer(terminal);
+        output.NewLine = "\n";
+
+        screen.Draw("> ");
+        var handle = screen.HandOver();
+        output.WriteLine("[dev] model call: 10 tokens");
+        screen.Draw("\u001b[2K\u001b[1G> ");
+        output.WriteLine("#1 dev asks to run note");
+        Assert.Equal($"> {ClearLine}", terminal.ToString()); // the prompt is cleared for the program
+
+        handle.Dispose();
+        handle.Dispose(); // taken back once
+
+        Assert.Equal($"> {ClearLine}{ClearLine}[dev] model call: 10 tokens\n\u001b[2K\u001b[1G> {ClearLine}#1 dev asks to run note\n", terminal.ToString());
+    }
+
+    // A program the terminal is handed to, such as a pager that writes in place, starts on a line of its own, and what it
+    // wrote stays: printing afterwards starts where it left the cursor, at the start of a line.
+    [Fact]
+    public void The_program_starts_on_a_line_of_its_own_and_what_it_wrote_stays()
+    {
+        var output = screen.Writer(terminal);
+        output.NewLine = "\n";
+
+        output.Write("[dev] partial");
+        using (screen.HandOver())
+        {
+            terminal.Write("Done.\n"); // the pager, writing to the terminal itself
+        }
+
+        output.WriteLine("next");
+
+        Assert.Equal($"{ClearLine}[dev] partial\nDone.\n{ClearLine}next\n", terminal.ToString());
+    }
+
     // Standard error shares the screen: an error clears the prompt line too, and goes to its own stream.
     [Fact]
     public void An_error_clears_the_prompt_line_and_goes_to_standard_error()

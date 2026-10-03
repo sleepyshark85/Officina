@@ -362,7 +362,8 @@ What to expect:
    Answer with /approve 1 or /deny 1.
    ```
 
-   `/status` shows the waiting request and its number again. Check that `average` depends on `fix-divide`; if it
+   The sign-off is never folded, however long the plan: you see every task before you approve it. `/status` shows the
+   waiting request and its number again. Check that `average` depends on `fix-divide`; if it
    doesn't, fix it yourself with `/task edit average --depends fix-divide`. Type `/approve 1` (or just `/approve`, as no
    other request was shown since). To change the plan, `/tell lead <what to change>`, then `/deny 1`; the lead plans
    again. With no answer within `run.approvalTimeout` (30 minutes), the team stops.
@@ -384,7 +385,10 @@ What to expect:
 5. **Integration.** The change is squashed into one commit, `build` and `tests` run on it applied to your branch, and
    the commit is added to `sof-try`. The working copy is removed.
 6. **Report.** When every task is done, the lead reports, and the reply ends with
-   `team: Completed, cost $…; this session $…`.
+   `team: Completed, cost $…; this session $…`. A report of more than 20 lines shows its first 12, then
+   `… N more lines (… KB). /show to read all · /save to keep it`. `/show` opens all the reply's text in a pager, each
+   agent's after its name (`q` closes it), even while the team works; `/save` saves the report, and `/history` lists the
+   session's replies. A developer's long text folds the same way (user guide, section 4, Long replies).
 
 To watch spend, each model call prints `[agent] model call: N tokens, $x; cost so far $y`. While it works: `/status`
 shows each agent and what waits for you, `/board` the tasks, and `/tell lead …` reaches the lead. `/task` changes the

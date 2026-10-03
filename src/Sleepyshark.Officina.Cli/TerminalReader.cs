@@ -11,25 +11,77 @@ namespace Sleepyshark.Officina.Cli;
 /// line before it starts a line, and when the editor draws while printed text has left a line unfinished, the line is ended
 /// first, so the editor redraws its prompt below the text rather than over it. Nothing printed is lost. The editor pads each
 /// line it draws with spaces to the terminal's width, which a copy of the screen would keep; as it clears the line before it
-/// draws and then places the cursor by its column, the padding is left out.
+/// draws and then places the cursor by its column, the padding is left out. The terminal can be handed over to another program
+/// that runs in the foreground, such as <c>/show</c>'s pager (<see cref="HandOver"/>).
 /// </summary>
 /// <param name="console">Where both write: the terminal's standard output.</param>
 internal sealed partial class TerminalScreen(TextWriter console)
 {
     private readonly Lock gate = new();
+    private readonly Keys keys = new();
 
     /// <summary>Whether printed text has left the current line unfinished.</summary>
     private bool midLine;
 
+    /// <summary>What is printed (with its stream) and drawn (with none) while the terminal is handed over, in order; null while it is not.</summary>
+    private List<(TextWriter? Stream, string Text)>? held;
+
     /// <summary>The terminal of this process, when its input and output are an interactive terminal the line editor supports.</summary>
     public static TerminalScreen? ForConsole() =>
-        !Console.IsInputRedirected && LineEditor.IsSupported(AnsiConsole.Console) ? new TerminalScreen(Console.Out) : null;
+        !Console.IsInputRedirected && !Console.IsOutputRedirected && LineEditor.IsSupported(AnsiConsole.Console) ? new TerminalScreen(Console.Out) : null;
 
     /// <summary>A writer for what the session prints to <paramref name="stream"/>, standard output or error, on this terminal.</summary>
     public TextWriter Writer(TextWriter stream) => new PrintWriter(this, stream);
 
     /// <summary>The console read through the line editor, with Tab completion and history.</summary>
-    public TerminalReader Reader() => new(EditorConsole(), new Keys());
+    public TerminalReader Reader() => new(EditorConsole(), keys);
+
+    /// <summary>
+    /// Hands the terminal over to a program that runs in the foreground, such as a pager, until the handle returned is disposed:
+    /// meanwhile the line editor reads no keys, and what is printed or drawn waits, then comes in order.
+    /// </summary>
+    public IDisposable HandOver()
+    {
+        lock (gate)
+        {
+            // The program starts on a line of its own: the editor's prompt is cleared, and unfinished printed text ended.
+            console.Write(midLine ? console.NewLine : "\r\u001b[2K");
+            console.Flush();
+            midLine = false;
+            held = [];
+            keys.Held = true;
+        }
+
+        return new Handle(this);
+    }
+
+    /// <summary>
+    /// Takes the terminal back: what waited is printed and drawn, and the editor reads keys again. The program has left the
+    /// cursor at the start of a line, as a pager does with text that ends its last line, or where it was, on the line cleared
+    /// for it, as a pager does on a screen of its own; so printing starts there, and nothing the program wrote is cleared.
+    /// </summary>
+    private void TakeBack()
+    {
+        lock (gate)
+        {
+            var waiting = held ?? [];
+            held = null;
+            midLine = false;
+            foreach (var (stream, text) in waiting)
+            {
+                if (stream is null)
+                {
+                    Draw(text);
+                }
+                else
+                {
+                    Print(stream, text);
+                }
+            }
+
+            keys.Held = false;
+        }
+    }
 
     /// <summary>Prints text: a line it starts first clears what is there, which is the editor's prompt or nothing.</summary>
     internal void Print(TextWriter stream, string text)
@@ -41,6 +93,12 @@ internal sealed partial class TerminalScreen(TextWriter console)
 
         lock (gate)
         {
+            if (held is not null)
+            {
+                held.Add((stream, text));
+                return;
+            }
+
             if (!midLine)
             {
                 console.Write("\r\u001b[2K");
@@ -61,6 +119,12 @@ internal sealed partial class TerminalScreen(TextWriter console)
     {
         lock (gate)
         {
+            if (held is not null)
+            {
+                held.Add((null, text));
+                return;
+            }
+
             if (midLine)
             {
                 console.WriteLine();
@@ -126,12 +190,35 @@ internal sealed partial class TerminalScreen(TextWriter console)
         public override void Write(char[] buffer, int index, int count) => Write(new string(buffer, index, count));
     }
 
-    /// <summary>The keyboard, as the editor reads it: it waits for a key without blocking.</summary>
+    private sealed class Handle(TerminalScreen screen) : IDisposable
+    {
+        private int disposed;
+
+        public void Dispose()
+        {
+            if (Interlocked.Exchange(ref disposed, 1) == 0)
+            {
+                screen.TakeBack();
+            }
+        }
+    }
+
+    /// <summary>
+    /// The keyboard, as the editor reads it: it waits for a key without blocking. While the terminal is handed over no key is
+    /// available to the editor, so it reads none, and the program the terminal is handed to reads them all.
+    /// </summary>
     private sealed class Keys : IInputSource
     {
+        private volatile bool held;
+
+        public bool Held
+        {
+            set => held = value;
+        }
+
         public bool ByPassProcessing => false;
 
-        public bool IsKeyAvailable() => Console.KeyAvailable;
+        public bool IsKeyAvailable() => !held && Console.KeyAvailable;
 
         public ConsoleKeyInfo ReadKey() => Console.ReadKey(intercept: true);
     }

@@ -8,7 +8,7 @@ namespace Sleepyshark.Officina.Cli.Tests;
 
 /// <summary>
 /// Runs the real <c>sof</c> command line in-process, in a real temporary directory. The owner at the console, the signals
-/// they send, the model providers and the clock are stand-ins.
+/// they send, the model providers, the clock and the programs run in the foreground, such as a pager, are stand-ins.
 /// </summary>
 internal sealed class Sof : IDisposable
 {
@@ -33,6 +33,15 @@ internal sealed class Sof : IDisposable
 
     /// <summary>Whether the owner types at a terminal, so a chat session may ask them something; piped input by default.</summary>
     public bool Interactive { get; set; }
+
+    /// <summary>What each program run in the foreground, such as <c>/show</c>'s pager, was run as, and given.</summary>
+    public List<(string Program, string Arguments, string Text)> Foregrounded { get; } = [];
+
+    /// <summary>
+    /// Stands in for running a program in the foreground at the terminal, such as a pager: by default it is recorded in
+    /// <see cref="Foregrounded"/> and ends at once, with exit code 0.
+    /// </summary>
+    public Func<string, string, string, CancellationToken, Task<int?>>? Foreground { get; set; }
 
     /// <summary>What the owner types; nothing by default.</summary>
     public Owner In { get; private set; } = new();
@@ -63,6 +72,15 @@ internal sealed class Sof : IDisposable
         var host = new SofEnvironment(Out, error, Directory, Variables)
         {
             In = In, Providers = Providers, Sandbox = Sandbox, Time = Time, Interactive = Interactive,
+            Foreground = (program, arguments, text, ct) =>
+            {
+                lock (Foregrounded)
+                {
+                    Foregrounded.Add((program, arguments, text));
+                }
+
+                return Foreground?.Invoke(program, arguments, text, ct) ?? Task.FromResult<int?>(0);
+            },
             Signals = handler =>
             {
                 signalled = handler;
@@ -150,14 +168,17 @@ internal sealed class Sof : IDisposable
 
         public override void WriteLine(string? value) => Write(value + NewLine);
 
-        public async Task WaitForAsync(string text, CancellationToken ct)
+        public Task WaitForAsync(string text, CancellationToken ct) => WaitForAsync(text, 1, ct);
+
+        /// <summary>Waits until the output shows <paramref name="text"/> <paramref name="times"/> times.</summary>
+        public async Task WaitForAsync(string text, int times, CancellationToken ct)
         {
             while (true)
             {
                 Task next;
                 lock (gate)
                 {
-                    if (ToString().Contains(text, StringComparison.Ordinal))
+                    if (ToString().Split(text).Length > times)
                     {
                         return;
                     }
