@@ -73,7 +73,9 @@ export ANTHROPIC_API_KEY=...            # Windows: $env:ANTHROPIC_API_KEY = "...
 sof                                     # type a message; /quit or Ctrl+D ends the session
 ```
 
-Runs are stored in `.sof/sof.db` next to `sof.json`. Add `.sof/` to `.gitignore`.
+Runs are stored in `.sof/sof.db` next to `sof.json`, and artifacts, such as the full text of a long tool result, as
+files in `.sof/artifacts`. Add `.sof/` to `.gitignore`; agents cannot see it. `operations.storage` moves them
+(configuration reference §12).
 
 If `ANTHROPIC_API_KEY` isn't set, a message ends with
 `HandedOff (ProviderFailure: the model call failed: KeyNotFoundException)`: set the key and send it again.

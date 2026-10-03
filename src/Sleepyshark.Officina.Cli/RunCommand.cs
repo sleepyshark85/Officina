@@ -9,7 +9,6 @@ using Sleepyshark.Officina.Core.Running;
 using Sleepyshark.Officina.Core.Tools;
 using Sleepyshark.Officina.Mcp;
 using Sleepyshark.Officina.Providers.Claude;
-using Sleepyshark.Officina.Storage.Sqlite;
 using Sleepyshark.Officina.Workspace;
 
 namespace Sleepyshark.Officina.Cli;
@@ -19,7 +18,7 @@ namespace Sleepyshark.Officina.Cli;
 /// events are shown as they happen (UX-01), and the owner answers what waits for them, messages agents, changes the
 /// permission mode, and pauses or resumes the run or one agent, and cancels an agent, by typing commands (HITL, RUN-06). In a team,
 /// agents are named by their id, such as developer[2]. Ctrl+C cancels the run. The
-/// run is stored in <c>.sof/sof.db</c> in the project directory (STO-01).
+/// run is stored where <c>operations.storage</c> says, <c>.sof/sof.db</c> in the project directory by default (STO-01).
 /// </summary>
 internal static class RunCommand
 {
@@ -53,7 +52,7 @@ internal static class RunCommand
     internal sealed record Session(AgentRunner Runner, string Agent, string RunId, OwnerQueue Queue, TextWriter Output, WorkspaceHost? Workspace, IStorage Storage);
 
     /// <summary>
-    /// Loads the configuration, opens what a run uses (the tool servers, the workspace, the storage in <c>.sof/sof.db</c>, the
+    /// Loads the configuration, opens what a run uses (the tool servers, the workspace, the storage (<see cref="LocalStorage"/>), the
     /// runner), and does what <paramref name="body"/> says with it. An <paramref name="existing"/> run is one that is already
     /// stored: its agent and trigger are the stored ones. Everything is closed afterwards, the working copies too unless
     /// <paramref name="leaveWorkingCopies"/> keeps them for a run that goes on. <paramref name="trigger"/> is how a new run's work
@@ -91,7 +90,7 @@ internal static class RunCommand
         if (existing)
         {
             // RUN-04: a run that is stored has the agent it was started with.
-            if (await StoredRunAsync(state, runId, host, ct) is not { } stored)
+            if (await StoredRunAsync(options, directory, runId, host, ct) is not { } stored)
             {
                 return ExitCodes.Invalid;
             }
@@ -135,7 +134,7 @@ internal static class RunCommand
         {
             await using var servers = options.ToolServers.Count > 0 ? await ToolServers.ConnectAsync(options, secrets, ct) : null;
             var tools = new Dictionary<string, ITool>(servers?.Tools ?? new Dictionary<string, ITool>());
-            IStorage storage = await SqliteStorage.OpenAsync(Path.Combine(state, "sof.db"), ct);
+            IStorage storage = await LocalStorage.OpenAsync(options, directory, ct);
             await using var workspace = options.Capabilities.Workspace.Enabled
                 ? await WorkspaceHost.OpenAsync(
                     options, directory, runId, options.Capabilities.Sandbox.Enabled ? host.Sandbox ?? WorkspaceHost.MachineSandbox() : null, host.Time,
@@ -193,12 +192,12 @@ internal static class RunCommand
     /// <summary>
     /// A stored run, read from the project's database; null, with the error printed, when there is none or the database is in another format.
     /// </summary>
-    internal static async Task<StoredRun?> StoredRunAsync(string state, string runId, SofEnvironment host, CancellationToken ct)
+    internal static async Task<StoredRun?> StoredRunAsync(OfficinaOptions options, string directory, string runId, SofEnvironment host, CancellationToken ct)
     {
-        var database = Path.Combine(state, "sof.db");
         try
         {
-            if (File.Exists(database) && await ((IStorage)await SqliteStorage.OpenAsync(database, ct)).Runs.ReadAsync(null, runId, ct) is { } stored)
+            if (File.Exists(LocalStorage.Locate(options, directory).Database)
+                && await ((IStorage)await LocalStorage.OpenAsync(options, directory, ct)).Runs.ReadAsync(null, runId, ct) is { } stored)
             {
                 return stored;
             }

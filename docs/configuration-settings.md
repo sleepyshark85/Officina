@@ -23,7 +23,7 @@ It lists the settings the code has today. Settings that later slices add are spe
 | `checks` | named entries | `{}` | Checks of output, by name. Agents refer to them by name in `output.checks`. | `{"no-secrets":{"use":"extension:Acme.NoSecretsCheck"}}` |
 | `knowledge` | named entries | `{}` | Knowledge sources, by name. | `{"handbook":{"use":"extension:Acme.HandbookIndex"}}` |
 | `run` | section | `{"budget":{"cost":25,"time":"08:00:00"},"permissionMode":"ask","approvalTimeout":"00:30:00","cancelWithin":"00:00:10"}` | Defaults for every run. | `{"permissionMode":"ask"}` |
-| `operations` | section | `{"telemetry":{"cacheHitWarning":0.7}}` | How the engine is operated. | `{"telemetry":{"cacheHitWarning":0.7}}` |
+| `operations` | section | `{"telemetry":{"cacheHitWarning":0.7},"storage":{"path":".sof/sof.db"}}` | How the engine is operated. | `{"telemetry":{"cacheHitWarning":0.7}}` |
 | `storage` | section | `{"retention":{"audit":"365.00:00:00"}}` | What is stored, and for how long. | `{"unstoredEvents":["textGenerated"],"retention":{"events":"30.00:00:00"}}` |
 | `capabilities` | section | `{"conversationStore":{"enabled":false},"knowledge":{"enabled":false},"humanInteraction":{"enabled":false},"workspace":{"enabled":false,"protectedPaths":[],"baselineChecks":[],"keepWorkingCopies":false},"sandbox":{"enabled":false,"allowedHosts":[],"toolchains":[],"commandRules":[],"secrets":{}},"taskBoard":{"enabled":false,"maxAttempts":3,"budget":{"cost":8}},"projectMemory":{"enabled":false,"scope":"project","maxTokens":20000,"approveBy":"lead"},"checkpoints":{"enabled":false},"team":{"enabled":false,"helperDepth":2,"helperCount":4}}` | Optional capabilities and their settings. All are off by default. | `{"conversationStore":{"enabled":true}}` |
 
@@ -157,6 +157,7 @@ It lists the settings the code has today. Settings that later slices add are spe
 | Setting | Allowed values | Default | Description | Example |
 |---|---|---|---|---|
 | `telemetry` | section | `{"cacheHitWarning":0.7}` | Measurements and the warnings raised from them. Required. | `{"cacheHitWarning":0.7}` |
+| `storage` | section | `{"path":".sof/sof.db"}` | Where the default local storage keeps its files, for a host that uses it, such as `sof`. A host that supplies its own storage in code has no use for it. Required. | `{"path":".sof/sof.db","artifacts":".sof/artifacts"}` |
 
 ## `storage`
 
@@ -344,6 +345,13 @@ It lists the settings the code has today. Settings that later slices add are spe
 | Setting | Allowed values | Default | Description | Example |
 |---|---|---|---|---|
 | `cacheHitWarning` | number, ≥ 0, ≤ 1 | `0.7` | The share of a model call's input read from the provider's cache, from 0 to 1, below which a warning is raised. The first call of a turn is not checked. | `0.7` |
+
+## `operations.storage`
+
+| Setting | Allowed values | Default | Description | Example |
+|---|---|---|---|---|
+| `path` | text | `".sof/sof.db"` | The database file (SQLite). A relative path is relative to the project directory and must stay in `.sof/`, which agents cannot see. An absolute path must lead into the project's `.sof/` or out of the project. Required. | `".sof/sof.db"` |
+| `artifacts` | text |  | The folder for the artifacts' files, one file each, under the same rules as `path`. Unset, it is the folder `artifacts` beside the database. | `".sof/artifacts"` |
 
 ## `storage.retention`
 
