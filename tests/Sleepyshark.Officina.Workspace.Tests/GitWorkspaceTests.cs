@@ -150,7 +150,7 @@ public class GitWorkspaceTests
         var locked = false;
         using var workspace = await repository.OpenAsync(released: folder =>
         {
-            if (!locked)
+            if (!locked && Directory.Exists(folder)) // after the checks
             {
                 locked = true;
                 repository.GitAsync("worktree", "lock", folder).GetAwaiter().GetResult(); // so git refuses to remove it
@@ -170,20 +170,74 @@ public class GitWorkspaceTests
         Assert.Equal(("two\n", "buzz\n"), (repository.Baseline("a.txt"), repository.Baseline("b.txt")));
     }
 
-    // WS-02: what the sandbox set up for the baseline checks goes with the folder they ran in.
+    // WS-02: what the sandbox set up for the baseline checks goes with the folder they ran in, and each integration's checks start
+    // without what an earlier one's left, such as a home folder a crash or a failed release kept. The sandbox's state is the stand-in:
+    // what the checks find in the folder's home, which a release empties.
     [Fact]
-    public async Task The_folder_the_baseline_checks_ran_in_is_released_before_it_is_removed()
+    public async Task Each_integrations_checks_start_from_a_released_folder_and_it_is_released_again_before_it_is_removed()
+    {
+        using var repository = await CreateAsync(("a.txt", "one\n"), ("b.txt", "bee\n"));
+        var scratch = Path.Combine(repository.Root, ".sof", "integration");
+        var home = new List<string> { "planted by a change before a crash" };
+        var seen = new List<string>();
+        var releases = new List<bool>();
+        var check = new Check(context =>
+        {
+            seen.AddRange(home);
+            home.Add($"planted by the checks of {File.ReadAllText(Path.Combine(context.Directory!, "a.txt")).Trim()}");
+            return Task.FromResult(new CheckResult(true, []));
+        });
+        using var workspace = await repository.OpenAsync(checks: new() { ["build"] = check }, released: folder =>
+        {
+            Assert.Equal(scratch, folder);
+            releases.Add(Directory.Exists(folder));
+            home.Clear();
+        });
+        var alice = await workspace.OpenWorkingCopyAsync("t1", "alice", Ct);
+        var bob = await workspace.OpenWorkingCopyAsync("t2", "bob", Ct);
+        await EditAsync(alice, "a.txt", "one", "two");
+        await EditAsync(bob, "b.txt", "bee", "buzz");
+
+        await workspace.IntegrateAsync(alice, alice.Name, alice.Agent, Ct);
+        home.Add("left by a release that failed");
+        await workspace.IntegrateAsync(bob, bob.Name, bob.Agent, Ct);
+
+        Assert.Empty(seen);
+        Assert.Equal([false, true, false, true], releases); // before each integration's checks, and before its folder is removed
+        Assert.False(Directory.Exists(scratch));
+    }
+
+    // WS-02: checks that could not start clean do not run, and the change goes back; one that cannot be cleaned up after keeps its result.
+    [Fact]
+    public async Task An_integration_fails_when_what_an_earlier_one_left_cannot_be_removed()
     {
         using var repository = await CreateAsync(("a.txt", "one\n"));
-        var released = new List<string>();
-        using var workspace = await repository.OpenAsync(checks: new() { ["build"] = Check.Passing }, released: released.Add);
+        var calls = 0;
+        var ran = false;
+        var check = new Check(_ =>
+        {
+            ran = true;
+            return Task.FromResult(new CheckResult(true, []));
+        });
+        using var workspace = await repository.OpenAsync(checks: new() { ["build"] = check }, released: _ =>
+        {
+            if (calls++ != 1)
+            {
+                throw new AggregateException(new UnauthorizedAccessException("denied"));
+            }
+        });
         var alice = await workspace.OpenWorkingCopyAsync("t1", "alice", Ct);
         await EditAsync(alice, "a.txt", "one", "two");
 
-        await workspace.IntegrateAsync(alice, alice.Name, alice.Agent, Ct);
+        var refused = await workspace.IntegrateAsync(alice, alice.Name, alice.Agent, Ct);
+        var integrated = await workspace.IntegrateAsync(alice, alice.Name, alice.Agent, Ct);
 
-        Assert.Equal(Path.Combine(repository.Root, ".sof", "integration"), Assert.Single(released));
-        Assert.False(Directory.Exists(Assert.Single(released)));
+        Assert.Equal(IntegrationOutcome.ChecksFailed, refused.Outcome);
+        Assert.StartsWith("the baseline checks did not run", Assert.Single(refused.Details), StringComparison.Ordinal);
+        Assert.Equal(IntegrationOutcome.Integrated, integrated.Outcome);
+        Assert.True(ran);
+        Assert.StartsWith("what the baseline checks left could not be removed", integrated.Warning, StringComparison.Ordinal);
+        Assert.Equal("two\n", repository.Baseline("a.txt"));
     }
 
     [Fact]

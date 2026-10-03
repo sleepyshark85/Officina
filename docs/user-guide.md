@@ -209,8 +209,9 @@ preset's `git push` and `git remote` denies, as the list replaces the preset's. 
   the input at its end, it fails and says to give them;
 - warns when a command you type lets an agent run any code: an interpreter or shell with no script or module (`node
   --test`, `bash -c …`), a package runner or install (`npx`, `npm install`), or `make` with no target;
-- on Linux, notes a program on your `PATH` outside the system folders, which the sandbox doesn't show, such as
-  `~/.dotnet`. It doesn't write `toolchains`: add the folder it names if the build can't find the program;
+- on Linux, notes a program on your `PATH` that the sandbox won't run, as it looks only in the toolchains and in
+  `/usr/local/bin`, `/usr/bin` and `/bin` (and the `sbin` folders), such as `~/.dotnet/dotnet`, or `/usr/lib/dotnet/dotnet`
+  with no link in `/usr/bin`. It doesn't write `toolchains`: add the folder it names;
 - refuses to replace an existing `sof.json` unless you give `--force`, which keeps no backup, and takes `--dir <folder>`;
 - warns when the folder isn't a git repository's top folder, which `sof` needs, and offers to add `.sof/` to `.gitignore`;
 - runs in the shell only: a session refuses `/init`.

@@ -533,8 +533,9 @@ are not checked.
     "allowedHosts": ["api.nuget.org", "*.nuget.org"],     // SBX-01; empty means no network
     "toolchains": ["/home/dev/.dotnet"],                  // read-only, and on the path
     "commandRules": [                                     // SBX-02; first match wins, unmatched is asked about
-      { "match": "dotnet *",  "action": "allow" },
-      { "match": "git push*", "action": "deny" }
+      { "match": "dotnet test",   "action": "allow" },
+      { "match": "dotnet test *", "action": "allow" },    // not dotnet *, which allows dotnet run and every tool
+      { "match": "git push*",     "action": "deny" }
     ],
     "secrets": { "developer": ["NUGET_TOKEN"] }           // SBX-05, by agent
   },

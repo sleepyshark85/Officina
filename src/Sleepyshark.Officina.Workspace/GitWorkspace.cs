@@ -48,7 +48,7 @@ public sealed partial class GitWorkspace : IWorkspace, IDisposable
     /// <param name="options">The workspace settings.</param>
     /// <param name="baselineChecks">The checks a change must pass on the baseline before it is integrated (WS-02), by name.</param>
     /// <param name="time">The clock for the queue's waiting time.</param>
-    /// <param name="released">Called with each folder the baseline checks ran in before it is removed; null for nothing.</param>
+    /// <param name="released">Called with the folder the baseline checks run in before they run and again before it is removed; null for nothing. If it throws before the checks, the integration fails.</param>
     /// <param name="ct">Cancels opening.</param>
     /// <exception cref="WorkspaceException">Another run holds the workspace, or the root has no branch checked out.</exception>
     public static async Task<GitWorkspace> OpenAsync(

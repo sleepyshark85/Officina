@@ -99,11 +99,21 @@ internal sealed class WorkspaceHost : IWorkspace, IAsyncDisposable
         // An application's check is not sof's to run: the runner refuses the configuration for it, as for any unregistered check.
         var baselineChecks = options.Capabilities.Workspace.BaselineChecks.Where(name => checks.ContainsKey(options.Checks[name].Id(name)))
             .ToDictionary(name => name, name => checks[options.Checks[name].Id(name)]);
+        // The integration folder's release throws: the integration decides whether it can go on.
         var workspace = await GitWorkspace.OpenAsync(
-            root, runId, options.Capabilities.Workspace, baselineChecks, time, folder => ReleaseLeftover(sandbox, options, folder, warnings), ct).ConfigureAwait(false);
+            root, runId, options.Capabilities.Workspace, baselineChecks, time, folder => sandbox?.Release(folder, options.Capabilities.Sandbox.Toolchains), ct).ConfigureAwait(false);
         try
         {
             await workspace.RemoveLeftoversAsync(keepLeftover, folder => ReleaseLeftover(sandbox, options, folder, warnings), ct).ConfigureAwait(false);
+            try
+            {
+                sandbox?.ReleaseOrphans();
+            }
+            catch (AggregateException exception)
+            {
+                warnings.WriteLine($"warning: could not remove what commands left for working copies that no longer exist: {string.Join("; ", exception.InnerExceptions.Select(inner => inner.Message))}");
+            }
+
             return new WorkspaceHost(workspace, options, sandbox, root, leaveWorkingCopies, checks, warnings);
         }
         catch
@@ -195,7 +205,7 @@ internal sealed class WorkspaceHost : IWorkspace, IAsyncDisposable
         finally
         {
             await workspace.CloseWorkingCopyAsync(closing, ct).ConfigureAwait(false);
-            if (!released)
+            if (!released && !options.Capabilities.Workspace.KeepWorkingCopies)
             {
                 // Checks may have run commands there even if no agent did.
                 ReleaseLeftover(sandbox, options, closing.Directory, warnings);
@@ -242,7 +252,7 @@ internal sealed class WorkspaceHost : IWorkspace, IAsyncDisposable
             try
             {
                 await workspace.CloseWorkingCopyAsync(copy).ConfigureAwait(false);
-                if (!released.Contains(copy.Name))
+                if (!released.Contains(copy.Name) && !options.Capabilities.Workspace.KeepWorkingCopies)
                 {
                     ReleaseLeftover(sandbox, options, copy.Directory, warnings);
                 }
@@ -284,7 +294,16 @@ internal sealed class WorkspaceHost : IWorkspace, IAsyncDisposable
         {
             if (sandboxes.TryRemove(key, out var tools) && tools.IsValueCreated)
             {
-                await tools.Value.DisposeAsync().ConfigureAwait(false);
+                try
+                {
+                    await tools.Value.DisposeAsync().ConfigureAwait(false);
+                }
+                catch (AggregateException exception)
+                {
+                    // What is left is removed as a run starts, once its copy is gone.
+                    warnings.WriteLine($"warning: could not remove what commands left outside the working copy {name}: {string.Join("; ", exception.InnerExceptions.Select(inner => inner.Message))}");
+                }
+
                 released = true;
             }
         }

@@ -84,20 +84,28 @@ internal static partial class CommandDetection
     }
 
     /// <summary>
-    /// Each program of the commands that <paramref name="path"/> finds outside the folders the Linux sandbox shows, with the folder
-    /// it is in. A program given with a folder, such as <c>./gradlew</c>, is not looked up.
+    /// Each program of the commands that <paramref name="path"/> finds and the Linux sandbox doesn't: the sandbox searches only
+    /// the toolchains and its own path, and sees only its system folders and the toolchains. With the folder that holds the program,
+    /// after any links. A program given with a folder, such as <c>./gradlew</c>, is not looked up.
     /// </summary>
-    public static IEnumerable<(string Program, string Folder)> Unseen(IEnumerable<string> lines, string? path)
+    public static IEnumerable<(string Program, string Folder)> Unseen(IEnumerable<string> lines, string? path, IReadOnlyList<string> toolchains)
     {
         var folders = (path ?? "").Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries).Select(Path.TrimEndingDirectorySeparator).ToList();
+        var visible = LinuxSandbox.SystemPaths.Concat(toolchains).Select(Path.TrimEndingDirectorySeparator).ToList();
         foreach (var program in Parts(lines).Select(command => command.Split(' ')[0]).Distinct().Where(program => !program.Contains('/', StringComparison.Ordinal)))
         {
-            if (folders.FirstOrDefault(folder => File.Exists(Path.Combine(folder, program))) is { } folder
-                && !LinuxSandbox.SystemPaths.Any(system => folder == system || folder.StartsWith($"{system}/", StringComparison.Ordinal)))
+            if (Find(program, folders) is { } yours
+                && Find(program, toolchains.Concat(LinuxSandbox.SearchPath)) is var sandboxes
+                && (sandboxes != yours || !visible.Any(folder => yours == folder || yours.StartsWith($"{folder}/", StringComparison.Ordinal))))
             {
-                yield return (program, folder);
+                yield return (program, Path.GetDirectoryName(yours)!);
             }
         }
+
+        // The program's file, after any links, in the first folder that has it.
+        static string? Find(string program, IEnumerable<string> folders) =>
+            folders.Select(folder => new FileInfo(Path.Combine(folder, program))).Where(file => file.Exists)
+                .Select(file => file.ResolveLinkTarget(returnFinalTarget: true)?.FullName ?? file.FullName).FirstOrDefault();
     }
 
     private static Detection? DotNet(string directory, List<string> notes)

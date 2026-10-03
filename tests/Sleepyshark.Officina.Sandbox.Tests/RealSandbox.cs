@@ -26,6 +26,7 @@ internal sealed class RealSandbox(ISandbox sandbox) : IDisposable
 
     public void Dispose()
     {
+        sandbox.Release(WorkingCopy, []);
         Directory.Delete(Host, recursive: true);
         Directory.Delete(WorkingCopy, recursive: true);
     }

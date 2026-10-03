@@ -124,7 +124,7 @@ public sealed class WindowsSandbox : ISandbox
                 environment["HTTP_PROXY"] = environment["HTTPS_PROXY"] = $"http://127.0.0.1:{port}";
             }
 
-            foreach (var (variable, value) in command.Environment)
+            foreach (var (variable, value) in ToolchainVariables.All.Concat(command.Environment))
             {
                 environment[variable] = value;
             }
