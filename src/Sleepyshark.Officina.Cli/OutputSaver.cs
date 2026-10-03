@@ -90,10 +90,14 @@ internal sealed class OutputSaver(string root, Func<OfficinaOptions> options, St
 
     /// <summary>
     /// Whether an answer is a path rather than a word: no spaces, and a slash or a file extension, such as <c>specs/</c> or
-    /// <c>login.md</c>, and not a command, which starts with a slash. A path with spaces is given to <c>/save</c> in quotes.
+    /// <c>login.md</c> (not <c>1.5</c>), and not a command, which starts with a slash. A path with spaces is given to <c>/save</c> in quotes.
     /// </summary>
     internal static bool IsPath(string answer) =>
-        !answer.StartsWith('/') && !answer.Any(char.IsWhiteSpace) && (answer.Contains('/', StringComparison.Ordinal) || answer.Contains('\\', StringComparison.Ordinal) || Path.GetExtension(answer).Length > 1);
+        !answer.StartsWith('/') && !answer.Any(char.IsWhiteSpace) && (answer.Contains('/', StringComparison.Ordinal) || answer.Contains('\\', StringComparison.Ordinal) || IsExtension(Path.GetExtension(answer)));
+
+    /// <summary>A file extension such as <c>.md</c> or <c>.json</c>: a letter, then letters or digits, so <c>1.5</c> or <c>main.cs?</c> is a word.</summary>
+    private static bool IsExtension(string extension) =>
+        extension.Length > 1 && char.IsAsciiLetter(extension[1]) && extension.Skip(1).All(char.IsAsciiLetterOrDigit);
 
     private static bool Is(string answer, params string[] words) => words.Any(word => string.Equals(answer, word, StringComparison.OrdinalIgnoreCase));
 

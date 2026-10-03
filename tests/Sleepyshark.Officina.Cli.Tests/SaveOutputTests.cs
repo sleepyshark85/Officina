@@ -104,6 +104,19 @@ public sealed class SaveOutputTests : IDisposable
         Assert.False(Directory.Exists(PathOf("docs")));
     }
 
+    // An answer is a path only with a slash or a real file extension, so a one-word message is never saved as a file.
+    [Theory]
+    [InlineData("login.md", true)]
+    [InlineData("specs/", true)]
+    [InlineData(@"specs\auth.md", true)]
+    [InlineData("notes.v2", true)]
+    [InlineData("1.5", false)]
+    [InlineData("main.cs?", false)]
+    [InlineData("thanks", false)]
+    [InlineData("/status", false)]
+    public void An_answer_is_a_path_only_with_a_slash_or_a_file_extension(string answer, bool path) =>
+        Assert.Equal(path, OutputSaver.IsPath(answer));
+
     // A long reply with no heading is a document too, named by the owner's message; a short one is not offered, and /save still saves it.
     [Fact]
     public async Task A_long_reply_is_named_by_the_message_and_a_short_one_is_not_offered()
