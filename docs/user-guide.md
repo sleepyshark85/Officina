@@ -16,7 +16,7 @@ How to set up `sof`, the Officina coding team CLI, and use it by hand. To set up
 | git | on PATH, with `user.name` and `user.email` set | same |
 | Sandbox (the coding team turns it on) | `bubblewrap`, `socat`, cgroups v2, a systemd user manager | Windows 10 or 11; no admin rights needed |
 | Claude API key | `ANTHROPIC_API_KEY` in the environment | same |
-| Python 3 | only for the benchmark and the team guide's example | same |
+| Python 3 | only for the benchmark | same |
 
 Get an API key from the [Claude Console](https://console.anthropic.com), and set a monthly spend limit there as a
 backstop to `sof`'s own budgets.
@@ -217,9 +217,10 @@ preset's `git push` and `git remote` denies, as the list replaces the preset's. 
 
 A working copy has only what git tracks, so no `node_modules` or virtual environment. If the build needs installed
 packages, it must install them first, as `sof init` suggests for Node with a lock file. Edit `sof.json` for anything else; the [team guide](team-guide.md) explains each part.
+For .NET, its section 1 shows what the sandbox needs beyond `sof init`: Source Link turned off, and where the SDK is.
 
-The team guide sets up a lead, developers and a reviewer step by step, and runs them on a small example. When you type a
-goal:
+The team guide sets up a lead, developers and a reviewer step by step, and runs them on a small .NET project. When you
+type a goal:
 
 1. The lead plans tasks, and you approve the plan before any work starts (`/approve <n>`). To reject it, say why with
    `/tell lead …`, then `/deny <n>`; the lead plans again.
