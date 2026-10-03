@@ -20,7 +20,7 @@ namespace is its name.
 | `Sleepyshark.Officina.Workspace` | Capabilities | Git-backed workspace: baseline, working copies, integration queue, edit safety; `sof` registers Core's `workspace.*` tools over its working copies, as `extension:` ids | Core; the git CLI at run time | `workspace` is on |
 | `Sleepyshark.Officina.Sandbox` | Capabilities | Linux sandbox (bubblewrap, cgroups v2) and Windows sandbox (AppContainer, Job Objects); filtering network proxy; `sandbox.*` tools and the command rules gate, which `sof` registers as `extension:` ids | Core | `sandbox` is on |
 | `Sleepyshark.Officina.Capabilities` | Capabilities | Empty: human interaction, project memory and checkpoints hook into the turn and the stores, so they live in Core | Core | — |
-| `Sleepyshark.Officina.Storage.Sqlite` | Storage.Sqlite | Default storage, conversations, the run record and artifacts included: one SQLite file in WAL mode; artifacts are text rows in it | Core, `Microsoft.Data.Sqlite` | Configured as storage (the CLI's default) |
+| `Sleepyshark.Officina.Storage.Sqlite` | Storage.Sqlite | Default storage, conversations, the run record and artifacts included: one SQLite file in WAL mode, and a folder with a file per artifact | Core, `Microsoft.Data.Sqlite` | Configured as storage (the CLI's default) |
 | `Sleepyshark.Officina.Mcp` | Mcp | Own MCP client for stdio and Streamable HTTP. Turns each server tool into a core tool. | Core | `toolServers` are configured |
 | `Sleepyshark.Officina.Providers.Claude` | Providers.Claude | The Claude provider: maps requests (§9), places cache markers, streams, classifies errors. The price table ships as the `claude` provider's default prices in Core's options | Core, Anthropic C# SDK | A `claude` provider is configured (the default) |
 | `Sleepyshark.Officina.Testing` | Testing | Test kit: scripted models and humans, a recording clock, fake tools, in-memory workspace, sandbox and storage, record and replay (TEST-01, TEST-02) | Core | In tests, and by `sof config dry-run` (CFG-12) |
@@ -251,8 +251,17 @@ decides the outcome.
 
 - **Storage.** SQLite in WAL mode. Tables: runs (with the resolved configuration, CFG-07),
   conversations (append-only, a row per turn), record entries (keyed by run and revision),
-  artifacts (text rows, such as the full text of a trimmed tool result), task board changes (keyed by run and revision),
-  memory, checkpoints, events, audit.
+  artifacts, task board changes (keyed by run and revision), memory, checkpoints, events, audit.
+  `sof` keeps it in `.sof/` unless `operations.storage` says otherwise (STO-01).
+- **Artifacts are files (STO-01).** Each artifact, such as the full text of a trimmed tool result, is a file in a folder
+  beside the database (`.sof/artifacts`), which is the database's alone and not configurable, named by its row's id, never by its name. The row holds its tenant, run, time,
+  name, size and SHA-256; a read checks the file against them and reports damage rather than misreading it. The file is
+  written to a temporary file, flushed and renamed inside the transaction that adds the row, so a row is never committed
+  without its file; the rename replaces a file already at that id, which can only be an orphan, as the row holds the id. Deleting (an owner's data, PRIV-02, or expired artifacts, PRIV-01) commits the rows' removal first, then
+  deletes the files. A crash in either leaves only files without rows, which the next open removes under the write lock.
+  Artifacts are append-only and never truncated: a rollback leaves them, so the ids the restored history names still read,
+  and those made after the checkpoint stay until retention or the owner's deletion. Format version 6 brought the files;
+  an older database is refused, like any other version, not migrated (REL-04).
 - **Checkpoints are cheap because history is append-only.** A checkpoint stores:
   - the number of stored turns of each conversation;
   - the revisions of the record and the task board, and the position in memory's log;

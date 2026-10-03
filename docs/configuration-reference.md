@@ -9,8 +9,8 @@ the settings reference is right: it is generated from the code.
 **Not built in v1.** For the open MUSTs below, §17 keeps the spec. The rest wait for a known case (principle 13) unless a
 reason is given:
 
-- Spec kept in §17: per-agent `capabilities` and `policies` (CFG-01, CAP-01, readings for the owner), `sof init` with
-  command detection (CFG-17), and `operations.storage` with an artifacts folder (STO-01).
+- Spec kept in §17: per-agent `capabilities` and `policies` (CFG-01, CAP-01, readings for the owner), and `sof init` with
+  command detection (CFG-17).
 - `baseUrl`, Message Batches (CLD-11) and the condition roots `checks.<name>`, `outcome` and `stopReason`: S21 records
   why. The `task` root: S18 records why.
 - `operations.secrets.source`: `sof` reads environment variables. `operations.events.store` and `storeModelText`:
@@ -95,7 +95,7 @@ for secret values. Names of named items cannot contain `.`, `[` or `]`, which se
   "capabilities": { },   // optional capabilities                                          §9
   "policies":     { },   // permission rules, global gates, masking, rate limits           §10
   "storage":      { },   // unstored events and retention                                  §12
-  "operations":   { }    // telemetry                                                      §12
+  "operations":   { }    // telemetry, and where the local storage is                     §12
 }
 ```
 
@@ -623,12 +623,22 @@ workspace and sandbox tools, the command rules gate and the command checks.
   }
 },
 "operations": {
-  "telemetry": { "cacheHitWarning": 0.7 }           // COST-01
+  "telemetry": { "cacheHitWarning": 0.7 },          // COST-01
+  "storage": {                                      // STO-01: the default local storage, for sof
+    "path": ".sof/sof.db"                           // the SQLite database; the folder `artifacts` beside it
+  }
 }
 ```
 
-- `sof` keeps its storage in `.sof/sof.db` (SQLite) next to `sof.json`, and the working copies in `.sof/worktrees`. Add
-  `.sof/` to `.gitignore`; the workspace hides it from agents.
+- `sof` keeps its storage in `.sof/sof.db` (SQLite) next to `sof.json`, with each artifact, such as the full text of a
+  trimmed tool result, as a file in `.sof/artifacts`, and the working copies in `.sof/worktrees`. Add `.sof/` to
+  `.gitignore`; the workspace hides it from agents.
+- `operations.storage.path` moves the storage, the artifacts' folder with it: that folder is always `artifacts` beside
+  the database, and the database's alone. A relative path is relative to the project directory and must stay in `.sof/`;
+  an absolute path must lead into the project's `.sof/` or out of the project. So the storage is never where agents can
+  see it, and leaving the project takes an absolute path, which says the owner meant it. `config validate` and every
+  command refuse any other path. A host that supplies its own `IStorage` in code ignores the setting, so there is no
+  `type`: the in-memory storage is the test kit's, and another storage is registered in code, not named in configuration.
 - `sof` reads secrets from environment variables.
 - Traces, metrics and logs are always produced, through `ActivitySource`, `Meter` and `EventSource` (DESIGN.md §2); the
   host chooses the exporters. Conversation content is not logged.
@@ -801,6 +811,3 @@ Kept so the shape is known if the owner decides to build them at revision 3.
   enabled is a CAP-03 error. An agent's `policies`, such as `{ "gates": ["tests-first"] }`, adds gates for all its tools.
 - **`sof init` (CFG-17).** Writes the coding team's `sof.json`, asking only for the build and test commands, and detects
   them where the project already has them, for example in a `.csproj` or `package.json`.
-- **`operations.storage` (STO-01).** `{ "type": "builtin:sqlite", "path": ".sof/state.db", "artifacts": ".sof/artifacts" }`:
-  `builtin:sqlite`, `builtin:memory` or `extension:<id>`, with artifacts as files in their own folder, kept in the
-  project directory unless configured otherwise.

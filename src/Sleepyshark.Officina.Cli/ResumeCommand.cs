@@ -1,6 +1,5 @@
 using System.CommandLine;
 using Sleepyshark.Officina.Core.Configuration;
-using Sleepyshark.Officina.Storage.Sqlite;
 using Sleepyshark.Officina.Core.Checkpoints;
 using Sleepyshark.Officina.Core.Extensibility;
 using Sleepyshark.Officina.Core.Reports;
@@ -53,7 +52,7 @@ internal static class ResumeCommand
             var number = parse.GetValue(to);
             if (number is null)
             {
-                return ListAsync(shared.Directory(parse, host), runId, host, ct);
+                return ListAsync(shared.Load(parse, host), shared.Directory(parse, host), runId, host, ct);
             }
 
             // The working copies stay: the run goes on from the checkpoint with `sof resume`.
@@ -80,28 +79,39 @@ internal static class ResumeCommand
         shared.AddTo(command);
         command.SetAction(async (parse, ct) =>
         {
-            var state = Path.Combine(shared.Directory(parse, host), WorkspaceOptions.StateFolder);
+            var directory = shared.Directory(parse, host);
             var runId = parse.GetValue(run)!;
-            if (await RunCommand.StoredRunAsync(state, runId, host, ct) is null)
+            var configuration = shared.Load(parse, host);
+            if (ConfigurationCommandOptions.ReportErrors(configuration, host) is var code && code != ExitCodes.Success)
+            {
+                return code;
+            }
+
+            if (await RunCommand.StoredRunAsync(configuration.Options, directory, runId, host, ct) is null)
             {
                 return ExitCodes.Invalid;
             }
 
-            host.Out.Write((await RunReport.BuildAsync(await SqliteStorage.OpenAsync(Path.Combine(state, "sof.db"), ct), null, runId, ct))!.ToText());
+            host.Out.Write((await RunReport.BuildAsync(await LocalStorage.OpenAsync(configuration.Options, directory, ct), null, runId, ct))!.ToText());
             return ExitCodes.Success;
         });
         return command;
     }
 
     /// <summary>Lists a run's checkpoints from the store alone: no tool servers, no lock on the workspace, nothing cleaned up.</summary>
-    private static async Task<int> ListAsync(string directory, string runId, SofEnvironment host, CancellationToken ct)
+    private static async Task<int> ListAsync(SofConfiguration configuration, string directory, string runId, SofEnvironment host, CancellationToken ct)
     {
-        if (await RunCommand.StoredRunAsync(Path.Combine(directory, WorkspaceOptions.StateFolder), runId, host, ct) is null)
+        if (ConfigurationCommandOptions.ReportErrors(configuration, host) is var code && code != ExitCodes.Success)
+        {
+            return code;
+        }
+
+        if (await RunCommand.StoredRunAsync(configuration.Options, directory, runId, host, ct) is null)
         {
             return ExitCodes.Invalid;
         }
 
-        IStorage storage = await SqliteStorage.OpenAsync(Path.Combine(directory, WorkspaceOptions.StateFolder, "sof.db"), ct);
+        IStorage storage = await LocalStorage.OpenAsync(configuration.Options, directory, ct);
         foreach (var checkpoint in await storage.Checkpoints.ReadAsync(null, runId, ct))
         {
             host.Out.WriteLine($"{checkpoint.Number}  {checkpoint.Time:u}  {checkpoint.Point}");

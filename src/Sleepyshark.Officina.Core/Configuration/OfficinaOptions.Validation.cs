@@ -32,7 +32,8 @@ public sealed partial record OfficinaOptions : IValidatableObject
             .Concat(Run.Budget is null ? [] : Annotations(Run.Budget, "run.budget", ValidationPhase.Invariants))
             .Concat(Names(Project.Values.Keys, "project.values"))
             .Concat(Annotations(Operations, "operations"))
-            .Concat(Operations.Telemetry is null ? [] : Annotations(Operations.Telemetry, "operations.telemetry"));
+            .Concat(Operations.Telemetry is null ? [] : Annotations(Operations.Telemetry, "operations.telemetry"))
+            .Concat(Operations.Storage is null ? [] : Annotations(Operations.Storage, "operations.storage"));
 
         foreach (var (name, provider) in Providers)
         {

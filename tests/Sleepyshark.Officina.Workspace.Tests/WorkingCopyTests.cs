@@ -15,7 +15,7 @@ public sealed class WorkingCopyTests : IAsyncLifetime
     {
         repository = await CreateAsync(
             ("src/a.txt", "one\ntwo\nthree\nfour\n"), (".env", "KEY=secret\n"), ("src/.env.local", "KEY=secret\n"),
-            ("secrets/key.txt", "secret\n"), ("sof.json", "{}\n"), ("sof.local.json", "{}\n"), ("software.json", "{}\n"), ("docs/guide.md", "secret-free\n"));
+            ("secrets/key.txt", "secret\n"), (".sof/artifacts/1", "secret\n"), ("sof.json", "{}\n"), ("sof.local.json", "{}\n"), ("software.json", "{}\n"), ("docs/guide.md", "secret-free\n"));
         var protectedPaths = new ProtectedPath[] { new() { Path = "secrets/**" }, new() { Path = "docs/**", Access = PathAccess.ReadOnly } };
         workspace = await repository.OpenAsync(new WorkspaceOptions { ProtectedPaths = protectedPaths });
         copy = await workspace.OpenWorkingCopyAsync("t1", "alice", Ct);
@@ -101,6 +101,7 @@ public sealed class WorkingCopyTests : IAsyncLifetime
     [InlineData("src/.env.local")]
     [InlineData("secrets/key.txt")]
     [InlineData(".git")]
+    [InlineData(".sof/artifacts/1")] // STO-01: the storage's artifacts, in the state folder
     public async Task A_hidden_path_looks_like_it_does_not_exist(string path)
     {
         var read = await Assert.ThrowsAsync<WorkspaceException>(() => copy.ReadAsync(path, ct: Ct));

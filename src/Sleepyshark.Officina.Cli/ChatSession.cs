@@ -9,7 +9,6 @@ using Sleepyshark.Officina.Core.Extensibility;
 using Sleepyshark.Officina.Core.Reports;
 using Sleepyshark.Officina.Core.Running;
 using Sleepyshark.Officina.Core.Tasks;
-using Sleepyshark.Officina.Storage.Sqlite;
 
 namespace Sleepyshark.Officina.Cli;
 
@@ -536,7 +535,7 @@ internal sealed class ChatSession
             return;
         }
 
-        IStorage storage = session?.Storage ?? await SqliteStorage.OpenAsync(Path.Combine(shared.Directory(parse, host), WorkspaceOptions.StateFolder, "sof.db"), ct);
+        IStorage storage = session?.Storage ?? await LocalStorage.OpenAsync(shared.Load(parse, host).Options, shared.Directory(parse, host), ct);
         status.WriteLine(await RunReport.BuildAsync(storage, null, run, ct) is { } report
             ? report.ToText().TrimEnd()
             : $"Run {run} has not been recorded yet; try again in a moment.");
@@ -581,7 +580,7 @@ internal sealed class ChatSession
 
         await using (held)
         {
-            IStorage storage = await SqliteStorage.OpenAsync(Path.Combine(state, "sof.db"), ct);
+            IStorage storage = await LocalStorage.OpenAsync(configuration.Options, shared.Directory(parse, host), ct);
             if (await storage.Runs.ReadAsync(null, run, ct) is not { } stored)
             {
                 status.WriteLine($"error: run {run} was not recorded, so it has no board.");
@@ -614,7 +613,7 @@ internal sealed class ChatSession
             }
 
             IStorage storage = session?.Storage
-                ?? SqliteStorage.OpenAsync(Path.Combine(shared.Directory(parse, host), WorkspaceOptions.StateFolder, "sof.db"), CancellationToken.None).GetAwaiter().GetResult();
+                ?? LocalStorage.OpenAsync(shared.Load(parse, host).Options, shared.Directory(parse, host), CancellationToken.None).GetAwaiter().GetResult();
             var history = storage.Tasks.ReadAsync(null, run, CancellationToken.None).AsTask().GetAwaiter().GetResult();
             return [.. history.SelectMany(change => change.Tasks).Select(task => task.Id).Distinct()];
         }

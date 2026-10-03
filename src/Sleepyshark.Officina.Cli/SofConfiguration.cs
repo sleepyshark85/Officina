@@ -107,7 +107,7 @@ public sealed class SofConfiguration
         bound = ProtectExtended(bound, directory, loaded);
         var configuration = new SofConfiguration(bound, errors, root, describe);
         errors.AddRange(PlainTextSecrets(root).Concat(ScalarTaskBudget(root)).Select(error => error with { Location = configuration.Provided(error.Path) }));
-        errors.AddRange(bound.Validate().Concat(WorkspaceHost.CapabilityErrors(bound)).Select(error => error with { Location = configuration.Provided(error.Path) }));
+        errors.AddRange(bound.Validate().Concat(WorkspaceHost.CapabilityErrors(bound)).Concat(LocalStorage.Errors(bound, directory)).Select(error => error with { Location = configuration.Provided(error.Path) }));
         return configuration;
     }
 

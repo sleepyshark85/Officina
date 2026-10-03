@@ -142,17 +142,20 @@ public abstract class StorageContract
         Assert.Empty(await storage.Memory.ReadAsync("globex", "project:app", Ct));
     }
 
-    // TOOL-09, OUT-05.
+    // TOOL-09, OUT-05, STO-01: the text comes back exactly, whatever its characters, length and line endings.
     [Fact]
     public async Task An_artifact_is_read_by_its_id_within_its_run()
     {
         var storage = await CreateAsync();
+        var text = $"# Ünïcødé 日本 ✓\r\n{new string('x', 100_000)}\n";
         var first = await storage.Artifacts.SaveAsync("acme", "run-1", new("read_log result", "full text"), Start, Ct);
-        var second = await storage.Artifacts.SaveAsync("acme", "run-1", new("report.md", "# Report"), Start, Ct);
+        var second = await storage.Artifacts.SaveAsync("acme", "run-1", new("report.md", text), Start, Ct);
 
         Assert.NotEqual(first, second);
-        Assert.Equal(new Artifact("report.md", "# Report"), await storage.Artifacts.ReadAsync("acme", "run-1", second, Ct));
+        Assert.Equal(new Artifact("report.md", text), await storage.Artifacts.ReadAsync("acme", "run-1", second, Ct));
+        Assert.Equal(new Artifact("read_log result", "full text"), await storage.Artifacts.ReadAsync("acme", "run-1", first, Ct));
         Assert.Null(await storage.Artifacts.ReadAsync("acme", "run-2", first, Ct));
+        Assert.Null(await storage.Artifacts.ReadAsync("acme", "run-1", second + 1, Ct));
     }
 
     // REC-04, CONC-01: real threads propose to one record through the real pipeline, record tool and store.
@@ -466,7 +469,7 @@ public abstract class StorageContract
     /// A run with one event, one audit entry, one turn of the owner's conversation, a record of one fact, one artifact and a
     /// task board of one change, all at <paramref name="time"/>.
     /// </summary>
-    private static async Task StoreRunAsync(IStorage storage, string tenant, string runId, string owner, DateTimeOffset? time = null)
+    protected static async Task StoreRunAsync(IStorage storage, string tenant, string runId, string owner, DateTimeOffset? time = null)
     {
         await storage.Runs.RecordStartAsync(tenant, Run(runId, owner, time), Ct);
         await storage.Events.AppendAsync(tenant, Event(runId, 1, time), Ct);
