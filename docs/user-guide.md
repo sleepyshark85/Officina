@@ -300,9 +300,9 @@ empty line takes the suggestion):
 | make | a `Makefile` with `build` and `test` targets | `make build`, `make test` |
 
 It writes `"extends": ["preset:coding-team"]`, the two commands, `run.budget` at $3, and what the commands need in the
-sandbox: their package registry in `allowedHosts` (NuGet, npm, crates.io or the Go proxy). It also writes out the
-preset's command rules, which trust the sandbox: every command is allowed in it but `git push` and `git remote`, so you
-can see them and tighten them (the [team guide](team-guide.md), section 2, shows how). Then it validates the file as
+sandbox: their package registry in `allowedHosts` (NuGet, npm, crates.io or the Go proxy). It sets no command rules, so
+the project keeps the preset's, which trust the sandbox: every command is allowed in it but `git push` and `git remote`.
+A comment in the file says how to tighten them (the [team guide](team-guide.md), section 2, shows it). Then it validates the file as
 `sof config validate` does. It also:
 
 - takes `--build "<command>"` and `--test "<command>"`, and with both asks nothing, for scripts. With nothing found and

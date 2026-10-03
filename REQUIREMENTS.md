@@ -735,7 +735,9 @@ v1 does not include:
 16. The external tool server transports are stdio and Streamable HTTP (TOOL-01).
 17. The benchmark goals are tiered small, medium and larger, and the 90% target applies across the whole set (TEST-31).
 18. The coding team trusts the sandbox: its command rules deny `git push` and `git remote` and allow every other command,
-    as the sandbox is the boundary and asking about each command added friction, not safety (SBX-02, 2026-10-04).
+    as the sandbox is the boundary and asking about each command added friction, not safety. The git denies are best effort,
+    matching only a command's literal start; git can't run in the sandbox and there are no credentials. The engine's own
+    default stays safe, as CFG-17 asks: with no rules, every command is asked about (SBX-02, CFG-17, 2026-10-04).
 
 **Open questions**
 

@@ -213,8 +213,20 @@ internal sealed class WorkspaceHost : IWorkspace, IAsyncDisposable
         }
     }
 
-    public Task<IntegrationResult> IntegrateAsync(IWorkingCopy copy, string task, string author, CancellationToken ct) =>
-        workspace.IntegrateAsync((WorkingCopy)copy, task, author, ct);
+    public Task<IntegrationResult> IntegrateAsync(IWorkingCopy copy, string task, string author, string? submitted, CancellationToken ct) =>
+        workspace.IntegrateAsync((WorkingCopy)copy, task, author, submitted, ct);
+
+    /// <summary>Stops the background processes of every agent in the copy (SBX-03), then says what the copy holds (TASK-05).</summary>
+    public async Task<string> SealAsync(IWorkingCopy copy, CancellationToken ct)
+    {
+        var sealing = (WorkingCopy)copy;
+        foreach (var tools in sandboxes.Where(entry => entry.Key.Copy == sealing.Name && entry.Value.IsValueCreated).Select(entry => entry.Value.Value).ToList())
+        {
+            await tools.StopBackgroundAsync().ConfigureAwait(false);
+        }
+
+        return await GitWorkspace.SealAsync(sealing, ct).ConfigureAwait(false);
+    }
 
     public Task<IReadOnlyList<CopySnapshot>> SnapshotAsync(CancellationToken ct) => workspace.SnapshotAsync(ct);
 

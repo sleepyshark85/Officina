@@ -191,6 +191,10 @@ decides the outcome.
 | Run as the caller | done, failed, timed out | Retried per configuration, then the error goes to the model (TOOL-08) |
 | Trim result, audit "outcome", publish events | — | — |
 
+A failed call's `toolCallEnded` event carries why, on one line, for the owner: what the model read, and the internal detail it
+didn't (TOOL-08), with known secrets removed and masked where the tool's results are. So that detail is in the stored event
+stream too, not only in the audit log and the logs.
+
 - **Every write-tool attempt is audited**, whichever step it stops at: allowed, denied, asked,
   failed or completed (TOOL-11).
 - **If every call in an iteration is denied**, the turn ends in a handoff for a policy gap (LOOP-11).
@@ -247,7 +251,9 @@ decides the outcome.
 | Sandbox environment | Both sandboxes add variables that only toolchains read, so every command gets them: `EnableSourceControlManagerQueries=false`, as MSBuild reads variables as properties and Source Link would otherwise read the hidden `.git` and fail every .NET build; `DOTNET_NOLOGO`, `DOTNET_CLI_TELEMETRY_OPTOUT`, `DOTNET_GENERATE_ASPNET_CERTIFICATE=false` and `DOTNET_SKIP_WORKLOAD_INTEGRITY_CHECK`, against the SDK's first-run output and its telemetry's traffic; and `NUGET_CERT_REVOCATION_MODE=offline`, so restore doesn't try certificate revocation hosts the proxy refuses (signatures are still verified). A project that sets `EnableSourceControlManagerQueries` to true itself overrides the variable, and fails again in a worktree. |
 | Windows sandbox | An AppContainer per working copy, with ACLs granting the working copy, a home folder of its own and the toolchains, and a Job Object per command for CPU, memory, process count and kill-on-close. The network capability is removed. Protected paths stop inheriting the working copy's grant: an AppContainer opens only what is granted to it, and an entry denying it does not stop it. Allowed traffic goes through the filtering proxy over a named pipe whose access list admits only the container, with a small PowerShell forwarder inside the sandbox. No admin rights are needed. A loopback exemption also works, but it would expose every local service on the host, so it is not used (S00a). |
 | No isolation available | Startup refuses to run with a clear reason. Commands never run unsandboxed (SBX-07). |
-| Command rules (SBX-02) | A gate on the command tools. A line is split at `;`, `&` and `\|`, each part is decided by the first rule that matches it, the strictest decision wins, and a line with `$( )` or backticks is always asked about. The rules sort what an agent means to do; the sandbox is the boundary. So the coding team trusts it: `git push*` and `git remote*` denied, then `*` allowed, as `dotnet test` already runs agent-written code. An application tightens them with exact allow rules and a last `*` ask rule. |
+| Command rules (SBX-02) | A gate on the command tools. A line is split at `;`, `&`, `\|` and newlines, each part is decided by the first rule that matches it, the strictest decision wins, and a line with `$( )` or backticks is always asked about. The rules sort what an agent means to do; the sandbox is the boundary. So the coding team trusts it: `git push*` and `git remote*` denied, then `*` allowed, as `dotnet test` already runs agent-written code. The git denies are best effort: they match only a command's literal start, so `git -c x=y push` gets past them, which is harmless as git can't run in the sandbox and there are no credentials. An application tightens the rules with exact allow rules and a last `*` ask rule. |
+| Background processes (SBX-03) | An agent runs at most 4 at once in its working copy. They stop when the task is submitted, before its checks run, and the copy's git tree is recorded once the checks pass; integration refuses a copy whose tree changed since (`Changed`), and the task goes back to its author, so only what the checks and any review saw is integrated. |
+| Resource limits | Each command, background or not, has its own limits: 2 CPUs, 4 GB of memory and 1024 processes. There is no disk quota on the working copy or its home folder. |
 
 ## 8. State and durability
 

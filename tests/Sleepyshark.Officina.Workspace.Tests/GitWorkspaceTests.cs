@@ -38,6 +38,30 @@ public class GitWorkspaceTests
             (await repository.GitAsync("log", "-1", "--format=%an%n%B")).TrimEnd(), ignoreLineEndingDifferences: true);
     }
 
+    // TASK-05: only what the task's checks and review saw is integrated. A file changed or added after the copy was sealed at
+    // submit, such as by a process left running, refuses the integration; ignored files, such as build output, don't count.
+    [Fact]
+    public async Task A_copy_changed_after_it_was_sealed_is_not_integrated()
+    {
+        using var repository = await CreateAsync(("a.txt", "one\n"), (".gitignore", "bin/\n"));
+        using var workspace = await repository.OpenAsync();
+        var alice = await workspace.OpenWorkingCopyAsync("t1", "alice", Ct);
+        await EditAsync(alice, "a.txt", "one", "two");
+        var submitted = await GitWorkspace.SealAsync(alice, Ct);
+        File.WriteAllText(Path.Combine(alice.Directory, "planted.txt"), "after the checks");
+
+        var refused = await workspace.IntegrateAsync(alice, alice.Name, alice.Agent, submitted, Ct);
+
+        Assert.Equal(IntegrationOutcome.Changed, refused.Outcome);
+        Assert.Equal("one\n", repository.Baseline("a.txt"));
+
+        File.Delete(Path.Combine(alice.Directory, "planted.txt"));
+        Directory.CreateDirectory(Path.Combine(alice.Directory, "bin"));
+        File.WriteAllText(Path.Combine(alice.Directory, "bin", "app.dll"), "built");
+        Assert.Equal(IntegrationOutcome.Integrated, (await workspace.IntegrateAsync(alice, alice.Name, alice.Agent, submitted, Ct)).Outcome);
+        Assert.Equal("two\n", repository.Baseline("a.txt"));
+    }
+
     // TEST-22, first half.
     [Fact]
     public async Task Two_agents_editing_the_same_lines_produce_a_conflict_never_an_overwrite()

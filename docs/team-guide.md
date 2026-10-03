@@ -119,7 +119,7 @@ Save this as `sof.json` in the `calc` folder. Each part is explained below it.
     "reviewer": {
       "model": "review",
       "description": "Reviews another developer's task. Never changes code.",
-      "instructions": "You review the team's tasks. Read the task's change against its acceptance criteria, then approve it or ask for changes, with your reasons. Its checks passed when it was submitted, so judge the change by reading it. You never change the code.",
+      "instructions": "You review the team's tasks. Read the task's change against its acceptance criteria, then approve it or ask for changes, with your reasons. Judge the change by reading it; your work says which checks passed when it was submitted. You never change the code.",
       "tools": ["files-read", "reviewing"]
     }
   },
@@ -208,13 +208,19 @@ sandbox's command rules.
 These rules allow the file writes and `run_command`, so you aren't asked about every edit; commands still pass the
 command rules next.
 
-**Command rules** decide each command a developer runs, first match wins. A line is split at `;`, `&&` and `|`, and
-each part must be allowed. These rules **trust the sandbox**: `git push` and `git remote` are denied, and every other
-command is allowed, `cat`, `ls` and `dotnet build 2>&1 | tail -5` included. The sandbox is the boundary: no network
-but `allowedHosts`, only the task's working copy writable, no secrets, and checks and a review before a change reaches
-your branch. `dotnet test` already runs code the agents wrote, so asking about each command adds friction, not safety.
-A line with `$( )` or backticks is still asked about (`/approve` or `/deny`), as no rule sees the command it runs. Git
-can't run in the sandbox anyway, because `.git` is hidden.
+**Command rules** decide each command a developer runs, first match wins. A line is split at `;`, `&`, `|` and line
+breaks, and each part must be allowed. These rules **trust the sandbox**: `git push` and `git remote` are denied, and every
+other command is allowed, `cat`, `ls` and `dotnet build 2>&1 | tail -5` included. The sandbox is the boundary: no network
+but `allowedHosts`, only the task's working copy writable, no secrets, and checks, and a review where the task needs one,
+before a change reaches your branch. Background processes stop when a task is submitted, and a copy that changed after
+its checks isn't integrated: it goes back to its developer. `dotnet test` already runs code the agents wrote, so asking
+about each command adds friction, not safety. A line with `$( )` or backticks is still asked about (`/approve` or
+`/deny`), as no rule sees the command it runs. The git denies are best effort: they match only the start of a command, so
+`git -c x=y push` gets past them. That's harmless: git can't run in the sandbox, because `.git` is hidden, and there are no
+credentials.
+
+Each command has its own limits: 2 CPUs, 4 GB of memory and 1024 processes, and a developer runs at most 4 background
+processes at once. There's no disk quota on the working copy.
 
 To be asked instead, allow your commands exactly, each as itself and followed by arguments, and end with an ask rule:
 
@@ -323,8 +329,8 @@ your file needs none. With the same project and limits:
 
 **The fast path:** `sof init` in the `calc` folder writes most of this for you. It says
 `Found .NET (Calc.slnx): dotnet build and dotnet test.`, and asks for each command; press Enter twice to take them. It
-writes the two commands, `run.budget` at $3, the NuGet hosts and the preset's three command rules, written out
-for you to tighten, then validates the file.
+writes the two commands, `run.budget` at $3 and the NuGet hosts, then validates the file. It sets no command rules, so
+your project keeps the preset's, including any later change to them; add `commandRules` yourself to tighten them.
 It leaves out the time limit, the team size and the task board's limits, which you add by hand. If the sandbox can't
 run the `dotnet` on your `PATH`, such as `~/.dotnet/dotnet` or `/usr/lib/dotnet/dotnet`, it says to add that folder to
 `toolchains` (section 1); it doesn't add it itself. See the [user guide](user-guide.md), section 6.

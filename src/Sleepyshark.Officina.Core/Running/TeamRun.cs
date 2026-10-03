@@ -178,7 +178,7 @@ internal sealed class TeamRun
             // The queue integrates one change at a time, so the team waits for its turn (WS-09).
             var author = task.Assignee ?? team.Agent;
             var copy = await workspace.OpenWorkingCopyAsync(WorkingCopies.OfTask(team.RunId, task.Id), author, ct).ConfigureAwait(false);
-            var result = await workspace.IntegrateAsync(copy, task.Id, author, ct).ConfigureAwait(false);
+            var result = await workspace.IntegrateAsync(copy, task.Id, author, task.Submitted, ct).ConfigureAwait(false);
             if (result.Warning is { } warning)
             {
                 await steps.PublishAsync(team, new Warning(warning), ct).ConfigureAwait(false);
@@ -195,6 +195,7 @@ internal sealed class TeamRun
                 {
                     IntegrationOutcome.Conflict =>
                         $"it conflicts with the baseline in {string.Join(", ", result.Details)}; the working copy now holds the baseline with the conflicts marked, to resolve",
+                    IntegrationOutcome.Changed => "the working copy changed after its checks ran, so what they and any review saw is not what would be integrated; check it and submit it again",
                     IntegrationOutcome.Protected =>
                         $"it changes protected files, which no agent may change: {string.Join(", ", result.Details)}; take those changes out of the working copy",
                     _ => $"the baseline checks failed with it: {string.Join("; ", result.Details)}",

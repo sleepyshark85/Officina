@@ -127,8 +127,12 @@ public sealed class ToolPipeline
         options.Capabilities.TaskBoard.Enabled
             ? new TaskBoard(storage.Tasks, context, options, events, time, owner)
             {
-                CopyOf = Workspace is { } workspace
-                    ? async (task, agent, ct) => (await workspace.OpenWorkingCopyAsync(WorkingCopies.OfTask(context.RunId, task), agent, ct).ConfigureAwait(false)).Directory
+                Seal = Workspace is { } workspace
+                    ? async (task, agent, ct) =>
+                    {
+                        var copy = await workspace.OpenWorkingCopyAsync(WorkingCopies.OfTask(context.RunId, task), agent, ct).ConfigureAwait(false);
+                        return (copy.Directory, await workspace.SealAsync(copy, ct).ConfigureAwait(false));
+                    }
                     : null,
             }
             : null;

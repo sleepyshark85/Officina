@@ -39,7 +39,7 @@ public sealed class InitCommandTests : IDisposable
     };
 
     // CFG-17: each detector finds the commands; with the input at its end, the suggestions are taken, and the file validates.
-    // The rules are the preset's, written out: every command but git push and git remote, whatever the commands are.
+    // The file sets no command rules, so the project keeps the preset's, and a later change to them reaches it.
     [Theory]
     [MemberData(nameof(Projects))]
     public async Task Each_toolchain_s_commands_are_detected_and_the_file_written_validates(
@@ -63,6 +63,7 @@ public sealed class InitCommandTests : IDisposable
         Assert.Equal((build, test), Commands());
         Assert.Equal(hosts, sandbox.AllowedHosts);
         Assert.Equal(Rules, sandbox.CommandRules.Select(rule => (rule.Match, rule.Action)));
+        Assert.DoesNotContain("\"commandRules\"", File.ReadAllText(Path.Combine(sof.Directory, "sof.json")), StringComparison.Ordinal);
         Assert.Empty(sandbox.Toolchains);
     }
 

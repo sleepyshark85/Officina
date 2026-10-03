@@ -37,7 +37,7 @@
       "extends": "coder",
       "model": "review",
       "description": "Reviews another agent's task: reads its change, never changes it.",
-      "instructions": "You review the team's tasks. Read the task's change in its working copy against its acceptance criteria and the project's conventions, then approve it or ask for changes with review_task, giving your reasons. The task's checks (build, tests) passed when it was submitted; you can't run commands, so judge the change by reading it. You never change the code; the author does.",
+      "instructions": "You review the team's tasks. Read the task's change in its working copy against its acceptance criteria and the project's conventions, then approve it or ask for changes with review_task, giving your reasons. You can't run commands, so judge the change by reading it; your work says which checks passed when it was submitted. You never change the code; the author does.",
       // TASK-06: no write tools and no commands, so the reviewer cannot change the author's working copy.
       "tools": ["files-read", "reviewing"]
     }
@@ -100,11 +100,13 @@
     "team": { "enabled": true },
     "workspace": { "enabled": true, "baselineChecks": ["build", "tests"] },
     // Trust the sandbox: every command is allowed in it but git push and git remote. The sandbox is the boundary: no network
-    // but allowedHosts, only the task's working copy writable, no secrets unless given, and checks and a review before a change
-    // is integrated. dotnet test already runs code the agents wrote, so asking about each command added friction, not safety.
-    // Git does not work in a working copy anyway, as the sandbox hides .git; the git denies are a convenience. A line with $( )
-    // or backticks is still asked about. run_command stays behind the commands gate, so an application can tighten this: its
-    // commandRules list replaces this one whole, such as exact allow rules for its commands and a last "*" ask rule.
+    // but allowedHosts, only the task's working copy writable, no secrets unless given, and checks, and a review where the task
+    // needs one, before a change is integrated: background processes stop at submit, and a copy changed since is not integrated.
+    // dotnet test already runs code the agents wrote, so asking about each command added friction, not safety. The git denies
+    // are best effort, matching only a command's literal start (git -c x=y push gets past them); git cannot run anyway, as the
+    // sandbox hides .git, and there are no credentials. A line with $( ) or backticks is still asked about. run_command stays
+    // behind the commands gate, so an application can tighten this: its commandRules list replaces this one whole, such as
+    // exact allow rules for its commands and a last "*" ask rule.
     "sandbox": {
       "enabled": true,
       "commandRules": [

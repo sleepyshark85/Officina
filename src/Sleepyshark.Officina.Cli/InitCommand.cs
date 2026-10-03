@@ -137,31 +137,31 @@ internal static class InitCommand
     }
 
     /// <summary>
-    /// The coding team's <c>sof.json</c>, with the hosts the commands need and the preset's command rules, written out so the
-    /// owner sees them and can tighten them: every command allowed in the sandbox but <c>git push</c> and <c>git remote</c>.
+    /// The coding team's <c>sof.json</c>, with the hosts the commands need. It sets no command rules, so the project keeps the
+    /// preset's, and a later change to them reaches it.
     /// </summary>
     internal static string Configuration(string build, string test)
     {
-        var sandbox = new JsonObject();
-        if (CommandDetection.Hosts([build, test]) is { Count: > 0 } hosts)
-        {
-            sandbox["allowedHosts"] = new JsonArray([.. hosts.Select(host => JsonValue.Create(host))]);
-        }
-
-        (string Match, string Action)[] rules = [("git push*", "deny"), ("git remote*", "deny"), ("*", "allow")];
-        sandbox["commandRules"] = new JsonArray([.. rules.Select(rule => new JsonObject { ["match"] = rule.Match, ["action"] = rule.Action })]);
         var configuration = new JsonObject
         {
             ["extends"] = new JsonArray("preset:coding-team"),
             ["project"] = new JsonObject { ["values"] = new JsonObject { ["buildCommand"] = build, ["testCommand"] = test } },
             ["run"] = new JsonObject { ["budget"] = new JsonObject { ["cost"] = JsonNode.Parse(Budget) } },
-            ["capabilities"] = new JsonObject { ["sandbox"] = sandbox },
         };
+        if (CommandDetection.Hosts([build, test]) is { Count: > 0 } hosts)
+        {
+            configuration["capabilities"] = new JsonObject
+            {
+                ["sandbox"] = new JsonObject { ["allowedHosts"] = new JsonArray([.. hosts.Select(host => JsonValue.Create(host))]) },
+            };
+        }
+
         return $"""
             // Written by sof init: the coding team of preset:coding-team, with this project's build and test commands.
             // run.budget: what each message to the team, and each sof run, may spend before you are asked to go on.
-            // commandRules: the preset's, which trust the sandbox: every command but git push and git remote runs in it, with no network
-            // but allowedHosts. To be asked instead, put allow rules for your commands, such as "dotnet test *", before a "*" ask rule.
+            // The preset's command rules trust the sandbox: every command but git push and git remote runs in it, with no network but
+            // allowedHosts. To be asked instead, set capabilities.sandbox.commandRules: the two git denies, allow rules for your
+            // commands, such as "dotnet test" and "dotnet test *", and a last "*" ask rule.
             // sof config show --origin lists every setting and where it comes from.
             {Format(configuration, "")}
 

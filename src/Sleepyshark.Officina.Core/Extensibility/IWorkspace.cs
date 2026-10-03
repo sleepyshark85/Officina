@@ -26,8 +26,19 @@ public interface IWorkspace
     /// <param name="copy">The working copy.</param>
     /// <param name="task">The task the change is for, which the baseline's history names (WS-04).</param>
     /// <param name="author">The agent that made the change.</param>
+    /// <param name="submitted">
+    /// What <see cref="SealAsync"/> returned when the task was submitted: a copy that holds anything else now is not integrated
+    /// (<see cref="IntegrationOutcome.Changed"/>), as its checks and review saw something else. Null integrates the copy as it is.
+    /// </param>
     /// <param name="ct">Cancels the integration.</param>
-    Task<IntegrationResult> IntegrateAsync(IWorkingCopy copy, string task, string author, CancellationToken ct);
+    Task<IntegrationResult> IntegrateAsync(IWorkingCopy copy, string task, string author, string? submitted, CancellationToken ct);
+
+    /// <summary>
+    /// A task is submitted from the working copy: stops whatever still runs in it, such as background processes, and returns what
+    /// it holds now. It is called before the task's checks run, so nothing changes the copy under them, and again once they pass,
+    /// for what <see cref="IntegrateAsync"/> then takes only unchanged (TASK-05).
+    /// </summary>
+    Task<string> SealAsync(IWorkingCopy copy, CancellationToken ct);
 
     /// <summary>Saves every open working copy as it is now, committing changes not yet committed first (DESIGN.md §8).</summary>
     Task<IReadOnlyList<CopySnapshot>> SnapshotAsync(CancellationToken ct);
@@ -104,6 +115,9 @@ public enum IntegrationOutcome
     /// so the baseline did not move (INV-10, WS-05); it goes back to the author.
     /// </summary>
     Protected,
+
+    /// <summary>The working copy changed after the task was submitted, so its checks and review saw something else; it goes back to the author.</summary>
+    Changed,
 }
 
 /// <summary>

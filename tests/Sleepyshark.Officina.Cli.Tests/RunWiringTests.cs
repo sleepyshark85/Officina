@@ -112,6 +112,65 @@ public sealed class RunWiringTests : IDisposable
         Assert.False(Directory.Exists(command.Directory)); // the task's copy went when it was done
     }
 
+    // SBX-03, TASK-05: a background process stops when its task is submitted, before the checks run, so it cannot change the copy
+    // after them; and an agent runs at most four at once.
+    [Fact]
+    public async Task Background_processes_stop_when_the_task_is_submitted_and_are_capped()
+    {
+        sof.Write("sof.json", """
+            {
+              "run": { "permissionMode": "auto" },
+              "agents": {
+                "team": { "instructions": "A team.", "pattern": { "type": "team", "lead": "lead", "roles": { "developer": { "max": 1 } } } },
+                "lead": { "instructions": "Lead.", "tools": ["planning"] },
+                "developer": { "instructions": "Develop.", "tools": ["work"] }
+              },
+              "tools": {
+                "create": { "source": "builtin:tasks.create" },
+                "submit": { "source": "builtin:tasks.submit_for_review" },
+                "start": { "source": "extension:sandbox.start_process", "gates": ["commands"] }
+              },
+              "gates": { "commands": { "use": "extension:sandbox.commandRules" } },
+              "toolSets": { "planning": ["create"], "work": ["start", "submit"] },
+              "checks": { "tests": { "command": "dotnet test" } },
+              "capabilities": {
+                "taskBoard": { "enabled": true }, "team": { "enabled": true }, "workspace": { "enabled": true },
+                "sandbox": { "enabled": true, "commandRules": [{ "match": "*", "action": "allow" }] }
+              }
+            }
+            """).Commit();
+        bool? stoppedBeforeChecks = null;
+        FakeSandbox sandbox = null!;
+        sandbox = new FakeSandbox
+        {
+            Answer = command =>
+            {
+                if (command.CommandLine == "dotnet test")
+                {
+                    stoppedBeforeChecks ??= sandbox.Processes.Where(process => process.Command.CommandLine.StartsWith("sleep", StringComparison.Ordinal)).All(process => process.Stopped);
+                    return ("passed", 0);
+                }
+
+                return ("", null); // runs until it is stopped
+            },
+        };
+        sof.Sandbox = sandbox;
+        model.When(request => ScriptedModelProvider.WorkOf(request).StartsWith("You lead a team", StringComparison.Ordinal))
+            .CallTools(("create", """{ "id": "a", "title": "Build", "checks": ["tests"], "reason": "plan" }""")).Reply("Planned.");
+        model.When(request => ScriptedModelProvider.WorkOf(request).StartsWith("Every task is done", StringComparison.Ordinal)).Reply("Built.");
+        model.When(request => ScriptedModelProvider.WorkOf(request).Contains("Do task a,", StringComparison.Ordinal))
+            .CallTools([.. Enumerable.Range(1, 5).Select(n => ("start", $$"""{ "command": "sleep 300; echo planted >> src/{{n}}.cs" }"""))])
+            .CallTools(("submit", """{ "id": "a" }""")).Reply("Submitted.");
+
+        var (exitCode, _, error) = await sof.RunAsync("run", "--agent", "team", "--input", "Build it.");
+
+        Assert.Equal((ExitCodes.Success, ""), (exitCode, error));
+        Assert.True(stoppedBeforeChecks);
+        Assert.Equal(4, sandbox.Processes.Count(process => process.Command.CommandLine.StartsWith("sleep", StringComparison.Ordinal)));
+        var results = model.Requests.SelectMany(request => request.History).SelectMany(message => message.Content).OfType<ToolResultContent>().Select(content => content.Text);
+        Assert.Contains(results, text => text.Contains("4 background processes already run; stop one with stop_process first", StringComparison.Ordinal));
+    }
+
     [Fact]
     public async Task A_machine_that_cannot_sandbox_commands_is_reported_and_nothing_runs()
     {

@@ -36,7 +36,7 @@ internal sealed class IntegrationQueue(
         }
     }
 
-    public Task<IntegrationResult> EnqueueAsync(WorkingCopy copy, string task, string author, CancellationToken ct)
+    public Task<IntegrationResult> EnqueueAsync(WorkingCopy copy, string task, string author, string? submitted, CancellationToken ct)
     {
         lock (gate)
         {
@@ -51,7 +51,7 @@ internal sealed class IntegrationQueue(
                         waiting.Dequeue();
                     }
 
-                    return IntegrateAsync(copy, task, author, ct);
+                    return IntegrateAsync(copy, task, author, submitted, ct);
                 },
                 CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default).Unwrap();
             tail = turn;
@@ -59,10 +59,23 @@ internal sealed class IntegrationQueue(
         }
     }
 
-    private async Task<IntegrationResult> IntegrateAsync(WorkingCopy copy, string task, string author, CancellationToken ct)
+    /// <summary>The git tree of a folder's files as <c>git add --all</c> takes them, without committing.</summary>
+    internal static async Task<string> TreeAsync(string directory, CancellationToken ct)
+    {
+        await Git.RunAsync(directory, ct, "add", "--all").ConfigureAwait(false);
+        return (await Git.RunAsync(directory, ct, "write-tree").ConfigureAwait(false)).Trim();
+    }
+
+    private async Task<IntegrationResult> IntegrateAsync(WorkingCopy copy, string task, string author, string? submitted, CancellationToken ct)
     {
         // A change cancelled while it waited is dropped before git touches it.
         ct.ThrowIfCancellationRequested();
+
+        // Only what the task's checks and review saw is integrated, never what changed in the copy since, such as by a process left running.
+        if (submitted is not null && await TreeAsync(copy.Directory, ct).ConfigureAwait(false) != submitted)
+        {
+            return new(IntegrationOutcome.Changed, []);
+        }
         var branchPoint = await CommitAsync(copy, task, author, ct).ConfigureAwait(false);
         if (await MarkedAsync(copy, branchPoint, ct).ConfigureAwait(false) is { Count: > 0 } unresolved)
         {

@@ -33,11 +33,19 @@ public sealed class InMemoryWorkspace : IWorkspace
         }
     }
 
-    public Task<IntegrationResult> IntegrateAsync(IWorkingCopy copy, string task, string author, CancellationToken ct)
+    /// <summary>Nothing runs in memory; what the copy holds is its files, sorted, as JSON.</summary>
+    public Task<string> SealAsync(IWorkingCopy copy, CancellationToken ct) => Task.FromResult(((Copy)copy).Content());
+
+    public Task<IntegrationResult> IntegrateAsync(IWorkingCopy copy, string task, string author, string? submitted, CancellationToken ct)
     {
         var integrating = (Copy)copy;
         lock (open)
         {
+            if (submitted is not null && integrating.Content() != submitted)
+            {
+                return Task.FromResult(new IntegrationResult(IntegrationOutcome.Changed, []));
+            }
+
             var changed = integrating.Changed();
             var conflicts = changed
                 .Where(path => Files.GetValueOrDefault(path) != integrating.Base.GetValueOrDefault(path) && Files.GetValueOrDefault(path) != integrating.Files.GetValueOrDefault(path))
@@ -169,6 +177,15 @@ public sealed class InMemoryWorkspace : IWorkspace
 
         /// <summary>The copy's files, by path.</summary>
         public IReadOnlyDictionary<string, string> Files => files;
+
+        /// <summary>The copy's files, sorted by path, as JSON.</summary>
+        internal string Content()
+        {
+            lock (files)
+            {
+                return JsonSerializer.Serialize(files.OrderBy(file => file.Key, StringComparer.Ordinal).ToList());
+            }
+        }
 
         /// <summary>Puts the copy's files back as they were; the agent has read none of them since.</summary>
         internal void Reset(Dictionary<string, string> saved)

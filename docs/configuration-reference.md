@@ -755,10 +755,12 @@ store and human interaction on; permission mode `ask`. The application gives `ag
   turn and each integration), conversation store, and human interaction with sign-offs for plan approval, the run budget
   and irreversible actions (HITL-04).
 - **Masking:** off, as it would corrupt source code (ING-02).
-- **Command rules:** trust the sandbox: `git push` and `git remote` denied, then `*` allowed. The sandbox is the boundary
-  (no network but `allowedHosts`, only the task's working copy writable, no secrets, checks and review before integration),
-  and `dotnet test` already runs agent-written code, so asking about each command added friction, not safety. A line with
-  `$( )` or backticks is still asked about. `run_command` stays behind the `commands` gate, so an application can tighten
+- **Command rules:** trust the sandbox: `git push` and `git remote` denied (best effort: only a command's literal start is
+  matched), then `*` allowed. The sandbox is the boundary (no network but `allowedHosts`, only the task's working copy
+  writable, no secrets, and checks, and a review where the task needs one, before integration; background processes stop at
+  submit, and a copy changed since isn't integrated), and `dotnet test` already runs agent-written code, so asking about
+  each command added friction, not safety. Each command has its own CPU and memory limits, an agent runs at most 4
+  background processes at once, and there is no disk quota. A line with `$( )` or backticks is still asked about. `run_command` stays behind the `commands` gate, so an application can tighten
   the rules: its list replaces the preset's whole.
 - **Checks:** `build` and `tests`, from `project.values.buildCommand` and `testCommand`, used for tasks and the baseline.
 - **Permission rules** allow the file writes and commands, as writes stay in a task's working copy until its checks and

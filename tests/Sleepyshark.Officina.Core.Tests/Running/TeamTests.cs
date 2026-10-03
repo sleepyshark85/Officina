@@ -359,6 +359,33 @@ public class TeamTests
         Assert.Empty(await workspace.SnapshotAsync(Ct)); // every task's copy went with its task
     }
 
+    // TASK-05: what changes in a task's copy after it was submitted, here an edit after the submit, is not integrated: the task goes
+    // back to its author, whose next submit checks the copy as it is now.
+    [Fact]
+    public async Task A_copy_changed_after_its_task_was_submitted_goes_back_to_its_author()
+    {
+        var workspace = new InMemoryWorkspace();
+        var kit = Kit(options => options with
+        {
+            Tools = new Dictionary<string, ToolOptions>(options.Tools) { ["edit"] = new() { Source = $"extension:{WorkspaceTools.Write}", GateExemption = "Tests only." } },
+            ToolSets = new Dictionary<string, IReadOnlyList<string>>(options.ToolSets) { ["developer"] = ["submit", "edit"] },
+            Capabilities = options.Capabilities with { Workspace = new() { Enabled = true } },
+        }, null, workspace: workspace);
+        Lead(kit, "You lead a team", Create("a"));
+        Lead(kit, "Every task is done").Reply("Done.");
+        Work(kit, "a").CallTools(("edit", """{ "path": "a.txt", "content": "checked" }""")).CallTools(("submit", """{ "id": "a" }"""))
+            .CallTools(("edit", """{ "path": "a.txt", "content": "planted" }""")).Reply("Submitted.")
+            .CallTools(("submit", """{ "id": "a" }""")).Reply("Submitted again.");
+
+        var work = new Work("team", "Build it.") { Caller = Ann };
+        var result = await kit.Runner.RunAsync(work, Ct);
+
+        Assert.Equal(AgentOutcome.Completed, result.Outcome);
+        var history = await kit.Runner.Board(null, work.RunId).HistoryAsync(Ct);
+        Assert.Single(history, change => change.By == "team" && change.Reason.StartsWith("the working copy changed after its checks ran", StringComparison.Ordinal));
+        Assert.Equal("planted", workspace.Files["a.txt"]); // only once a submit had checked it
+    }
+
     // TEAM-07, TASK-06: a reviewer's helper keeps the reviewer's task, so it reads the author's copy and cannot change it; and a
     // helper's id is numbered in the run, so the reviewer's helpers in two turns never share one.
     [Fact]
