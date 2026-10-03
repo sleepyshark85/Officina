@@ -11,10 +11,6 @@
     "sandbox": {
       "allowedHosts": ["api.nuget.org", "*.nuget.org"],
       "commandRules": [
-        { "match": "git status*", "action": "allow" },
-        { "match": "git diff*", "action": "allow" },
-        { "match": "git log*", "action": "allow" },
-        { "match": "git show*", "action": "allow" },
         { "match": "git push*", "action": "deny" },
         { "match": "git remote*", "action": "deny" },
         { "match": "dotnet *", "action": "allow" }
