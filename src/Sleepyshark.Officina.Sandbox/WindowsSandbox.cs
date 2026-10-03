@@ -173,7 +173,8 @@ public sealed class WindowsSandbox : ISandbox
             var home = Path.Combine(Path.GetTempPath(), name);
             if (Directory.Exists(home))
             {
-                Directory.Delete(home, recursive: true);
+                // A command that has just ended can leave a handle open for a moment (curl, conhost, a virus scanner).
+                RetryOnIo.Run(() => Directory.Delete(home, recursive: true), RetryOnIo.Backoff, Thread.Sleep);
             }
         });
         Try(() =>
