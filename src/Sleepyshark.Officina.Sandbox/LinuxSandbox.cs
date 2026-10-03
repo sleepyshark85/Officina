@@ -68,7 +68,18 @@ public sealed class LinuxSandbox : ISandbox
         {
             // A home without its file is from before the files were written; the file is written before the home is made.
             var copy = Path.Combine(homes, $"{Path.GetFileName(home)}.copy");
-            if (!File.Exists(copy) || !Directory.Exists(File.ReadAllText(copy)))
+            string? directory;
+            try
+            {
+                directory = File.ReadAllText(copy);
+            }
+            catch (Exception exception) when (exception is FileNotFoundException or DirectoryNotFoundException)
+            {
+                // No file, or another run released the home as it was looked at: removing what is left is all there is to do.
+                directory = null;
+            }
+
+            if (directory is null || !Directory.Exists(directory))
             {
                 try
                 {
@@ -135,7 +146,11 @@ public sealed class LinuxSandbox : ISandbox
         // The file that names the copy comes first, so a home is never taken for an orphan while it is made.
         var homeName = Name(command.Directory);
         Directory.CreateDirectory(homes);
-        File.WriteAllText(Path.Combine(homes, $"{homeName}.copy"), Path.GetFullPath(command.Directory));
+        // Written whole and then renamed, so another run looking for orphans never reads it half written.
+        var marker = Path.Combine(homes, $"{homeName}.copy");
+        var writing = $"{marker}.{Guid.NewGuid():N}";
+        File.WriteAllText(writing, Path.GetFullPath(command.Directory));
+        File.Move(writing, marker, overwrite: true);
         var home = Directory.CreateDirectory(Path.Combine(homes, homeName), UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute).FullName;
         Add(start, "--bind", home, home);
 
@@ -216,6 +231,10 @@ public sealed class LinuxSandbox : ISandbox
             }
 
             File.Delete(Path.Combine(homes, $"{name}.copy"));
+        }
+        catch (DirectoryNotFoundException) when (!Directory.Exists(home))
+        {
+            // Another run removed it at the same time.
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
