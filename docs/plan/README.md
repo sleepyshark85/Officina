@@ -4,11 +4,11 @@ Slices `REQUIREMENTS.md` (revision 2) into deliverable work.
 
 ## Status
 
-Last updated 2026-10-02.
+Last updated 2026-10-04.
 
 - **Done:** every slice, S00a to S20, and S21's five parts. S21 stays `doing` only for the live TEST-31 benchmark run, its
   last acceptance criterion. `check_coverage.py` passes; `check_verification.py` lists only TEST-31 as pending, and
-  three readings for the owner. STO-01 is closed: artifacts are files on disk, and `operations.storage.path` moves the
+  four readings for the owner. STO-01 is closed: artifacts are files on disk, and `operations.storage.path` moves the
   storage. CFG-17 is closed: `sof init` detects the build and test commands.
 - **For the owner, next:**
   1. Run the live benchmark on Linux and Windows: a pilot first, then the full set, then `report.py` over both
@@ -19,7 +19,7 @@ Last updated 2026-10-02.
      ([`scripts/windows-standard-user-tests.ps1`](../../scripts/windows-standard-user-tests.ps1), S21 part 5).
   4. Confirm the items [S21](S21-hardening.md) proposes as not in v1, and whether CPU throttling needs a limit-hit
      result of its own (S21 part 5).
-  5. Confirm the readings of CFG-01, CAP-01 and TASK-02 ([`verification.md`](verification.md)), or change them at
+  5. Confirm the readings of CFG-01, CAP-01, RUN-05 and TASK-02 ([`verification.md`](verification.md)), or change them at
      revision 3, with the other questions in REQUIREMENTS.md §13.
   6. The MUST gaps are closed: TASK-08 (`/board` and `/task` at the console, during a run and between a chat's
      replies), STO-01 (artifacts are files on disk, and `operations.storage.path` moves the storage) and CFG-17

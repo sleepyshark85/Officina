@@ -9,13 +9,17 @@ using static Sleepyshark.Officina.Core.Tasks.TaskState;
 
 namespace Sleepyshark.Officina.Core.Running;
 
-/// <summary>What the team needs of its runner: the board, the workspace, the stored events, each agent's cancellation, and who is in the team.</summary>
+/// <summary>What the team needs of its runner: the board, the workspace, the stored events and conversations, each agent's cancellation, and who is in the team.</summary>
 /// <param name="Pipeline">The tool pipeline, whose board the team acts on.</param>
 /// <param name="Workspace">Where the tasks' working copies are, and their changes are integrated; null when the run has none.</param>
 /// <param name="Log">The run's stored events, which say what each agent spent before a restart (INV-07).</param>
 /// <param name="CancelOf">The owner's cancellation of an agent, by its id (RUN-06).</param>
 /// <param name="Members">Registers the team's agents for the run, so they can message each other; null ends the team and drops its messages.</param>
-internal sealed record TeamServices(ToolPipeline Pipeline, IWorkspace? Workspace, IEventLog Log, Func<string, CancellationToken> CancelOf, Action<string, IReadOnlySet<string>?> Members);
+/// <param name="Conversations">The stored conversations, whose lead's says which run's board a new run carries on.</param>
+/// <param name="Runs">The stored runs, whose status says whether that run still works on its board.</param>
+internal sealed record TeamServices(
+    ToolPipeline Pipeline, IWorkspace? Workspace, IEventLog Log, Func<string, CancellationToken> CancelOf, Action<string, IReadOnlySet<string>?> Members,
+    IConversationStore Conversations, IRunStore Runs);
 
 /// <summary>
 /// The team pattern (TEAM): a lead and agents of several roles over the run's task board. The lead turns the goal into tasks,
@@ -28,7 +32,8 @@ internal sealed record TeamServices(ToolPipeline Pipeline, IWorkspace? Workspace
 /// </summary>
 /// <remarks>
 /// The team works from the board as it is, so a run that resumes goes on from its last checkpoint's board: a task in progress
-/// goes back to its agent, and the plan is made only while the board is empty (RUN-04).
+/// goes back to its agent, and the plan is made only while the board is empty (RUN-04). A new run whose lead continues its
+/// conversation from an earlier run starts with that run's board, so the lead sees the tasks it remembers.
 /// </remarks>
 internal sealed class TeamRun
 {
@@ -55,6 +60,9 @@ internal sealed class TeamRun
     private readonly HashSet<string> closed = new(StringComparer.Ordinal);
     private IReadOnlyList<CoreEvent>? stored;
     private long stuckAt = -1;
+
+    /// <summary>The board's revision when the lead started planning; null once it has planned.</summary>
+    private long? planFrom;
 
     public TeamRun(Steps steps, TeamServices services, OfficinaOptions options, ToolContext team, PatternOptions pattern, string goal, Budget budget)
     {
@@ -86,9 +94,19 @@ internal sealed class TeamRun
             // TEAM-10: the owner's approval of the plan, once given, holds across a restart.
             var approved = !options.Capabilities.HumanInteraction.SignsOff(SignOff.PlanApproval)
                 || (await services.Log.ReadAsync(team.Caller.Tenant, team.RunId, 0, stop.Token).ConfigureAwait(false)).Any(coreEvent => coreEvent.Payload is PlanApproved);
-            if ((await board.ReadAsync(stop.Token).ConfigureAwait(false)).Count == 0)
+            var start = await board.HistoryAsync(stop.Token).ConfigureAwait(false);
+            if (start.Count == 0 && await CarryOverAsync(board, stop.Token).ConfigureAwait(false))
             {
-                await StartAsync(lead, PlanStep, null, PlanInput(), stop.Token).ConfigureAwait(false);
+                start = await board.HistoryAsync(stop.Token).ConfigureAwait(false);
+            }
+
+            if (start.Count == 0 || start.All(change => change.Reason.StartsWith(TaskBoard.CarriedFrom, StringComparison.Ordinal)))
+            {
+                // The lead has not planned in this run: the tasks that failed in the run carried over are part of its plan.
+                planFrom = start.Count;
+                told.UnionWith(start.Select(change => change.Revision));
+                await StartAsync(lead, PlanStep, null, start.Count == 0 ? PlanInput() : ContinueInput(start[0].Reason[TaskBoard.CarriedFrom.Length..], TaskBoard.Current(start)), stop.Token)
+                    .ConfigureAwait(false);
             }
 
             while (true)
@@ -108,7 +126,7 @@ internal sealed class TeamRun
                     continue;
                 }
 
-                if (approved || tasks.Count == 0)
+                if ((approved || tasks.Count == 0) && planFrom is null)
                 {
                     if (await IntegrateVerifiedAsync(board, tasks, stop.Token).ConfigureAwait(false))
                     {
@@ -229,7 +247,7 @@ internal sealed class TeamRun
     private async Task<bool?> ApprovePlanAsync(IReadOnlyList<BoardTask> tasks, CancellationToken ct)
     {
         var owner = services.Pipeline.Owner;
-        var context = Member(lead, null, PlanStep);
+        var context = Member(lead, null, PlanStep) with { WaitForOwner = budget.WaitForOwner };
         var answer = await owner.AskAsync(context, owner.Request(context, HumanRequestKind.SignOff, $"Approve the lead's plan before work starts?\n{Plan(tasks)}") with { PlanApproval = true }, ct)
             .ConfigureAwait(false);
         if (answer is { Approved: true })
@@ -362,7 +380,7 @@ internal sealed class TeamRun
                 return result;
             }
 
-            return job.Step == ReportStep || (job.Step == PlanStep && (await board.ReadAsync(ct).ConfigureAwait(false)).Count == 0) ? result : null;
+            return job.Step == ReportStep || (job.Step == PlanStep && await NothingPlannedAsync(board, ct).ConfigureAwait(false)) ? result : null;
         }
 
         var task = (await board.ReadAsync(ct).ConfigureAwait(false)).FirstOrDefault(task => task.Id == job.Task);
@@ -381,6 +399,47 @@ internal sealed class TeamRun
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Whether the lead's plan gave the team nothing to do: it changed nothing on a board where no task is ready, such as when the
+    /// goal is a question. Nothing works on a board before the plan, so a task that waits for others waits for a ready one, or
+    /// for one that failed. The lead's reply is then the team's.
+    /// </summary>
+    private async Task<bool> NothingPlannedAsync(TaskBoard board, CancellationToken ct)
+    {
+        if (planFrom is not { } from)
+        {
+            return false; // the lead planned again, as the owner asked
+        }
+
+        planFrom = null;
+        var history = await board.HistoryAsync(ct).ConfigureAwait(false);
+        return history.Count == from && TaskBoard.Current(history).All(task => task.State != Ready);
+    }
+
+    /// <summary>
+    /// Starts the board with the tasks of the run whose turn the lead's conversation ended with, when it is another run's: a chat's
+    /// earlier message, whose team the lead remembers. Without a conversation of its own the lead remembers none, so none is carried;
+    /// nor is the board of a run still running, such as another session's, whose team works on it.
+    /// </summary>
+    /// <returns>Whether tasks were carried over.</returns>
+    private async Task<bool> CarryOverAsync(TaskBoard board, CancellationToken ct)
+    {
+        if (options.Agents[lead].Context.History.Strategy == HistoryStrategy.None
+            || (await services.Conversations.ReadAsync(team.Caller.Tenant, lead, team.Caller.Id, ct).ConfigureAwait(false)) is not [.., { RunId: { } earlier }]
+            || earlier == team.RunId)
+        {
+            return false;
+        }
+
+        if ((await services.Runs.ReadAsync(team.Caller.Tenant, earlier, ct).ConfigureAwait(false))?.Status is null or RunStatus.Running)
+        {
+            return false;
+        }
+
+        var tasks = await services.Pipeline.Board(team.Caller.Tenant, earlier).ReadAsync(ct).ConfigureAwait(false);
+        return tasks.Count > 0 && (await board.CarryOverAsync(earlier, tasks, ct).ConfigureAwait(false)).Accepted;
     }
 
     /// <summary>
@@ -505,6 +564,16 @@ internal sealed class TeamRun
 
         Goal:
         {goal}
+        """;
+
+    private string ContinueInput(string earlier, IReadOnlyList<BoardTask> tasks) =>
+        $"""
+        You lead a team: {Team()}. The board below is the one your team left in run {earlier}, which this conversation continues: its done tasks are integrated, and tasks that were in progress or in review there failed with it. Do what the goal below asks with tasks.create and tasks.update: retry failed tasks (state ready), add tasks, which may depend on done ones, and cancel those no longer needed. The team then works on the tasks that are ready and those that wait for them; if the goal needs no work from the team, answer it and change nothing.
+
+        Goal:
+        {goal}
+
+        {Labels.Data("board", Board(tasks))}
         """;
 
     private string ReplanInput(IReadOnlyList<BoardTask> tasks) =>

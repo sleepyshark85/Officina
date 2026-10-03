@@ -97,7 +97,7 @@ public sealed class TaskCommandTests : IDisposable
         sof.In.Type("/task cancel b Too late.");
         await sof.Out.WaitForAsync("error: task b cannot go from Done to Cancelled.", Ct);
         sof.In.Type("/task add Document it --role developer");
-        await sof.Out.WaitForAsync("so no agent works on this board again; ask for the work in your next message.", Ct);
+        await sof.Out.WaitForAsync("has ended; the team's next message starts from this board.", Ct);
         sof.In.Type("/task assign owner-1 lead");
         await sof.Out.WaitForAsync("error: there is no agent lead to assign it to. Use one of: developer[1].", Ct);
         sof.In.Type("/task edit owner-1 --role designer");

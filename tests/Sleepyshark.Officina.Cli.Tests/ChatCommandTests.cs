@@ -128,6 +128,33 @@ public sealed class ChatCommandTests : IDisposable
         Assert.Equal(3, model.Requests.Count);
     }
 
+    // HITL-03: a message typed while a question waits is not taken as its answer; the hint says how to answer it. /answer with the
+    // question's number and no text says the answer is missing, as often as it is typed, rather than answering with the number.
+    [Fact]
+    public async Task A_message_typed_while_a_question_waits_is_told_how_to_answer_it_and_an_answer_needs_its_text()
+    {
+        model.CallTools(("ask", """{ "question": "Which database?" }""")).Reply("Postgres it is.").Reply("Yes to what?");
+
+        var chat = sof.RunAsync("chat");
+        sof.In.Type("Pick a database.");
+        await sof.Out.WaitForAsync("#1 dev asks: Which database? Answer with /answer 1 <your answer> or /deny 1.", Ct);
+        sof.In.Type("yes");
+        await sof.Out.WaitForAsync("(it is sent when this reply ends; /drop drops it) #1 waits for an answer; to answer it, type /answer 1 <your answer>", Ct);
+        sof.In.Type("/answer 1");
+        sof.In.Type("/answer 1");
+        sof.In.Type("/status"); // commands are taken in order, so both errors are written before what waits
+        await sof.Out.WaitForAsync("waiting for you: #1 dev asks: Which database?", Ct);
+        Assert.Equal(2, sof.Out.ToString().Split("error: give your answer after the number: /answer 1 <your answer>").Length - 1);
+        sof.In.Type("/answer 1 Postgres.");
+        sof.In.Dispose();
+        var (exitCode, output, _) = await sof.EndedAsync(chat);
+
+        Assert.Equal(ExitCodes.Success, exitCode);
+        Assert.Contains("answered #1: dev: Which database?", output, StringComparison.Ordinal);
+        Assert.Contains("Postgres.", Assert.IsType<ToolResultContent>(model.Requests[1].History[^1].Content[0]).Text, StringComparison.Ordinal);
+        Assert.Equal(Message.User("yes"), model.Requests[2].History[^1]);
+    }
+
     // A plain line shaped like a command, typed during a reply, is likely the command without its /: it is not queued, which would
     // start a run of its own, until it is typed again as the next line. Prose that starts with a command's name is a message.
     [Fact]

@@ -24,6 +24,7 @@ requirement changes at revision 3.
 |---|---|---|
 | CFG-01 | The agent definition holds every part of an agent, policies and enabled capabilities included | `AgentDefinition` holds `model`, `instructions`, `tools`, `pattern`, `context`, `output`, `budget`, `permissions`, `triggers` and `stopWhen`. Policies (`policies`) and capabilities (`capabilities`) are the configuration's, the same for every agent of it |
 | CAP-01 | Each capability can be switched on or off per application or per agent definition | Per application only (`capabilities.*.enabled`): an agent uses every capability that is on, and a tool of one that is off is an error (CAP-02). No agent has a capabilities setting |
+| RUN-05 | The run budget defaults to 8 hours of elapsed time | Every level's time, the run's included, is working time: the time a turn waits for the owner (an approval, a question, a sign-off, a pause) does not count, so a slow answer never uses up a budget. A level's clock stops only while every turn drawing on it waits, so in a team the run's time runs while one agent waits and another works. `run.approvalTimeout` bounds each wait (`BudgetTests`, `TeamTests`) |
 | TASK-02 | Only configured status changes are allowed | The status changes are fixed in code (`TaskBoard.Transitions`), not configured; the test that names TASK-02 checks that a change outside them is refused |
 
 ## Pending

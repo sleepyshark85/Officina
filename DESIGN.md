@@ -215,9 +215,14 @@ decides the outcome.
 - **The team** is an agent's own pattern (`TeamRun`), built from turns like every other. Each agent of it is an instance,
   `role[n]` or the lead, with its own turns, budget, inbox and status; it sees only its task as data, the board when it is the
   lead, and messages sent to it (TEAM-04). The team works from the board as it is, so a resumed run goes on from its last
-  checkpoint's board: the lead plans only while the board is empty, each ready task goes to a free agent of its role, a task
+  checkpoint's board: the lead plans when it has not yet in the run (on an empty board, or one carried over), each ready task goes to a free agent of its role, a task
   that needs a review to another agent whose tools can review, and work that ends unfinished fails its task back to the lead
   with the reason. The lead's authority (assign, retry, cancel, decide on memory) is a flag the team sets, never a name.
+  The board is a run's, but the lead's conversation spans runs, as each chat message is a run. So a new run whose lead's
+  conversation ended in another run starts with that run's board, as one change by the host (`carried over from run …`): the
+  lead sees the tasks it remembers, retries failed ones and adds tasks that depend on done ones. A task in progress or in
+  review there is failed, as its work is in that run's working copy. The lead plans on that board; when it changes nothing and
+  nothing is ready, its reply is the team's.
 - **Done means integrated.** Submitting runs the task's checks, and only if they pass is the task in review. The host
   integrates a task in review that is verified and approved, then marks it done; a conflict or a failed baseline check
   returns it to its author as a failed attempt (WS-03). The last failed attempt, or a used-up task budget, sends it to
@@ -285,11 +290,17 @@ decides the outcome.
   repeated, because its intent is already in the audit log (TOOL-10): it goes to a human. Patterns do not resume part-way: the
   steps run again from the first, on the state the checkpoint holds. The budgets hold across the restart (INV-07): the resumed
   run's budget starts with the cost, tokens and tool calls summed from the stored events, and the time spent inside its work
-  items, so downtime between processes does not count. Event retention shorter than a run's life would under-count it. `sof` holds a lock file for a run while it works on it, so a live run is not resumed from another process.
+  items less the time in which every agent at work waited for the owner, so downtime between processes and waits for the owner do not count. Event retention shorter than a run's life would under-count it. `sof` holds a lock file for a run while it works on it, so a live run is not resumed from another process.
 - **Budgets and the report (RUN-05, RUN-10, RUN-11).** Each level draws on the one above: turn, pattern, agent, run; a task's budget
   (its cost, and its tokens, tool calls and time when set) is checked beside them, and so is the own level of a pattern's step agent
   with a `budget.total`, over all its steps in the run. Exhausting any ends the turn in a handoff that names the level, and the run level asks the owner. The agent level exists only when configured. A level
-  announces a `budgetWarning` once at 80% of a limit. The report is built from the stored events, record and board, so it can be
+  announces a `budgetWarning` once at 80% of a limit. Time is working time: a level counts the turns that draw on it and those
+  of them that wait for the owner (an approval, a question, a sign-off, or a pause), and its clock stops while every one waits,
+  or, with none at work, while anything waits (the plan's approval). So a waiting turn and its task use no time, and neither
+  does a run whose agents all wait; while one agent of a team waits and another works, the run's time runs.
+  `run.approvalTimeout` bounds each wait. A resumed run reads the same from its events: a team's agents work from their
+  `working` status to their step's end, and wait from `humanAsked` to `humanAnswered`, which a cancelled wait publishes too.
+  The report's running time is the run's time. The report is built from the stored events, record and board, so it can be
   made for a run of another process; cost is summed from `modelCallEnded` events by their agent, task, step and model.
 
 ![Crash and resume](docs/diagrams/resume.svg)

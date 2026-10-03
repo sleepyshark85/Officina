@@ -32,7 +32,7 @@ public sealed record TaskBudget
     [Range(1, int.MaxValue, ErrorMessage = Messages.NotZero)]
     public int? ToolCalls { get; init; }
 
-    [Setting("The longest a task's turns may take together, as `hh:mm:ss`. Unset means no limit of its own.", Example = "\"02:00:00\"")]
+    [Setting("The longest a task's turns may take together, as `hh:mm:ss`, less the time they wait for the owner. Unset means no limit of its own.", Example = "\"02:00:00\"")]
     [Range(typeof(TimeSpan), "00:00:00", "10675199.02:48:05.4775807", MinimumIsExclusive = true, ErrorMessage = Messages.NotZero)]
     public TimeSpan? Time { get; init; }
 }

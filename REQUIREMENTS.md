@@ -739,7 +739,8 @@ v1 does not include:
 
 None at revision 2. Raised during the build, for the owner to decide at revision 3:
 
-- Readings of three MUSTs, which [`verification.md`](docs/plan/verification.md) records: CFG-01, CAP-01 and TASK-02.
+- Readings of four MUSTs, which [`verification.md`](docs/plan/verification.md) records: CFG-01, CAP-01, RUN-05 (time spent
+  waiting for the owner does not count against a time budget) and TASK-02.
 - Proposed as not in v1, with reasons in [S21](docs/plan/S21-hardening.md): CLD-11 (SHOULD), HITL-07 (MAY) and SEC-03 (MAY).
 - §4.3 lists masking as replaceable; the design keeps it in the core, not replaceable in v1.
 - No MUST gap is left: CFG-17's command detection is `sof init`. [`verification.md`](docs/plan/verification.md) lists

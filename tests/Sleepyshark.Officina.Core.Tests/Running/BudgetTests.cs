@@ -148,6 +148,52 @@ public class BudgetTests
         }
     }
 
+    // RUN-05: the time a turn waits for the owner to approve a call uses none of its budget's time, nor the run's: a turn of 45
+    // minutes in a run of an hour goes on after the owner took 50 minutes, twice. A call that takes 50 minutes itself uses it up.
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Waiting_for_the_owner_uses_no_time_of_the_turn_or_the_run(bool waiting)
+    {
+        TestKit? kit = null;
+        var owner = new SlowOwner(() => kit!.Time.Advance(waiting ? TimeSpan.FromMinutes(50) : TimeSpan.Zero));
+        kit = Kit(
+            agent => agent with { Budget = agent.Budget with { Turn = agent.Budget.Turn with { Time = TimeSpan.FromMinutes(45) } } },
+            run: new() { Time = TimeSpan.FromHours(1) }, readTakes: waiting ? TimeSpan.Zero : TimeSpan.FromMinutes(50), owner: owner);
+        kit.Model.Reply(Call(), new Stopped(StopReason.WantsTools)).Reply(Call(), new Stopped(StopReason.WantsTools)).Reply("Done.");
+        var work = new Work(Agent, "work");
+
+        var result = await kit.Runner.RunAsync(work, Ct);
+
+        if (waiting)
+        {
+            Assert.Equal((AgentOutcome.Completed, "Done."), Outcome(result));
+            Assert.Equal(TimeSpan.Zero, (await kit.Runner.ReportAsync(work.RunId, ct: Ct)).Running);
+            Assert.DoesNotContain((await Events(kit)).Select(coreEvent => coreEvent.Payload), payload => payload is BudgetWarning { Limit: "time" });
+        }
+        else
+        {
+            Assert.Equal((AgentOutcome.HandedOff, "the turn's time budget is used up"), (result.Outcome, result.Handoff!.Detail));
+        }
+    }
+
+    // INV-07, RUN-05: a resumed run reads from its events what it spent, and the time it waited for the owner is not among it.
+    [Fact]
+    public async Task A_resumed_run_has_not_spent_the_time_it_waited_for_the_owner()
+    {
+        TestKit? first = null;
+        first = Kit(owner: new SlowOwner(() => first!.Time.Advance(TimeSpan.FromHours(2))));
+        first.Model.Reply(Call(), new Stopped(StopReason.WantsTools)).Reply("Done.");
+        var work = new Work(Agent, "work");
+        await first.Runner.RunAsync(work, Ct);
+        await first.Runner.RollbackAsync(work.RunId, 0, ct: Ct);
+
+        var second = Kit(storage: first.Storage, run: new() { Time = TimeSpan.FromHours(1) });
+        second.Model.Reply("Again.");
+
+        Assert.Equal((AgentOutcome.Completed, "Again."), Outcome(await second.Runner.ResumeAsync(work.RunId, ct: Ct)));
+    }
+
     // EVT-01: a warning already given is not given again when the run resumes.
     [Fact]
     public async Task A_warning_given_before_a_restart_is_not_given_again()
@@ -279,12 +325,12 @@ public class BudgetTests
 
     private static TestKit Kit(
         Func<AgentDefinition, AgentDefinition>? configure = null, InMemoryStorage? storage = null, RunBudget? run = null, PolicyOptions? policies = null,
-        TimeSpan readTakes = default, bool checkpoints = true, Func<Task>? inRead = null)
+        TimeSpan readTakes = default, bool checkpoints = true, Func<Task>? inRead = null, IHumanChannel? owner = null)
     {
-        var options = Options(("read", Extension("read")));
+        var options = Options(("read", Extension("read") with { Approval = owner is null ? null : Approval.Always }));
         options = options with
         {
-            Run = options.Run with { Budget = run ?? new() },
+            Run = options.Run with { Budget = run ?? new(), ApprovalTimeout = TimeSpan.FromHours(10) }, // longer than any wait a test makes
             Policies = policies ?? new(),
             Agents = new Dictionary<string, AgentDefinition>
             {
@@ -296,7 +342,10 @@ public class BudgetTests
             {
                 [ProviderOptions.ClaudeName] = ProviderOptions.Claude with { Prices = new Dictionary<string, ModelPrice> { ["claude-opus-5-5"] = new() { Input = 1, Output = 5 } } },
             },
-            Capabilities = new() { ConversationStore = new() { Enabled = true }, Checkpoints = new() { Enabled = checkpoints } },
+            Capabilities = new()
+            {
+                ConversationStore = new() { Enabled = true }, Checkpoints = new() { Enabled = checkpoints }, HumanInteraction = new() { Enabled = owner is not null },
+            },
         };
         TestKit? kit = null;
         var tools = new Dictionary<string, ITool>
@@ -312,8 +361,18 @@ public class BudgetTests
                 return ToolResult.Success("contents");
             }),
         };
-        kit = new TestKit(options, tools, storage: storage, checks: new Dictionary<string, ICheck> { ["style"] = new PassingCheck() });
+        kit = new TestKit(options, tools, storage: storage, checks: new Dictionary<string, ICheck> { ["style"] = new PassingCheck() }, human: owner);
         return kit;
+    }
+
+    /// <summary>The owner, who takes as long on the clock as a test says to approve each call.</summary>
+    private sealed class SlowOwner(Action answering) : IHumanChannel
+    {
+        public ValueTask<HumanAnswer> AskAsync(HumanRequest request, CancellationToken ct)
+        {
+            answering();
+            return ValueTask.FromResult(HumanAnswer.Approve);
+        }
     }
 
     private sealed class PassingCheck : ICheck

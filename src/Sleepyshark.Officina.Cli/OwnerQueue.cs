@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Globalization;
 using Sleepyshark.Officina.Core.Extensibility;
 
 namespace Sleepyshark.Officina.Cli;
@@ -84,11 +85,11 @@ internal sealed class OwnerQueue(TextWriter output, string prefix = "") : IHuman
                     number = only.Number;
                     break;
                 case [var only] when gone.Count == 0:
-                    return $"error: #{only.Number} is irreversible, so type its number: {prefix}{command} {only.Number}.";
+                    return $"error: #{only.Number} is irreversible, so type its number: {Usage(command, only.Number.ToString(CultureInfo.InvariantCulture))}.";
                 case [var only]:
-                    return $"error: {Numbers(gone)} {(gone.Count == 1 ? "is" : "are")} no longer waiting; #{only.Number} is new: {What(only.Request)}. Type {prefix}{command} {only.Number}.";
+                    return $"error: {Numbers(gone)} {(gone.Count == 1 ? "is" : "are")} no longer waiting; #{only.Number} is new: {What(only.Request)}. Type {Usage(command, only.Number.ToString(CultureInfo.InvariantCulture))}.";
                 default:
-                    return $"error: {all.Count} requests wait for you; type {prefix}{command} with the number of one:\n"
+                    return $"error: {all.Count} requests wait for you; type {(command is "answer" or "change" ? Usage(command, "<n>") : prefix + command)} with the number of one:\n"
                         + string.Join("\n", all.Select(entry => $"  #{entry.Number} {Kind(entry.Request.Kind)}, {What(entry.Request)}"));
             }
         }
@@ -134,9 +135,20 @@ internal sealed class OwnerQueue(TextWriter output, string prefix = "") : IHuman
         HumanRequestKind.Approval => Lines(
             $"{request.Agent} asks to run {request.Tool} {request.Arguments?.GetRawText()}: {request.Summary}.",
             $"Answer with {prefix}approve {number}, {prefix}deny {number} or {prefix}change {number} <json>."),
-        HumanRequestKind.Question => Lines($"{request.Agent} asks: {request.Summary}", $"Answer with {prefix}answer {number} <text> or {prefix}deny {number}."),
+        HumanRequestKind.Question => Lines($"{request.Agent} asks: {request.Summary}", $"Answer with {prefix}answer {number} <your answer> or {prefix}deny {number}."),
         _ => Lines($"{request.Agent} needs your sign-off: {request.Summary}", $"Answer with {prefix}approve {number} or {prefix}deny {number}."),
     };
+
+    /// <summary>How to type a command for the request with the number, with what must follow it.</summary>
+    public string Usage(string command, string number) => command switch
+    {
+        "answer" => $"{prefix}answer {number} <your answer>",
+        "change" => $"{prefix}change {number} <json>",
+        _ => $"{prefix}{command} {number}",
+    };
+
+    /// <summary>Whether the request with the number waits and is a question.</summary>
+    public bool AsksQuestion(int number) => waiting.TryGetValue(number, out var entry) && entry.Request.Kind == HumanRequestKind.Question;
 
     /// <summary>A request in a few words: the agent and the call it asks to make, or the first line of what it asks.</summary>
     private static string What(HumanRequest request) => request.Kind == HumanRequestKind.Approval

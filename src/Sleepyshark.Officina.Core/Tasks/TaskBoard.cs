@@ -208,6 +208,30 @@ public sealed class TaskBoard
             return null;
         }, ct);
 
+    /// <summary>What the reason of a board carried over from an earlier run starts with, before that run's id.</summary>
+    internal const string CarriedFrom = "carried over from run ";
+
+    /// <summary>
+    /// Starts an empty board with an earlier run's tasks, as that run left them (TEAM-02): the run continues the lead's conversation,
+    /// so the lead sees the tasks it remembers, retries those that failed and adds tasks that depend on those done. A task in progress
+    /// or in review there failed with that run, as its work is in that run's working copy. Only the host carries a board over.
+    /// </summary>
+    internal Task<(bool Accepted, string Text)> CarryOverAsync(string runId, IReadOnlyList<BoardTask> tasks, CancellationToken ct) =>
+        ChangeAsync($"{CarriedFrom}{runId}", board =>
+        {
+            if (!owner || board.Count > 0)
+            {
+                return owner ? "the board is not empty." : HostOnly;
+            }
+
+            foreach (var task in tasks)
+            {
+                board[task.Id] = task.State is InProgress or InReview ? task with { State = Failed, Assignee = null, Verified = false, Approved = false } : task;
+            }
+
+            return null;
+        }, ct, carried: true);
+
     /// <summary>Takes a ready task for the agent, unless it is assigned to another (TASK-03, TASK-04).</summary>
     internal Task<(bool Accepted, string Text)> ClaimAsync(string id, CancellationToken ct) =>
         ChangeAsync("claimed", tasks =>
@@ -374,14 +398,15 @@ public sealed class TaskBoard
     /// <param name="reason">Why, as recorded (TASK-07).</param>
     /// <param name="change">Changes the tasks, by id, and returns why it cannot, or null.</param>
     /// <param name="ct">Cancels the change.</param>
-    private async Task<(bool Accepted, string Text)> ChangeAsync(string reason, Func<Dictionary<string, BoardTask>, string?> change, CancellationToken ct)
+    /// <param name="carried">Whether it carries tasks over as another run left them, which kept the rules then.</param>
+    private async Task<(bool Accepted, string Text)> ChangeAsync(string reason, Func<Dictionary<string, BoardTask>, string?> change, CancellationToken ct, bool carried = false)
     {
         while (true)
         {
             var history = await HistoryAsync(ct).ConfigureAwait(false);
             var before = Tasks(history);
             var after = new Dictionary<string, BoardTask>(before);
-            if ((change(after) ?? Problem(before, Promote(after))) is { } problem)
+            if ((change(after) ?? (carried ? null : Problem(before, Promote(after)))) is { } problem)
             {
                 return (false, problem);
             }

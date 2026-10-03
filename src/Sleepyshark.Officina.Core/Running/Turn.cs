@@ -70,7 +70,7 @@ internal sealed class Turn
     private long prefixMemory;
     private long seenMemory;
     private List<ToolUseContent> pending = [];
-    private long? started;
+    private bool started;
     private int iterations;
     private int toolCalls;
     private int withoutProgress;
@@ -120,11 +120,11 @@ internal sealed class Turn
         TimeProvider time,
         Func<ToolContext, string, Budget, CancellationToken, Task<AgentResult>> runHelper)
     {
-        this.context = context with { StartHelper = StartHelperAsync };
-        this.runHelper = runHelper;
-        project = options.Project;
         agent = options.Agents[context.Agent];
         this.budget = budget.Draw("turn's", agent.Budget.Turn);
+        this.context = context with { StartHelper = StartHelperAsync, WaitForOwner = this.budget.WaitForOwner };
+        this.runHelper = runHelper;
+        project = options.Project;
         runBudget = options.Run.Budget;
         cacheHitWarning = options.Operations.Telemetry.CacheHitWarning;
         var profile = options.Models[agent.Model];
@@ -157,7 +157,8 @@ internal sealed class Turn
 
     public async Task<AgentResult> RunAsync(CancellationToken ct)
     {
-        started = time.GetTimestamp();
+        started = true;
+        using var working = budget.Working(); // RUN-05: a level's clock stops only while every turn drawing on it waits
         var history = agent.Context.History;
         IReadOnlyList<ConversationTurn> earlier = [];
         if (history.Strategy != HistoryStrategy.None)
@@ -201,7 +202,10 @@ internal sealed class Turn
 
         while (true)
         {
-            await whilePaused(ct).ConfigureAwait(false);
+            using (budget.WaitForOwner())
+            {
+                await whilePaused(ct).ConfigureAwait(false);
+            }
 
             // RUN-06: a turn cancelled while it was paused, or just before, starts no other model call.
             ct.ThrowIfCancellationRequested();
@@ -323,8 +327,8 @@ internal sealed class Turn
         }
     }
 
-    /// <summary>Time since the turn started; zero for a turn cancelled before it started.</summary>
-    private TimeSpan Elapsed => started is { } at ? time.GetElapsedTime(at) : TimeSpan.Zero;
+    /// <summary>The time the turn has used, less its waits for the owner (RUN-05); zero for a turn cancelled before it started.</summary>
+    private TimeSpan Elapsed => started ? budget.Time : TimeSpan.Zero;
 
     /// <summary>
     /// Searches the knowledge sources configured before the turn with its work, once, and keeps what each found as a

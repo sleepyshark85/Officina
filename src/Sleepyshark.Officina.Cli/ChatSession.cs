@@ -457,7 +457,10 @@ internal sealed class ChatSession
             queued.Enqueue(message);
             if (session is not null)
             {
-                status.WriteLine("(it is sent when this reply ends; /drop drops it, and /tell <agent> <text> reaches an agent now)");
+                // A message is never taken as an answer, but the owner who typed one to a question is told how to answer it.
+                status.WriteLine(owner.Waiting.Where(entry => entry.Request.Kind == HumanRequestKind.Question).ToList() is [var question]
+                    ? $"(it is sent when this reply ends; /drop drops it) #{question.Number} waits for an answer; to answer it, type /answer {question.Number} <your answer>"
+                    : "(it is sent when this reply ends; /drop drops it, and /tell <agent> <text> reaches an agent now)");
             }
         }
     }
@@ -1015,8 +1018,8 @@ internal sealed class ChatSession
     /// <summary>
     /// TASK-08: <c>/board</c> and <c>/task</c> between replies act on the last message's run, straight from storage: no run, tool
     /// server or workspace is opened, as a board change touches none of the workspace. A change takes the run's lock, so a run held
-    /// by another process, such as one resumed in another terminal, is refused. The run has ended, so no agent works on its board
-    /// again: the change is recorded and shows in its report. A run that stopped without ending, as a rollback leaves it, is refused
+    /// by another process, such as one resumed in another terminal, is refused. The run has ended: the change is recorded and shows
+    /// in its report, and a team's next message starts from the board. A run that stopped without ending, as a rollback leaves it, is refused
     /// too, as its resume goes back to its last checkpoint's board and would undo the change.
     /// </summary>
     private async Task StoredBoardAsync(List<string> words, CancellationToken ct)
@@ -1066,7 +1069,9 @@ internal sealed class ChatSession
             }
 
             var options = configuration.Options;
-            var note = $"note: run {run} has ended, so no agent works on this board again; ask for the work in your next message.";
+            var note = options.Agents[agent].Pattern.Type == PatternOptions.Team
+                ? $"note: run {run} has ended; the team's next message starts from this board."
+                : $"note: run {run} has ended, so no agent works on this board again; ask for the work in your next message.";
             status.WriteLine(await TaskCommand.CarryOutAsync(
                 words, new OwnerBoard(() => TaskBoard.ForOwner(storage, options, null, run, host.Time), options, agent, Live: false, "/", note), ct));
         }

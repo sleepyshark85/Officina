@@ -21,7 +21,7 @@ public sealed record TurnBudget
     [Range(typeof(decimal), "0", "79228162514264337593543950335", MinimumIsExclusive = true, ErrorMessage = Messages.NotZero)]
     public decimal Cost { get; init; } = 5m;
 
-    [Setting("The longest a turn may take, as `hh:mm:ss`.", Example = "\"00:45:00\"")]
+    [Setting("The longest a turn may take, as `hh:mm:ss`. Time waiting for the owner, to answer or to resume it, does not count.", Example = "\"00:45:00\"")]
     [Range(typeof(TimeSpan), "00:00:00", "10675199.02:48:05.4775807", MinimumIsExclusive = true, ErrorMessage = Messages.NotZero)]
     public TimeSpan Time { get; init; } = TimeSpan.FromMinutes(45);
 }
