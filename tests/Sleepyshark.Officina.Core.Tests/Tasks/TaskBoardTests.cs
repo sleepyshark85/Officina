@@ -505,6 +505,27 @@ public class TaskBoardTests
                 : GateDecision.Deny("the task must be in progress");
     }
 
+    // TASK-08, TASK-07: the owner cancels a task while its checks run; the submit, which read the task before, does not overwrite the cancel.
+    [Fact]
+    public async Task A_cancel_that_lands_while_the_checks_run_is_kept()
+    {
+        var slow = new SlowCheck();
+        setup.Checks["slow"] = slow;
+        var pipeline = setup.Create(options with { Checks = new Dictionary<string, CheckOptions>(options.Checks) { ["slow"] = new() { Use = "extension:slow" } } });
+        var board = pipeline.Board(Owner.Tenant, Context.RunId);
+        Assert.True((await board.AddAsync("t1", new() { Title = "Run the tests", Checks = ["slow"] }, "planned", Ct)).Accepted);
+        await RunAsync(pipeline, "claim", """{ "id": "t1" }""", Context);
+
+        var submitting = RunAsync(pipeline, "submit", """{ "id": "t1" }""", Context);
+        await slow.Started.Task.WaitAsync(Ct);
+        Assert.True((await board.EditAsync("t1", new() { State = TaskState.Cancelled }, "not needed", Ct)).Accepted);
+        slow.Release.TrySetResult(new(true, []));
+
+        Assert.EndsWith("task t1 changed while its checks ran. Submit it again.", (await submitting).Content, StringComparison.Ordinal);
+        Assert.Equal(TaskState.Cancelled, (await board.ReadAsync(Ct)).Single().State);
+        Assert.Equal("not needed", (await board.HistoryAsync(Ct))[^1].Reason);
+    }
+
     /// <summary>A check that runs until the test releases it.</summary>
     private sealed class SlowCheck : ICheck
     {

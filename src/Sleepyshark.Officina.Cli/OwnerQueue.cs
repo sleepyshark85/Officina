@@ -15,6 +15,9 @@ internal sealed class OwnerQueue(TextWriter output, string prefix = "") : IHuman
     private readonly ConcurrentDictionary<int, (HumanRequest Request, TaskCompletionSource<HumanAnswer> Answer)> waiting = new();
     private int numbered;
 
+    /// <summary>What the owner types before a command.</summary>
+    public string Prefix => prefix;
+
     /// <summary>Where requests and everything else for the owner are shown.</summary>
     public TextWriter Output => output;
 

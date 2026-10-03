@@ -1,4 +1,5 @@
 using System.CommandLine;
+using System.CommandLine.Parsing;
 using System.Globalization;
 using System.Text.Json;
 using Sleepyshark.Officina.Core.Configuration;
@@ -26,7 +27,8 @@ internal static class RunCommand
     internal static string Help(string prefix = "") => $"""
         Commands: {prefix}status | {prefix}approve <n> | {prefix}deny <n> | {prefix}change <n> <json> | {prefix}answer <n> <text> | {prefix}tell <agent> <text>
                   | {prefix}mode <ask|auto|readOnly> | {prefix}pause [agent] | {prefix}resume [agent] | {prefix}cancel [agent] | {prefix}checkpoint | {prefix}board
-                  | {prefix}memory | {prefix}memory approve <n> [reason] | {prefix}memory reject <n> <reason>
+                  | {prefix}task add|edit|priority|assign|cancel|show ... ({prefix}task --help) | {prefix}memory | {prefix}memory approve <n> [reason]
+                  | {prefix}memory reject <n> <reason>
         """;
 
     public static Command Create(ConfigurationCommandOptions shared, SofEnvironment host)
@@ -306,9 +308,11 @@ internal static class RunCommand
             {
                 output.WriteLine(await CheckpointAsync(runner, session.RunId, ct));
             }
-            else if (line.Trim() == "board")
+            else if (CommandLineParser.SplitCommandLine(line).ToList() is [_, ..] words && words[0] is "board" or "task")
             {
-                output.Write(await BoardAsync(runner, session.RunId, ct));
+                // TASK-08: the live run's board, which its team sees changed at its next look.
+                output.WriteLine(await TaskCommand.CarryOutAsync(
+                    words, new OwnerBoard(() => runner.Board(null, session.RunId), runner.Options, session.Agent, Live: true, session.Queue.Prefix), ct));
             }
             else if (line.Trim().Split(' ', 4, StringSplitOptions.RemoveEmptyEntries) is ["memory", .. var memory])
             {
@@ -337,20 +341,6 @@ internal static class RunCommand
         {
             return $"error: {exception.Message}";
         }
-    }
-
-    /// <summary>TASK-08: the run's task board as it is now, one task a line, the highest priority first.</summary>
-    private static async Task<string> BoardAsync(AgentRunner runner, string runId, CancellationToken ct)
-    {
-        if (!runner.Options.Capabilities.TaskBoard.Enabled)
-        {
-            return "error: the task board is off.\n";
-        }
-
-        var tasks = await runner.Board(null, runId).ReadAsync(ct);
-        return tasks.Count == 0 ? "the board is empty.\n" : string.Concat(tasks.Select(task =>
-            $"{task.Id} {task.Title}: {task.State}{(task.Assignee is { } assignee ? $", with {assignee}" : "")}{(task.Role is { } role ? $", role {role}" : "")}"
-            + string.Create(CultureInfo.InvariantCulture, $"{(task.DependsOn.Count > 0 ? $", depends on {string.Join(", ", task.DependsOn)}" : "")}, priority {task.Priority}, ${task.Spent:0.00} of ${task.Budget:0.00}\n")));
     }
 
     /// <summary>

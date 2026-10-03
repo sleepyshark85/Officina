@@ -345,7 +345,7 @@ What to expect:
    ```
 
    `/status` shows the waiting request and its number again. Check that `average` depends on `fix-divide`; if it
-   doesn't, `/tell lead average must depend on fix-divide`, then `/deny 1`. Type `/approve 1`. To change the plan, `/tell lead <what to change>`, then `/deny 1`; the lead plans again. With no
+   doesn't, fix it yourself with `/task edit average --depends fix-divide`. Type `/approve 1`. To change the plan, `/tell lead <what to change>`, then `/deny 1`; the lead plans again. With no
    answer within `run.approvalTimeout` (30 minutes), the team stops.
 2. **Tasks.** A developer takes each ready task, in `.sof/worktrees/<run>-task.<task id>`. Lines such as
    `[developer[1]] running run_command` show what it does. A command no rule allows waits for `/approve` or `/deny`. The
@@ -358,14 +358,16 @@ What to expect:
    `team: Completed, cost $…; this session $…`.
 
 To watch spend, each model call prints `[agent] model call: N tokens, $x; cost so far $y`. While it works: `/status` shows each agent and what waits for you, `/board` the tasks, and `/tell lead …` reaches the
-lead. Ctrl+C cancels the reply; changes already integrated stay on the branch.
+lead. `/task` changes the board as the team works, such as `/task add Add a median --role developer --depends fix-divide`
+or `/task cancel average Not needed`; the team sees the change the next time it looks at the board. Ctrl+C cancels the
+reply; changes already integrated stay on the branch.
 
 ## 5. Check the result
 
 In the session, after the reply:
 
 - `/report`: the outcome, each task's state and spend, which checks passed and failed, and cost by agent, task and
-  model. (`/board` works only while a reply runs.)
+  model. `/board` shows the tasks, and `/task show <id>` every change to one.
 - `/quit`, then in the shell:
 
 ```bash

@@ -127,8 +127,8 @@ unknown `--agent`, or when no agent was picked; 3 if the session itself fails.
 
 ## 5. Commands
 
-In a session, type each after a `/`. In `sof run` (section 8), type the first table's commands, `status` and `mode`
-without the `/`. Numbers come from `/status`, and keep growing through a session.
+In a session, type each after a `/`. In `sof run` (section 8), type the first table's commands, `status`, `mode`,
+`board` and `task` without the `/`. Numbers come from `/status`, and keep growing through a session.
 
 **While a reply runs** (between replies they say no reply is running):
 
@@ -141,7 +141,6 @@ without the `/`. Numbers come from `/status`, and keep growing through a session
 | `/pause [agent]` / `/resume [agent]` | Pause or resume the whole run, or one agent such as `developer[2]` |
 | `/cancel [agent]` | Stop one agent, or the whole run cleanly |
 | `/checkpoint` | Take a checkpoint now |
-| `/board` | Show the task board |
 | `/memory`, `/memory approve <n> [reason]`, `/memory reject <n> <reason>` | Review project memory proposals |
 
 **At any time:**
@@ -152,9 +151,22 @@ without the `/`. Numbers come from `/status`, and keep growing through a session
 | `/mode <ask\|auto\|readOnly>` | Change the permission mode, for this reply and the rest of the session |
 | `/new` | The next message starts a new conversation |
 | `/report [run]` | The report of the reply that runs or the last message's run, or of any run |
+| `/board` | The task board: each task's id, title, status, assignee, role, dependencies, priority and spend of its budget |
+| `/task add <title> [options]`, `/task edit <id> [options]` | Add or change a task. Options: `--description`, `--criteria` (repeat it), `--depends a,b`, `--role`, `--priority <n>`, `--checks c1,c2`, `--budget <usd>`, `--review true\|false`, `--reason`; edit takes `--title` too, and its `--depends`, `--checks` and `--criteria` replace the task's list. An added task's id is `owner-1`, `owner-2`, … |
+| `/task priority <id> <n>`, `/task assign <id> <agent>`, `/task cancel <id> <reason>` | Reprioritise, reassign (to an agent such as `developer[1]`) or cancel a task |
+| `/task show <id>` | A task, with every change to it: who, when, what and why |
 | `/config validate`, `/config show [--origin]`, `/config dry-run …` | As on the command line |
 | `/help [command]` | All commands; with a `sof` command (`run`, `resume`, `rollback`, `report`, `config`, `chat`), its options |
 | `/quit` | End the session |
+
+`/board` and `/task` act on the run of the reply that runs, and the team sees a change the next time it looks at the
+board, such as when an agent ends its turn. Cancelling a task an agent works on does not stop its turn; `/cancel <agent>`
+does. Between replies they act on the last message's run, which has ended: a change is recorded and shows in `/report`,
+but no agent works on that board again, so ask for new work in your next message. A change is refused while another
+process holds that run, and after `/rollback` (resume the run, and change its board while it runs). The board refuses
+what breaks its rules, such as a dependency cycle, a check that does not exist, or cancelling a task that is done.
+Tasks that depend on a cancelled task stay Proposed until you change their `--depends` or cancel them too. A task
+cancelled while its change is being integrated may still land on the branch; a warning says so.
 
 **Between replies only:** `/resume <run>`, `/rollback <run> [--to <n>]`, `/run --input <text>`. While a reply runs they
 are refused with an error, not queued; type them again after the reply ends.
@@ -282,8 +294,7 @@ Write down anything surprising, with the run id; `sof report <run>` and `.sof/so
 - `sof init` isn't built: write `sof.json` by hand.
 - `sof.json` must sit in the git repository's top folder.
 - Nothing lists runs: note the run id each message or `sof run` prints.
-- `/board` works only while a reply runs, and only shows the board; nothing can add, edit, reprioritise, reassign or
-  cancel tasks. After the reply, `/report` lists the tasks.
+- Between replies, `/task` changes the last message's run, which has ended, so no agent works on what it adds (section 5).
 - A single agent with the workspace loses its edits between chat messages (section 4).
 - The Claude feature switches (`providers.<name>.features`: structured output, clearing tool results, task budget,
   refusal fallback) and history compaction were tested against recordings written from the API docs. Try each on its own
