@@ -729,7 +729,7 @@ store and human interaction on; permission mode `ask`. The application gives `ag
   turn and each integration), conversation store, and human interaction with sign-offs for plan approval, the run budget
   and irreversible actions (HITL-04).
 - **Masking:** off, as it would corrupt source code (ING-02).
-- **Command rules:** `git status`, `diff`, `log` and `show` allowed; `git push` and `git remote` denied. The application
+- **Command rules:** `git push` and `git remote` denied; no git command is allowed, as the sandbox hides `.git`. The application
   adds its own project's commands, repeating these, since a list replaces the preset's.
 - **Checks:** `build` and `tests`, from `project.values.buildCommand` and `testCommand`, used for tasks and the baseline.
 - **Permission rules** allow the file writes and commands, as writes stay in a task's working copy until its checks and

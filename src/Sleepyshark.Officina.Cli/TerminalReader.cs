@@ -7,8 +7,8 @@ namespace Sleepyshark.Officina.Cli;
 /// <summary>
 /// The interactive terminal a chat session runs at: what the session prints and what the line editor draws share it under one
 /// lock, so neither cuts into the other. The editor's prompt sits on the last line while a read waits. Printed text clears that
-/// line before it starts a line, and when a key arrives while printed text has left a line unfinished, the line is ended first,
-/// so the editor redraws its prompt below the text rather than over it. Nothing printed is lost.
+/// line before it starts a line, and when the editor draws while printed text has left a line unfinished, the line is ended
+/// first, so the editor redraws its prompt below the text rather than over it. Nothing printed is lost.
 /// </summary>
 /// <param name="console">Where both write: the terminal's standard output.</param>
 internal sealed class TerminalScreen(TextWriter console)
@@ -26,7 +26,7 @@ internal sealed class TerminalScreen(TextWriter console)
     public TextWriter Writer(TextWriter stream) => new PrintWriter(this, stream);
 
     /// <summary>The console read through the line editor, with Tab completion and history.</summary>
-    public TerminalReader Reader() => new(EditorConsole(), new Keys(this));
+    public TerminalReader Reader() => new(EditorConsole(), new Keys());
 
     /// <summary>Prints text: a line it starts first clears what is there, which is the editor's prompt or nothing.</summary>
     internal void Print(TextWriter stream, string text)
@@ -50,27 +50,22 @@ internal sealed class TerminalScreen(TextWriter console)
         }
     }
 
-    /// <summary>The editor draws: its prompt and what was typed, on a line of its own.</summary>
+    /// <summary>
+    /// The editor draws: its prompt and what was typed, on a line of its own. A line printed text left unfinished is ended first,
+    /// under the same lock, so the editor draws below it.
+    /// </summary>
     internal void Draw(string text)
-    {
-        lock (gate)
-        {
-            console.Write(text);
-            console.Flush();
-        }
-    }
-
-    /// <summary>A key arrives: a line printed text left unfinished is ended, so the editor draws below it.</summary>
-    internal void KeyArrives()
     {
         lock (gate)
         {
             if (midLine)
             {
                 console.WriteLine();
-                console.Flush();
                 midLine = false;
             }
+
+            console.Write(text);
+            console.Flush();
         }
     }
 
@@ -124,19 +119,14 @@ internal sealed class TerminalScreen(TextWriter console)
         public override void Write(char[] buffer, int index, int count) => Write(new string(buffer, index, count));
     }
 
-    /// <summary>The keyboard, as the editor reads it: it waits for a key without blocking, and each key ends an unfinished printed line.</summary>
-    private sealed class Keys(TerminalScreen screen) : IInputSource
+    /// <summary>The keyboard, as the editor reads it: it waits for a key without blocking.</summary>
+    private sealed class Keys : IInputSource
     {
         public bool ByPassProcessing => false;
 
         public bool IsKeyAvailable() => Console.KeyAvailable;
 
-        public ConsoleKeyInfo ReadKey()
-        {
-            var key = Console.ReadKey(intercept: true);
-            screen.KeyArrives();
-            return key;
-        }
+        public ConsoleKeyInfo ReadKey() => Console.ReadKey(intercept: true);
     }
 }
 

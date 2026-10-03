@@ -135,7 +135,9 @@ public sealed class ToolPipeline
 
     /// <summary>
     /// Runs the calls of one model reply. When every tool called is safe to run in parallel they run at the same time, up
-    /// to the agent's limit; otherwise one after another. The results are in the order of the requests (LOOP-08).
+    /// to the agent's limit; otherwise one after another. Task board calls still run in the order they were made, each
+    /// after the one before it, so a task may depend on one created earlier in the same reply. The results are in the
+    /// order of the requests (LOOP-08).
     /// </summary>
     public async Task<IReadOnlyList<ToolResult>> RunAsync(ToolContext context, IReadOnlyList<ToolRequest> requests, CancellationToken ct)
     {
@@ -144,10 +146,40 @@ public sealed class ToolPipeline
         var parallel = requests.All(request => catalog.TryGet(context.Agent, request.Name, out var tool) && tool.ParallelSafe);
         var limit = parallel ? options.Agents[context.Agent].MaxParallelToolCalls : 1;
         var results = new ToolResult[requests.Count];
+
+        // Each board call waits for the board call before it. Calls start in order, so the one waited for has started.
+        var ended = new TaskCompletionSource?[requests.Count];
+        Task? previous = null;
+        var waitFor = new Task?[requests.Count];
+        for (var index = 0; index < requests.Count; index++)
+        {
+            if (catalog.TryGet(context.Agent, requests[index].Name, out var tool) && tool.Implementation is TaskTool)
+            {
+                waitFor[index] = previous;
+                ended[index] = new(TaskCreationOptions.RunContinuationsAsynchronously);
+                previous = ended[index]!.Task;
+            }
+        }
+
         await Parallel.ForEachAsync(
             Enumerable.Range(0, requests.Count),
             new ParallelOptions { MaxDegreeOfParallelism = limit, CancellationToken = ct },
-            async (index, token) => results[index] = await RunAsync(context, requests[index], token).ConfigureAwait(false)).ConfigureAwait(false);
+            async (index, token) =>
+            {
+                try
+                {
+                    if (waitFor[index] is { } before)
+                    {
+                        await before.WaitAsync(token).ConfigureAwait(false);
+                    }
+
+                    results[index] = await RunAsync(context, requests[index], token).ConfigureAwait(false);
+                }
+                finally
+                {
+                    ended[index]?.TrySetResult();
+                }
+            }).ConfigureAwait(false);
         return results;
     }
 

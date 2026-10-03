@@ -98,17 +98,14 @@
     "taskBoard": { "enabled": true },
     "team": { "enabled": true },
     "workspace": { "enabled": true, "baselineChecks": ["build", "tests"] },
-    // The project's own commands are the application's to allow; anything no rule matches is asked about. The git deny rules
-    // are a convenience, not the boundary: that is the sandbox, which has no network unless allowedHosts says so, and asking
-    // about every command no rule matches. A list in the application's file replaces this one rather than merging with it, so
-    // an application that sets commandRules repeats the rules it keeps.
+    // The project's own commands are the application's to allow; anything no rule matches is asked about. No git command is
+    // allowed, as the sandbox hides .git, so git does not work in a working copy. The git deny rules are a convenience, not
+    // the boundary: that is the sandbox, which has no network unless allowedHosts says so, and asking about every command no
+    // rule matches. A list in the application's file replaces this one rather than merging with it, so an application that
+    // sets commandRules repeats the rules it keeps.
     "sandbox": {
       "enabled": true,
       "commandRules": [
-        { "match": "git status*", "action": "allow" },
-        { "match": "git diff*", "action": "allow" },
-        { "match": "git log*", "action": "allow" },
-        { "match": "git show*", "action": "allow" },
         { "match": "git push*", "action": "deny" },
         { "match": "git remote*", "action": "deny" }
       ]

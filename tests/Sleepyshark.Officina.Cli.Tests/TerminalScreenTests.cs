@@ -15,20 +15,18 @@ public sealed class TerminalScreenTests : IDisposable
 
     public void Dispose() => terminal.Dispose();
 
-    // A key typed while a streamed line is half written ends that line first, so the editor's redraw, which clears the line it is
-    // on, lands below the text instead of erasing it; the rest of the stream then starts a line of its own.
+    // The editor drawing, as it does for a key typed while a streamed line is half written, ends that line first, so its redraw,
+    // which clears the line it is on, lands below the text instead of erasing it; the rest of the stream then starts a line of its own.
     [Fact]
-    public void A_key_typed_mid_line_ends_the_line_so_the_editor_draws_below_the_streamed_text()
+    public void The_editor_drawing_mid_line_ends_the_line_so_it_draws_below_the_streamed_text()
     {
         var output = screen.Writer(terminal);
         output.NewLine = "\n";
 
         output.Write("[dev] STREAMED partial line ");
-        screen.KeyArrives();
         screen.Draw("\u001b[2K\u001b[1G> t");
         output.Write("one\n");
         output.Write("second line\n");
-        screen.KeyArrives();
 
         Assert.Equal(
             $"{ClearLine}[dev] STREAMED partial line \n\u001b[2K\u001b[1G> t{ClearLine}one\n{ClearLine}second line\n",

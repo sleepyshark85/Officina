@@ -244,6 +244,57 @@ public sealed class RunCommandTests : IDisposable
         Assert.Equal((ExitCodes.Usage, "error: provider \"other\" is not available in this build of sof.\n"), (exitCode, error));
     }
 
+    // TEAM-10, UX-01: the plan to sign off lists its tasks indented under the request, and how to answer on a line of its own.
+    [Fact]
+    public async Task The_plan_to_sign_off_lists_its_tasks_under_the_request()
+    {
+        sof.Write("sof.json", """
+            {
+              "providers": { "claude": { "prices": { "claude-opus-5-5": { "input": 1 } } } },
+              "agents": {
+                "team": { "instructions": "A team.", "pattern": { "type": "team", "lead": "lead", "roles": { "developer": { "max": 1 } } } },
+                "lead": { "instructions": "Lead.", "tools": ["planning"] },
+                "developer": { "instructions": "Develop.", "tools": ["work"] }
+              },
+              "tools": { "create": { "source": "builtin:tasks.create" }, "submit": { "source": "builtin:tasks.submit_for_review" } },
+              "toolSets": { "planning": ["create"], "work": ["submit"] },
+              "capabilities": {
+                "taskBoard": { "enabled": true }, "team": { "enabled": true },
+                "humanInteraction": { "enabled": true, "signOffs": ["planApproval"] }
+              }
+            }
+            """);
+        model.When(request => Work(request).StartsWith("You lead a team", StringComparison.Ordinal))
+            .CallTools(
+                ("create", """{ "id": "a", "title": "Parse", "acceptanceCriteria": ["It parses."], "reason": "plan" }"""),
+                ("create", """{ "id": "b", "title": "Print", "reason": "plan" }"""))
+            .Reply("Planned.");
+        model.When(request => Work(request).StartsWith("Every task is done", StringComparison.Ordinal)).Reply("Done.");
+        model.When(request => Work(request).Contains("Do task ", StringComparison.Ordinal))
+            .CallTools(("submit", """{ "id": "a" }""")).Reply("Submitted.").CallTools(("submit", """{ "id": "b" }""")).Reply("Submitted.");
+
+        var run = sof.RunAsync("run", "--agent", "team", "--input", "Write a parser.");
+        await sof.Out.WaitForAsync("Answer with approve or deny.", Ct);
+        sof.In.Type("approve 1");
+        var (exitCode, output, _) = await run;
+
+        Assert.Equal(ExitCodes.Success, exitCode);
+        Assert.Contains(
+            """
+            #1 lead needs your sign-off: Approve the lead's plan before work starts?
+              a Parse: Ready
+                Acceptance criteria:
+                - It parses.
+              b Print: Ready
+            Answer with approve or deny.
+            """.ReplaceLineEndings("\n"),
+            output,
+            StringComparison.Ordinal);
+    }
+
+    private static string Work(ModelRequest request) =>
+        ScriptedModelProvider.WorkOf(request);
+
     private static ContentReceived Call(string tool, string arguments) =>
         new(new ToolUseContent("call-note", tool, System.Text.Json.JsonDocument.Parse(arguments).RootElement.Clone()));
 }

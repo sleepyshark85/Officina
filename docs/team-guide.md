@@ -162,9 +162,7 @@ Save this as `sof.json` in the `calc` folder. Each part is explained below it.
 Check it before you spend anything:
 
 ```bash
-sof config validate            # "The configuration is valid." It also notes that a single agent loses its
-                               # edits between chat messages; that applies to chatting with lead, developer or
-                               # reviewer alone, not to the team.
+sof config validate            # "The configuration is valid."
 sof config show --origin       # every setting and where it came from
 ```
 
@@ -193,8 +191,8 @@ command rules next.
 
 **Command rules** decide each command a developer runs, first match wins. Here: the build and tests are allowed,
 `git push` and `git remote` are denied, and **anything else is asked about** (`/approve` or `/deny`). Git itself can't
-run in the sandbox, because `.git` is hidden, so there's no point allowing `git status` or `git diff`; the preset's
-rules for them have no effect for the same reason. Don't allow an interpreter as a whole, such as `python3 *` or `sh*`: that allows every command.
+run in the sandbox, because `.git` is hidden, so there's no point allowing `git status` or `git diff`, and the preset
+no longer has git allow rules. Don't allow an interpreter as a whole, such as `python3 *` or `sh*`: that allows every command.
 
 **Masking** is off because it would replace things that look like emails or phone numbers in source code.
 
@@ -278,7 +276,7 @@ the fix, goes back. That's why the lead's instructions ask it to order tasks wit
   "capabilities": {
     "taskBoard": { "maxAttempts": 2, "budget": { "cost": 2 } },
     "sandbox": {
-      // This list replaces the preset's whole. Its git allow rules are left out: git can't run in the sandbox.
+      // This list replaces the preset's whole, so it repeats the preset's git deny rules.
       "commandRules": [
         { "match": "python3 -m unittest*", "action": "allow" },
         { "match": "python3 -m compileall*", "action": "allow" },
@@ -337,19 +335,17 @@ Fix the failing test in test_calc.py; the fix must come first. Then add average(
 What to expect:
 
 1. **Plan.** `run <id>` is printed; note it. The lead reads the code and creates tasks. Then it waits for your sign-off
-   (abridged; a live plan also lists each task's description and acceptance criteria, so the number scrolls up):
+   (abridged; a live plan also lists each task's description and acceptance criteria, indented under it):
 
    ```
    #1 lead needs your sign-off: Approve the lead's plan before work starts?
-   average Add average: Proposed, role developer, depends on fix-divide, needs a review
-
-   fix-divide Fix divide: Ready, role developer, needs a review Answer with /approve or /deny.
+     average Add average: Proposed, role developer, depends on fix-divide, needs a review
+     fix-divide Fix divide: Ready, role developer, needs a review
+   Answer with /approve or /deny.
    ```
 
    `/status` shows the waiting request and its number again. Check that `average` depends on `fix-divide`; if it
-   doesn't, `/tell lead average must depend on fix-divide`, then `/deny 1`. A `create_task failed` line during planning
-   is a known bug with a task that depends on another created in the same step; the lead usually retries. Type
-   `/approve 1`. To change the plan, `/tell lead <what to change>`, then `/deny 1`; the lead plans again. With no
+   doesn't, `/tell lead average must depend on fix-divide`, then `/deny 1`. Type `/approve 1`. To change the plan, `/tell lead <what to change>`, then `/deny 1`; the lead plans again. With no
    answer within `run.approvalTimeout` (30 minutes), the team stops.
 2. **Tasks.** A developer takes each ready task, in `.sof/worktrees/<run>-task.<task id>`. Lines such as
    `[developer[1]] running run_command` show what it does. A command no rule allows waits for `/approve` or `/deny`. The
