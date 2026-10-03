@@ -457,7 +457,10 @@ internal sealed class ChatSession
             queued.Enqueue(message);
             if (session is not null)
             {
-                status.WriteLine("(it is sent when this reply ends; /drop drops it, and /tell <agent> <text> reaches an agent now)");
+                // A message is never taken as an answer, but the owner who typed one to a question is told how to answer it.
+                status.WriteLine(owner.Waiting.Where(entry => entry.Request.Kind == HumanRequestKind.Question).ToList() is [var question]
+                    ? $"(it is sent when this reply ends; /drop drops it) #{question.Number} waits for an answer; to answer it, type /answer {question.Number} <your answer>"
+                    : "(it is sent when this reply ends; /drop drops it, and /tell <agent> <text> reaches an agent now)");
             }
         }
     }

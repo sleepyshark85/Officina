@@ -103,7 +103,10 @@ off, or if the agent's `triggers` leave out `conversation`; `config validate` no
 **Each message is a run of its own**, with its own run id (printed as `run <id>`), report, checkpoints and budget.
 `run.budget`, or `--budget`, applies to each message. Every reply ends with its cost and the session's cost so far, as
 `assistant: Completed, cost $0.03; this session $0.05`. There is no limit for the session as a whole: queued messages
-or a piped script can each spend a full budget without asking you.
+or a piped script can each spend a full budget without asking you. A team's message starts from the task board its
+last message left, as its lead remembers it: done tasks stay done, and new ones can depend on them; failed ones can be
+retried; and a task still in progress or in review there is failed, as its work stayed in that run. After `/new` the
+board starts empty.
 
 **Typing during a reply.** Commands work at once. A message waits, and is sent when the reply ends; to reach an agent
 now, use `/tell`. `/status` lists the messages that wait, and `/drop` drops them without cancelling the reply. A line
@@ -230,7 +233,11 @@ In a session, type each after a `/`. In `sof run` (section 8), type the first ta
 what it answered, such as `approved #2: developer[1] run_command {…}`. `/approve`, `/deny`, `/change` and `/answer`
 may leave out the number when one request waits and no other was shown since your last answer; otherwise, such as when
 #1 went away and #2 arrived, they list what waits and ask for the number. An irreversible call always needs its
-number. Words after `/approve <n>` or `/deny <n>` are allowed, and not passed on.
+number. Words after `/approve <n>` or `/deny <n>` are allowed, and not passed on. In `/answer` and `/change` a number
+is the request's only when something follows it: `/answer 3` answers the only question that waits with "3", unless
+question #3 waits, when it says `error: give your answer after the number: /answer 3 <your answer>`. A message you type
+while one question waits is not its answer: it waits for the reply to end, and the session says
+`#3 waits for an answer; to answer it, type /answer 3 <your answer>`.
 
 **While a reply runs** (between replies they say no reply is running):
 
@@ -268,7 +275,7 @@ number. Words after `/approve <n>` or `/deny <n>` are allowed, and not passed on
 `/board` and `/task` act on the run of the reply that runs, and the team sees a change the next time it looks at the
 board, such as when an agent ends its turn. Cancelling a task an agent works on does not stop its turn; `/cancel <agent>`
 does. Between replies they act on the last message's run, which has ended: a change is recorded and shows in `/report`,
-but no agent works on that board again, so ask for new work in your next message. A change is refused while another
+and the team's next message starts from that board. A change is refused while another
 process holds that run, and after `/rollback` (resume the run, and change its board while it runs). The board refuses
 what breaks its rules, such as a dependency cycle, a check that does not exist, or cancelling a task that is done.
 Tasks that depend on a cancelled task stay Proposed until you change their `--depends` or cancel them too. A task
@@ -354,7 +361,8 @@ What they don't do:
   such as memory changes.
 - A resume or rollback is refused if another process holds the run, or if another run has written to the same agent's
   conversation since the checkpoint.
-- A resumed run's time budget counts only time spent inside work, not the time between the crash and the resume.
+- A resumed run's time budget counts only time spent inside work, not the time between the crash and the resume, nor
+  the time it waited for your answers. Pauses before the crash are not recorded, so they count.
 
 ## 8. Scripts: `sof run`
 
@@ -386,6 +394,9 @@ completing (handed off, rejected, failed or cancelled).
   testing; `--budget 2` overrides it. The budget is checked between model calls, so a run can go past it by about one
   call for each agent working at once. To watch spend, each call prints
   `[agent] model call: N tokens, $x; cost so far $y`.
+- **Time waiting for you is free:** while an agent waits for your approval, answer or sign-off, or is paused, its turn's
+  and task's time budgets don't run, and neither does the run's, so a slow answer never fails the work. Each wait is
+  still bounded by `run.approvalTimeout`. The report's running time leaves the waits out too.
 - **Structured output:** an agent with `output.format: structured` is told its `output.schema` and must reply with
   JSON that matches it. Say the shape in its instructions too, such as `{"steps": ["…"]}`; see `samples/`.
 - **Permission mode:** `ask` (default; you approve writes no rule allows), `auto` or `readOnly`. Set it with

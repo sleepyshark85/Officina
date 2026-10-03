@@ -440,11 +440,16 @@ internal static class RunCommand
     /// <c>approve [n]</c>, <c>deny [n]</c>, <c>change [n] &lt;json&gt;</c> and <c>answer [n] &lt;text&gt;</c>, carried out on the
     /// request with that number, or without one on the request the owner has seen (<see cref="OwnerQueue.Answer"/>). Words after
     /// approve and deny, such as a reason, are taken and not used, as the channel has no reason. In change and answer a number is
-    /// the request's only when something follows it, so <c>answer 42</c> answers with 42, and <c>change 3</c> is refused as it has
-    /// no arguments.
+    /// the request's only when something follows it, so <c>answer 42</c> answers with 42, unless question #42 waits: then the
+    /// owner meant its number and left out the answer, which is said. <c>change 3</c> is refused as it has no arguments.
     /// </summary>
     private static string Answer(string command, string rest, OwnerQueue queue)
     {
+        if (command == "answer" && int.TryParse(rest.TrimStart('#'), NumberStyles.None, CultureInfo.InvariantCulture, out var asked) && queue.AsksQuestion(asked))
+        {
+            return $"error: give your answer after the number: {queue.Usage(command, asked.ToString(CultureInfo.InvariantCulture))}";
+        }
+
         int? number = null;
         if (rest.Split(' ', 2, StringSplitOptions.RemoveEmptyEntries) is [var first, .. var after]
             && int.TryParse(first.TrimStart('#'), NumberStyles.None, CultureInfo.InvariantCulture, out var typed) && (after.Length > 0 || command is "approve" or "deny"))

@@ -38,6 +38,12 @@ public sealed record ToolContext(string RunId, string Agent, Caller Caller)
     /// <summary>Starts a helper of the agent, on its work; null where the agent cannot (TEAM-07).</summary>
     internal Func<string, string, CancellationToken, Task<(bool Completed, string Text)>>? StartHelper { get; init; }
 
+    /// <summary>
+    /// Stops the clock of the agent's budget until the result is disposed, while it waits for the owner (RUN-05); null where no
+    /// budget's time runs.
+    /// </summary>
+    internal Func<IDisposable>? WaitForOwner { get; init; }
+
     /// <summary>The run's masking, when it is on (ING-06).</summary>
     internal Masker? Masker { get; init; }
 

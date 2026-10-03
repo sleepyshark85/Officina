@@ -128,6 +128,26 @@ public sealed class RunCommandTests : IDisposable
         Assert.True(SofCommandLine.TerminationTimeout(new()) > new Sleepyshark.Officina.Core.Configuration.RunDefaults().CancelWithin);
     }
 
+    // A number alone is the answer's text, unless a question with that number waits: then the owner left out the answer, which is
+    // said each time, and the question keeps waiting.
+    [Fact]
+    public async Task Answer_with_a_waiting_questions_number_and_no_text_asks_for_the_text()
+    {
+        model.CallTools(("ask", """{ "question": "How many retries?" }""")).Reply("Done.");
+
+        var run = sof.RunAsync("run", "--input", "Configure it.");
+        await sof.Out.WaitForAsync("#1 dev asks: How many retries? Answer with answer 1 <your answer> or deny 1.", Ct);
+        sof.In.Type("answer 1");
+        sof.In.Type("answer #1");
+        await sof.Out.WaitForAsync("error: give your answer after the number: answer 1 <your answer>\nerror: give your answer after the number: answer 1 <your answer>", Ct);
+        sof.In.Type("answer 3");
+        var (exitCode, output, _) = await run;
+
+        Assert.Equal(ExitCodes.Success, exitCode);
+        Assert.Contains("answered #1: dev: How many retries?", output, StringComparison.Ordinal);
+        Assert.Contains("3", Assert.IsType<ToolResultContent>(model.Requests[^1].History[^1].Content[0]).Text, StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task An_answer_of_the_wrong_kind_is_refused_and_the_request_keeps_waiting()
     {

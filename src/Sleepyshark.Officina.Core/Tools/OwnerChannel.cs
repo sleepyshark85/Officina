@@ -5,7 +5,8 @@ namespace Sleepyshark.Officina.Core.Tools;
 
 /// <summary>
 /// The human channel as the core uses it: each request gets its deadline, and is published as it starts and ends, so a
-/// reader sees what waits for the owner (UX-01). Only the asking agent waits (LOOP-12).
+/// reader sees what waits for the owner (UX-01). Only the asking agent waits (LOOP-12), and its budget uses no time meanwhile
+/// (RUN-05): the deadline bounds each wait.
 /// </summary>
 /// <param name="human">The host's channel.</param>
 /// <param name="events">Where the waits are published.</param>
@@ -18,6 +19,7 @@ internal sealed class OwnerChannel(IHumanChannel human, EventBus events, TimeSpa
     public async Task<HumanAnswer?> AskAsync(ToolContext context, HumanRequest request, CancellationToken ct)
     {
         await events.PublishAsync(context, new HumanAsked(request.Kind, request.Summary, request.Tool), ct).ConfigureAwait(false);
+        using var waiting = context.WaitForOwner?.Invoke();
         using var deadline = new CancellationTokenSource(timeout, time);
         using var wait = CancellationTokenSource.CreateLinkedTokenSource(ct, deadline.Token);
         HumanAnswer? answer = null;

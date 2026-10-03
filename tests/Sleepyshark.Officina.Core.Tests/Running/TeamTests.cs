@@ -649,6 +649,105 @@ public class TeamTests
         Assert.All(await kit.Runner.Board(null, work.RunId).ReadAsync(Ct), task => Assert.Equal(TaskState.Done, task.State));
     }
 
+    // TEAM-02, TEAM-09, TASK-03: a chat's next message is a run of its own, whose board starts as the run the lead's conversation
+    // ended with left it. So the lead, who remembers those tasks, sees them all: it retries the one that failed and adds one that
+    // depends on one done there.
+    [Fact]
+    public async Task The_next_message_carries_on_the_board_so_the_lead_retries_a_failed_task_and_builds_on_a_done_one()
+    {
+        var kit = Kit(LeadKeepsItsConversation, null);
+        Turn(kit, "You lead a team: lead (the lead), developer[1], developer[2], reviewer[1]. Turn the goal", Create("a"), Create("b"));
+        Turn(kit, "Tasks failed and came back to you").Reply("Leave it for the owner.");
+        Turn(kit, "No task can start").Reply("Leave it.");
+        Work(kit, "a").CallTools(("submit", """{ "id": "a" }""")).Reply("Submitted.");
+        Work(kit, "b").Reply("I ran out of time.").CallTools(("submit", """{ "id": "b" }""")).Reply("Submitted.");
+        var first = new Work("team", "Build a and b.") { Caller = Ann };
+        Assert.Equal(HandoffReason.NoProgress, (await kit.Runner.RunAsync(first, Ct)).Handoff?.Reason);
+
+        Turn(kit, "You lead a team: lead (the lead), developer[1], developer[2], reviewer[1]. The board below is the one your team left in run",
+            ("update", """{ "id": "b", "state": "ready", "reason": "It only ran out of time." }"""),
+            ("create", """{ "id": "c", "title": "Task c", "role": "developer", "dependsOn": ["a"], "reason": "It builds on a." }"""));
+        Turn(kit, "Every task is done").Reply("b and c are done.");
+        Work(kit, "c").CallTools(("submit", """{ "id": "c" }""")).Reply("Submitted.");
+        var next = new Work("team", "Do it, and add c on top of a.") { Caller = Ann };
+        var result = await kit.Runner.RunAsync(next, Ct);
+
+        Assert.Equal((AgentOutcome.Completed, "b and c are done."), (result.Outcome, result.Output));
+        var history = await kit.Runner.Board(null, next.RunId).HistoryAsync(Ct);
+        Assert.Equal(("team", $"carried over from run {first.RunId}", "a added as Done; b added as Failed"), (history[0].By, history[0].Reason, history[0].What));
+        Assert.Equal(
+            [("lead", "It only ran out of time."), ("lead", "It builds on a.")],
+            history.Where(change => change.By == "lead").Select(change => (change.By, change.Reason)));
+        Assert.Equal(
+            [("a", TaskState.Done, ""), ("b", TaskState.Done, ""), ("c", TaskState.Done, "a")],
+            (await kit.Runner.Board(null, next.RunId).ReadAsync(Ct)).Select(task => (task.Id, task.State, string.Join(",", task.DependsOn))));
+        var told = kit.Model.Requests.Select(Current).First(work => work.Contains("left in run", StringComparison.Ordinal));
+        Assert.Contains("a Task a: Done, role developer", told, StringComparison.Ordinal);
+        Assert.Contains("b Task b: Failed, role developer", told, StringComparison.Ordinal);
+    }
+
+    // TEAM-02: a message that asks the team for no work, on a board carried over where nothing can start, is the lead's to answer.
+    [Fact]
+    public async Task A_message_the_lead_answers_without_changing_the_board_carried_over_ends_with_its_reply()
+    {
+        var kit = Kit(LeadKeepsItsConversation, null);
+        Turn(kit, "You lead a team: lead (the lead), developer[1], developer[2], reviewer[1]. Turn the goal", Create("a"));
+        Turn(kit, "Every task is done").Reply("a is done.");
+        Work(kit, "a").CallTools(("submit", """{ "id": "a" }""")).Reply("Submitted.");
+        await kit.Runner.RunAsync(new Work("team", "Build a.") { Caller = Ann }, Ct);
+        Turn(kit, "You lead a team: lead (the lead), developer[1], developer[2], reviewer[1]. The board below").Reply("a parses the input.");
+
+        var result = await kit.Runner.RunAsync(new Work("team", "What does a do?") { Caller = Ann }, Ct);
+
+        Assert.Equal((AgentOutcome.Completed, "a parses the input."), (result.Outcome, result.Output));
+    }
+
+    // RUN-05, TASK-09: the time an agent's turn waits for the owner uses none of its turn's time (45 minutes by default), nor its task's.
+    [Fact]
+    public async Task Waiting_for_the_owner_uses_no_time_of_the_turn_or_the_task()
+    {
+        TestKit? kit = null;
+        var owner = new SlowOwner(() => kit!.Time.Advance(TimeSpan.FromMinutes(50)));
+        kit = Kit(options => options with
+        {
+            Tools = new Dictionary<string, ToolOptions>(options.Tools) { ["write"] = options.Tools["write"] with { Approval = Approval.Always } },
+            Capabilities = options.Capabilities with
+            {
+                HumanInteraction = new() { Enabled = true },
+                TaskBoard = options.Capabilities.TaskBoard with { Budget = new() { Time = TimeSpan.FromMinutes(45) } },
+            },
+        }, owner);
+        Lead(kit, "You lead a team", Create("a"));
+        Lead(kit, "Every task is done").Reply("Done.");
+        Work(kit, "a").CallTools(("write", "{}")).CallTools(("submit", """{ "id": "a" }""")).Reply("Submitted.");
+        var work = new Work("team", "Build it.") { Caller = Ann };
+
+        var result = await kit.Runner.RunAsync(work, Ct);
+
+        Assert.Equal((AgentOutcome.Completed, "Done."), (result.Outcome, result.Output));
+        Assert.Equal((TaskState.Done, TimeSpan.Zero), (await kit.Runner.Board(null, work.RunId).ReadAsync(Ct)).Select(task => (task.State, task.SpentTime)).Single());
+    }
+
+    /// <summary>A chat with the team: the lead keeps its conversation from message to message.</summary>
+    private static OfficinaOptions LeadKeepsItsConversation(OfficinaOptions options) => options with
+    {
+        Agents = new Dictionary<string, AgentDefinition>(options.Agents)
+        {
+            ["lead"] = options.Agents["lead"] with { Context = options.Agents["lead"].Context with { History = new() { Strategy = HistoryStrategy.Full } } },
+        },
+        Capabilities = options.Capabilities with { ConversationStore = new() { Enabled = true } },
+    };
+
+    /// <summary>Scripts the turns whose own work, not the conversation's first, starts with <paramref name="work"/>: its tool calls, then a reply.</summary>
+    private static ModelScript Turn(TestKit kit, string work, params (string Tool, string Arguments)[] calls)
+    {
+        var script = kit.Model.When(request => Current(request).StartsWith(work, StringComparison.Ordinal));
+        return calls.Length == 0 ? script : script.CallTools(calls).Reply("Planned.");
+    }
+
+    /// <summary>The work of the request's turn: the first message after the earlier turns of its conversation.</summary>
+    private static string Current(ModelRequest request) => string.Concat(request.History[request.TurnStart].Content.OfType<TextContent>().Select(text => text.Text));
+
     private static (string, string) Create(string id, bool review = false) =>
         ("create", $$"""{ "id": "{{id}}", "title": "Task {{id}}", "role": "developer", "requiresReview": {{(review ? "true" : "false")}}, "reason": "plan" }""");
 
@@ -772,6 +871,16 @@ public class TeamTests
         {
             await Task.Delay(Timeout.Infinite, ct);
             throw new InvalidOperationException("unreachable");
+        }
+    }
+
+    /// <summary>The owner, who takes as long on the clock as a test says to approve each request.</summary>
+    private sealed class SlowOwner(Action answering) : IHumanChannel
+    {
+        public ValueTask<HumanAnswer> AskAsync(HumanRequest request, CancellationToken ct)
+        {
+            answering();
+            return ValueTask.FromResult(HumanAnswer.Approve);
         }
     }
 

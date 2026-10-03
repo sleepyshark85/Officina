@@ -80,7 +80,7 @@ the sandbox (see the [user guide](docs/user-guide.md), section 6):
 | `agents.<name>.tools` | no tools | The agent should act |
 | `tools.<name>.approval` | `always` for irreversible tools, otherwise `never` | A tool needs human sign-off |
 | `toolServers` | none | You use MCP tool servers |
-| `run.budget` | $25 and 8 hours (`"08:00:00"`) | Runs are bigger or smaller |
+| `run.budget` | $25 and 8 hours (`"08:00:00"`) of working time: waits for the owner don't count, nor do they in a turn's or a task's time | Runs are bigger or smaller |
 | `agents.<name>.budget.total` | none | One agent should spend less of the run than the rest |
 | `run.permissionMode` | `ask` | You trust the rules enough for `auto`, or want `readOnly` |
 | `capabilities.sandbox.allowedHosts` | none (network off) | Builds download packages |

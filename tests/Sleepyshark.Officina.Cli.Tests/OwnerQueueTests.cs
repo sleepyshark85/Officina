@@ -67,6 +67,34 @@ public sealed class OwnerQueueTests : IDisposable
         Assert.Equal(2, queue.Waiting.Count());
     }
 
+    // The hints that name a question's number say the answer follows it.
+    [Fact]
+    public void A_hint_to_answer_a_question_by_its_number_includes_the_answer()
+    {
+        _ = Ask(new HumanRequest(HumanRequestKind.Question, "developer[2]", "Which database?", DateTimeOffset.MaxValue));
+        _ = Ask(new HumanRequest(HumanRequestKind.Question, "lead", "Which test framework?", DateTimeOffset.MaxValue));
+
+        Assert.Equal(
+            "error: 2 requests wait for you; type /answer <n> <your answer> with the number of one:\n  #1 question, developer[2]: Which database?\n  #2 question, lead: Which test framework?",
+            queue.Answer(null, "answer", HumanAnswer.Reply("Postgres.")));
+        Assert.StartsWith("#1 developer[2] asks: Which database? Answer with /answer 1 <your answer> or /deny 1.\n", output.ToString(), StringComparison.Ordinal);
+    }
+
+    // The question the owner read goes away, and another arrives: a numberless answer is refused, with how to answer the new one.
+    [Fact]
+    public async Task Without_a_number_an_answer_meant_for_a_question_that_went_away_says_how_to_answer_the_new_one()
+    {
+        using var first = CancellationTokenSource.CreateLinkedTokenSource(cancel.Token);
+        var gone = Ask(new HumanRequest(HumanRequestKind.Question, "developer[1]", "Tabs?", DateTimeOffset.MaxValue), first.Token);
+        await first.CancelAsync();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await gone);
+        _ = Ask(new HumanRequest(HumanRequestKind.Question, "lead", "Which database?", DateTimeOffset.MaxValue));
+
+        Assert.Equal(
+            "error: #1 is no longer waiting; #2 is new: lead: Which database?. Type /answer 2 <your answer>.",
+            queue.Answer(null, "answer", HumanAnswer.Reply("Tabs.")));
+    }
+
     // The owner reads #1; it goes away, as its agent is cancelled, and #2 arrives: a numberless approve, meant for #1, is refused.
     [Fact]
     public async Task Without_a_number_a_request_that_came_after_the_one_the_owner_read_went_away_is_refused()

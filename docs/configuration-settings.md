@@ -336,7 +336,7 @@ It lists the settings the code has today. Settings that later slices add are spe
 | Setting | Allowed values | Default | Description | Example |
 |---|---|---|---|---|
 | `cost` | number, > 0 | `25` | The most the run may spend, in USD. Live: the owner may change it during a run. | `25` |
-| `time` | time span (`hh:mm:ss` or `d.hh:mm:ss`) | `"08:00:00"` | The longest the run may take, as `hh:mm:ss` or `d.hh:mm:ss`. Live: the owner may change it during a run. | `"08:00:00"` |
+| `time` | time span (`hh:mm:ss` or `d.hh:mm:ss`) | `"08:00:00"` | The longest the run may take, as `hh:mm:ss` or `d.hh:mm:ss`. Time in which an agent of it waits for the owner, to answer or to resume it, does not count. Live: the owner may change it during a run. | `"08:00:00"` |
 | `tokens` | whole number, ≥ 1 |  | The most tokens the run may use: input, output, cache reads and cache writes together. Unset: only cost and time limit the run. Live: the owner may change it during a run. | `500000000` |
 | `toolCalls` | whole number, ≥ 1 |  | The most tool calls the run may make, including tools the provider runs itself. Unset: only cost and time limit the run. Live: the owner may change it during a run. | `20000` |
 
@@ -475,7 +475,7 @@ It lists the settings the code has today. Settings that later slices add are spe
 | `toolCalls` | whole number, ≥ 1 | `200` | The most tool calls in a turn, including tools the provider runs itself. | `200` |
 | `tokens` | whole number, ≥ 1 | `3000000` | The most tokens a turn may use: input, output, cache reads and cache writes together. | `3000000` |
 | `cost` | number, > 0 | `5` | The most a turn may spend, in USD. | `5` |
-| `time` | time span (`hh:mm:ss` or `d.hh:mm:ss`) | `"00:45:00"` | The longest a turn may take, as `hh:mm:ss`. | `"00:45:00"` |
+| `time` | time span (`hh:mm:ss` or `d.hh:mm:ss`) | `"00:45:00"` | The longest a turn may take, as `hh:mm:ss`. Time waiting for the owner, to answer or to resume it, does not count. | `"00:45:00"` |
 
 ## `agents.<name>.budget.total`
 
@@ -513,7 +513,7 @@ It lists the settings the code has today. Settings that later slices add are spe
 | `cost` | number, > 0 | `8` | The most a task's turns may cost, in USD, unless the owner gives the task another budget. | `8` |
 | `tokens` | whole number, ≥ 1 |  | The most tokens a task's turns may use: input, output, cache reads and cache writes together. Unset means no limit of its own. | `20000000` |
 | `toolCalls` | whole number, ≥ 1 |  | The most tool calls a task's turns may make. Unset means no limit of its own. | `500` |
-| `time` | time span (`hh:mm:ss` or `d.hh:mm:ss`) |  | The longest a task's turns may take together, as `hh:mm:ss`. Unset means no limit of its own. | `"02:00:00"` |
+| `time` | time span (`hh:mm:ss` or `d.hh:mm:ss`) |  | The longest a task's turns may take together, as `hh:mm:ss`, less the time they wait for the owner. Unset means no limit of its own. | `"02:00:00"` |
 
 ## `agents.<name>.pattern.steps[].onOutcome`
 
