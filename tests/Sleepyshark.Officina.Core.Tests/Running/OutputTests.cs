@@ -69,6 +69,20 @@ public class OutputTests
         Assert.EndsWith($".\n{ToldSchema}", retry, StringComparison.Ordinal);
     }
 
+    // OUT-01: the schema is shown as written, with no \uXXXX escapes; with no attempts left, one invalid reply is handed off.
+    [Fact]
+    public async Task The_schema_is_told_as_written_and_one_invalid_reply_is_handed_off_with_no_attempts()
+    {
+        const string schema = """{"type":"object","properties":{"total":{"type":"number","description":"Total in € of <net> & 'gross'"}},"required":["total"]}""";
+        var kit = Kit(agent => agent with { Output = new() { Format = OutputFormat.Structured, Schema = schema, Attempts = 0 } });
+        kit.Model.Reply("{}");
+
+        var result = await kit.RunAsync(Agent, "Total?", Ct);
+
+        Assert.Contains($"matching this JSON Schema:\n{schema}", Assert.Single(kit.Model.Requests).Instructions, StringComparison.Ordinal);
+        Assert.StartsWith("the output does not match its JSON Schema after 1 reply: ", result.Handoff!.Detail, StringComparison.Ordinal);
+    }
+
     // OUT-01, CLD-06: the model is told the schema in its instructions, which are cached, unless the provider constrains the output to it.
     [Theory]
     [InlineData(false)]

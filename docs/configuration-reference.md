@@ -424,8 +424,8 @@ draws on the pattern's budget, which is the agent's turn budget (PAT-06). Runnab
 
 In `planAndExecute`, the planner's input starts with a note that it only plans, in short steps a worker carries out one
 at a time. Each item's input holds the work, the plan, every earlier item's output, each labelled with its source, and
-then the item. A long plan of long outputs makes long inputs, so ask the planner for few steps, and the executor for
-short replies.
+then the item. Because each item gets every earlier output, a long plan with long outputs costs input that grows with
+the square of the plan's length; the run and turn budgets bound it.
 
 A workflow step's `input` lists `input` (the workflow's input) or earlier steps' ids; several are each labelled with
 their source, and a step skipped by a `goto` gives empty input. `onOutcome` maps `completed`, `handedOff` and `failed` to

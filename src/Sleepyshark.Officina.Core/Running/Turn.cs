@@ -615,7 +615,7 @@ internal sealed class Turn
             return null;
         }
 
-        return HandOff(reason, invalid ? $"the output does not match its JSON Schema after {outputAttempts + 1} replies: {problem}" : problem);
+        return HandOff(reason, invalid ? $"the output does not match its JSON Schema after {(outputAttempts == 0 ? "1 reply" : $"{outputAttempts + 1} replies")}: {problem}" : problem);
     }
 
     /// <summary>

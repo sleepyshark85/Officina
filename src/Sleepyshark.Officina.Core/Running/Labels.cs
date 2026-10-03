@@ -25,7 +25,10 @@ internal static class Labels
     /// and again with the errors when output does not match it (OUT-02).
     /// </summary>
     public static string OutputSchema(System.Text.Json.JsonElement schema) =>
-        $"Reply with JSON only, matching this JSON Schema:\n{System.Text.Json.JsonSerializer.Serialize(schema)}";
+        $"Reply with JSON only, matching this JSON Schema:\n{System.Text.Json.JsonSerializer.Serialize(schema, Readable)}";
+
+    /// <summary>Compact, and without <c>\uXXXX</c> escapes, so non-ASCII text and <c>&lt; &gt; &amp; '</c> stay as written.</summary>
+    private static readonly System.Text.Json.JsonSerializerOptions Readable = new() { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
 
     /// <summary>Content from <paramref name="source"/>, such as <c>tool:read_file</c>, delimited as data.</summary>
     public static string Data(string source, string text) =>

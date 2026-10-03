@@ -11,8 +11,14 @@
       "output_config": {
         "format": { "type": "json_schema", "schema": {
           "type": "object",
-          "properties": { "number": { "type": "string" }, "lines": { "type": "array", "items": { "type": "object", "properties": { "amount": { "type": "number" } }, "additionalProperties": false } } },
-          "required": ["number"], "additionalProperties": false
+          "properties": {
+            "number": { "type": "string" },
+            "lines": { "type": "array", "items": { "$ref": "#/$defs/line" } },
+            "payer": { "anyOf": [{ "type": "object", "properties": { "name": { "type": "string" } }, "additionalProperties": false }, { "type": "null" }] }
+          },
+          "required": ["number"],
+          "$defs": { "line": { "type": ["object"], "properties": { "amount": { "type": "number" } }, "additionalProperties": false } },
+          "additionalProperties": false
         } },
         "task_budget": { "type": "tokens", "total": 64000 }
       },
@@ -75,8 +81,14 @@
       "output_config": {
         "format": { "type": "json_schema", "schema": {
           "type": "object",
-          "properties": { "number": { "type": "string" }, "lines": { "type": "array", "items": { "type": "object", "properties": { "amount": { "type": "number" } }, "additionalProperties": false } } },
-          "required": ["number"], "additionalProperties": false
+          "properties": {
+            "number": { "type": "string" },
+            "lines": { "type": "array", "items": { "$ref": "#/$defs/line" } },
+            "payer": { "anyOf": [{ "type": "object", "properties": { "name": { "type": "string" } }, "additionalProperties": false }, { "type": "null" }] }
+          },
+          "required": ["number"],
+          "$defs": { "line": { "type": ["object"], "properties": { "amount": { "type": "number" } }, "additionalProperties": false } },
+          "additionalProperties": false
         } },
         "task_budget": { "type": "tokens", "total": 64000 }
       },

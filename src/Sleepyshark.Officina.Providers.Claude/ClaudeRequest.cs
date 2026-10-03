@@ -144,8 +144,8 @@ internal static class ClaudeRequest
     }
 
     /// <summary>
-    /// Claude's structured output takes an object schema only with <c>additionalProperties: false</c>, so it is added to each object
-    /// schema that leaves it unset, as the Anthropic SDKs do. A reply this allows also matches the schema as written, which the core
+    /// Claude's structured output takes an object schema only with <c>additionalProperties: false</c>, so it is added to each schema
+    /// whose <c>type</c> is or includes <c>object</c> and that leaves it unset, as the Anthropic SDKs do. A reply this allows also matches the schema as written, which the core
     /// checks. Any other keyword Claude does not take, such as <c>additionalProperties: true</c> or <c>minLength</c>, is sent as it is,
     /// and Claude refuses the call as an invalid request.
     /// </summary>
@@ -163,8 +163,9 @@ internal static class ClaudeRequest
             }
 
             var type = schema["type"];
-            var isObject = schema.ContainsKey("properties")
-                || type is JsonValue value && value.TryGetValue<string>(out var name) && name == "object"
+            // Only a schema whose type says object: allOf branches that list properties without a type stay open, since closing
+            // each would allow no property of the others.
+            var isObject = type is JsonValue value && value.TryGetValue<string>(out var name) && name == "object"
                 || type is JsonArray types && types.Any(each => each?.GetValueKind() == JsonValueKind.String && each.GetValue<string>() == "object");
             if (isObject && !schema.ContainsKey("additionalProperties"))
             {
