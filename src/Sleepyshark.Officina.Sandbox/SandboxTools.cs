@@ -81,8 +81,11 @@ public sealed class SandboxTools : IAsyncDisposable
             }
         }
 
-        // Every command has ended, so what the sandbox set up for this working copy can go.
-        sandbox.Release(directory, options.Toolchains);
+        // Every command has ended, so what the sandbox set up for this working copy can go, unless the owner keeps the copy (WS-08).
+        if (!workspace.KeepWorkingCopies)
+        {
+            sandbox.Release(directory, options.Toolchains);
+        }
     }
 
     private async ValueTask<ToolResult> RunAsync(ToolCall call, CancellationToken ct)

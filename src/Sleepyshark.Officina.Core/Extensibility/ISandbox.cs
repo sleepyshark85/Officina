@@ -22,6 +22,14 @@ public interface ISandbox
     /// <param name="directory">The working copy, as given to <see cref="StartAsync"/>.</param>
     /// <param name="toolchains">The toolchains given with its commands.</param>
     void Release(string directory, IReadOnlyList<string> toolchains);
+
+    /// <summary>
+    /// Removes what the sandbox set up for working copies that no longer exist, such as those a crash left before they were released.
+    /// It is called as a run starts.
+    /// </summary>
+    void ReleaseOrphans()
+    {
+    }
 }
 
 /// <summary>A command running in a sandbox. Disposing it stops the command and every process it started.</summary>

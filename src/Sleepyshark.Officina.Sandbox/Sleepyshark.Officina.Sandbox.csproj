@@ -8,4 +8,8 @@
     <PackageReference Include="Microsoft.Extensions.FileSystemGlobbing" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="Sleepyshark.Officina.Sandbox.Tests" />
+  </ItemGroup>
+
 </Project>

@@ -12,11 +12,19 @@ public sealed class LinuxSandboxTests : IDisposable
 {
     private const string LinuxOnly = "The Linux sandbox runs only on Linux.";
 
-    private readonly RealSandbox real = new(new LinuxSandbox());
+    // The working copies' home folders go here, not in the user's own data folder.
+    private readonly string homes = Directory.CreateTempSubdirectory("officina-homes-").FullName;
+    private readonly RealSandbox real;
+
+    public LinuxSandboxTests() => real = new(new LinuxSandbox(homes));
 
     public static bool OnLinux => OperatingSystem.IsLinux();
 
-    public void Dispose() => real.Dispose();
+    public void Dispose()
+    {
+        real.Dispose();
+        Directory.Delete(homes, recursive: true);
+    }
 
     [Fact(Skip = LinuxOnly, SkipUnless = nameof(OnLinux))]
     public void The_machine_can_isolate_commands() => Assert.Null(real.Sandbox.Probe());
@@ -94,7 +102,45 @@ public sealed class LinuxSandboxTests : IDisposable
         Assert.DoesNotContain("kept", other, StringComparison.Ordinal);
         Assert.DoesNotContain(home, other, StringComparison.Ordinal);
         Assert.False(Directory.Exists(home));
+        Assert.Equal(2, Directory.EnumerateFileSystemEntries(homes).Count()); // the other copy's home and the file that names its copy
         real.Sandbox.Release(real.WorkingCopy, []); // nothing left to remove is not an error
+    }
+
+    // A command can leave folders it cannot write, as Go's module cache is, and links to anywhere: the home still goes, and what a
+    // link leads to stays.
+    [Fact(Skip = LinuxOnly, SkipUnless = nameof(OnLinux))]
+    public async Task Releasing_removes_a_home_with_read_only_folders_and_leaves_what_its_links_lead_to()
+    {
+        var outside = Directory.CreateDirectory(Path.Combine(real.Host, "outside")).FullName;
+        await File.WriteAllTextAsync(Path.Combine(outside, "keep.txt"), "kept", Ct);
+        var (home, exitCode) = await real.RunAsync(
+            $"mkdir -p ~/go/pkg/mod/x && touch ~/go/pkg/mod/x/f && chmod 555 ~/go/pkg/mod/x ~/go/pkg/mod && chmod 444 ~/go/pkg/mod/x/f && ln -s {outside} ~/outside && ln -s {outside}/keep.txt ~/keep && echo $HOME");
+        Assert.Equal(0, exitCode);
+
+        real.Sandbox.Release(real.WorkingCopy, []);
+
+        Assert.False(Directory.Exists(home.Trim()));
+        Assert.Equal("kept", await File.ReadAllTextAsync(Path.Combine(outside, "keep.txt"), Ct));
+        Assert.Empty(Directory.EnumerateFileSystemEntries(homes));
+    }
+
+    // A crash can leave a home whose working copy is gone; it goes as a run starts, and a copy that still exists keeps its home.
+    [Fact(Skip = LinuxOnly, SkipUnless = nameof(OnLinux))]
+    public async Task Releasing_orphans_removes_only_the_homes_of_working_copies_that_are_gone()
+    {
+        var (kept, _) = await real.RunAsync("echo $HOME");
+        var gone = new RealSandbox(real.Sandbox);
+        var (orphan, _) = await gone.RunAsync("chmod 500 ~; echo $HOME");
+        Directory.Delete(gone.WorkingCopy, recursive: true);
+        Directory.CreateDirectory(Path.Combine(homes, "0123456789abcdef")); // a home with no file naming its copy, from before there were any
+
+        real.Sandbox.ReleaseOrphans();
+
+        Assert.True(Directory.Exists(kept.Trim()));
+        Assert.False(Directory.Exists(orphan.Trim()));
+        Assert.Equal([Path.GetFileName(kept.Trim()), $"{Path.GetFileName(kept.Trim())}.copy"], Directory.EnumerateFileSystemEntries(homes).Select(Path.GetFileName).Order(StringComparer.Ordinal));
+        Directory.CreateDirectory(gone.WorkingCopy);
+        gone.Dispose();
     }
 
     // A git worktree's .git is a file, which the sandbox hides. The .NET SDK's Source Link reads it and fails the build unless the

@@ -22,6 +22,21 @@ public sealed class SandboxToolsTests : IAsyncDisposable
 
     public ValueTask DisposeAsync() => dev.DisposeAsync();
 
+    // WS-08: what the sandbox set up for a working copy, such as its home folder, goes when the tools do, unless the owner keeps
+    // working copies: then it stays with the copy.
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Disposing_the_tools_releases_the_working_copy_unless_copies_are_kept(bool keep)
+    {
+        var released = new FakeSandbox();
+        var tools = new SandboxTools(released, Options, new WorkspaceOptions { KeepWorkingCopies = keep }, "dev", dev.WorkingCopy);
+
+        await tools.DisposeAsync();
+
+        Assert.Equal(keep ? [] : [dev.WorkingCopy], released.Released);
+    }
+
     [Fact]
     public async Task A_command_runs_in_the_agents_working_copy_with_its_limits_and_allowed_hosts()
     {

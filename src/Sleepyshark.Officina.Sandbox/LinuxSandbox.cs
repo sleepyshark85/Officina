@@ -30,14 +30,60 @@ public sealed class LinuxSandbox : ISandbox
     /// <summary>The folders commands find programs in, after the toolchains.</summary>
     public static IReadOnlyList<string> SearchPath { get; } = ["/usr/local/bin", "/usr/bin", "/bin", "/usr/local/sbin", "/usr/sbin", "/sbin"];
 
-    /// <summary>Removes the working copy's home folder. Everything else commands use is a mount that ends with the command.</summary>
+    // Each working copy's home folder, named by a hash of the copy's path, beside a file that names the copy.
+    private readonly string homes;
+
+    /// <summary>The sandbox, with the working copies' home folders in the user's own data folder: the temporary folder is shared with other users.</summary>
+    public LinuxSandbox()
+        : this(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData, Environment.SpecialFolderOption.DoNotVerify), "officina", "homes"))
+    {
+    }
+
+    /// <param name="homes">The folder that holds the working copies' home folders.</param>
+    internal LinuxSandbox(string homes) => this.homes = homes;
+
+    /// <summary>
+    /// Removes the working copy's home folder. Everything else commands use is a mount that ends with the command.
+    /// </summary>
+    /// <exception cref="AggregateException">The folder could not be removed.</exception>
+    [UnsupportedOSPlatform("windows")]
     public void Release(string directory, IReadOnlyList<string> toolchains)
     {
         ArgumentNullException.ThrowIfNull(directory);
-        var home = Home(directory);
-        if (Directory.Exists(home))
+        Remove(Name(directory));
+    }
+
+    /// <summary>Removes the home folders of working copies that no longer exist, such as those a crash left.</summary>
+    /// <exception cref="AggregateException">A folder could not be removed.</exception>
+    [UnsupportedOSPlatform("windows")]
+    public void ReleaseOrphans()
+    {
+        if (!Directory.Exists(homes))
         {
-            Directory.Delete(home, recursive: true);
+            return;
+        }
+
+        var failures = new List<Exception>();
+        foreach (var home in Directory.EnumerateDirectories(homes))
+        {
+            // A home without its file is from before the files were written; the file is written before the home is made.
+            var copy = Path.Combine(homes, $"{Path.GetFileName(home)}.copy");
+            if (!File.Exists(copy) || !Directory.Exists(File.ReadAllText(copy)))
+            {
+                try
+                {
+                    Remove(Path.GetFileName(home));
+                }
+                catch (AggregateException exception)
+                {
+                    failures.AddRange(exception.InnerExceptions);
+                }
+            }
+        }
+
+        if (failures.Count > 0)
+        {
+            throw new AggregateException("The sandbox could not remove the home folders of working copies that no longer exist.", failures);
         }
     }
 
@@ -86,8 +132,11 @@ public sealed class LinuxSandbox : ISandbox
             Add(start, "--ro-bind-try", path, path);
         }
 
-        // In the user's own data folder: the temporary folder is shared with other users.
-        var home = Directory.CreateDirectory(Home(command.Directory), UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute).FullName;
+        // The file that names the copy comes first, so a home is never taken for an orphan while it is made.
+        var homeName = Name(command.Directory);
+        Directory.CreateDirectory(homes);
+        File.WriteAllText(Path.Combine(homes, $"{homeName}.copy"), Path.GetFullPath(command.Directory));
+        var home = Directory.CreateDirectory(Path.Combine(homes, homeName), UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute).FullName;
         Add(start, "--bind", home, home);
 
         var environment = new Dictionary<string, string>(ToolchainVariables.All)
@@ -143,10 +192,49 @@ public sealed class LinuxSandbox : ISandbox
         return process.ExitCode;
     }
 
-    /// <summary>The working copy's home folder on the host. Its name comes from the working copy, so each has its own (SBX-06).</summary>
-    private static string Home(string directory) => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData, Environment.SpecialFolderOption.DoNotVerify), "officina", "homes",
-        Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(Path.GetFullPath(directory))))[..16]);
+    /// <summary>The name of the working copy's home folder. It comes from the copy's path, so each copy has its own (SBX-06).</summary>
+    private static string Name(string directory) => Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(Path.GetFullPath(directory))))[..16];
+
+    /// <summary>
+    /// Removes a home folder and the file that names its copy. A command may leave folders it cannot write, as Go's module cache
+    /// is, so each folder is made writable first; links are removed, never followed.
+    /// </summary>
+    [UnsupportedOSPlatform("windows")]
+    private void Remove(string name)
+    {
+        var home = Path.Combine(homes, name);
+        try
+        {
+            if (Directory.Exists(home))
+            {
+                foreach (var folder in Folders(new DirectoryInfo(home)))
+                {
+                    folder.UnixFileMode |= UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute;
+                }
+
+                Directory.Delete(home, recursive: true);
+            }
+
+            File.Delete(Path.Combine(homes, $"{name}.copy"));
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            throw new AggregateException($"The sandbox could not remove the home folder {home}.", exception);
+        }
+
+        // The folder and every folder in it, each before what it holds, which it cannot list until it is readable.
+        static IEnumerable<DirectoryInfo> Folders(DirectoryInfo folder)
+        {
+            yield return folder;
+            foreach (var inner in folder.EnumerateDirectories("*", new EnumerationOptions { AttributesToSkip = FileAttributes.ReparsePoint, IgnoreInaccessible = false }))
+            {
+                foreach (var each in Folders(inner))
+                {
+                    yield return each;
+                }
+            }
+        }
+    }
 
     private static void Add(ProcessStartInfo start, params string[] arguments)
     {

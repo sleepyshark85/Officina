@@ -6,8 +6,9 @@
     "name": "benchmark",
     "values": { "buildCommand": "dotnet build", "testCommand": "dotnet test" }
   },
-  // A list replaces the preset's, so its rules are repeated. Packages come from NuGet. Build, test and restore are allowed,
-  // each as itself and with arguments; any other command, such as dotnet new or dotnet run, is asked about, and a run declines it.
+  // A list replaces the preset's, so its rules are repeated. Packages come from NuGet. Every goal starts from an empty repository,
+  // so making projects, solutions and references is allowed with build, test and restore, and the SDK's information. Any other
+  // command, such as dotnet run or dotnet tool, is asked about, and a run declines it.
   "capabilities": {
     "sandbox": {
       "allowedHosts": ["api.nuget.org", "*.nuget.org"],
@@ -19,7 +20,15 @@
         { "match": "dotnet test", "action": "allow" },
         { "match": "dotnet test *", "action": "allow" },
         { "match": "dotnet restore", "action": "allow" },
-        { "match": "dotnet restore *", "action": "allow" }
+        { "match": "dotnet restore *", "action": "allow" },
+        { "match": "dotnet new", "action": "allow" },
+        { "match": "dotnet new *", "action": "allow" },
+        { "match": "dotnet add *", "action": "allow" },
+        { "match": "dotnet sln *", "action": "allow" },
+        { "match": "dotnet --version", "action": "allow" },
+        { "match": "dotnet --info", "action": "allow" },
+        { "match": "dotnet --list-sdks", "action": "allow" },
+        { "match": "dotnet --list-runtimes", "action": "allow" }
       ]
     }
   }

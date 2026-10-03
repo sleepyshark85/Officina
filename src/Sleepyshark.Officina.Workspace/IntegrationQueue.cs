@@ -16,7 +16,7 @@ namespace Sleepyshark.Officina.Workspace;
 /// <param name="runId">The run whose changes are integrated, named in each commit (WS-04).</param>
 /// <param name="checks">The baseline checks, by name, in order (WS-02).</param>
 /// <param name="time">The clock for the waiting time.</param>
-/// <param name="released">Called with the scratch worktree's folder before it is removed, such as to release what a sandbox set up for its checks.</param>
+/// <param name="released">Called with the scratch worktree's folder before its checks run and again before it is removed, such as to release what a sandbox set up for its checks. If it throws (an <see cref="AggregateException"/>) before the checks, the integration fails; after them, the result carries a warning.</param>
 /// <param name="protectedPaths">The hidden and read-only paths, which no change may add, change or remove (INV-10).</param>
 internal sealed class IntegrationQueue(
     string root, string baseline, string runId, IReadOnlyDictionary<string, ICheck> checks, TimeProvider time, Action<string>? released, Matcher protectedPaths)
@@ -79,20 +79,43 @@ internal sealed class IntegrationQueue(
 
         var scratch = Path.Combine(root, WorkspaceOptions.StateFolder, "integration");
         await RemoveScratchAsync(scratch, ct).ConfigureAwait(false);
+
+        // Every integration's checks start from nothing a sandbox kept for the folder, such as a home folder an earlier change's
+        // checks wrote to and a crash or a failed release left: what it holds could change how the checks run.
+        try
+        {
+            released?.Invoke(scratch);
+        }
+        catch (Exception exception) when (exception is AggregateException or IOException or UnauthorizedAccessException)
+        {
+            return new(IntegrationOutcome.ChecksFailed, [$"the baseline checks did not run: what an earlier integration's checks left could not be removed: {exception.Message}"]);
+        }
+
         await Git.RunAsync(root, ct, "worktree", "add", "--detach", scratch, copy.Branch).ConfigureAwait(false);
         IntegrationResult result;
+        string? warning = null;
         try
         {
             result = await RebaseAndCheckAsync(copy, scratch, ct).ConfigureAwait(false);
         }
         finally
         {
-            released?.Invoke(scratch);
+            try
+            {
+                released?.Invoke(scratch);
+            }
+            catch (Exception exception) when (exception is AggregateException or IOException or UnauthorizedAccessException)
+            {
+                // The next integration tries again before its checks run.
+                warning = $"what the baseline checks left could not be removed: {exception.Message}";
+            }
         }
 
         // The result stands whatever happens to the scratch folder; one left behind is removed before the next integration.
         var removed = await Git.TryRunAsync(root, CancellationToken.None, "worktree", "remove", "--force", scratch).ConfigureAwait(false);
-        return removed.ExitCode == 0 ? result : result with { Warning = $"the integration's scratch folder {scratch} was not removed: {removed.Error.Trim()}" };
+        return removed.ExitCode == 0
+            ? result with { Warning = warning }
+            : result with { Warning = $"the integration's scratch folder {scratch} was not removed: {removed.Error.Trim()}" };
     }
 
     private async Task<IntegrationResult> RebaseAndCheckAsync(WorkingCopy copy, string scratch, CancellationToken ct)
