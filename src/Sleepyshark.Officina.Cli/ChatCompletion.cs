@@ -104,9 +104,12 @@ internal sealed class ChatCompletion(RootCommand root, Func<IEnumerable<string>>
         return command.Arguments.Any(argument => argument.Name == "run") && !words.Skip(1).Any(name => !name.StartsWith('-')) ? runs() : [];
     }
 
-    /// <summary>Every command that can be typed after a <c>/</c>: <c>chat</c> is not one, as the session is a chat already.</summary>
+    /// <summary>
+    /// Every command that can be typed after a <c>/</c>: <c>chat</c> is not one, as the session is a chat already, nor <c>init</c>,
+    /// which runs outside a session.
+    /// </summary>
     private IEnumerable<string> Commands() =>
-        SessionCommands.Concat(root.Subcommands.Select(command => command.Name)).Where(command => command != "chat").Distinct().Order(StringComparer.Ordinal);
+        SessionCommands.Concat(root.Subcommands.Select(command => command.Name)).Where(command => command is not ("chat" or "init")).Distinct().Order(StringComparer.Ordinal);
 
     private static List<string> Matching(IEnumerable<string> candidates, string word) =>
         [.. candidates.Distinct().Where(candidate => candidate.StartsWith(word, StringComparison.Ordinal))];

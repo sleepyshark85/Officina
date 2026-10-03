@@ -288,6 +288,11 @@ the fix, goes back. That's why the lead's instructions ask it to order tasks wit
 }
 ```
 
+**The fast path:** `sof init` in the `calc` folder writes the preset variant for you. It finds `test_calc.py`,
+suggests `python3 -m compileall -q .` and `python3 -m unittest` (type `python3 -m unittest -v` to edit it), and writes
+the two commands, `run.budget` at $3 and the command rules above. Add the team size and the task board's limits by hand.
+See the [user guide](user-guide.md), section 6.
+
 Objects merge key by key, so `"roles": { "developer": { "max": 2 } }` keeps the preset's lead and reviewer. A list, such
 as `commandRules`, a sign-off list or an agent's `tools`, replaces the preset's whole. Run `sof config show --origin` to
 see which value came from the preset and which from your file. To change one role, override only it, such as
@@ -298,7 +303,8 @@ see which value came from the preset and which from your file. To change one rol
 | The preset | Most of the time. You get the full tool set and later fixes to it, and write only your commands, limits and rules |
 | By hand | You want another team shape: other roles, fewer tools, different instructions, or a role that isn't a coder |
 
-For a .NET project, the build needs NuGet, so allow its hosts, and allow the commands:
+For a .NET project, the build needs NuGet, so allow its hosts, and allow the commands (`sof init` writes this for a
+folder with a solution or project file):
 
 ```jsonc
 "project": { "values": { "buildCommand": "dotnet build", "testCommand": "dotnet test" } },

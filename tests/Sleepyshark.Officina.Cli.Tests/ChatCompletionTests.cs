@@ -52,5 +52,6 @@ public sealed class ChatCompletionTests
             new HashSet<string> { "/status", "/approve", "/tell", "/mode", "/new", "/help", "/quit", "/config", "/report", "/resume", "/rollback", "/run" },
             suggested.ToHashSet());
         Assert.DoesNotContain("/chat", suggested); // the session is a chat already, so /chat is refused
+        Assert.DoesNotContain("/init", suggested); // it runs outside a session
     }
 }

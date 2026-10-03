@@ -7,9 +7,9 @@ Slices `REQUIREMENTS.md` (revision 2) into deliverable work.
 Last updated 2026-10-02.
 
 - **Done:** every slice, S00a to S20, and S21's five parts. S21 stays `doing` only for the live TEST-31 benchmark run, its
-  last acceptance criterion. `check_coverage.py` passes; `check_verification.py` lists TEST-31 and one MUST gap
-  (CFG-17) as pending, and three readings for the owner. STO-01 is closed: artifacts are files on disk, and
-  `operations.storage.path` moves the storage.
+  last acceptance criterion. `check_coverage.py` passes; `check_verification.py` lists only TEST-31 as pending, and
+  three readings for the owner. STO-01 is closed: artifacts are files on disk, and `operations.storage.path` moves the
+  storage. CFG-17 is closed: `sof init` detects the build and test commands.
 - **For the owner, next:**
   1. Run the live benchmark on Linux and Windows: a pilot first, then the full set, then `report.py` over both
      ([`benchmark/`](../../benchmark/README.md)). It is estimated at about $1,200 for both systems.
@@ -21,15 +21,17 @@ Last updated 2026-10-02.
      result of its own (S21 part 5).
   5. Confirm the readings of CFG-01, CAP-01 and TASK-02 ([`verification.md`](verification.md)), or change them at
      revision 3, with the other questions in REQUIREMENTS.md §13.
-  6. Decide the MUST gap in [`verification.md`](verification.md): CFG-17 (`sof` does not detect the build and
-     test commands). TASK-08 is built: `/board` and `/task` at the console, during a run and between a chat's replies.
-     STO-01 is built: artifacts are files on disk, and `operations.storage.path` moves the storage.
-     Build it, or change it at revision 3. The configuration reference §17 keeps its spec.
+  6. The MUST gaps are closed: TASK-08 (`/board` and `/task` at the console, during a run and between a chat's
+     replies), STO-01 (artifacts are files on disk, and `operations.storage.path` moves the storage) and CFG-17
+     (`sof init` detects the build and test commands).
   7. Sign off the M0 design review of `REQUIREMENTS.md`, `CONFIGURATION.md` and `DESIGN.md`.
 - **After the plan:** `sof chat` (plain `sof`), an interactive session that keeps its context: each message is a run of
   the conversation trigger in the conversation the agent keeps with the owner, the reply streams, and every command is
   typed after a `/` (TRG-01, CAP-05, HITL-01 to HITL-03, RUN-06, UX-01, LAT-02). See the user guide, section 4. At a terminal its
   lines are edited with RadLine: Tab completion and history.
+- **CFG-17 gap closed:** `sof init` writes the coding team's `sof.json`. It detects the build and test commands of .NET,
+  Node, Python, Rust, Go and Makefile projects, asks the owner to confirm or edit each (or takes `--build` and `--test`),
+  adds what the commands need in the sandbox, and validates the file. See the user guide, section 6.
 - **Open follow-ups**, each waiting for a case or for the owner:
   - Chat with a single agent in the workspace: each message works in a fresh working copy, so edits that are not
     integrated are lost between messages (the session and `config validate` warn). For the owner: keep one working copy

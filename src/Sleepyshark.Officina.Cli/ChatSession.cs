@@ -108,7 +108,7 @@ internal sealed class ChatSession
         {
             if (!File.Exists(Path.Combine(shared.Directory(parse, host), "sof.json")))
             {
-                error.WriteLine("There is no sof.json here to chat with: write one first, as section 3 of the user guide (docs/user-guide.md) shows.");
+                error.WriteLine("There is no sof.json here to chat with: run sof init to write one for the coding team, or write one as section 3 of the user guide (docs/user-guide.md) shows.");
             }
 
             return code;
@@ -487,6 +487,10 @@ internal sealed class ChatSession
                     break;
                 case "resume" or "config" or "report" or "rollback" or "run" or "chat":
                     await SofAsync(words, session);
+                    break;
+                case "init":
+                    // It asks at the console, which the session holds, and writes the configuration the session runs with.
+                    status.WriteLine("error: run sof init in the shell, outside the session.");
                     break;
                 case var _ when RunCommands.Contains(word):
                     status.WriteLine($"error: no reply is running; /{word} works while one does.");
