@@ -114,10 +114,10 @@ now, use `/tell`. The reply never loses text: when you type, the line it is writ
 With piped input (`sof < script.txt`) plain lines are read, and the end of the input ends the session.
 
 **Working copies.** Each message's run gets its own working copies, fresh from your branch. The coding team integrates
-its changes into your branch, so its next message builds on them. **A single agent with the workspace on does not:** its
+its changes into your branch, so its next message builds on them. **A single agent that changes files does not:** its
 edits are removed when the reply ends, unless `capabilities.workspace.keepWorkingCopies` is on, which keeps them in
-that message's copy under `.sof/worktrees`, where the next message does not see them. The session warns about this at
-its start, and `config validate` notes it.
+that message's copy under `.sof/worktrees`, where the next message does not see them. When `keepWorkingCopies` is off,
+the session warns about this at its start, and `config validate` notes it.
 
 **Rollback and resume.** Each message's run is rolled back and resumed on its own. A rollback that would remove a later
 message's part of the conversation is refused, so roll back the latest message first.
@@ -245,8 +245,8 @@ Do these in order; each costs more than the last. Keep `--budget` low, watch `/s
 - [ ] Typing during a reply: ask for something long, then try `/status`, type a message (it waits, and is sent when the
       reply ends), and press Ctrl+C: the reply stops, the waiting message is dropped, and the session goes on. Then try
       `/report`, `/config validate`, Tab after `/con`, Up, and end with Ctrl+C twice.
-- [ ] A tool agent in a scratch git repository with one commit. The session warns about working copies at its start.
-      Approve one write and deny one; the kept working copy is under `.sof/worktrees`:
+- [ ] A tool agent in a scratch git repository with one commit. `keepWorkingCopies` is on, so there's no working-copy
+      warning. Approve one write and deny one; the kept working copy is under `.sof/worktrees`:
 
   ```jsonc
   {

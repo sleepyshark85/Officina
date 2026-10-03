@@ -162,9 +162,7 @@ Save this as `sof.json` in the `calc` folder. Each part is explained below it.
 Check it before you spend anything:
 
 ```bash
-sof config validate            # "The configuration is valid." It also notes that a single agent loses its
-                               # edits between chat messages; that applies to chatting with lead, developer or
-                               # reviewer alone, not to the team.
+sof config validate            # "The configuration is valid."
 sof config show --origin       # every setting and where it came from
 ```
 
