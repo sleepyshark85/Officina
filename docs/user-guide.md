@@ -1,8 +1,8 @@
 # sof user guide
 
-How to set up `sof`, the Officina coding team CLI, and use it by hand. For the configuration, see
-[`CONFIGURATION.md`](../CONFIGURATION.md), the [configuration reference](configuration-reference.md) and the
-[settings reference](configuration-settings.md).
+How to set up `sof`, the Officina coding team CLI, and use it by hand. To set up a coding team step by step, see the
+[team guide](team-guide.md). For the configuration, see [`CONFIGURATION.md`](../CONFIGURATION.md), the
+[configuration reference](configuration-reference.md) and the [settings reference](configuration-settings.md).
 
 > **Status.** Every slice passes its tests on Linux and Windows, but the tests use a scripted model. No full live run
 > against Claude has been done yet. Treat your first sessions as a field test: work in throwaway repositories, start
@@ -16,7 +16,7 @@ How to set up `sof`, the Officina coding team CLI, and use it by hand. For the c
 | git | on PATH, with `user.name` and `user.email` set | same |
 | Sandbox (the coding team turns it on) | `bubblewrap`, `socat`, cgroups v2, a systemd user manager | Windows 10 or 11; no admin rights needed |
 | Claude API key | `ANTHROPIC_API_KEY` in the environment | same |
-| Python 3 | only for the benchmark | same |
+| Python 3 | only for the benchmark and the team guide's example | same |
 
 Get an API key from the [Claude Console](https://console.anthropic.com), and set a monthly spend limit there as a
 backstop to `sof`'s own budgets.
@@ -50,7 +50,7 @@ The package version is always 0.1.0, so `dotnet tool update` keeps the old build
 `dotnet tool uninstall --global Sleepyshark.Officina.Cli` and install again. Without installing,
 `dotnet run --project src/Sleepyshark.Officina.Cli -- <args>` works the same way.
 
-## 3. Your first agent (no tools, no sandbox)
+## 3. Your first agent
 
 In an empty folder, create `sof.json`:
 
@@ -63,177 +63,127 @@ In an empty folder, create `sof.json`:
 }
 ```
 
-Then:
+Check it, then chat:
 
 ```bash
-sof config validate                     # exits 1 and lists the errors if any
+sof config validate                     # exits 1 and lists the errors, if any
 sof config show --origin                # every setting, its value and where it came from
-sof config dry-run --input "Hi" --reply "Hello."   # prints the configuration, then runs a scripted model: no API call
+sof config dry-run --input "Hi" --reply "Hello."   # runs a scripted model: no API call
 export ANTHROPIC_API_KEY=...            # Windows: $env:ANTHROPIC_API_KEY = "..."
-sof run --input "What is a git worktree?"
-sof                                     # a chat session: type messages, /quit to end (section 6)
+sof                                     # type a message; /quit or Ctrl+D ends the session
 ```
 
-`sof run` prints the run id first, streams what the agent does, and ends with the run report. The run is stored in
-`.sof/sof.db` next to `sof.json`; add `.sof/` to `.gitignore`.
+Runs are stored in `.sof/sof.db` next to `sof.json`. Add `.sof/` to `.gitignore`.
 
-## 4. Configuration essentials
-
-- **Layers, lowest to highest:** code defaults < files named in `extends` (presets first) < `sof.json` <
-  `sof.<environment>.json` < `SOF__section__setting` variables < command-line options. A list in a higher layer replaces
-  the lower one's whole.
-- **Presets:** `preset:coding-team`, `preset:tool-using-assistant` and `preset:single-call-extractor`. Read them in
-  [`src/Sleepyshark.Officina.Core/Presets/`](../src/Sleepyshark.Officina.Core/Presets/).
-- **Tools:** each tool is defined under `tools`, grouped under `toolSets`, and an agent's `tools` lists tool *set*
-  names. A write tool needs `gates` or a `gateExemption` with a reason; `config validate`, `config dry-run` and
-  `sof run` all refuse it.
-- **Models:** the default profile is `claude-opus-5-5`. Name more in `models`, and point an agent at one with
-  `agents.<name>.model`.
-- **Budgets:** `run.budget` defaults to $25 and 8 hours. Set it low while testing; `--budget 2` overrides it for one
-  run. A run can go past its budget by about one model call, because the budget is checked between calls.
-- **Permission mode:** `ask` (default; you approve writes no rule allows), `auto` or `readOnly`. Set it with
-  `--permission-mode`, or switch it during a run with `mode <name>`.
-- **Options every command takes:** `--dir <folder with sof.json>`, `--environment <name>`, `--budget <usd>`,
-  `--permission-mode <mode>`.
-
-## 5. Running and the console
+## 4. Chatting: `sof`
 
 ```
-sof run [--agent <name>] --input "<the work>"
+sof [--agent <name>] [--new] [--budget <usd>] [--permission-mode <mode>]     # sof chat is the same
 ```
 
-While it runs, type these at the console. Numbers come from `status`.
+Plain `sof` opens a session that stays open. With several agents and no `--agent`, it asks which one; for the coding
+team, use `sof --agent team`. Each line you type is a message, and the reply streams as the model writes it. Lines that
+start with `/` are commands (section 5).
+
+**The agent remembers the conversation**, from message to message and from one session to the next. `--new`, or `/new`
+in the session, starts a fresh one. The session turns on the conversation store and full history for the agent you chat
+with (a team's lead), so `sof config show` doesn't show them. If `sof.json` sets that agent's `context.history.strategy`,
+that is kept; with `none`, each message starts afresh. `sof` refuses to chat if `sof.json` turns the conversation store
+off, or if the agent's `triggers` leave out `conversation`; `config validate` notes both.
+
+**Each message is a run of its own**, with its own run id (printed as `run <id>`), report, checkpoints and budget.
+`run.budget`, or `--budget`, applies to each message. Every reply ends with its cost and the session's cost so far, as
+`assistant: Completed, cost $0.03; this session $0.05`. There is no limit for the session as a whole: queued messages
+or a piped script can each spend a full budget without asking you.
+
+**Typing during a reply.** Commands work at once. A message waits, and is sent when the reply ends; to reach an agent
+now, use `/tell`. The reply never loses text: when you type, the line it is writing ends and your prompt is drawn below.
+
+**Keys.** At a terminal, lines are edited with a line editor:
+
+| Key | What it does |
+|---|---|
+| Tab | Completes a `/` command, a command's subcommands and options, agents' names (in a team also ids such as `developer[1]`), the permission modes, and the run ids of this session's messages |
+| Up, Down | Go through the lines you typed in this session |
+| Ctrl+C | Cancels the reply that runs (or a command such as `/resume <run>`), and drops the messages that waited for it. The session goes on. A second Ctrl+C before your next message ends the session |
+| Ctrl+D | On an empty line, ends the session once the messages you sent have their replies |
+
+With piped input (`sof < script.txt`) plain lines are read, and the end of the input ends the session.
+
+**Working copies.** Each message's run gets its own working copies, fresh from your branch. The coding team integrates
+its changes into your branch, so its next message builds on them. **A single agent with the workspace on does not:** its
+edits are removed when the reply ends, unless `capabilities.workspace.keepWorkingCopies` is on, which keeps them in
+that message's copy under `.sof/worktrees`, where the next message does not see them. The session warns about this at
+its start, and `config validate` notes it.
+
+**Rollback and resume.** Each message's run is rolled back and resumed on its own. A rollback that would remove a later
+message's part of the conversation is refused, so roll back the latest message first.
+
+Exit codes: 0 when the session ends; 1 for configuration errors or an agent `sof` refuses to chat with; 2 for an
+unknown `--agent`, or when no agent was picked; 3 if the session itself fails.
+
+## 5. Commands
+
+In a session, type each after a `/`. In `sof run` (section 8), type the first table's commands, `status` and `mode`
+without the `/`. Numbers come from `/status`, and keep growing through a session.
+
+**While a reply runs** (between replies they say no reply is running):
 
 | Command | What it does |
 |---|---|
-| `status` | Each agent's status, what waits for you (numbered), cost so far |
-| `approve <n>` / `deny <n>` | Answer an approval or a sign-off |
-| `change <n> <json>` | Approve a tool call with changed arguments |
-| `answer <n> <text>` | Answer a question an agent asked you |
-| `tell <agent> <text>` | Send an agent a message, such as `tell lead focus on the parser` |
-| `mode <ask\|auto\|readOnly>` | Change the permission mode |
-| `pause [agent]` / `resume [agent]` | Pause or resume the whole run, or one agent such as `developer[2]` |
-| `cancel [agent]` | Stop one agent, or the whole run cleanly |
-| `checkpoint` | Take a checkpoint now |
-| `board` | Show the task board |
-| `memory`, `memory approve <n> [reason]`, `memory reject <n> <reason>` | Review project memory proposals |
+| `/approve <n>` / `/deny <n>` | Answer an approval or a sign-off |
+| `/change <n> <json>` | Approve a tool call with changed arguments |
+| `/answer <n> <text>` | Answer a question an agent asked you |
+| `/tell <agent> <text>` | Send an agent a message, such as `/tell lead focus on the parser` |
+| `/pause [agent]` / `/resume [agent]` | Pause or resume the whole run, or one agent such as `developer[2]` |
+| `/cancel [agent]` | Stop one agent, or the whole run cleanly |
+| `/checkpoint` | Take a checkpoint now |
+| `/board` | Show the task board |
+| `/memory`, `/memory approve <n> [reason]`, `/memory reject <n> <reason>` | Review project memory proposals |
 
-**To stop a run, press Ctrl+C or type `cancel`.** Both stop it cleanly: the run has `run.cancelWithin` (10 seconds by
-default) to stop, is recorded as cancelled, and its report prints. A second Ctrl+C does not end the process sooner.
-
-Exit codes: 0 done; 1 configuration errors, or a failure while starting; 2 usage error; 3 the run ended without
-completing (handed off, rejected or failed).
-
-## 6. Chatting with an agent
-
-```
-sof [--agent <name>] [--new]            # sof chat is the same
-```
-
-Plain `sof` opens a session that stays open. With several agents and no `--agent`, it asks which one. Each line you type
-is a message, and the reply streams as the model writes it. The agent remembers the conversation: from message to
-message, and from one session to the next. `--new` (or `/new` in the session) starts a fresh conversation.
-
-Lines that start with `/` are commands, so they're never taken for a message:
+**At any time:**
 
 | Command | What it does |
 |---|---|
-| `/status` … `/memory` | The commands of section 5, with a `/`: `/approve 1`, `/tell lead focus on the parser`, `/mode auto`… |
-| `/report [run]` | The report of the last message's run, or of any run |
-| `/resume <run>`, `/rollback <run> [--to <n>]`, `/run --input <text>` | As on the command line; they wait until no reply runs |
-| `/config validate`, `/config show [--origin]`, `/config dry-run …` | As on the command line |
+| `/status` | Each agent's status, what waits for you (numbered), and the session's cost |
+| `/mode <ask\|auto\|readOnly>` | Change the permission mode, for this reply and the rest of the session |
 | `/new` | The next message starts a new conversation |
-| `/help [command]` | Everything, or one command's options |
-| `/quit` | End the session. So does Ctrl+D, once the messages you sent have their replies |
+| `/report [run]` | The report of the reply that runs or the last message's run, or of any run |
+| `/config validate`, `/config show [--origin]`, `/config dry-run …` | As on the command line |
+| `/help [command]` | All commands, or one command's options |
+| `/quit` | End the session |
 
-At a terminal, lines are edited with a line editor: **Tab** completes a `/` command, a command's subcommands and
-options, agents' names and the run ids of this session's messages, **Up** and **Down** go through
-the lines you typed, and **Ctrl+D** on an empty line ends the session. You can type while a reply streams: the reply
-never loses text. A line it is writing is ended before your prompt is drawn below it, and output clears the prompt line,
-which comes back, with what you had typed, at your next key. With piped input (`sof < script.txt`), plain lines are read.
-Only the chat session uses the line editor; `sof run`'s console reads plain lines.
+**Between replies only** (they wait until no reply runs): `/resume <run>`, `/rollback <run> [--to <n>]`,
+`/run --input <text>`.
 
-How it behaves:
+## 6. The coding team
 
-- **Each message is a run of its own**, with its own run id, report, checkpoints and budget: `run.budget` applies to each
-  message, as it does to each `sof run`. Every reply ends with its cost and the session's cost so far, and `/status` shows
-  the session's cost too. There is no limit for the session as a whole: messages that wait for a reply, or a script piped
-  in, can spend `run.budget` once for each message without asking you.
-- **The conversation is kept in the conversation store**, which the session turns on, with full history for the agent
-  you chat with, unless `sof.json` sets its `context.history.strategy`: then that strategy is kept, and with `none` each
-  message starts afresh. If `sof.json` turns the conversation store off, `sof` refuses to chat; so does an agent whose
-  `triggers` leave out `conversation`. `config validate` notes both.
-- **The coding team** (`--agent team`): each message is new work for the team. The lead plans it, with the earlier
-  messages in mind, as the lead keeps the conversation; the developers and the reviewer start each task afresh. To speak
-  to the lead or a developer while the team works, use `/tell`.
-- **While a reply runs**, commands work at once. A message you type waits, and is sent when the reply ends. `/resume` or
-  `/resume <agent>` then resumes what `/pause` paused; `/resume <run>`, `/rollback` and `/run` wait until no reply runs.
-- **Ctrl+C** cancels the reply (or a command such as `/resume <run>`) and drops the messages that waited for it; the
-  session goes on. A second Ctrl+C before your next message ends the session.
-- **Rollback and resume:** every message's run is rolled back and resumed on its own. A rollback that would remove a later
-  message's part of the conversation is refused, so roll back the latest message first. A resumed message runs with the
-  conversation, as the session ran it.
-- **Working copies:** each message's run gets its own working copies, fresh from your branch, as each `sof run` does.
-  The coding team integrates its changes into your branch, so its next message builds on them. **A single agent with the
-  workspace on does not:** its edits from one message are removed when the reply ends, unless
-  `capabilities.workspace.keepWorkingCopies` is on, which keeps them in that message's copy under `.sof/worktrees`, where
-  the next message does not see them. The session warns about this at its start, and `config validate` notes it.
+The [team guide](team-guide.md) sets up a lead, developers and a reviewer step by step, and runs them on a small
+example. In short: with `"extends": ["preset:coding-team"]` and your build and test commands in `sof.json`, run
+`sof --agent team` and type a goal. Then:
 
-## 7. The coding team
-
-Set up a throwaway repository first:
-
-- It needs at least one commit; on an empty repository the working copies can't be created.
-- Work on a new branch with a clean working tree. Approved changes are committed to the checked-out branch.
-- Add `.sof/` to `.gitignore`.
-
-A configuration for a .NET project, with `sof.json` in the repository's top folder:
-
-```jsonc
-{
-  "extends": ["preset:coding-team"],
-  "project": { "values": { "buildCommand": "dotnet build", "testCommand": "dotnet test" } },
-  "run": { "budget": { "cost": 5 } },
-  "capabilities": {
-    "sandbox": {
-      "allowedHosts": ["api.nuget.org", "*.nuget.org"],
-      // Only system folders are visible in the Linux sandbox. If the SDK lives elsewhere (~/.dotnet, a snap), list it:
-      // "toolchains": ["/home/me/.dotnet"],
-      // This list replaces the preset's, so its rules are repeated.
-      "commandRules": [
-        { "match": "git status*", "action": "allow" }, { "match": "git diff*", "action": "allow" },
-        { "match": "git log*", "action": "allow" },    { "match": "git show*", "action": "allow" },
-        { "match": "git push*", "action": "deny" },    { "match": "git remote*", "action": "deny" },
-        { "match": "dotnet *", "action": "allow" }
-      ]
-    }
-  }
-}
-```
-
-Then `sof run --agent team --input "Add a --verbose flag to the CLI, with tests."` What happens:
-
-1. The lead plans tasks, and you approve the plan before any work starts (`approve <n>`). To reject it, first say why
-   with `tell lead …`, then `deny <n>`; the lead plans again at once.
-2. Up to three developers each work in a working copy of their own under `.sof/worktrees`, in the sandbox. They have no
-   network except `allowedHosts`, and you're asked about any command no rule allows.
-3. A reviewer, never the author, reads each change and approves it or asks for changes. The reviewer can't edit files
-   or run commands.
+1. The lead plans tasks, and you approve the plan before any work starts (`/approve <n>`). To reject it, say why with
+   `/tell lead …`, then `/deny <n>`; the lead plans again.
+2. Up to three developers each work in a working copy of their own under `.sof/worktrees`, in the sandbox, with no
+   network except `allowedHosts`. You're asked about any command no rule allows.
+3. A reviewer, never the author, reads each change and approves it or asks for changes. It can't edit files or run
+   commands.
 4. An approved task's change is squashed into one commit, checked with the build and tests, then added to your branch. A
    conflict or a failing check sends the task back to its author.
 
-Agents can't change `sof.json`, `sof.*.json` or any file they extend, and such changes are refused at integration.
-`git push` and `git remote` are denied for convenience; the real boundary is the network-less sandbox plus asking you
-about unmatched commands.
+Each new message is new work for the team. The lead plans it with the earlier messages in mind; the developers and the
+reviewer start each task afresh.
 
-## 8. Long runs: checkpoints, resume, rollback, report
+## 7. Long runs: checkpoints, resume, rollback, report
 
 | Command | What it does |
 |---|---|
 | `sof resume <run>` | Continue a run that stopped without ending, such as after a crash or a killed process, from its last checkpoint. What it already spent still counts. |
 | `sof rollback <run>` | List the run's checkpoints |
 | `sof rollback <run> --to <n>` | Go back to checkpoint `n`: the stores and the working copies together. Then `sof resume <run>` continues from there. |
-| `sof report <run>` | Outcome, work, decisions, checks, cost by agent, task, step and model, open issues |
+| `sof report <run>` | Outcome, work, tasks, decisions, checks, cost by agent, task, step and model, open issues |
+
+Each works in a session too, after a `/`. Nothing lists runs, so note the run id each message prints.
 
 What they don't do:
 
@@ -245,15 +195,54 @@ What they don't do:
   conversation since the checkpoint.
 - A resumed run's time budget counts only time spent inside work, not the time between the crash and the resume.
 
-## 9. Manual test checklist
+## 8. Scripts: `sof run`
 
-Do these in order; each costs more than the last. Keep `--budget` low, watch `status`, and use throwaway repositories.
+```
+sof run [--agent <name>] --input "<the work>"
+```
+
+One run, then the process ends. It prints the run id, shows what the agents do, and ends with the result and the run
+report. Type the commands of section 5 without the `/`, such as `status` or `approve 1`.
+
+**Ctrl+C, or `cancel`, stops the run cleanly:** it has `run.cancelWithin` (10 seconds by default) to stop, is recorded
+as cancelled, and its report prints.
+
+Exit codes: 0 done; 1 configuration errors, or a failure while starting; 2 usage error; 3 the run ended without
+completing (handed off, rejected, failed or cancelled).
+
+## 9. Configuration essentials
+
+- **Layers, lowest to highest:** code defaults < files named in `extends` (presets first) < `sof.json` <
+  `sof.<environment>.json` < `SOF__section__setting` variables < command-line options. Objects merge key by key; a list
+  in a higher layer replaces the lower one's whole.
+- **Presets:** `preset:coding-team`, `preset:tool-using-assistant` and `preset:single-call-extractor`. Read them in
+  [`src/Sleepyshark.Officina.Core/Presets/`](../src/Sleepyshark.Officina.Core/Presets/).
+- **Tools:** each tool is defined under `tools`, grouped under `toolSets`, and an agent's `tools` lists tool *set*
+  names. A write tool needs `gates` or a `gateExemption` with a reason, or nothing runs.
+- **Models:** the default profile is `claude-opus-5-5`. Name more in `models`, and point an agent at one with
+  `agents.<name>.model`.
+- **Budgets:** `run.budget` defaults to $25 and 8 hours, for each `sof run` and each chat message. Set it low while
+  testing; `--budget 2` overrides it. A run can go past its budget by about one model call, because the budget is checked
+  between calls.
+- **Permission mode:** `ask` (default; you approve writes no rule allows), `auto` or `readOnly`. Set it with
+  `--permission-mode`, or change it with `/mode`.
+- **Options every command takes:** `--dir <folder with sof.json>`, `--environment <name>`, `--budget <usd>`,
+  `--permission-mode <mode>`.
+
+## 10. Manual test checklist
+
+Do these in order; each costs more than the last. Keep `--budget` low, watch `/status`, and use throwaway repositories.
 
 - [ ] `dotnet test` passes on your machine, and on Linux the sandbox tests aren't all skipped.
-- [ ] Section 3: `config validate`, `config show --origin`, `config dry-run` and one live `sof run`. Check the report's
-      cost against the Claude Console.
-- [ ] A tool agent in a scratch git repository with one commit. Approve one write and deny one; the kept working copy is
-      under `.sof/worktrees`:
+- [ ] Section 3: `config validate`, `config show --origin`, `config dry-run`, then `sof` with one message. Check the
+      reply's cost against the Claude Console.
+- [ ] Chat memory: "My name is Ann." then "What is my name?". `/quit`, start `sof` again and ask once more; then
+      `sof --new` and check it has forgotten.
+- [ ] Typing during a reply: ask for something long, then try `/status`, type a message (it waits, and is sent when the
+      reply ends), and press Ctrl+C: the reply stops, the waiting message is dropped, and the session goes on. Then try
+      `/report`, `/config validate`, Tab after `/con`, Up, and end with Ctrl+C twice.
+- [ ] A tool agent in a scratch git repository with one commit. The session warns about working copies at its start.
+      Approve one write and deny one; the kept working copy is under `.sof/worktrees`:
 
   ```jsonc
   {
@@ -271,16 +260,11 @@ Do these in order; each costs more than the last. Keep `--budget` low, watch `st
 
 - [ ] Break the configuration on purpose, such as an unknown model or a tool set that doesn't exist, and check that
       `config validate` names each error.
-- [ ] Coding team on a tiny repository, such as a calculator with one failing test: plan approval, two tasks, review,
-      integration, then a green build on your branch.
-- [ ] Press Ctrl+C during a run. The run stops within `run.cancelWithin`, the report prints, and the exit code is 3.
-- [ ] Chat (section 6): plain `sof`, two messages where the second needs the first ("My name is Ann." then "What is my
-      name?"). Quit, start `sof` again and ask once more; then `sof --new` and check it has forgotten. During a reply, try
-      `/status`, type a message (it waits), and press Ctrl+C: the reply stops and the session goes on. Try `/report`,
-      `/config validate`, then Ctrl+C twice.
-- [ ] Chat with the coding team (`sof --agent team`): two small goals in a row; the lead's second plan should know the
-      first.
-- [ ] Kill `sof` mid-run (`kill -9`, or close the terminal), then `sof resume <run>`. The run continues from its last
+- [ ] The team guide's example: plan approval, two tasks, review, integration, then green tests on your branch. Then a
+      second goal in the same session; the lead's plan should know the first.
+- [ ] `sof run --input "…"`, and press Ctrl+C during it. The run stops within `run.cancelWithin`, the report prints, and
+      the exit code is 3.
+- [ ] Kill `sof` mid-reply (`kill -9`, or close the terminal), then `sof resume <run>`. The run continues from its last
       checkpoint.
 - [ ] `sof rollback <run>`, then `--to <n>`, then `sof resume <run>`; check the working copies and the report.
 - [ ] Ask an agent to edit `sof.json`, or to `git push`. Both must be refused.
@@ -289,19 +273,22 @@ Do these in order; each costs more than the last. Keep `--budget` low, watch `st
 
 Write down anything surprising, with the run id; `sof report <run>` and `.sof/sof.db` hold the details.
 
-## 10. Known limitations
+## 11. Known limitations
 
 - `sof init` isn't built: write `sof.json` by hand.
 - `sof.json` must sit in the git repository's top folder.
+- Nothing lists runs: note the run id each message or `sof run` prints.
+- `/board` works only while a reply runs, and only shows the board; nothing can add, edit, reprioritise, reassign or
+  cancel tasks. After the reply, `/report` lists the tasks.
+- A single agent with the workspace loses its edits between chat messages (section 4).
 - The Claude feature switches (`providers.<name>.features`: structured output, clearing tool results, task budget,
   refusal fallback) and history compaction were tested against recordings written from the API docs. Try each on its own
   first.
 - Fan-out branches of one agent share a working copy. Command checks time out after 20 minutes by default
   (`checks.<name>.timeout`).
-- `board` only shows the task board; the console can't add, edit, reprioritise, reassign or cancel tasks.
 - The items left out of v1 are listed in [`docs/plan/S21-hardening.md`](plan/S21-hardening.md).
 
-## 11. The benchmark (later)
+## 12. The benchmark (later)
 
 The benchmark scores 10 coding goals with hidden tests (TEST-31). Scoring runs code the model wrote **outside the
 sandbox**, so use a throwaway VM or account.
