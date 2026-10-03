@@ -69,8 +69,15 @@ internal sealed class OwnerQueue(TextWriter output, string prefix = "") : IHuman
 
     public string Describe(HumanRequest request) => request.Kind switch
     {
-        HumanRequestKind.Approval => $"{request.Agent} asks to run {request.Tool} {request.Arguments?.GetRawText()}: {request.Summary}. Answer with {prefix}approve, {prefix}deny or {prefix}change.",
-        HumanRequestKind.Question => $"{request.Agent} asks: {request.Summary} Answer with {prefix}answer or {prefix}deny.",
-        _ => $"{request.Agent} needs your sign-off: {request.Summary} Answer with {prefix}approve or {prefix}deny.",
+        HumanRequestKind.Approval => Lines($"{request.Agent} asks to run {request.Tool} {request.Arguments?.GetRawText()}: {request.Summary}.", $"Answer with {prefix}approve, {prefix}deny or {prefix}change."),
+        HumanRequestKind.Question => Lines($"{request.Agent} asks: {request.Summary}", $"Answer with {prefix}answer or {prefix}deny."),
+        _ => Lines($"{request.Agent} needs your sign-off: {request.Summary}", $"Answer with {prefix}approve or {prefix}deny."),
     };
+
+    /// <summary>
+    /// A request and how to answer it, on one line; a request of several lines, such as a plan, has its lines indented
+    /// under the first and the instruction on a line of its own.
+    /// </summary>
+    private static string Lines(string request, string instruction) =>
+        request.Contains('\n', StringComparison.Ordinal) ? $"{request.ReplaceLineEndings("\n  ")}\n{instruction}" : $"{request} {instruction}";
 }

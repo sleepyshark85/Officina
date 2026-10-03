@@ -221,7 +221,7 @@ internal sealed class TeamRun
     {
         var owner = services.Pipeline.Owner;
         var context = Member(lead, null, PlanStep);
-        var answer = await owner.AskAsync(context, owner.Request(context, HumanRequestKind.SignOff, $"Approve the lead's plan before work starts?\n{Board(tasks)}"), ct)
+        var answer = await owner.AskAsync(context, owner.Request(context, HumanRequestKind.SignOff, $"Approve the lead's plan before work starts?\n{Plan(tasks)}"), ct)
             .ConfigureAwait(false);
         if (answer is { Approved: true })
         {
@@ -554,6 +554,9 @@ internal sealed class TeamRun
 
     /// <summary>The board, one task after another, for the lead.</summary>
     private static string Board(IReadOnlyList<BoardTask> tasks) => string.Join("\n\n", tasks.Select(Describe));
+
+    /// <summary>The board for the owner to sign off: one task after another, each one's details indented under it.</summary>
+    private static string Plan(IReadOnlyList<BoardTask> tasks) => string.Join("\n", tasks.Select(task => Describe(task).ReplaceLineEndings("\n  ")));
 
     /// <summary>A task as an agent reads it: written by agents, so it is given as data (INV-08).</summary>
     private static string Describe(BoardTask task)
