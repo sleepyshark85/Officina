@@ -55,8 +55,8 @@ internal sealed class OwnerQueue(TextWriter output, string prefix = "") : IHuman
     /// answered, or what was wrong. A command of the wrong kind is refused and the request keeps waiting, so a reply never
     /// approves an approval. Without a <paramref name="number"/>, the request that waits is answered only when it is the one
     /// the owner has seen: the only one that waits, with no other shown since the owner's last answer, so a request that
-    /// arrived as another went away, or a line recalled from history, never answers what the owner did not read. An
-    /// irreversible call always needs its number.
+    /// arrived as another went away is refused. The first request to arrive alone after an answer can still be answered by
+    /// a recalled or repeated line; the reply names it, and an irreversible call always needs its number.
     /// </summary>
     public string Answer(int? number, string command, HumanAnswer answer)
     {
