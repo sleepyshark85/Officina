@@ -257,7 +257,7 @@ decides the outcome.
   beside the database (`.sof/artifacts`), which is the database's alone and not configurable, named by its row's id, never by its name. The row holds its tenant, run, time,
   name, size and SHA-256; a read checks the file against them and reports damage rather than misreading it. The file is
   written to a temporary file, flushed and renamed inside the transaction that adds the row, so a row is never committed
-  without its file; the rename never replaces a file already there, it fails instead. Deleting (an owner's data, PRIV-02, or expired artifacts, PRIV-01) commits the rows' removal first, then
+  without its file; the rename replaces a file already at that id, which can only be an orphan, as the row holds the id. Deleting (an owner's data, PRIV-02, or expired artifacts, PRIV-01) commits the rows' removal first, then
   deletes the files. A crash in either leaves only files without rows, which the next open removes under the write lock.
   Artifacts are append-only and never truncated: a rollback leaves them, so the ids the restored history names still read,
   and those made after the checkpoint stay until retention or the owner's deletion. Format version 6 brought the files;

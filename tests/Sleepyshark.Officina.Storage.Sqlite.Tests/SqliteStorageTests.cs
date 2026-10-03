@@ -66,18 +66,20 @@ public sealed class SqliteStorageTests : StorageContract, IDisposable
         Assert.Equal(Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData("# Ünïcødé"u8)), sha256);
     }
 
-    // STO-01: a file already under the id an artifact gets is never replaced; the save fails loudly and leaves no row.
+    // STO-01: a file without a row at the id an artifact gets, such as one a failed commit left after the storage opened, is an
+    // orphan; the save replaces it and succeeds, so one orphan cannot make later saves fail.
     [Fact]
-    public async Task A_file_already_under_an_artifacts_id_is_never_replaced()
+    public async Task An_orphan_file_at_the_next_id_is_replaced_and_the_save_succeeds()
     {
         var storage = await CreateAsync();
         Directory.CreateDirectory(Artifacts);
-        await System.IO.File.WriteAllTextAsync(Path.Combine(Artifacts, "1"), "not this storage's", Ct);
+        await System.IO.File.WriteAllTextAsync(Path.Combine(Artifacts, "1"), "an orphan", Ct);
 
-        await Assert.ThrowsAnyAsync<IOException>(async () => await storage.Artifacts.SaveAsync("acme", "run-1", new("report.md", "text"), Start, Ct));
+        var id = await storage.Artifacts.SaveAsync("acme", "run-1", new("report.md", "text"), Start, Ct);
 
-        Assert.Equal("not this storage's", await System.IO.File.ReadAllTextAsync(Path.Combine(Artifacts, "1"), Ct));
-        Assert.Empty(await QueryAsync("SELECT name, sha256 FROM artifacts"));
+        Assert.Equal(1, id);
+        Assert.Equal("text", await System.IO.File.ReadAllTextAsync(Path.Combine(Artifacts, "1"), Ct));
+        Assert.Equal(new Artifact("report.md", "text"), await storage.Artifacts.ReadAsync("acme", "run-1", id, Ct));
     }
 
     // STO-01, REL-04: the file is written before its row is committed, so a failed write leaves no row behind.

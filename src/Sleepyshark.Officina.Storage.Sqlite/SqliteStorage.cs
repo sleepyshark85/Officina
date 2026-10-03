@@ -290,16 +290,7 @@ public sealed class SqliteStorage : IStorage, IRunStore, IConversationStore, IEv
             ("$sha256", Convert.ToHexStringLower(SHA256.HashData(content))));
         var id = (long)(await command.ExecuteScalarAsync(ct).ConfigureAwait(false))!;
         await WriteFileAsync(id, content, ct).ConfigureAwait(false);
-        try
-        {
-            await transaction.CommitAsync(ct).ConfigureAwait(false);
-        }
-        catch
-        {
-            // The id goes back unused, so its file goes too, or the next save of that id would find it in the way.
-            DeleteFile(FilePath(id));
-            throw;
-        }
+        await transaction.CommitAsync(ct).ConfigureAwait(false);
 
         return id;
     }
@@ -474,8 +465,9 @@ public sealed class SqliteStorage : IStorage, IRunStore, IConversationStore, IEv
     private string FilePath(long id) => Path.Combine(artifacts, id.ToString(CultureInfo.InvariantCulture));
 
     /// <summary>
-    /// Writes an artifact's file whole: to a temporary file, flushed to the disk, then renamed. A file already there under that id is
-    /// never replaced: ids are not reused and the folder is the database's alone, so one there means something is wrong, and the rename fails.
+    /// Writes an artifact's file whole: to a temporary file, flushed to the disk, then renamed. The rename replaces a file already
+    /// there under that id: the caller holds the write lock and its uncommitted row has taken the id, so such a file has no row (one a
+    /// crash or a failed commit left), and replacing it is safe.
     /// </summary>
     private async Task WriteFileAsync(long id, byte[] content, CancellationToken ct)
     {
@@ -488,7 +480,7 @@ public sealed class SqliteStorage : IStorage, IRunStore, IConversationStore, IEv
             stream.Flush(flushToDisk: true);
         }
 
-        File.Move(temporary, path, overwrite: false);
+        File.Move(temporary, path, overwrite: true);
     }
 
     /// <exception cref="InvalidDataException">The file is not the one the row describes.</exception>
