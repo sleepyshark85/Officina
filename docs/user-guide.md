@@ -75,6 +75,9 @@ sof                                     # type a message; /quit or Ctrl+D ends t
 
 Runs are stored in `.sof/sof.db` next to `sof.json`. Add `.sof/` to `.gitignore`.
 
+If `ANTHROPIC_API_KEY` isn't set, a message ends with
+`HandedOff (ProviderFailure: the model call failed: KeyNotFoundException)`: set the key and send it again.
+
 ## 4. Chatting: `sof`
 
 ```
@@ -150,11 +153,11 @@ without the `/`. Numbers come from `/status`, and keep growing through a session
 | `/new` | The next message starts a new conversation |
 | `/report [run]` | The report of the reply that runs or the last message's run, or of any run |
 | `/config validate`, `/config show [--origin]`, `/config dry-run …` | As on the command line |
-| `/help [command]` | All commands, or one command's options |
+| `/help [command]` | All commands; with a `sof` command (`run`, `resume`, `rollback`, `report`, `config`, `chat`), its options |
 | `/quit` | End the session |
 
-**Between replies only** (they wait until no reply runs): `/resume <run>`, `/rollback <run> [--to <n>]`,
-`/run --input <text>`.
+**Between replies only:** `/resume <run>`, `/rollback <run> [--to <n>]`, `/run --input <text>`. While a reply runs they
+are refused with an error, not queued; type them again after the reply ends.
 
 ## 6. The coding team
 
@@ -222,8 +225,9 @@ completing (handed off, rejected, failed or cancelled).
 - **Models:** the default profile is `claude-opus-5-5`. Name more in `models`, and point an agent at one with
   `agents.<name>.model`.
 - **Budgets:** `run.budget` defaults to $25 and 8 hours, for each `sof run` and each chat message. Set it low while
-  testing; `--budget 2` overrides it. A run can go past its budget by about one model call, because the budget is checked
-  between calls.
+  testing; `--budget 2` overrides it. The budget is checked between model calls, so a run can go past it by about one
+  call for each agent working at once. To watch spend, each call prints
+  `[agent] model call: N tokens, $x; cost so far $y`.
 - **Permission mode:** `ask` (default; you approve writes no rule allows), `auto` or `readOnly`. Set it with
   `--permission-mode`, or change it with `/mode`.
 - **Options every command takes:** `--dir <folder with sof.json>`, `--environment <name>`, `--budget <usd>`,

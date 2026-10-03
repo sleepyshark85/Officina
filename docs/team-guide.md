@@ -4,13 +4,13 @@ This guide builds a coding team by hand: a lead, two developers and a reviewer. 
 shows the same team built on `preset:coding-team`, and runs it on a tiny Python project. Read the
 [user guide](user-guide.md) first for installing `sof` and using a chat session.
 
-> **This costs real money.** Each message to the team is a run that calls Claude many times. Start with
-> `--budget 3` (dollars per message), set a monthly spend limit in the [Claude Console](https://console.anthropic.com),
+> **This costs real money.** Each message to the team is a run that calls Claude many times. The example limits each
+> message to $3 (`run.budget`). Set a monthly spend limit in the [Claude Console](https://console.anthropic.com),
 > and work in a throwaway repository.
 
 ## 1. The example project
 
-A calculator with a bug, and a feature to add. On Linux or macOS:
+A calculator with a bug, and a feature to add. On Linux (macOS has no sandbox, so the team can't run there):
 
 ```bash
 mkdir calc && cd calc
@@ -138,7 +138,7 @@ Save this as `sof.json` in the `calc` folder. Each part is explained below it.
       { "tool": "run_command", "action": "allow" }
     ]
   },
-  "run": { "budget": { "cost": 5, "time": "01:00:00" } },
+  "run": { "budget": { "cost": 3, "time": "01:00:00" } },
   "capabilities": {
     "team": { "enabled": true },
     "taskBoard": { "enabled": true, "maxAttempts": 2, "budget": { "cost": 2 } },
@@ -151,8 +151,6 @@ Save this as `sof.json` in the `calc` folder. Each part is explained below it.
       "commandRules": [
         { "match": "python3 -m unittest*", "action": "allow" },
         { "match": "python3 -m compileall*", "action": "allow" },
-        { "match": "git status*", "action": "allow" },
-        { "match": "git diff*", "action": "allow" },
         { "match": "git push*", "action": "deny" },
         { "match": "git remote*", "action": "deny" }
       ]
@@ -194,8 +192,9 @@ These rules allow the file writes and `run_command`, so you aren't asked about e
 command rules next.
 
 **Command rules** decide each command a developer runs, first match wins. Here: the build and tests are allowed,
-reading git state is allowed, `git push` and `git remote` are denied, and **anything else is asked about** (`/approve` or
-`/deny`). Don't allow an interpreter as a whole, such as `python3 *` or `sh*`: that allows every command.
+`git push` and `git remote` are denied, and **anything else is asked about** (`/approve` or `/deny`). Git itself can't
+run in the sandbox, because `.git` is hidden, so there's no point allowing `git status` or `git diff`; the preset's
+rules for them have no effect for the same reason. Don't allow an interpreter as a whole, such as `python3 *` or `sh*`: that allows every command.
 
 **Masking** is off because it would replace things that look like emails or phone numbers in source code.
 
@@ -239,13 +238,14 @@ Every level has a limit. The run's is the one you set most often.
 
 | Setting | Here | What it limits |
 |---|---|---|
-| `run.budget` | $5, 1 hour | Each message to the team (each `sof run`). `--budget 3` overrides the cost. When it runs out, the `runBudgetExceeded` sign-off asks you: approve, and the run gets another budget of the same size |
+| `run.budget` | $3, 1 hour | Each message to the team (each `sof run`). `--budget <usd>` overrides the cost for one session or run. When it runs out, the `runBudgetExceeded` sign-off asks you: approve, and the run gets another budget of the same size |
 | `capabilities.taskBoard.budget` | $2 | Everything spent on one task. Used up, the task goes back to the lead |
 | `capabilities.taskBoard.maxAttempts` | 2 | Failed checks, reviews or integrations before a task goes back to the lead |
 | `agents.<name>.budget.turn` | default: $5, 50 iterations, 45 minutes | One turn of an agent |
 | `agents.<name>.budget.total` | unset | All of one agent's turns in a run, such as `"lead": { "budget": { "total": { "cost": 1 } } }` |
 
-A budget is checked between model calls, so a run can go over by about one call.
+A budget is checked between model calls, so a team can go over by about one call for each agent working at once, and
+several agents may ask for the `runBudgetExceeded` sign-off at the same time.
 
 ### Checks
 
@@ -274,18 +274,14 @@ the fix, goes back. That's why the lead's instructions ask it to order tasks wit
   "agents": {
     "team": { "pattern": { "roles": { "developer": { "max": 2 } } } }
   },
-  "run": { "budget": { "cost": 5, "time": "01:00:00" } },
+  "run": { "budget": { "cost": 3, "time": "01:00:00" } },
   "capabilities": {
     "taskBoard": { "maxAttempts": 2, "budget": { "cost": 2 } },
     "sandbox": {
-      // This list replaces the preset's whole, so the preset's git rules are repeated.
+      // This list replaces the preset's whole. Its git allow rules are left out: git can't run in the sandbox.
       "commandRules": [
         { "match": "python3 -m unittest*", "action": "allow" },
         { "match": "python3 -m compileall*", "action": "allow" },
-        { "match": "git status*", "action": "allow" },
-        { "match": "git diff*", "action": "allow" },
-        { "match": "git log*", "action": "allow" },
-        { "match": "git show*", "action": "allow" },
         { "match": "git push*", "action": "deny" },
         { "match": "git remote*", "action": "deny" }
       ]
@@ -315,8 +311,6 @@ For a .NET project, the build needs NuGet, so allow its hosts, and allow the com
     // "toolchains": ["/home/me/.dotnet"],
     "commandRules": [
       { "match": "dotnet build*", "action": "allow" }, { "match": "dotnet test*", "action": "allow" },
-      { "match": "git status*", "action": "allow" },   { "match": "git diff*", "action": "allow" },
-      { "match": "git log*", "action": "allow" },      { "match": "git show*", "action": "allow" },
       { "match": "git push*", "action": "deny" },      { "match": "git remote*", "action": "deny" }
     ]
   }
@@ -331,7 +325,7 @@ needs at least one commit to make working copies from.
 ```bash
 git add . && git commit -m "A tiny calculator with a failing test"
 git switch -c sof-try
-sof --agent team --budget 3    # with ANTHROPIC_API_KEY set
+sof --agent team               # with ANTHROPIC_API_KEY set
 ```
 
 Type the goal as one line:
@@ -342,7 +336,8 @@ Fix the failing test in test_calc.py; the fix must come first. Then add average(
 
 What to expect:
 
-1. **Plan.** `run <id>` is printed; note it. The lead reads the code and creates tasks. Then it waits for your sign-off:
+1. **Plan.** `run <id>` is printed; note it. The lead reads the code and creates tasks. Then it waits for your sign-off
+   (abridged; a live plan also lists each task's description and acceptance criteria, so the number scrolls up):
 
    ```
    #1 lead needs your sign-off: Approve the lead's plan before work starts?
@@ -351,7 +346,10 @@ What to expect:
    fix-divide Fix divide: Ready, role developer, needs a review Answer with /approve or /deny.
    ```
 
-   Type `/approve 1`. To change the plan, `/tell lead <what to change>`, then `/deny 1`; the lead plans again. With no
+   `/status` shows the waiting request and its number again. Check that `average` depends on `fix-divide`; if it
+   doesn't, `/tell lead average must depend on fix-divide`, then `/deny 1`. A `create_task failed` line during planning
+   is a known bug with a task that depends on another created in the same step; the lead usually retries. Type
+   `/approve 1`. To change the plan, `/tell lead <what to change>`, then `/deny 1`; the lead plans again. With no
    answer within `run.approvalTimeout` (30 minutes), the team stops.
 2. **Tasks.** A developer takes each ready task, in `.sof/worktrees/<run>-task.<task id>`. Lines such as
    `[developer[1]] running run_command` show what it does. A command no rule allows waits for `/approve` or `/deny`. The
@@ -363,7 +361,7 @@ What to expect:
 6. **Report.** When every task is done, the lead reports, and the reply ends with
    `team: Completed, cost $…; this session $…`.
 
-While it works: `/status` shows each agent and what waits for you, `/board` the tasks, and `/tell lead …` reaches the
+To watch spend, each model call prints `[agent] model call: N tokens, $x; cost so far $y`. While it works: `/status` shows each agent and what waits for you, `/board` the tasks, and `/tell lead …` reaches the
 lead. Ctrl+C cancels the reply; changes already integrated stay on the branch.
 
 ## 5. Check the result
@@ -375,7 +373,7 @@ In the session, after the reply:
 - `/quit`, then in the shell:
 
 ```bash
-git log --stat            # one commit per task, "Task fix-divide" and "Task average", by developer[1] or [2]
+git log --stat            # one commit per task, such as "Task fix-divide", by developer[1] or [2]
 python3 -m unittest -v    # all tests pass
 sof report <run>          # the same report as /report
 ```
