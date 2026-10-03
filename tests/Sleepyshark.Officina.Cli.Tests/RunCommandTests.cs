@@ -139,7 +139,9 @@ public sealed class RunCommandTests : IDisposable
         await sof.Out.WaitForAsync("#1 dev asks: How many retries? Answer with answer 1 <your answer> or deny 1.", Ct);
         sof.In.Type("answer 1");
         sof.In.Type("answer #1");
-        await sof.Out.WaitForAsync("error: give your answer after the number: answer 1 <your answer>\nerror: give your answer after the number: answer 1 <your answer>", Ct);
+        sof.In.Type("status"); // commands are taken in order, so both errors are written before what waits
+        await sof.Out.WaitForAsync("waiting for you: #1 dev asks: How many retries?", Ct);
+        Assert.Equal(2, sof.Out.ToString().Split("error: give your answer after the number: answer 1 <your answer>").Length - 1);
         sof.In.Type("answer 3");
         var (exitCode, output, _) = await run;
 

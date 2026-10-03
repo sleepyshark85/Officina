@@ -142,7 +142,9 @@ public sealed class ChatCommandTests : IDisposable
         await sof.Out.WaitForAsync("(it is sent when this reply ends; /drop drops it) #1 waits for an answer; to answer it, type /answer 1 <your answer>", Ct);
         sof.In.Type("/answer 1");
         sof.In.Type("/answer 1");
-        await sof.Out.WaitForAsync("error: give your answer after the number: /answer 1 <your answer>\nerror: give your answer after the number: /answer 1 <your answer>", Ct);
+        sof.In.Type("/status"); // commands are taken in order, so both errors are written before what waits
+        await sof.Out.WaitForAsync("waiting for you: #1 dev asks: Which database?", Ct);
+        Assert.Equal(2, sof.Out.ToString().Split("error: give your answer after the number: /answer 1 <your answer>").Length - 1);
         sof.In.Type("/answer 1 Postgres.");
         sof.In.Dispose();
         var (exitCode, output, _) = await sof.EndedAsync(chat);
