@@ -5,16 +5,13 @@ using Sleepyshark.Officina.Sandbox;
 
 namespace Sleepyshark.Officina.Cli;
 
-/// <summary>A command <c>sof init</c> suggests, and the commands its rules allow, each as itself and with arguments after it.</summary>
-internal sealed record Suggestion(string Line, IReadOnlyList<string> Rules);
-
 /// <summary>A toolchain <c>sof init</c> found in a project, the file that shows it, and its build and test commands, where it has them.</summary>
-internal sealed record Detection(string Toolchain, string Why, Suggestion? Build, Suggestion? Test);
+internal sealed record Detection(string Toolchain, string Why, string? Build, string? Test);
 
 /// <summary>
 /// What <c>sof init</c> knows of toolchains (CFG-17): a small table of detectors, in order of confidence, that find a project's
-/// build and test commands in its top folder, with the commands their rules allow; and what a command's program needs in the
-/// sandbox: the hosts of its package registry, whether its rule would let an agent run any code, and whether the sandbox shows it.
+/// build and test commands in its top folder; and what a command's program needs in the sandbox: the hosts of its package
+/// registry, and whether the sandbox shows it.
 /// </summary>
 internal static partial class CommandDetection
 {
@@ -33,18 +30,6 @@ internal static partial class CommandDetection
         ["go"] = ["proxy.golang.org", "sum.golang.org"],
     };
 
-    /// <summary>Programs that run whatever code their options give them, unless a script or a module follows.</summary>
-    private static readonly HashSet<string> Interpreters =
-        ["python", "python3", "py", "node", "deno", "bun", "ruby", "perl", "php", "sh", "bash", "zsh", "dash", "pwsh", "powershell", "cmd"];
-
-    /// <summary>Commands that install or run any package named after them, by their first one, two or three words.</summary>
-    private static readonly HashSet<string> Runners =
-        ["npx", "pnpx", "bunx", "uvx", "dnx", "npm exec", "npm install", "npm i", "npm add", "pnpm dlx", "pnpm exec", "pnpm add", "yarn dlx", "yarn exec",
-         "yarn add", "bun x", "deno run", "dotnet dnx", "dotnet tool run", "pip install", "pip3 install", "uv run"];
-
-    /// <summary>Programs that run any program named after them.</summary>
-    private static readonly HashSet<string> Wrappers = ["env", "xargs"];
-
     /// <summary>Every toolchain found in <paramref name="directory"/>, the most certain first; <paramref name="notes"/> gets why one was skipped.</summary>
     public static IReadOnlyList<Detection> Detect(string directory, List<string> notes) =>
         [.. Detectors.Select(detect => detect(directory, notes)).OfType<Detection>()];
@@ -56,32 +41,6 @@ internal static partial class CommandDetection
     /// <summary>Each command of the lines, split where the command rules split them.</summary>
     public static IEnumerable<string> Parts(IEnumerable<string> lines) =>
         lines.SelectMany(line => Separators().Split(line)).Select(command => command.Trim()).Where(command => command.Length > 0);
-
-    /// <summary>Why a rule that allows <paramref name="command"/> with any arguments lets an agent run any code, if it does.</summary>
-    public static string? Broad(string command)
-    {
-        var words = command.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        var program = Program(command);
-        if (Interpreters.Contains(program) && !(words.Length > 2 && words[1] == "-m") && !(words.Length > 1 && !words[1].StartsWith('-')))
-        {
-            return $"\"{command}\" with any arguments lets an agent run any code with {program}. Name a script or a module after it instead.";
-        }
-
-        if (Enumerable.Range(1, Math.Min(3, words.Length)).Any(count => Runners.Contains(string.Join(' ', words.Take(count).Skip(1).Prepend(program)))))
-        {
-            return $"\"{command}\" with any arguments lets an agent install or run any package. Use the lock file's install, such as npm ci, and a script of the project.";
-        }
-
-        if (Wrappers.Contains(program))
-        {
-            return $"\"{command}\" with any arguments lets an agent run any program with {program}. Name the program instead.";
-        }
-
-        // Only options or variables, such as make -j4: no target is named, so any can follow.
-        return program == "make" && words.Skip(1).All(word => word.StartsWith('-') || word.Contains('=', StringComparison.Ordinal))
-            ? $"\"{command}\" with any arguments lets an agent run any target. Name the target, such as make build."
-            : null;
-    }
 
     /// <summary>
     /// Each program of the commands that <paramref name="path"/> finds and the Linux sandbox doesn't: the sandbox searches only
@@ -125,7 +84,7 @@ internal static partial class CommandDetection
         }
 
         var target = found.Count == 1 ? "" : $" {found[0]}"; // several solutions: dotnet build needs one named
-        return new(".NET", string.Join(", ", found), new($"dotnet build{target}", ["dotnet build"]), new($"dotnet test{target}", ["dotnet test"]));
+        return new(".NET", string.Join(", ", found), $"dotnet build{target}", $"dotnet test{target}");
     }
 
     private static Detection? Node(string directory, List<string> notes)
@@ -162,8 +121,7 @@ internal static partial class CommandDetection
         var hasTest = Script(scripts, "test") is { } test && !test.Contains("no test specified", StringComparison.Ordinal);
 
         // A working copy has only what git tracks, so the packages are installed first: before the build, or the tests if there is none.
-        Suggestion? Command(string line, bool installs) =>
-            install is not null && installs ? new($"{install} && {line}", [install, line]) : new(line, [line]);
+        string Command(string line, bool installs) => install is not null && installs ? $"{install} && {line}" : line;
         return new(
             "Node",
             lockFile is null ? "package.json" : $"package.json, {lockFile}",
@@ -184,14 +142,14 @@ internal static partial class CommandDetection
             || Contains(directory, "pyproject.toml", "[tool.pytest") || Contains(directory, "setup.cfg", "[tool:pytest]") || Contains(directory, "tox.ini", "[pytest]");
         var python = OperatingSystem.IsWindows() ? "python" : "python3";
         var test = pytest ? $"{python} -m pytest" : $"{python} -m unittest";
-        return new("Python", string.Join(", ", markers.Take(3)), new($"{python} -m compileall -q .", [$"{python} -m compileall"]), new(test, [test]));
+        return new("Python", string.Join(", ", markers.Take(3)), $"{python} -m compileall -q .", test);
     }
 
     private static Detection? Rust(string directory, List<string> notes) =>
-        Exists(directory, "Cargo.toml") ? new("Rust", "Cargo.toml", new("cargo build", ["cargo build"]), new("cargo test", ["cargo test"])) : null;
+        Exists(directory, "Cargo.toml") ? new("Rust", "Cargo.toml", "cargo build", "cargo test") : null;
 
     private static Detection? Go(string directory, List<string> notes) =>
-        Exists(directory, "go.mod") ? new("Go", "go.mod", new("go build ./...", ["go build"]), new("go test ./...", ["go test"])) : null;
+        Exists(directory, "go.mod") ? new("Go", "go.mod", "go build ./...", "go test ./...") : null;
 
     private static Detection? Make(string directory, List<string> notes)
     {
@@ -202,7 +160,7 @@ internal static partial class CommandDetection
         }
 
         var text = File.ReadAllText(Path.Combine(directory, name));
-        Suggestion? Target(string target) => new Regex($@"^{target}\s*:(?!=)", RegexOptions.Multiline).IsMatch(text) ? new($"make {target}", [$"make {target}"]) : null;
+        string? Target(string target) => new Regex($@"^{target}\s*:(?!=)", RegexOptions.Multiline).IsMatch(text) ? $"make {target}" : null;
         var (build, test) = (Target("build"), Target("test"));
         var targets = string.Join(" and ", new[] { build is null ? null : "build", test is null ? null : "test" }.OfType<string>());
         return build is null && test is null ? null : new("make", $"{name} with {targets} targets", build, test);

@@ -102,8 +102,13 @@ public sealed record CheckRan(string Check, bool Passed, string? Task = null) : 
 /// <summary>A tool call reached the tool pipeline. Known secrets are removed from the arguments (INV-06).</summary>
 public sealed record ToolCallStarted(string Tool, string Arguments) : EventPayload;
 
-/// <summary>A tool call ended; the error is set when it did not succeed.</summary>
-public sealed record ToolCallEnded(string Tool, ToolErrorCategory? Error) : EventPayload;
+/// <summary>A tool call ended.</summary>
+/// <param name="Tool">The tool's name.</param>
+/// <param name="Error">Set when the call did not succeed.</param>
+/// <param name="Reason">
+/// Why it failed, on one line: what the model read, then any internal detail in brackets. Known secrets are removed (INV-06).
+/// </param>
+public sealed record ToolCallEnded(string Tool, ToolErrorCategory? Error, string? Reason = null) : EventPayload;
 
 /// <summary>A line of output from a running tool, such as a sandboxed command (SBX-04). Known secrets are removed (INV-06).</summary>
 public sealed record ToolOutput(string Tool, string Line) : EventPayload;

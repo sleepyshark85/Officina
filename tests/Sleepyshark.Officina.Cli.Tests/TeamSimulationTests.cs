@@ -51,7 +51,8 @@ public sealed class TeamSimulationTests : IDisposable
 
         // The process dies: nothing after this is heard from it, and the operating system releases its hold on the workspace.
         await first.Host.DisposeAsync();
-        var second = await StartAsync(work.RunId, Script(plan: false, develop: false, first: reviewed), leaveWorkingCopies: false);
+        var resumed = Script(plan: false, develop: false, first: reviewed);
+        var second = await StartAsync(work.RunId, resumed, leaveWorkingCopies: false);
         var result = await second.Runner.ResumeAsync(work.RunId, ct: Ct);
 
         Assert.Equal((AgentOutcome.Completed, "The parser and the printer are in."), (result.Outcome, result.Output));
@@ -62,6 +63,9 @@ public sealed class TeamSimulationTests : IDisposable
         Assert.Equal(["Start", "Task a", "Task b"], (await Git("log", "--format=%s", "main")).Split('\n').Order(StringComparer.Ordinal));
         await second.Host.DisposeAsync();
         Assert.Empty(Directory.EnumerateDirectories(Path.Combine(sof.Directory, ".sof", "worktrees")));
+
+        // A task is reviewed once its checks pass at submit, and the reviewer, who runs no commands, is told so.
+        Assert.Contains(resumed.Requests, request => Is(request, "Review task ") && Is(request, "Its checks passed at submit: tests."));
 
         // Each task's tests ran in its own working copy (TASK-05), and the build and the tests on the baseline before each integration (WS-02).
         var commands = sandbox.Processes.Select(process => (process.Command.CommandLine, Path.GetFileName(process.Command.Directory))).ToList();

@@ -1,5 +1,6 @@
 using System.Globalization;
 using Sleepyshark.Officina.Core.Events;
+using Sleepyshark.Officina.Core.Extensibility;
 using Sleepyshark.Officina.Core.Messages;
 
 namespace Sleepyshark.Officina.Cli.Tests;
@@ -152,6 +153,25 @@ public class StatusViewTests
         Assert.Equal(13, hidden);
         Assert.EndsWith("[dev] … 13 more lines\n", output.ToString(), StringComparison.Ordinal);
         Assert.Equal(("", 0), view.EndRun());
+    }
+
+    // A failed tool call says why, on one line and cut short, rather than only its category.
+    [Fact]
+    public void A_failed_tool_call_shows_its_reason_on_one_line()
+    {
+        using var output = new StringWriter { NewLine = "\n" };
+        var view = new StatusView(output);
+
+        view.Apply(Event("developer[1]", new ToolCallEnded("write_file", ToolErrorCategory.Failed, "failed (IOException: Access to the path 'src/App.cs' is denied.)")));
+        view.Apply(Event("developer[1]", new ToolCallEnded("run_command", ToolErrorCategory.PolicyViolation, $"policy violation: {new string('x', 300)}")));
+        view.Apply(Event("developer[1]", new ToolCallEnded("read_file", ToolErrorCategory.Failed)));
+
+        var lines = output.ToString().Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        Assert.Equal("[developer[1]] write_file: failed (IOException: Access to the path 'src/App.cs' is denied.)", lines[0]);
+        Assert.StartsWith("[developer[1]] run_command: policy violation: xxx", lines[1], StringComparison.Ordinal);
+        Assert.EndsWith("x…", lines[1], StringComparison.Ordinal);
+        Assert.Equal("[developer[1]] read_file: Failed", lines[2]); // an event with no reason, from before reasons were kept
+        Assert.Equal(3, lines.Length);
     }
 
     private static string Lines(int from, int to) => string.Concat(Enumerable.Range(from, to - from + 1).Select(number => $"Line {number}\n"));

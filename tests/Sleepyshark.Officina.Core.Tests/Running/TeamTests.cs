@@ -69,6 +69,14 @@ public class TeamTests
         Assert.All(requests.Where(request => ScriptedModelProvider.WorkOf(request).StartsWith("You are developer", StringComparison.Ordinal)), request =>
             Assert.Single(DeveloperWork, task => request.History.Any(message => message.Content.OfType<TextContent>().Any(text => text.Text.Contains(task, StringComparison.Ordinal)))));
 
+        // Each agent's work names the tools by the names it is offered, not the built-ins' ids, and a task with no checks says none passed.
+        var works = requests.Select(ScriptedModelProvider.WorkOf).ToList();
+        Assert.Contains(works, work => work.StartsWith("You lead a team", StringComparison.Ordinal) && work.Contains("on the board with create:", StringComparison.Ordinal));
+        Assert.Contains(works, work => work.Contains("Do task a, then submit it with submit;", StringComparison.Ordinal));
+        var review = works.First(work => work.StartsWith("Review task a,", StringComparison.Ordinal));
+        Assert.Contains("ask for changes with review, giving your reasons.\n", review, StringComparison.Ordinal);
+        Assert.DoesNotContain("tasks.", string.Concat(works), StringComparison.Ordinal);
+
         // RUN-10: cost by agent and by definition.
         Assert.Contains("developer", CostBreakdown.Of(events).ByDefinition.Keys);
     }

@@ -312,7 +312,7 @@ internal sealed class TeamRun
             else if (task is { State: InReview, Verified: true, RequiresReview: true, Approved: false } && !running.Any(job => job.Task == task.Id)
                 && Reviewer(task) is { } reviewer)
             {
-                await StartAsync(reviewer, $"review:{task.Id}", task.Id, ReviewInput(task), ct).ConfigureAwait(false);
+                await StartAsync(reviewer, $"review:{task.Id}", task.Id, ReviewInput(reviewer, task), ct).ConfigureAwait(false);
             }
         }
     }
@@ -492,8 +492,14 @@ internal sealed class TeamRun
     }
 
     /// <summary>Whether the agents of a definition are offered the review tool.</summary>
-    private bool Reviews(string definition) =>
-        options.Agents[definition].Tools.SelectMany(set => options.ToolSets[set]).Any(tool => options.Tools[tool].BuiltinTool() == "tasks.review");
+    private bool Reviews(string definition) => Tool(definition, "tasks.review") is not null;
+
+    /// <summary>The name the agents of a definition know a built-in tool by, such as <c>submit_task</c> for <c>tasks.submit_for_review</c>.</summary>
+    private string? Tool(string definition, string builtin) =>
+        options.Agents[definition].Tools.SelectMany(set => options.ToolSets[set]).FirstOrDefault(tool => options.Tools[tool].BuiltinTool() == builtin);
+
+    /// <summary>A member's name for a built-in tool, so its input names the tool it is offered; the built-in's id if it has none.</summary>
+    private string ToolOf(string member, string builtin) => Tool(members[member], builtin) ?? builtin;
 
     private static TaskChange LastChange(IReadOnlyList<TaskChange> history, string id) => history.Last(change => change.Tasks.Any(task => task.Id == id));
 
@@ -501,7 +507,7 @@ internal sealed class TeamRun
 
     private string PlanInput() =>
         $"""
-        You lead a team: {Team()}. Turn the goal below into tasks on the board with tasks.create: each a piece of work one agent can do and submit, with its acceptance criteria, the role that does it ({string.Join(", ", pattern.Roles.Keys)}), the tasks it depends on, and whether it needs a review. The team's agents then do them, and you hear back when a task fails.
+        You lead a team: {Team()}. Turn the goal below into tasks on the board with {ToolOf(lead, "tasks.create")}: each a piece of work one agent can do and submit, with its acceptance criteria, the role that does it ({string.Join(", ", pattern.Roles.Keys)}), the tasks it depends on, and whether it needs a review. The team's agents then do them, and you hear back when a task fails.
 
         Goal:
         {goal}
@@ -509,7 +515,7 @@ internal sealed class TeamRun
 
     private string ReplanInput(IReadOnlyList<BoardTask> tasks) =>
         $"""
-        The owner did not approve your plan. Change the board with tasks.create and tasks.update so the plan does what the owner asked, then end your turn; the owner is asked again.
+        The owner did not approve your plan. Change the board with {ToolOf(lead, "tasks.create")} and {ToolOf(lead, "tasks.update")} so the plan does what the owner asked, then end your turn; the owner is asked again.
 
         Goal:
         {goal}
@@ -519,7 +525,7 @@ internal sealed class TeamRun
 
     private string FailedInput(IReadOnlyList<BoardTask> failed, IReadOnlyList<TaskChange> history, IReadOnlyList<BoardTask> tasks) =>
         $"""
-        Tasks failed and came back to you: {string.Join(", ", failed.Select(task => task.Id))}. For each, retry it (tasks.update with state ready), assign it to another agent of the team, split it into new tasks and cancel it, or leave it failed for the owner.
+        Tasks failed and came back to you: {string.Join(", ", failed.Select(task => task.Id))}. For each, retry it ({ToolOf(lead, "tasks.update")} with state ready), assign it to another agent of the team, split it into new tasks and cancel it, or leave it failed for the owner.
 
         Goal:
         {goal}
@@ -549,14 +555,15 @@ internal sealed class TeamRun
 
     private string WorkInput(string member, BoardTask task, string? returned) =>
         $"""
-        You are {member} in a team: {Team()}. Do task {task.Id}, then submit it with tasks.submit_for_review; its checks run then. {(returned is null ? "" : "It came back to you; the board says why.")}
+        You are {member} in a team: {Team()}. Do task {task.Id}, then submit it with {ToolOf(member, "tasks.submit_for_review")}; its checks run then. {(returned is null ? "" : "It came back to you; the board says why.")}
 
         {Labels.Data("task", Describe(task) + (returned is null ? "" : $"\nCame back: {returned}"))}
         """;
 
-    private static string ReviewInput(BoardTask task) =>
+    // A task is reviewed only once its checks pass at submit, so the reviewer, who runs no commands, need not run them again.
+    private string ReviewInput(string reviewer, BoardTask task) =>
         $"""
-        Review task {task.Id}, which {task.Assignee} did: check its work against its acceptance criteria, then approve it or ask for changes with tasks.review, giving your reasons.
+        Review task {task.Id}, which {task.Assignee} did: check its work against its acceptance criteria, then approve it or ask for changes with {ToolOf(reviewer, "tasks.review")}, giving your reasons.{(task.Checks.Count > 0 ? $" Its checks passed at submit: {string.Join(", ", task.Checks)}." : "")}
 
         {Labels.Data("task", Describe(task))}
         """;

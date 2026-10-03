@@ -85,7 +85,7 @@ the sandbox (see the [user guide](docs/user-guide.md), section 6):
 | `run.permissionMode` | `ask` | You trust the rules enough for `auto`, or want `readOnly` |
 | `capabilities.sandbox.allowedHosts` | none (network off) | Builds download packages |
 | `capabilities.sandbox.toolchains` | none: on Linux, commands find programs only in `/usr/local/bin`, `/usr/bin` and `/bin` | An SDK is elsewhere, such as `~/.dotnet` or `/usr/lib/dotnet`; `sof init` names the folder |
-| `capabilities.sandbox.commandRules` | the preset's rules; anything unmatched is asked about | You want fewer or more prompts. An allow rule for an interpreter, such as `sh*` or `bash*`, allows every command. |
+| `capabilities.sandbox.commandRules` | none, so every command is asked about; the coding team allows every command but `git push` and `git remote`, trusting the sandbox | You'd rather be asked: allow your commands exactly, such as `dotnet test` and `dotnet test *`, then end with a `*` ask rule. An allow rule for an interpreter, such as `sh*`, allows every command. |
 | `capabilities.workspace.protectedPaths` | `.git`, `.env*` and `.sof/` hidden; `sof.json` and `sof.*.json` read-only | More files must stay out of reach |
 | `capabilities.humanInteraction.signOffs` | run budget exceeded and irreversible action; the coding team adds plan approval | You want more or fewer checkpoints with the owner |
 | `capabilities.checkpoints.at` | after each turn | You want one after each step of a pattern or each integration, as well |

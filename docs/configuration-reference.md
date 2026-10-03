@@ -548,10 +548,10 @@ are not checked.
     "enabled": true,
     "allowedHosts": ["api.nuget.org", "*.nuget.org"],     // SBX-01; empty means no network
     "toolchains": ["/home/dev/.dotnet"],                  // read-only, and on the path
-    "commandRules": [                                     // SBX-02; first match wins, unmatched is asked about
+    "commandRules": [                                     // SBX-02; first match wins, unmatched is asked about, as is a line with $( )
       { "match": "dotnet test",   "action": "allow" },
-      { "match": "dotnet test *", "action": "allow" },    // not dotnet *, which allows dotnet run and every tool
-      { "match": "git push*",     "action": "deny" }
+      { "match": "dotnet test *", "action": "allow" },
+      { "match": "git push*",     "action": "deny" }      // the coding team adds git remote* deny and a last * allow
     ],
     "secrets": { "developer": ["NUGET_TOKEN"] }           // SBX-05, by agent
   },
@@ -755,8 +755,11 @@ store and human interaction on; permission mode `ask`. The application gives `ag
   turn and each integration), conversation store, and human interaction with sign-offs for plan approval, the run budget
   and irreversible actions (HITL-04).
 - **Masking:** off, as it would corrupt source code (ING-02).
-- **Command rules:** `git push` and `git remote` denied; no git command is allowed, as the sandbox hides `.git`. The application
-  adds its own project's commands, repeating these, since a list replaces the preset's.
+- **Command rules:** trust the sandbox: `git push` and `git remote` denied, then `*` allowed. The sandbox is the boundary
+  (no network but `allowedHosts`, only the task's working copy writable, no secrets, checks and review before integration),
+  and `dotnet test` already runs agent-written code, so asking about each command added friction, not safety. A line with
+  `$( )` or backticks is still asked about. `run_command` stays behind the `commands` gate, so an application can tighten
+  the rules: its list replaces the preset's whole.
 - **Checks:** `build` and `tests`, from `project.values.buildCommand` and `testCommand`, used for tasks and the baseline.
 - **Permission rules** allow the file writes and commands, as writes stay in a task's working copy until its checks and
   review pass, and commands still pass the command rules.
@@ -781,7 +784,7 @@ An application using the coding team needs only:
 }
 ```
 
-[`benchmark/sof.json`](../benchmark/sof.json) is such a file, with command rules for `dotnet`.
+[`benchmark/sof.json`](../benchmark/sof.json) is such a file.
 
 ---
 

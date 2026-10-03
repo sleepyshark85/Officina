@@ -113,13 +113,13 @@ Save this as `sof.json` in the `calc` folder. Each part is explained below it.
     },
     "developer": {
       "description": "Does one task at a time in its own working copy.",
-      "instructions": "You are a developer. Do the task you are given in its working copy: read the code, change it, build with {{project.values.buildCommand}}, test with {{project.values.testCommand}}, and submit the task when its acceptance criteria are met. Keep the change small.",
+      "instructions": "You are a developer. Do the task you are given in its working copy: read the code, change it, build with {{project.values.buildCommand}}, test with {{project.values.testCommand}}, and submit the task when its acceptance criteria are met. Keep the change small. Read and search files with read_file and search, not the shell. Git is not available in the sandbox; your working copy is integrated for you.",
       "tools": ["files-read", "files-write", "shell", "developing"]
     },
     "reviewer": {
       "model": "review",
       "description": "Reviews another developer's task. Never changes code.",
-      "instructions": "You review the team's tasks. Read the task's change against its acceptance criteria, then approve it or ask for changes, with your reasons. You never change the code.",
+      "instructions": "You review the team's tasks. Read the task's change against its acceptance criteria, then approve it or ask for changes, with your reasons. Its checks passed when it was submitted, so judge the change by reading it. You never change the code.",
       "tools": ["files-read", "reviewing"]
     }
   },
@@ -169,12 +169,9 @@ Save this as `sof.json` in the `calc` folder. Each part is explained below it.
       "enabled": true,
       "allowedHosts": ["api.nuget.org", "*.nuget.org"],
       "commandRules": [
-        { "match": "dotnet build", "action": "allow" },
-        { "match": "dotnet build *", "action": "allow" },
-        { "match": "dotnet test", "action": "allow" },
-        { "match": "dotnet test *", "action": "allow" },
         { "match": "git push*", "action": "deny" },
-        { "match": "git remote*", "action": "deny" }
+        { "match": "git remote*", "action": "deny" },
+        { "match": "*", "action": "allow" }
       ]
     }
   }
@@ -211,11 +208,27 @@ sandbox's command rules.
 These rules allow the file writes and `run_command`, so you aren't asked about every edit; commands still pass the
 command rules next.
 
-**Command rules** decide each command a developer runs, first match wins. Here: `dotnet build` and `dotnet test` are
-allowed, each as itself and followed by arguments (`dotnet test *` allows `dotnet test --filter Divide`, but
-`dotnet build*` would also allow `dotnet build-server`); `git push` and `git remote` are denied; and **anything else is
-asked about** (`/approve` or `/deny`). Git itself can't run in the sandbox, because `.git` is hidden, so there's no
-point allowing `git status` or `git diff`. Don't allow `dotnet *`: that allows `dotnet run` and every tool.
+**Command rules** decide each command a developer runs, first match wins. A line is split at `;`, `&&` and `|`, and
+each part must be allowed. These rules **trust the sandbox**: `git push` and `git remote` are denied, and every other
+command is allowed, `cat`, `ls` and `dotnet build 2>&1 | tail -5` included. The sandbox is the boundary: no network
+but `allowedHosts`, only the task's working copy writable, no secrets, and checks and a review before a change reaches
+your branch. `dotnet test` already runs code the agents wrote, so asking about each command adds friction, not safety.
+A line with `$( )` or backticks is still asked about (`/approve` or `/deny`), as no rule sees the command it runs. Git
+can't run in the sandbox anyway, because `.git` is hidden.
+
+To be asked instead, allow your commands exactly, each as itself and followed by arguments, and end with an ask rule:
+
+```jsonc
+"commandRules": [
+  { "match": "git push*", "action": "deny" },
+  { "match": "git remote*", "action": "deny" },
+  { "match": "dotnet build", "action": "allow" },
+  { "match": "dotnet build *", "action": "allow" },   // not dotnet build*, which allows dotnet build-server
+  { "match": "dotnet test", "action": "allow" },
+  { "match": "dotnet test *", "action": "allow" },
+  { "match": "*", "action": "ask" }                   // anything else is asked about, as with no rule at all
+]
+```
 
 **Allowed hosts** are the only network the sandbox has: NuGet, so the build can restore packages. Each working copy keeps its packages between commands, so only its first build downloads them.
 
@@ -286,7 +299,8 @@ the fix, goes back. That's why the lead's instructions ask it to order tasks wit
 ## 3. The same team from the preset
 
 `preset:coding-team` is this team with more tools (delete and move files, background processes, `hand_off`), a shared
-`coder` base for the roles, project memory on, and up to three developers. With the same project and limits:
+`coder` base for the roles, project memory on, and up to three developers. Its command rules are the ones above, so
+your file needs none. With the same project and limits:
 
 ```jsonc
 {
@@ -301,16 +315,7 @@ the fix, goes back. That's why the lead's instructions ask it to order tasks wit
   "capabilities": {
     "taskBoard": { "maxAttempts": 2, "budget": { "cost": 2 } },
     "sandbox": {
-      "allowedHosts": ["api.nuget.org", "*.nuget.org"],
-      // This list replaces the preset's whole, so it repeats the preset's git deny rules.
-      "commandRules": [
-        { "match": "dotnet build", "action": "allow" },
-        { "match": "dotnet build *", "action": "allow" },
-        { "match": "dotnet test", "action": "allow" },
-        { "match": "dotnet test *", "action": "allow" },
-        { "match": "git push*", "action": "deny" },
-        { "match": "git remote*", "action": "deny" }
-      ]
+      "allowedHosts": ["api.nuget.org", "*.nuget.org"]
     }
   }
 }
@@ -318,7 +323,8 @@ the fix, goes back. That's why the lead's instructions ask it to order tasks wit
 
 **The fast path:** `sof init` in the `calc` folder writes most of this for you. It says
 `Found .NET (Calc.slnx): dotnet build and dotnet test.`, and asks for each command; press Enter twice to take them. It
-writes the two commands, `run.budget` at $3, the NuGet hosts and the same six command rules, then validates the file.
+writes the two commands, `run.budget` at $3, the NuGet hosts and the preset's three command rules, written out
+for you to tighten, then validates the file.
 It leaves out the time limit, the team size and the task board's limits, which you add by hand. If the sandbox can't
 run the `dotnet` on your `PATH`, such as `~/.dotnet/dotnet` or `/usr/lib/dotnet/dotnet`, it says to add that folder to
 `toolchains` (section 1); it doesn't add it itself. See the [user guide](user-guide.md), section 6.
@@ -378,8 +384,9 @@ What to expect:
    Press Enter to save it there, type another path or folder, or `n`. The file isn't committed; commit it yourself if
    you want to keep it. `/save` saves it later too.
 2. **Tasks.** A developer takes each ready task, in `.sof/worktrees/<run>-task.<task id>`. Lines such as
-   `[developer[1]] running run_command` show what it does. A command no rule allows waits for `/approve` or `/deny`. The
-   task with a dependency waits until the one it needs is done.
+   `[developer[1]] running run_command` show what it does, and a failed call says why, such as
+   `[developer[1]] write_file: failed: …`. A command line with `$( )` waits for `/approve` or `/deny`. The task with a
+   dependency waits until the one it needs is done.
 3. **Submit.** The developer submits; `build` and `tests` run in its working copy.
 4. **Review.** `reviewer[1]` approves, or asks for changes, which sends the task back to the developer.
 5. **Integration.** The change is squashed into one commit, `build` and `tests` run on it applied to your branch, and
@@ -420,8 +427,8 @@ branch has its commits. `sof --agent team --new` starts the lead afresh.
 
 - **Sandbox:** commands and checks run without network (unless `allowedHosts`), with limits on CPU, memory and
   processes. On Linux, only system folders, the toolchains, the working copy and its own home folder are visible.
-- **Command rules:** anything not allowed is asked about. The git deny rules are a convenience; the sandbox is the
-  boundary.
+- **Command rules:** every command is allowed but `git push` and `git remote`, as the sandbox is the boundary; a line
+  with `$( )` or backticks is asked about. Tighten them as in section 2 if you'd rather be asked.
 - **Protected files:** `.git`, `.env*` and `.sof/` are hidden from agents, and `sof.json`, `sof.*.json` and the files
   they extend are read-only. Integration refuses a change that touches them. Add your own with
   `capabilities.workspace.protectedPaths`.

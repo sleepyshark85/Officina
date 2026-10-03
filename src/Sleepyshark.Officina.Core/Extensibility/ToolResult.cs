@@ -32,6 +32,9 @@ public sealed record ToolResult
     /// <summary>Why the agent asks for a human, when it called the tool for it; the turn then ends in a handoff to a human (EGR-04).</summary>
     internal string? HandOffToHuman { get; init; }
 
+    /// <summary>The internal detail of a failure, which the model never reads (TOOL-08): for the audit log and the owner.</summary>
+    internal string? Detail { get; init; }
+
     /// <summary>Whether the content comes from outside the agents' control, such as a check's findings on code they wrote (SEC-04).</summary>
     internal bool Untrusted { get; init; }
 

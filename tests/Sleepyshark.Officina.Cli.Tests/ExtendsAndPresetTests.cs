@@ -1,4 +1,7 @@
+using System.Text.Json;
 using Sleepyshark.Officina.Core.Configuration;
+using Sleepyshark.Officina.Core.Extensibility;
+using Sleepyshark.Officina.Sandbox;
 
 namespace Sleepyshark.Officina.Cli.Tests;
 
@@ -135,6 +138,31 @@ public sealed class ExtendsAndPresetTests : IDisposable
         var reviewerTools = options.Agents["reviewer"].Tools.SelectMany(set => options.ToolSets[set]).Select(tool => options.Tools[tool].Source).ToList();
         Assert.DoesNotContain(reviewerTools, source => source!.StartsWith("extension:sandbox.", StringComparison.Ordinal) || source == "extension:workspace.write_file");
         Assert.All(["lead", "developer", "reviewer"], role => Assert.Equal(["Today is {{now:date}}."], options.Agents[role].Context.OperatingFacts));
+    }
+
+    // SBX-02: the coding team trusts the sandbox. Every command runs in it, however a line joins them, but git push and git
+    // remote; a line with a substitution is still asked about, as no rule sees the command it runs.
+    [Theory]
+    [InlineData("dotnet build 2>&1 | tail -5", PolicyAction.Allow)]
+    [InlineData("cat x", PolicyAction.Allow)]
+    [InlineData("ls; pwd", PolicyAction.Allow)]
+    [InlineData("cd src && dotnet test", PolicyAction.Allow)]
+    [InlineData("find . -name '*.cs' | xargs grep -n Divide", PolicyAction.Allow)]
+    [InlineData("git push origin", PolicyAction.Deny)]
+    [InlineData("dotnet build && git remote add x https://example.com", PolicyAction.Deny)]
+    [InlineData("echo $(cat x)", PolicyAction.Ask)]
+    [InlineData("echo `cat x`", PolicyAction.Ask)]
+    public async Task The_coding_team_allows_every_command_but_git_push_and_git_remote(string command, PolicyAction expected)
+    {
+        folder.Write("sof.json", """{ "extends": ["preset:coding-team"], "project": { "values": { "buildCommand": "dotnet build", "testCommand": "dotnet test" } } }""");
+        var options = folder.Load().Options;
+
+        // The gate reads only the command, so the call's run record is not needed.
+        var context = new GateContext("developer[1]", "run_command", JsonSerializer.SerializeToElement(new { command }), Caller.Anonymous, false, null!, null);
+        var decision = await new CommandRules(options.Capabilities.Sandbox).EvaluateAsync(context, TestContext.Current.CancellationToken);
+
+        Assert.Equal(expected, decision.Action);
+        Assert.Equal(["run_command", "start_process"], options.Tools.Where(tool => tool.Value.Gates.Contains("commands")).Select(tool => tool.Key).Order(StringComparer.Ordinal));
     }
 
     // TEST-31: the benchmark's goals are fixed, in tiers, each with a hidden test suite, for a team its configuration sets up.
