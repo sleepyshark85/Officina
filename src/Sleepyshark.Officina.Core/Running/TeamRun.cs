@@ -230,7 +230,7 @@ internal sealed class TeamRun
     {
         var owner = services.Pipeline.Owner;
         var context = Member(lead, null, PlanStep);
-        var answer = await owner.AskAsync(context, owner.Request(context, HumanRequestKind.SignOff, $"Approve the lead's plan before work starts?\n{Plan(tasks)}"), ct)
+        var answer = await owner.AskAsync(context, owner.Request(context, HumanRequestKind.SignOff, $"Approve the lead's plan before work starts?\n{Plan(tasks)}") with { PlanApproval = true }, ct)
             .ConfigureAwait(false);
         if (answer is { Approved: true })
         {

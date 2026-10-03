@@ -39,12 +39,13 @@ internal sealed class ChatSession
     private static readonly string Help = $"""
         {RunCommand.Help("/")}
                   | /new | /drop | /report [run] | /resume <run> | /rollback <run> [--to <n>] | /run --input <text>
-                  | /config validate | /config show [--origin] | /config dry-run ... | /help [command] | /quit (or Ctrl+D)
+                  | /config validate | /config show [--origin] | /config dry-run ... | /save [path] | /help [command] | /quit (or Ctrl+D)
         A line that does not start with / is a message. While a reply runs, a message waits until it ends (/status lists the
         waiting messages, /drop drops them), and /tell reaches an agent at once. A line shaped like a command without its /,
         such as "approve 1", is held back; type it again to send it as a message. /approve to /memory act on the reply that runs; between
         replies, /board and /task act on the last message's run. /resume <run>, /rollback and /run work only between replies;
         type them again when the reply ends.
+        /save [path] saves the last reply's output, the plan approved, or the report /report showed, as a file in the project, not committed.
         """;
 
     private readonly ParseResult parse;
@@ -66,6 +67,16 @@ internal sealed class ChatSession
     private readonly TextReader input;
     private readonly OwnerQueue owner;
     private readonly StatusView status;
+    private readonly OutputSaver saver;
+
+    /// <summary>What <c>/save</c> saves: the last reply's output, the plan approved, or the report shown, and its default path.</summary>
+    private (string Content, string Suggestion)? saveable;
+
+    /// <summary>The message of the reply that runs, or of the last one.</summary>
+    private string message = "";
+
+    /// <summary>Set when the owner approves a team's plan, which the session then offers to save.</summary>
+    private int planApproved;
 
     /// <summary>Whether the next message starts a new conversation (<c>--new</c>, <c>/new</c>).</summary>
     private bool fresh;
@@ -111,6 +122,14 @@ internal sealed class ChatSession
         input = host.Terminal?.Reader() ?? host.In;
         owner = new OwnerQueue(output, "/");
         status = new StatusView(output, () => current?.Workspace?.Queue, stream: true);
+        saver = new OutputSaver(shared.Directory(parse, host), () => shared.Load(parse, host).Options, status, ReadAnswerAsync, host.Interactive);
+        owner.Answered = (request, answer) =>
+        {
+            if (request.PlanApproval && answer.Approved)
+            {
+                Interlocked.Exchange(ref planApproved, 1);
+            }
+        };
     }
 
     public async Task<int> RunAsync(CancellationToken ct)
@@ -328,9 +347,25 @@ internal sealed class ChatSession
         }
     }
 
-    /// <summary>Sends a message: a run of the conversation, whose reply streams, with the owner's commands carried out while it runs.</summary>
-    private Task SendAsync(string message) => GuardedAsync(async token =>
+    /// <summary>
+    /// Sends a message: a run of the conversation, whose reply streams, with the owner's commands carried out while it runs. A
+    /// reply that is a document is offered to be saved as a file once it ends.
+    /// </summary>
+    private async Task SendAsync(string message)
     {
+        this.message = message;
+        var offered = false;
+        await GuardedAsync(async token => offered = await MessageAsync(message, token));
+        if (offered && saveable is var (content, suggestion) && await saver.OfferAsync(content, suggestion, ending.Token) is { } line)
+        {
+            returned.Enqueue(line); // the owner went on without answering
+        }
+    }
+
+    /// <returns>Whether the reply completed with a document.</returns>
+    private async Task<bool> MessageAsync(string message, CancellationToken token)
+    {
+        completed = null;
         var work = new Work(agent, message) { Trigger = Trigger.Conversation };
         var code = await RunCommand.ExecuteAsync(
             parse, shared, host, work.RunId, agent, existing: false, leaveWorkingCopies: false, (session, ct) => ReplyAsync(session, work, ct), token,
@@ -339,7 +374,12 @@ internal sealed class ChatSession
         {
             status.WriteLine("The message was not sent.");
         }
-    });
+
+        return code == ExitCodes.Success && completed is { } output && OutputFiles.IsDocument(output);
+    }
+
+    /// <summary>The output of the reply that completed last in <see cref="ReplyAsync"/>; null if it did not complete.</summary>
+    private string? completed;
 
     /// <summary>
     /// Does what a message or a command between replies does, which Ctrl+C cancels. What fails is said, and the session goes on;
@@ -410,6 +450,12 @@ internal sealed class ChatSession
             {
                 replying = null; // Ctrl+C from now on is one between replies
             }
+        }
+
+        completed = result.Outcome == AgentOutcome.Completed ? result.Output : null;
+        if (result.Output.Trim().Length > 0)
+        {
+            saveable = (result.Output, OutputFiles.Suggest(result.Output, work.Input));
         }
 
         status.WriteLine(string.Create(
@@ -555,6 +601,14 @@ internal sealed class ChatSession
                     break;
                 case var _ when session is not null && RunCommands.Contains(word):
                     await RunCommand.CarryOutAsync(command, session, status, Help, ending.Token);
+                    if (Interlocked.Exchange(ref planApproved, 0) == 1)
+                    {
+                        await OfferPlanAsync(session);
+                    }
+
+                    break;
+                case "save" when words.Count <= 2:
+                    await SaveAsync(words.Count == 2 ? words[1] : null);
                     break;
                 case "board" or "task" when session is null:
                     await StoredBoardAsync(words, ending.Token);
@@ -617,9 +671,68 @@ internal sealed class ChatSession
         }
 
         IStorage storage = session?.Storage ?? await LocalStorage.OpenAsync(shared.Load(parse, host).Options, shared.Directory(parse, host), ct);
-        status.WriteLine(await RunReport.BuildAsync(storage, null, run, ct) is { } report
-            ? report.ToText().TrimEnd()
-            : $"Run {run} has not been recorded yet; try again in a moment.");
+        if (await RunReport.BuildAsync(storage, null, run, ct) is not { } report)
+        {
+            status.WriteLine($"Run {run} has not been recorded yet; try again in a moment.");
+            return;
+        }
+
+        var text = report.ToText().TrimEnd();
+        status.WriteLine(text);
+        saveable = (text, $"docs/report-{run[..Math.Min(8, run.Length)]}.txt");
+    }
+
+    /// <summary><c>/save [path]</c>: saves the last reply's output, the plan approved, or the report shown, as a file in the project.</summary>
+    private async Task SaveAsync(string? path)
+    {
+        if (saveable is not var (content, suggestion))
+        {
+            status.WriteLine("error: there is nothing to save yet: /save saves the last reply's output, or the report /report showed.");
+            return;
+        }
+
+        await saver.SaveAsync(content, suggestion, path, ending.Token);
+    }
+
+    /// <summary>
+    /// TEAM-10: once the owner approves a team's plan, the plan is offered to be saved as Markdown: each task's title, description,
+    /// acceptance criteria and dependencies. The board is read as it is now, so it holds what the owner changed with <c>/task</c>.
+    /// </summary>
+    private async Task OfferPlanAsync(RunCommand.Session session)
+    {
+        var tasks = await session.Runner.Board(null, session.RunId).ReadAsync(ending.Token);
+        var now = host.Time.GetLocalNow();
+        var (content, suggestion) = (OutputFiles.PlanMarkdown(message, tasks, now), OutputFiles.PlanPath(message, now));
+        saveable = (content, suggestion);
+        if (await saver.OfferAsync(content, suggestion, ending.Token) is not { } line)
+        {
+            return;
+        }
+
+        if (line.StartsWith('/'))
+        {
+            await CommandAsync(line[1..].Trim(), session);
+        }
+        else
+        {
+            queued.Enqueue(line);
+            status.WriteLine("(it is sent when this reply ends; /tell <agent> <text> reaches an agent now)");
+        }
+    }
+
+    /// <summary>The owner's answer to a question the session asks, from the lines the console thread reads; null at the end of the input.</summary>
+    private async Task<string?> ReadAnswerAsync(CancellationToken ct)
+    {
+        try
+        {
+            var line = inputEnded ? null : await ReadAsync(lines.Reader, ct);
+            inputEnded = line is null;
+            return line;
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            return null;
+        }
     }
 
     /// <summary>

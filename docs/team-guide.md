@@ -366,6 +366,16 @@ What to expect:
    doesn't, fix it yourself with `/task edit average --depends fix-divide`. Type `/approve 1` (or just `/approve`, as no
    other request was shown since). To change the plan, `/tell lead <what to change>`, then `/deny 1`; the lead plans
    again. With no answer within `run.approvalTimeout` (30 minutes), the team stops.
+
+   After `/approve`, the session offers to save the plan, with each task's title, description, acceptance criteria and
+   dependencies:
+
+   ```
+   Save this as docs/plans/2026-10-03-fix-the-failing-divide-test-the-fix-must-come-first-then.md? [Enter = yes, n = no, or type another path]
+   ```
+
+   Press Enter to save it there, type another path or folder, or `n`. The file isn't committed; commit it yourself if
+   you want to keep it. `/save` saves it later too.
 2. **Tasks.** A developer takes each ready task, in `.sof/worktrees/<run>-task.<task id>`. Lines such as
    `[developer[1]] running run_command` show what it does. A command no rule allows waits for `/approve` or `/deny`. The
    task with a dependency waits until the one it needs is done.

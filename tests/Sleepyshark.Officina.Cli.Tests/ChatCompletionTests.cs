@@ -14,7 +14,11 @@ public sealed class ChatCompletionTests
     [InlineData("", "/re", "/report|/resume")]
     [InlineData("", "/ro", "/rollback")]
     [InlineData("", "/q", "/quit")]
+<<<<<<< HEAD
     [InlineData("", "/dr", "/drop")]
+=======
+    [InlineData("", "/sa", "/save")]
+>>>>>>> b623a5d (Offer to save documents and plans as files in the project)
     [InlineData("", "/Con", "")] // case matters, as it does to the line editor
     [InlineData("", "Hello", "")] // a message
     [InlineData("/config ", "", "show|validate|dry-run")]

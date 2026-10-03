@@ -1,3 +1,5 @@
+using System.Text.RegularExpressions;
+
 namespace Sleepyshark.Officina.Core.Configuration;
 
 /// <summary>Masking of personal data in work from outside the core (ING-02, ING-06).</summary>
@@ -17,4 +19,11 @@ public sealed record MaskingOptions
         ["card"] = @"(?<!\w)\d([ -]?\d){12,18}(?!\w)",
         ["phone"] = @"(?<![\w+])\+?\d([ ().-]?\d){8,14}(?!\w)",
     };
+
+    /// <summary>
+    /// Whether the text holds a masking token, such as <c>[email-1]</c>: one of the patterns' names, a dash and a number, in
+    /// brackets. A token stands for a value the text does not hold.
+    /// </summary>
+    public bool HoldsToken(string text) =>
+        Regex.IsMatch(text, $@"\[({string.Join('|', (Patterns ?? BuiltInPatterns).Keys.Select(Regex.Escape))})-\d+\]");
 }
