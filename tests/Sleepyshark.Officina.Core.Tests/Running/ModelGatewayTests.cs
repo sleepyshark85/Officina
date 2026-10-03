@@ -121,6 +121,8 @@ public class ModelGatewayTests
     [Fact]
     public async Task A_fallback_serves_the_call_when_the_primary_stays_unavailable_and_the_switch_is_recorded()
     {
+        // The meter is process-wide and tests run in parallel, so count only the fallbacks of an agent no other test uses.
+        const string Metered = "metered";
         var fallbacks = new List<(string Model, string? Reason)>();
         using var metering = new MeterListener
         {
@@ -134,17 +136,22 @@ public class ModelGatewayTests
         };
         metering.SetMeasurementEventCallback<long>((_, _, tags, _) =>
         {
+            if ((string?)tags.ToArray().Single(tag => tag.Key == "gen_ai.agent.name").Value != Metered)
+            {
+                return;
+            }
+
             lock (fallbacks)
             {
                 fallbacks.Add(((string)tags.ToArray().Single(tag => tag.Key == "gen_ai.request.model").Value!, (string?)tags.ToArray().Single(tag => tag.Key == "officina.fallback.reason").Value));
             }
         });
         metering.Start();
-        var kit = Kit(maxAttempts: 2, fallback: true);
+        var kit = Kit(maxAttempts: 2, fallback: true, agent: Metered);
         kit.Model.Fail(ModelFailure.Transient).Fail(ModelFailure.Transient)
             .Reply(new TextDelta("Done."), new UsageReported(new Usage(1_000_000, 0, 0, 0)), new Stopped(StopReason.Finished));
 
-        var (result, _) = await RunAsync(kit);
+        var (result, _) = await RunAsync(kit, new Work(Metered, "work"));
 
         Assert.Equal(AgentOutcome.Completed, result.Outcome);
         Assert.Equal(["claude-opus-5-5", "claude-opus-5-5", "claude-haiku-4-5"], kit.Model.Requests.Select(request => request.Profile.Model));
@@ -324,11 +331,12 @@ public class ModelGatewayTests
         Assert.True(condition(), "The condition did not become true.");
     }
 
-    /// <summary>The kit for agent <c>dev</c>, whose profile <c>default</c> has the fallback <c>fast</c> when asked.</summary>
-    private static TestKit Kit(int maxAttempts = 4, TimeSpan? maxDelay = null, bool fallback = false)
+    /// <summary>The kit for agent <c>dev</c> (or the one named), whose profile <c>default</c> has the fallback <c>fast</c> when asked.</summary>
+    private static TestKit Kit(int maxAttempts = 4, TimeSpan? maxDelay = null, bool fallback = false, string agent = Agent)
     {
         var options = Options(("echo", Extension("echo"))) with
         {
+            Agents = new Dictionary<string, AgentDefinition> { [agent] = new() { Instructions = "Work.", Tools = ["all"] } },
             Providers = new Dictionary<string, ProviderOptions>
             {
                 ["claude"] = ProviderOptions.Claude with { Retry = new() { MaxAttempts = maxAttempts, InitialDelay = TimeSpan.FromSeconds(1), MaxDelay = maxDelay ?? TimeSpan.FromSeconds(30) } },
