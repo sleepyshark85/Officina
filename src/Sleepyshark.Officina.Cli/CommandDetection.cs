@@ -178,7 +178,8 @@ internal static partial class CommandDetection
 
     private static Detection? Make(string directory, List<string> notes)
     {
-        if (Makefiles.FirstOrDefault(name => Exists(directory, name)) is not { } name)
+        // By the name on disk: a case-insensitive file system finds Makefile as makefile too.
+        if (Makefiles.SelectMany(name => Files(directory, name)).FirstOrDefault() is not { } name)
         {
             return null;
         }
