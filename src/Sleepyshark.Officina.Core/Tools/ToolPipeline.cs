@@ -127,8 +127,12 @@ public sealed class ToolPipeline
         options.Capabilities.TaskBoard.Enabled
             ? new TaskBoard(storage.Tasks, context, options, events, time, owner)
             {
-                CopyOf = Workspace is { } workspace
-                    ? async (task, agent, ct) => (await workspace.OpenWorkingCopyAsync(WorkingCopies.OfTask(context.RunId, task), agent, ct).ConfigureAwait(false)).Directory
+                Seal = Workspace is { } workspace
+                    ? async (task, agent, ct) =>
+                    {
+                        var copy = await workspace.OpenWorkingCopyAsync(WorkingCopies.OfTask(context.RunId, task), agent, ct).ConfigureAwait(false);
+                        return (copy.Directory, await workspace.SealAsync(copy, ct).ConfigureAwait(false));
+                    }
                     : null,
             }
             : null;
@@ -210,8 +214,19 @@ public sealed class ToolPipeline
         await events.PublishAsync(context, new ToolCallStarted(request.Name, secrets.Remove(request.Arguments.GetRawText())), ct).ConfigureAwait(false);
         var result = await DecideAndRunAsync(context, request, activity, ct).ConfigureAwait(false);
         Telemetry.ToolCallEnded(activity, context, request.Name, result.Error?.ToString() ?? "ok", time.GetElapsedTime(started));
-        await events.PublishAsync(context, new ToolCallEnded(request.Name, result.Error), ct).ConfigureAwait(false);
+        await events.PublishAsync(context, new ToolCallEnded(request.Name, result.Error, result.Error is null ? null : Reason(result)), ct).ConfigureAwait(false);
         return result;
+    }
+
+    /// <summary>
+    /// Why a call failed, on one line, for the owner: what the model read, and the internal detail it did not (TOOL-08), with
+    /// known secrets removed (INV-06). Both are masked already where the tool's results are.
+    /// </summary>
+    private string Reason(ToolResult result)
+    {
+        static string FirstLine(string text) => text.AsSpan().Trim().ToString().Split('\n')[0].TrimEnd('\r');
+        var reason = FirstLine(result.Content);
+        return secrets.Remove(result.Detail is { } detail ? $"{reason} ({FirstLine(detail)})" : reason);
     }
 
     private async Task<ToolResult> DecideAndRunAsync(ToolContext context, ToolRequest request, Activity? activity, CancellationToken ct)
@@ -314,7 +329,7 @@ public sealed class ToolPipeline
         // Secrets are removed and values masked before trimming, so a value cut in half cannot leave its start behind (INV-06).
         var content = secrets.Remove(result.Content);
         content = masker?.Mask(content) ?? content;
-        result = result with { Artifacts = [.. result.Artifacts.Select(artifact => artifact with { Content = secrets.Remove(artifact.Content) })] };
+        result = result with { Artifacts = [.. result.Artifacts.Select(artifact => artifact with { Content = secrets.Remove(artifact.Content) })], Detail = detail };
         var max = tool.Options.MaxResultLength;
         if (!JsonElement.DeepEquals(arguments, request.Arguments))
         {

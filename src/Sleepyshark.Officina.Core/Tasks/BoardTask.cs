@@ -88,6 +88,9 @@ public sealed record BoardTask
 
     /// <summary>What the work produced, such as artifact ids or files, as its author submitted it.</summary>
     public IReadOnlyList<string> Artifacts { get; init; } = [];
+
+    /// <summary>What its working copy held when it was last submitted, which integration takes only unchanged; null without a workspace.</summary>
+    public string? Submitted { get; init; }
 }
 
 /// <summary>

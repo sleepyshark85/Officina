@@ -94,6 +94,27 @@ public class AdmissionTests
         Assert.Equal([("masked", "to [email-1]"), ("plain", $"to {Email}")], events.Select(read => read.Payload).OfType<ToolOutput>().Select(output => (output.Tool, output.Line)));
     }
 
+    // ING-04, EVT-01: why a call of a tool whose results are masked failed reaches the event stream masked, both what the model read
+    // and the internal detail it did not.
+    [Fact]
+    public async Task A_masked_tools_failure_reason_is_masked_in_the_events()
+    {
+        var tools = new Dictionary<string, ITool>
+        {
+            ["refuses"] = new FakeTool(ToolKind.Read, run: (_, _) => ValueTask.FromResult(ToolResult.Failed(ToolErrorCategory.Failed, $"no mailbox {Email}"))),
+            ["throws"] = new FakeTool(ToolKind.Read, run: (_, _) => throw new InvalidOperationException($"bounced from {Email}")),
+        };
+        var kit = new TestKit(Options(("refuses", Extension("refuses") with { MaskResults = true }), ("throws", Extension("throws") with { MaskResults = true })), tools);
+        kit.Model.CallTools(("refuses", "{}")).CallTools(("throws", "{}")).Reply("Done.");
+
+        await kit.RunAsync(Agent, "Go.", Ct);
+
+        var events = await kit.Storage.Events.ReadAsync(null, kit.Storage.Runs.Runs[0].RunId, 0, Ct);
+        Assert.Equal(
+            ["failed: no mailbox [email-1]", "failed (InvalidOperationException: bounced from [email-1])"],
+            events.Select(read => read.Payload).OfType<ToolCallEnded>().Select(ended => ended.Reason));
+    }
+
     // ING-03, ING-04.
     [Fact]
     public async Task Rate_limits_per_owner_and_per_tenant_reject_work_with_a_reason()

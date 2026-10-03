@@ -300,15 +300,13 @@ empty line takes the suggestion):
 | make | a `Makefile` with `build` and `test` targets | `make build`, `make test` |
 
 It writes `"extends": ["preset:coding-team"]`, the two commands, `run.budget` at $3, and what the commands need in the
-sandbox: their package registry in `allowedHosts` (NuGet, npm, crates.io or the Go proxy), and command rules that allow
-each command as itself and followed by arguments (`npm test` and `npm test *`, not `npm test:e2e`), repeating the
-preset's `git push` and `git remote` denies, as the list replaces the preset's. Then it validates the file as
+sandbox: their package registry in `allowedHosts` (NuGet, npm, crates.io or the Go proxy). It sets no command rules, so
+the project keeps the preset's, which trust the sandbox: every command is allowed in it but `git push` and `git remote`.
+A comment in the file says how to tighten them (the [team guide](team-guide.md), section 2, shows it). Then it validates the file as
 `sof config validate` does. It also:
 
 - takes `--build "<command>"` and `--test "<command>"`, and with both asks nothing, for scripts. With nothing found and
   the input at its end, it fails and says to give them;
-- warns when a command you type lets an agent run any code: an interpreter or shell with no script or module (`node
-  --test`, `bash -c …`), a package runner or install (`npx`, `npm install`), or `make` with no target;
 - on Linux, notes a program on your `PATH` that the sandbox won't run, as it looks only in the toolchains and in
   `/usr/local/bin`, `/usr/bin` and `/bin` (and the `sbin` folders), such as `~/.dotnet/dotnet`, or `/usr/lib/dotnet/dotnet`
   with no link in `/usr/bin`. It doesn't write `toolchains`: add the folder it names;
@@ -326,7 +324,7 @@ type a goal:
 1. The lead plans tasks, and you approve the plan before any work starts (`/approve <n>`). To reject it, say why with
    `/tell lead …`, then `/deny <n>`; the lead plans again.
 2. Up to three developers each work in a working copy of their own under `.sof/worktrees`, in the sandbox, with no
-   network except `allowedHosts`. You're asked about any command no rule allows.
+   network except `allowedHosts`. Their commands run without asking you, except a line with `$( )` or backticks.
 3. A reviewer, never the author, reads each change and approves it or asks for changes. It can't edit files or run
    commands.
 4. An approved task's change is squashed into one commit, checked with the build and tests, then added to your branch. A

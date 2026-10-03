@@ -29,6 +29,9 @@ internal sealed class StatusView(TextWriter output, Func<IntegrationQueueStatus?
     /// <summary>The lines long text shows before it is folded.</summary>
     internal const int ShownLines = 12;
 
+    /// <summary>The most characters of why a tool call failed that are shown.</summary>
+    private const int ReasonLength = 200;
+
     private readonly Dictionary<string, string> doing = new(StringComparer.Ordinal);
     private decimal cost;
 
@@ -75,7 +78,8 @@ internal sealed class StatusView(TextWriter output, Func<IntegrationQueueStatus?
         {
             TurnStarted => "working",
             ToolCallStarted started => $"running {started.Tool}",
-            ToolCallEnded { Error: { } error } ended => $"{ended.Tool} failed: {error}",
+            // Such as "write_file: failed: the file changed since it was read", or "run_command: approval denied".
+            ToolCallEnded { Error: { } error } ended => $"{ended.Tool}: {Shortened(ended.Reason ?? $"{error}")}",
             BudgetWarning warning => $"the {warning.Level} {warning.Limit} budget is {warning.Used:P0} used",
             HumanAsked asked => $"waits for you: {asked.Request} {asked.Tool}".TrimEnd(),
             HumanAnswered { TimedOut: true } => "working; nobody answered in time",
@@ -215,6 +219,13 @@ internal sealed class StatusView(TextWriter output, Func<IntegrationQueueStatus?
 
     /// <summary>How many more lines there are, such as <c>9 more lines</c>.</summary>
     internal static string More(int lines) => lines == 1 ? "1 more line" : $"{lines} more lines";
+
+    /// <summary>The text on one line of at most <see cref="ReasonLength"/> characters, cut with an ellipsis.</summary>
+    internal static string Shortened(string text)
+    {
+        var line = text.ReplaceLineEndings(" ");
+        return line.Length <= ReasonLength ? line : $"{line[..(ReasonLength - 1)]}…";
+    }
 
     /// <summary>Two texts, the second on a line of its own.</summary>
     private static string Joined(string first, string second) =>

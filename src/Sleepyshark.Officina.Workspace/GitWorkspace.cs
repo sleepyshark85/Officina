@@ -225,10 +225,24 @@ public sealed partial class GitWorkspace : IWorkspace, IDisposable
     }
 
     /// <summary>Queues a task's change for integration, attributed to the task and its author (WS-04), and waits for the result (WS-09).</summary>
-    public Task<IntegrationResult> IntegrateAsync(WorkingCopy copy, string task, string author, CancellationToken ct = default)
+    public Task<IntegrationResult> IntegrateAsync(WorkingCopy copy, string task, string author, CancellationToken ct = default) =>
+        IntegrateAsync(copy, task, author, null, ct);
+
+    /// <summary>
+    /// Queues a task's change for integration, attributed to the task and its author (WS-04), and waits for the result (WS-09); a copy
+    /// that no longer holds <paramref name="submitted"/>, what <see cref="SealAsync"/> returned, is not integrated.
+    /// </summary>
+    public Task<IntegrationResult> IntegrateAsync(WorkingCopy copy, string task, string author, string? submitted, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(copy);
-        return queue.EnqueueAsync(copy, task, author, ct);
+        return queue.EnqueueAsync(copy, task, author, submitted, ct);
+    }
+
+    /// <summary>What the copy holds now, as integration would take it: the git tree of its files, ignored ones left out.</summary>
+    public static Task<string> SealAsync(WorkingCopy copy, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(copy);
+        return IntegrationQueue.TreeAsync(copy.Directory, ct);
     }
 
     /// <summary>Removes the working copy and its branch when its task ends, unless the owner keeps working copies (WS-08).</summary>
@@ -248,7 +262,10 @@ public sealed partial class GitWorkspace : IWorkspace, IDisposable
 
     Task IWorkspace.CloseWorkingCopyAsync(IWorkingCopy copy, CancellationToken ct) => CloseWorkingCopyAsync((WorkingCopy)copy, ct);
 
-    Task<IntegrationResult> IWorkspace.IntegrateAsync(IWorkingCopy copy, string task, string author, CancellationToken ct) => IntegrateAsync((WorkingCopy)copy, task, author, ct);
+    Task<IntegrationResult> IWorkspace.IntegrateAsync(IWorkingCopy copy, string task, string author, string? submitted, CancellationToken ct) =>
+        IntegrateAsync((WorkingCopy)copy, task, author, submitted, ct);
+
+    Task<string> IWorkspace.SealAsync(IWorkingCopy copy, CancellationToken ct) => SealAsync((WorkingCopy)copy, ct);
 
     Task<IReadOnlyList<CopySnapshot>> IWorkspace.SnapshotAsync(CancellationToken ct) => SnapshotAsync(ct);
 

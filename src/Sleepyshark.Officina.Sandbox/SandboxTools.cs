@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using Sleepyshark.Officina.Core.Configuration;
 using Sleepyshark.Officina.Core.Extensibility;
+using Sleepyshark.Officina.Core.Tasks;
 
 namespace Sleepyshark.Officina.Sandbox;
 
@@ -11,8 +12,8 @@ namespace Sleepyshark.Officina.Sandbox;
 /// read and stop background processes (SBX-03). Give <see cref="Run"/> and <see cref="Start"/> the
 /// <see cref="CommandRules"/> gate (SBX-02). The agent's commands receive the secrets its role may use, which the tool
 /// pipeline then removes from their output (SBX-05). Commands cannot see the workspace's hidden paths or change its
-/// read-only ones (WS-05). Disposing the tools stops the agent's background processes; the
-/// host does it when the agent, its task or the run ends.
+/// read-only ones (WS-05). The host stops the agent's background processes when its task is submitted, and disposes the
+/// tools, which stops them too, when the agent, its task or the run ends.
 /// </summary>
 public sealed class SandboxTools : IAsyncDisposable
 {
@@ -20,6 +21,9 @@ public sealed class SandboxTools : IAsyncDisposable
     public const string Start = "sandbox.start_process";
     public const string Read = "sandbox.read_process_output";
     public const string Stop = "sandbox.stop_process";
+
+    /// <summary>The most background processes an agent may have running at once in its working copy; each has its own CPU and memory limits.</summary>
+    internal const int MaxBackground = 4;
 
     private const string CommandSchema = """
         { "type": "object", "properties": { "command": { "type": "string", "description": "The shell command line." } }, "required": ["command"], "additionalProperties": false }
@@ -73,13 +77,7 @@ public sealed class SandboxTools : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
-        foreach (var id in background.Keys)
-        {
-            if (background.TryRemove(id, out var process))
-            {
-                await process.DisposeAsync().ConfigureAwait(false);
-            }
-        }
+        await StopBackgroundAsync().ConfigureAwait(false);
 
         // Every command has ended, so what the sandbox set up for this working copy can go, unless the owner keeps the copy (WS-08).
         if (!workspace.KeepWorkingCopies)
@@ -88,8 +86,25 @@ public sealed class SandboxTools : IAsyncDisposable
         }
     }
 
+    /// <summary>Stops the agent's background processes, such as when its task is submitted, so none changes the copy after its checks.</summary>
+    public async Task StopBackgroundAsync()
+    {
+        foreach (var id in background.Keys)
+        {
+            if (background.TryRemove(id, out var process))
+            {
+                await process.DisposeAsync().ConfigureAwait(false);
+            }
+        }
+    }
+
     private async ValueTask<ToolResult> RunAsync(ToolCall call, CancellationToken ct)
     {
+        if (await Submitted(call, ct).ConfigureAwait(false) is { } refused)
+        {
+            return refused;
+        }
+
         // Leaving early, at the time limit or on cancellation, stops the command.
         await using var process = await StartCommandAsync(call, ct).ConfigureAwait(false);
         var output = new StringBuilder();
@@ -104,6 +119,16 @@ public sealed class SandboxTools : IAsyncDisposable
 
     private async ValueTask<ToolResult> StartAsync(ToolCall call, CancellationToken ct)
     {
+        if (await Submitted(call, ct).ConfigureAwait(false) is { } refused)
+        {
+            return refused;
+        }
+
+        if (background.Values.Count(process => process.Running) >= MaxBackground)
+        {
+            return ToolResult.Failed(ToolErrorCategory.Failed, $"{MaxBackground} background processes already run; stop one with stop_process first");
+        }
+
         var id = $"p{Interlocked.Increment(ref started)}";
         background[id] = new Background(await StartCommandAsync(call, ct).ConfigureAwait(false), call.Output);
         return ToolResult.Success($"Started {id}.");
@@ -137,6 +162,15 @@ public sealed class SandboxTools : IAsyncDisposable
             new SandboxCommand(command, directory, SandboxLimits.Default, options.AllowedHosts, environment, hiddenPaths, readOnlyPaths, options.Toolchains), ct).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// A refusal when the agent's task is no longer in progress, such as once it is submitted: what runs in its copy then could
+    /// change it after its checks (TASK-05); null when commands may run.
+    /// </summary>
+    private static async Task<ToolResult?> Submitted(ToolCall call, CancellationToken ct) =>
+        call.Board is { TaskId: { } id } board && (await board.ReadAsync(ct).ConfigureAwait(false)).FirstOrDefault(task => task.Id == id) is { State: not TaskState.InProgress } task
+            ? ToolResult.Failed(ToolErrorCategory.Failed, $"task {id} is {task.State}, so no command runs in its working copy until it is in progress again")
+            : null;
+
     private static string Id(ToolCall call) => call.Arguments.GetProperty("id").GetString()!;
 
     private static ToolResult Unknown(ToolCall call) => ToolResult.Failed(ToolErrorCategory.InvalidArguments, $"there is no background process {Id(call)}");
@@ -153,6 +187,9 @@ public sealed class SandboxTools : IAsyncDisposable
             this.process = process;
             drained = DrainAsync(publish);
         }
+
+        /// <summary>Whether the process still runs.</summary>
+        public bool Running => !process.ExitCode.IsCompleted;
 
         /// <summary>The output since the last read, then whether the process still runs.</summary>
         public string Read()

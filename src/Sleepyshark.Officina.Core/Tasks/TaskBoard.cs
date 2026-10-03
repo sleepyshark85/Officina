@@ -81,8 +81,11 @@ public sealed class TaskBoard
     /// <summary>How the result of a submit that a check failed begins, before the check's name and findings.</summary>
     internal const string CheckFailed = "check ";
 
-    /// <summary>The folder of a task's working copy, opened for its agent, which its verification checks look at; null without a workspace.</summary>
-    internal Func<string, string, CancellationToken, Task<string?>>? CopyOf { get; init; }
+    /// <summary>
+    /// Seals a task's working copy, opened for its agent, as the task is submitted (<see cref="IWorkspace.SealAsync"/>): its folder,
+    /// which the verification checks look at, and what it holds; null without a workspace.
+    /// </summary>
+    internal Func<string, string, CancellationToken, Task<(string? Directory, string Submitted)>>? Seal { get; init; }
 
     /// <summary>The task the agent works on, if any.</summary>
     public string? TaskId => context.TaskId;
@@ -249,7 +252,8 @@ public sealed class TaskBoard
         }
 
         string? failed = null;
-        var directory = task.Checks.Count > 0 && CopyOf is not null ? await CopyOf(id, task.Assignee, ct).ConfigureAwait(false) : null;
+        // What still runs in the copy, such as a background process, stops before the checks look at it.
+        (string? directory, string? submitted) = Seal is not null ? await Seal(id, task.Assignee, ct).ConfigureAwait(false) : (null, null);
         foreach (var name in task.Checks)
         {
             if (!options.Checks.ContainsKey(name))
@@ -268,6 +272,12 @@ public sealed class TaskBoard
             }
         }
 
+        if (failed is null && Seal is not null)
+        {
+            // What the checks leave, such as ignored build output, is what a review sees and integration takes; nothing may change it now.
+            submitted = (await Seal(id, task.Assignee, ct).ConfigureAwait(false)).Submitted;
+        }
+
         var (accepted, text) = await ChangeAsync(failed ?? "its checks passed", tasks =>
         {
             if (!Same(tasks[id], task))
@@ -275,7 +285,7 @@ public sealed class TaskBoard
                 return $"task {id} changed while its checks ran. Submit it again.";
             }
 
-            tasks[id] = failed is null ? task with { State = InReview, Verified = true, Artifacts = artifacts } : Rework(task);
+            tasks[id] = failed is null ? task with { State = InReview, Verified = true, Artifacts = artifacts, Submitted = submitted } : Rework(task);
             return null;
         }, ct).ConfigureAwait(false);
         return (accepted, failed is null || !accepted ? text : $"{failed}. {text}");

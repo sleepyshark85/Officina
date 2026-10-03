@@ -191,7 +191,7 @@ public class ToolPipelineTests
         // EVT-01.
         Assert.Equal(
             [new ToolCallStarted("create_issue", """{ "title": "x" }"""), new HumanAsked(HumanRequestKind.Approval, "the tool needs approval", "create_issue"),
-                new HumanAnswered(HumanRequestKind.Approval, false, false, "create_issue"), new ToolCallEnded("create_issue", ToolErrorCategory.ApprovalDenied)],
+                new HumanAnswered(HumanRequestKind.Approval, false, false, "create_issue"), new ToolCallEnded("create_issue", ToolErrorCategory.ApprovalDenied, "approval denied")],
             (await setup.Events.ReadAsync("acme", "run-1", 0, TestContext.Current.CancellationToken)).Select(read => read.Payload));
     }
 
@@ -371,6 +371,11 @@ public class ToolPipelineTests
 
         Assert.Equal((ToolErrorCategory.Failed, "failed", false), (result.Error, result.Content, result.Retryable));
         Assert.Equal("HttpRequestException: POST https://tracker.example.com failed with Authorization: Bearer [secret]", setup.Audit.Entries[^1].Detail);
+
+        // EVT-01: the owner sees why, on one line: what the model read, then the detail it did not.
+        Assert.Equal(
+            "failed (HttpRequestException: POST https://tracker.example.com failed with Authorization: Bearer [secret])",
+            (await setup.Events.ReadAsync("acme", "run-1", 0, TestContext.Current.CancellationToken)).Select(read => read.Payload).OfType<ToolCallEnded>().Single().Reason);
     }
 
     [Fact]

@@ -71,7 +71,7 @@ internal static class InitCommand
 
         foreach (var (detection, index) in found.Select((detection, index) => (detection, index)))
         {
-            var commands = string.Join(" and ", new[] { detection.Build?.Line, detection.Test?.Line }.OfType<string>());
+            var commands = string.Join(" and ", new[] { detection.Build, detection.Test }.OfType<string>());
             host.Out.WriteLine(index == 0
                 ? $"Found {detection.Toolchain} ({detection.Why}){(commands.Length > 0 ? $": {commands}" : "")}."
                 : $"Also found {detection.Toolchain} ({detection.Why}); sof init suggests the first.");
@@ -79,17 +79,15 @@ internal static class InitCommand
 
         var suggested = found.Count > 0 ? found[0] : null;
         var asks = build is null || test is null;
-        build ??= Ask(host, "Build command", suggested?.Build?.Line);
-        test ??= build is null ? null : Ask(host, "Test command", suggested?.Test?.Line);
+        build ??= Ask(host, "Build command", suggested?.Build);
+        test ??= build is null ? null : Ask(host, "Test command", suggested?.Test);
         if (build is null || test is null)
         {
             host.Error.WriteLine($"error: no {(build is null ? "build" : "test")} command, and the input ended. Give both with --build and --test.");
             return ExitCodes.Usage;
         }
 
-        // A suggested command keeps its detector's rules; one the owner typed is allowed as typed, and warned about if that is too broad.
-        List<string> allowed = [.. Allowed(host, build, suggested?.Build).Concat(Allowed(host, test, suggested?.Test)).Distinct()];
-        var text = Configuration(build, test, allowed);
+        var text = Configuration(build, test);
         File.WriteAllText(file, text);
         host.Out.WriteLine($"Wrote {file}:");
         host.Out.WriteLine(text);
@@ -139,48 +137,31 @@ internal static class InitCommand
     }
 
     /// <summary>
-    /// The commands the rules allow for <paramref name="line"/>: its detector's, for the suggestion or the suggestion with more
-    /// arguments, such as <c>python3 -m unittest -v</c>; or each command of it as typed, with a warning for a broad one.
+    /// The coding team's <c>sof.json</c>, with the hosts the commands need. It sets no command rules, so the project keeps the
+    /// preset's, and a later change to them reaches it.
     /// </summary>
-    private static IEnumerable<string> Allowed(SofEnvironment host, string line, Suggestion? suggestion)
+    internal static string Configuration(string build, string test)
     {
-        var commands = CommandDetection.Parts([line]).ToList();
-        if (suggestion is not null && (line == suggestion.Line || (line.StartsWith($"{suggestion.Line} ", StringComparison.Ordinal) && commands.Count == CommandDetection.Parts([suggestion.Line]).Count())))
-        {
-            return suggestion.Rules;
-        }
-
-        foreach (var broad in commands.Select(CommandDetection.Broad).OfType<string>())
-        {
-            host.Error.WriteLine($"warning: {broad}");
-        }
-
-        return commands;
-    }
-
-    /// <summary>The coding team's <c>sof.json</c>, with what the commands need in the sandbox: each allowed as itself, and with arguments after it.</summary>
-    internal static string Configuration(string build, string test, IReadOnlyList<string> allowed)
-    {
-        var sandbox = new JsonObject();
-        if (CommandDetection.Hosts([build, test]) is { Count: > 0 } hosts)
-        {
-            sandbox["allowedHosts"] = new JsonArray([.. hosts.Select(host => JsonValue.Create(host))]);
-        }
-
-        List<(string Match, string Action)> rules =
-            [.. allowed.SelectMany(command => new[] { (command, "allow"), ($"{command} *", "allow") }), ("git push*", "deny"), ("git remote*", "deny")];
-        sandbox["commandRules"] = new JsonArray([.. rules.Select(rule => new JsonObject { ["match"] = rule.Match, ["action"] = rule.Action })]);
         var configuration = new JsonObject
         {
             ["extends"] = new JsonArray("preset:coding-team"),
             ["project"] = new JsonObject { ["values"] = new JsonObject { ["buildCommand"] = build, ["testCommand"] = test } },
             ["run"] = new JsonObject { ["budget"] = new JsonObject { ["cost"] = JsonNode.Parse(Budget) } },
-            ["capabilities"] = new JsonObject { ["sandbox"] = sandbox },
         };
+        if (CommandDetection.Hosts([build, test]) is { Count: > 0 } hosts)
+        {
+            configuration["capabilities"] = new JsonObject
+            {
+                ["sandbox"] = new JsonObject { ["allowedHosts"] = new JsonArray([.. hosts.Select(host => JsonValue.Create(host))]) },
+            };
+        }
+
         return $"""
             // Written by sof init: the coding team of preset:coding-team, with this project's build and test commands.
             // run.budget: what each message to the team, and each sof run, may spend before you are asked to go on.
-            // commandRules replaces the preset's list whole, so it repeats the preset's git push and git remote denies.
+            // The preset's command rules trust the sandbox: every command but git push and git remote runs in it, with no network but
+            // allowedHosts. To be asked instead, set capabilities.sandbox.commandRules: the two git denies, allow rules for your
+            // commands, such as "dotnet test" and "dotnet test *", and a last "*" ask rule.
             // sof config show --origin lists every setting and where it comes from.
             {Format(configuration, "")}
 

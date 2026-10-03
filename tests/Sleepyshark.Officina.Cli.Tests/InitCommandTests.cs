@@ -11,7 +11,7 @@ namespace Sleepyshark.Officina.Cli.Tests;
 public sealed class InitCommandTests : IDisposable
 {
     private static readonly string Python = OperatingSystem.IsWindows() ? "python" : "python3";
-    private static readonly string[] Denied = ["git push*", "git remote*"];
+    private static readonly (string, CommandAction)[] Rules = [("git push*", CommandAction.Deny), ("git remote*", CommandAction.Deny), ("*", CommandAction.Allow)];
 
     private readonly Sof sof = new();
 
@@ -19,31 +19,31 @@ public sealed class InitCommandTests : IDisposable
 
     public void Dispose() => sof.Dispose();
 
-    public static TheoryData<string[], string, string, string[], string[]> Projects => new()
+    public static TheoryData<string[], string, string, string[]> Projects => new()
     {
-        { ["App.slnx", "src/App.csproj"], "dotnet build", "dotnet test", ["api.nuget.org", "*.nuget.org"], ["dotnet build", "dotnet test"] },
-        { ["App.sln", "App.slnx"], "dotnet build App.sln", "dotnet test App.sln", ["api.nuget.org", "*.nuget.org"], ["dotnet build", "dotnet test"] },
-        { ["package.json"], "npm run build", "npm test", ["registry.npmjs.org"], ["npm run build", "npm test"] },
-        { ["package.json", "package-lock.json"], "npm ci && npm run build", "npm test", ["registry.npmjs.org"], ["npm ci", "npm run build", "npm test"] },
-        { ["package.json", "pnpm-lock.yaml"], "pnpm install --frozen-lockfile && pnpm run build", "pnpm test", ["registry.npmjs.org"], ["pnpm install --frozen-lockfile", "pnpm run build", "pnpm test"] },
-        { ["package.json", "yarn.lock"], "yarn install --frozen-lockfile && yarn run build", "yarn test", ["registry.yarnpkg.com", "registry.npmjs.org"], ["yarn install --frozen-lockfile", "yarn run build", "yarn test"] },
-        { ["package.json", "yarn.lock", ".yarnrc.yml"], "yarn install --immutable && yarn run build", "yarn test", ["registry.yarnpkg.com", "registry.npmjs.org"], ["yarn install --immutable"] },
-        { ["pyproject.toml"], $"{Python} -m compileall -q .", $"{Python} -m unittest", [], [$"{Python} -m compileall", $"{Python} -m unittest"] },
-        { ["pyproject.toml", "pytest.ini"], $"{Python} -m compileall -q .", $"{Python} -m pytest", [], [$"{Python} -m pytest"] },
-        { ["test_calc.py"], $"{Python} -m compileall -q .", $"{Python} -m unittest", [], [$"{Python} -m unittest"] },
-        { ["Cargo.toml"], "cargo build", "cargo test", ["crates.io", "index.crates.io", "static.crates.io"], ["cargo build", "cargo test"] },
-        { ["go.mod"], "go build ./...", "go test ./...", ["proxy.golang.org", "sum.golang.org"], ["go build", "go test"] },
-        { ["Makefile"], "make build", "make test", [], ["make build", "make test"] },
+        { ["App.slnx", "src/App.csproj"], "dotnet build", "dotnet test", ["api.nuget.org", "*.nuget.org"] },
+        { ["App.sln", "App.slnx"], "dotnet build App.sln", "dotnet test App.sln", ["api.nuget.org", "*.nuget.org"] },
+        { ["package.json"], "npm run build", "npm test", ["registry.npmjs.org"] },
+        { ["package.json", "package-lock.json"], "npm ci && npm run build", "npm test", ["registry.npmjs.org"] },
+        { ["package.json", "pnpm-lock.yaml"], "pnpm install --frozen-lockfile && pnpm run build", "pnpm test", ["registry.npmjs.org"] },
+        { ["package.json", "yarn.lock"], "yarn install --frozen-lockfile && yarn run build", "yarn test", ["registry.yarnpkg.com", "registry.npmjs.org"] },
+        { ["package.json", "yarn.lock", ".yarnrc.yml"], "yarn install --immutable && yarn run build", "yarn test", ["registry.yarnpkg.com", "registry.npmjs.org"] },
+        { ["pyproject.toml"], $"{Python} -m compileall -q .", $"{Python} -m unittest", [] },
+        { ["pyproject.toml", "pytest.ini"], $"{Python} -m compileall -q .", $"{Python} -m pytest", [] },
+        { ["test_calc.py"], $"{Python} -m compileall -q .", $"{Python} -m unittest", [] },
+        { ["Cargo.toml"], "cargo build", "cargo test", ["crates.io", "index.crates.io", "static.crates.io"] },
+        { ["go.mod"], "go build ./...", "go test ./...", ["proxy.golang.org", "sum.golang.org"] },
+        { ["Makefile"], "make build", "make test", [] },
         // The most certain first: a .NET solution with a Makefile beside it is a .NET project.
-        { ["Makefile", "App.slnx"], "dotnet build", "dotnet test", ["api.nuget.org", "*.nuget.org"], ["dotnet build"] },
+        { ["Makefile", "App.slnx"], "dotnet build", "dotnet test", ["api.nuget.org", "*.nuget.org"] },
     };
 
     // CFG-17: each detector finds the commands; with the input at its end, the suggestions are taken, and the file validates.
-    // Each command is allowed as itself and with arguments after a space, so npm run build does not allow npm run build:deploy.
+    // The file sets no command rules, so the project keeps the preset's, and a later change to them reaches it.
     [Theory]
     [MemberData(nameof(Projects))]
     public async Task Each_toolchain_s_commands_are_detected_and_the_file_written_validates(
-        string[] files, string build, string test, string[] hosts, string[] allowed)
+        string[] files, string build, string test, string[] hosts)
     {
         foreach (var file in files)
         {
@@ -62,15 +62,12 @@ public sealed class InitCommandTests : IDisposable
         var sandbox = Load().Capabilities.Sandbox;
         Assert.Equal((build, test), Commands());
         Assert.Equal(hosts, sandbox.AllowedHosts);
-        var allows = sandbox.CommandRules.Where(rule => rule.Action == CommandAction.Allow).Select(rule => rule.Match).ToList();
-        Assert.Subset(allows.ToHashSet(), allowed.SelectMany(command => new[] { command, $"{command} *" }).ToHashSet());
-        Assert.All(allows, match => Assert.True(!match.Contains('*', StringComparison.Ordinal) || match.EndsWith(" *", StringComparison.Ordinal), match));
-        Assert.Equal(Denied, sandbox.CommandRules.Where(rule => rule.Action == CommandAction.Deny).Select(rule => rule.Match));
+        Assert.Equal(Rules, sandbox.CommandRules.Select(rule => (rule.Match, rule.Action)));
+        Assert.DoesNotContain("\"commandRules\"", File.ReadAllText(Path.Combine(sof.Directory, "sof.json")), StringComparison.Ordinal);
         Assert.Empty(sandbox.Toolchains);
     }
 
     // CFG-17: the owner confirms one suggestion with an empty line and edits the other; declining, .gitignore stays as it was.
-    // A command typed in place of a suggestion is allowed as typed.
     [Fact]
     public async Task The_owner_confirms_or_edits_each_command_at_the_console()
     {
@@ -86,30 +83,9 @@ public sealed class InitCommandTests : IDisposable
         Assert.Contains("Found .NET (App.slnx): dotnet build and dotnet test.", output, StringComparison.Ordinal);
         Assert.Contains("Build command [dotnet build]: \nTest command [dotnet test]: \n", output, StringComparison.Ordinal);
         Assert.Equal(("dotnet build", "dotnet test --no-build"), Commands());
-        Assert.Equal(
-            ["dotnet build", "dotnet build *", "dotnet test", "dotnet test *", .. Denied],
-            Load().Capabilities.Sandbox.CommandRules.Select(rule => rule.Match)); // --no-build is arguments added to the suggestion
+        Assert.Equal(Rules, Load().Capabilities.Sandbox.CommandRules.Select(rule => (rule.Match, rule.Action)));
         Assert.False(File.Exists(Path.Combine(sof.Directory, ".gitignore")));
         Assert.Contains("note: add .sof/ to .gitignore yourself", output, StringComparison.Ordinal);
-    }
-
-    // CFG-17: arguments added to a suggestion keep its detector's rules, so python3 -m unittest test_calc stays allowed after
-    // python3 -m unittest -v; a command added after it, or one typed in its place, is allowed as typed.
-    [Fact]
-    public async Task Arguments_added_to_a_suggestion_keep_its_rules()
-    {
-        sof.Write("test_calc.py", "");
-        sof.In.Type($"{Python} -m compileall -q . && ./lint.sh");
-        sof.In.Type($"{Python} -m unittest -v");
-        sof.In.Type("n");
-
-        var (exitCode, _, error) = await sof.EndedAsync(sof.RunAsync("init"));
-
-        Assert.Equal(ExitCodes.Success, exitCode);
-        Assert.Equal("", error);
-        Assert.Equal(
-            [$"{Python} -m compileall -q .", $"{Python} -m compileall -q . *", "./lint.sh", "./lint.sh *", $"{Python} -m unittest", $"{Python} -m unittest *", .. Denied],
-            Load().Capabilities.Sandbox.CommandRules.Select(rule => rule.Match));
     }
 
     // CFG-17: with several projects and no solution, sof init says so and asks, rather than taking one of them.
@@ -146,7 +122,7 @@ public sealed class InitCommandTests : IDisposable
         Assert.Contains("note: add .sof/ to .gitignore: runs are stored there.", output, StringComparison.Ordinal);
         Assert.Equal(("make all && make lint", "make check"), Commands());
         var sandbox = Load().Capabilities.Sandbox;
-        Assert.Equal(["make all", "make all *", "make lint", "make lint *", "make check", "make check *", .. Denied], sandbox.CommandRules.Select(rule => rule.Match));
+        Assert.Equal(Rules, sandbox.CommandRules.Select(rule => (rule.Match, rule.Action)));
         Assert.Empty(sandbox.AllowedHosts); // make needs no registry, whatever go.mod says
     }
 
@@ -165,47 +141,6 @@ public sealed class InitCommandTests : IDisposable
         Assert.Contains($"note: {note}", output, StringComparison.Ordinal);
         Assert.Contains("Found make (Makefile with build and test targets): make build and make test.", output, StringComparison.Ordinal);
         Assert.Equal(("make build", "make test"), Commands());
-    }
-
-    // CFG-17: a command the owner types that would let an agent run any code (an interpreter or a shell with no script, a package
-    // runner or install, make with no target) is written as typed, with a warning that suggests a narrower one.
-    [Fact]
-    public async Task A_typed_command_that_allows_any_code_is_warned_about()
-    {
-        var (exitCode, _, error) = await sof.EndedAsync(sof.RunAsync(
-            "init", "--build", "npm install && make && npx tsc && bash -c 'make all'", "--test", $"node --test && {Python} -m unittest -v && sh test.sh"));
-
-        Assert.Equal(ExitCodes.Success, exitCode);
-        Assert.Contains("warning: \"npm install\" with any arguments lets an agent install or run any package.", error, StringComparison.Ordinal);
-        Assert.Contains("warning: \"make\" with any arguments lets an agent run any target. Name the target, such as make build.", error, StringComparison.Ordinal);
-        Assert.Contains("warning: \"npx tsc\" with any arguments lets an agent install or run any package.", error, StringComparison.Ordinal);
-        Assert.Contains("warning: \"bash -c 'make all'\" with any arguments lets an agent run any code with bash.", error, StringComparison.Ordinal);
-        Assert.Contains("warning: \"node --test\" with any arguments lets an agent run any code with node. Name a script or a module after it instead.", error, StringComparison.Ordinal);
-        Assert.DoesNotContain("-m unittest", error, StringComparison.Ordinal); // a module is named
-        Assert.DoesNotContain("sh test.sh", error, StringComparison.Ordinal); // a script is named
-        Assert.Equal(5, error.Split('\n').Count(line => line.StartsWith("warning: ", StringComparison.Ordinal)));
-    }
-
-    // CFG-17: the rest of the warning table: make with options but no target, the package runners of pnpm, yarn, bun, deno and
-    // dotnet, and programs that run any program named after them.
-    [Theory]
-    [InlineData("make -j4", "run any target")]
-    [InlineData("make -j4 CC=clang", "run any target")]
-    [InlineData("pnpm exec", "install or run any package")]
-    [InlineData("yarn exec", "install or run any package")]
-    [InlineData("bun x", "install or run any package")]
-    [InlineData("deno run", "install or run any package")]
-    [InlineData("dotnet tool run", "install or run any package")]
-    [InlineData("dotnet dnx", "install or run any package")]
-    [InlineData("env", "run any program with env")]
-    [InlineData("xargs -n1", "run any program with xargs")]
-    public async Task Package_runners_wrappers_and_make_with_no_target_are_warned_about(string command, string why)
-    {
-        var (exitCode, _, error) = await sof.EndedAsync(sof.RunAsync("init", "--build", command, "--test", "make test -j4"));
-
-        Assert.Equal(ExitCodes.Success, exitCode);
-        Assert.Contains($"warning: \"{command}\" with any arguments lets an agent {why}", error, StringComparison.Ordinal);
-        Assert.Single(error.Split('\n'), line => line.StartsWith("warning: ", StringComparison.Ordinal)); // make test -j4 names a target
     }
 
     // CFG-17: with nothing detected, the owner is asked; an empty line asks again. Agreeing adds .sof/ to .gitignore.
