@@ -20,16 +20,23 @@ internal static partial class OutputFiles
 
     private const int DocumentCharacters = 2000;
 
+    /// <summary>Output with a Markdown heading is a document from this many lines, or characters: a heading alone is not enough.</summary>
+    private const int HeadedLines = 15;
+
+    private const int HeadedCharacters = 600;
+
     private const int SlugLength = 60;
 
     /// <summary>
-    /// Whether the output is a document, which the session offers to save: long, Markdown with a heading, or a structured plan,
-    /// a JSON object with a list of <c>steps</c> as a plan-and-execute planner writes.
+    /// Whether the output is a document, which the session offers to save: long, Markdown with a heading that is not short, or a
+    /// structured plan, a JSON object with a list of <c>steps</c> as a plan-and-execute planner writes.
     /// </summary>
     public static bool IsDocument(string output)
     {
         var text = output.Trim();
-        return text.Length >= DocumentCharacters || text.Split('\n').Length >= DocumentLines || Heading(text) is not null || IsPlan(Json(text));
+        var lines = text.Split('\n').Length;
+        return text.Length >= DocumentCharacters || lines >= DocumentLines
+            || (Heading(text) is not null && (text.Length >= HeadedCharacters || lines >= HeadedLines)) || IsPlan(Json(text));
     }
 
     /// <summary>
@@ -47,12 +54,15 @@ internal static partial class OutputFiles
     /// <summary>Where a team's plan goes by default: <c>docs/plans/&lt;date&gt;-&lt;slug of the goal&gt;.md</c>.</summary>
     public static string PlanPath(string goal, DateTimeOffset now) => $"docs/plans/{now:yyyy-MM-dd}-{Slug(goal)}.md";
 
-    /// <summary>A team's plan as Markdown: the goal, then each task's title, description, acceptance criteria and dependencies.</summary>
+    /// <summary>
+    /// A team's plan as Markdown: the goal, then each task's title, description, acceptance criteria and dependencies. A cancelled
+    /// task is not part of the plan.
+    /// </summary>
     public static string PlanMarkdown(string goal, IReadOnlyList<BoardTask> tasks, DateTimeOffset now)
     {
         var text = new StringBuilder();
         text.Append(CultureInfo.InvariantCulture, $"# Plan: {FirstLine(goal)}\n\nThe team lead's plan, approved on {now:yyyy-MM-dd}.\n\n## Goal\n\n{goal.Trim()}\n");
-        foreach (var task in tasks)
+        foreach (var task in tasks.Where(task => task.State != TaskState.Cancelled))
         {
             text.Append(CultureInfo.InvariantCulture, $"\n## {task.Title} (`{task.Id}`)\n");
             if (task.Description.Trim() is { Length: > 0 } description)
@@ -111,6 +121,13 @@ internal static partial class OutputFiles
         }
 
         relative = relative.Replace('\\', '/');
+        if (relative.Contains(':', StringComparison.Ordinal))
+        {
+            // On Windows, name:stream is a hidden stream of the file name.
+            refusal = $"{relative} has a colon, which a saved file's path may not have.";
+            return null;
+        }
+
         var protectedPaths = new Matcher();
         protectedPaths.AddIncludePatterns(WorkspaceOptions.FixedProtectedPaths.Concat(options.Capabilities.Workspace.ProtectedPaths).Select(protectedPath => protectedPath.Path));
         if (protectedPaths.Match(relative).HasMatches)
@@ -135,7 +152,10 @@ internal static partial class OutputFiles
         return (full, relative);
     }
 
-    /// <summary>Writes the file atomically: a temporary file next to it, then a rename. Its folders are created as needed.</summary>
+    /// <summary>
+    /// Writes the file atomically: a temporary file next to it, then a rename. Its folders are created as needed, and a file it
+    /// replaces keeps its permissions.
+    /// </summary>
     public static void Write(string full, string content)
     {
         var folder = Path.GetDirectoryName(full)!;
@@ -144,6 +164,11 @@ internal static partial class OutputFiles
         try
         {
             File.WriteAllText(temporary, content.EndsWith('\n') ? content : content + "\n", new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+            if (!OperatingSystem.IsWindows() && File.Exists(full))
+            {
+                File.SetUnixFileMode(temporary, File.GetUnixFileMode(full)); // an overwritten file keeps its permissions
+            }
+
             File.Move(temporary, full, overwrite: true);
         }
         finally

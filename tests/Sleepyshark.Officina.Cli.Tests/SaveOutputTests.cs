@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using Sleepyshark.Officina.Testing;
 
 namespace Sleepyshark.Officina.Cli.Tests;
@@ -16,7 +17,8 @@ public sealed class SaveOutputTests : IDisposable
         }
         """;
 
-    private const string Requirements = "# Login requirements\n\nThe owner signs in with a passkey.";
+    private static readonly string Requirements =
+        "# Login requirements\n\n" + string.Join("\n", Enumerable.Range(1, 15).Select(number => $"- Requirement {number}: the owner signs in with a passkey."));
 
     private readonly Sof sof = new();
     private readonly ScriptedModelProvider model = new();
@@ -177,7 +179,7 @@ public sealed class SaveOutputTests : IDisposable
             var chat = sof.RunAsync("chat");
             sof.In.Type("Say hi.");
             await sof.Out.WaitForAsync("dev: Completed", Ct);
-            foreach (var path in new[] { ".sof/notes.md", "sof.json", "sof.dev.json", "shared.json", "secrets/key.md", ".git/notes.md", "../out.md", "docs/../../out.md", outside + "/out.md", "link/out.md" })
+            foreach (var path in new[] { ".sof/notes.md", "sof.json", "sof.dev.json", "shared.json", "secrets/key.md", ".git/notes.md", "../out.md", "docs/../../out.md", outside + "/out.md", "link/out.md", "notes.md:hidden" })
             {
                 sof.In.Type($"/save \"{path}\"");
             }
@@ -192,6 +194,8 @@ public sealed class SaveOutputTests : IDisposable
             }
 
             Assert.Contains("error: ../out.md is outside the project, and only files in it are saved.", output, StringComparison.Ordinal);
+            Assert.Contains("error: notes.md:hidden has a colon, which a saved file's path may not have.", output, StringComparison.Ordinal);
+            Assert.False(File.Exists(PathOf("notes.md")));
             Assert.Contains("error: docs/../../out.md is outside the project", output, StringComparison.Ordinal);
             Assert.Contains($"error: {outside}/out.md is outside the project", output, StringComparison.Ordinal);
             Assert.Equal("{}", Read("shared.json"));
@@ -220,6 +224,7 @@ public sealed class SaveOutputTests : IDisposable
         await sof.Out.WaitForAsync("dev: Completed", Ct);
         sof.In.Type("/save");
         sof.In.Type("/save docs/login-requirements.md");
+        sof.In.Type("/save my notes.md");
         sof.In.Dispose();
         var (exitCode, output, _) = await sof.EndedAsync(chat);
 
@@ -229,7 +234,86 @@ public sealed class SaveOutputTests : IDisposable
         Assert.Contains(
             "error: docs/login-requirements.md exists, and is not overwritten without asking; give another path, such as docs/login-requirements-2.md.",
             output, StringComparison.Ordinal);
+        Assert.Contains("error: /save takes one path; quote a path with spaces, such as /save \"my notes.md\".", output, StringComparison.Ordinal);
         Assert.Single(Directory.GetFiles(PathOf("docs")));
+    }
+
+    // A one-word reply to the question is not a path: "N" declines, a word is a message, and a command typed without its slash is held back.
+    [Theory]
+    [InlineData("N", "Not saved; /save saves it later.")]
+    [InlineData("thanks", "[dev] You're welcome.")]
+    [InlineData("approve", "That looks like a command: type /approve.")]
+    public async Task A_word_at_the_question_saves_no_file(string typed, string shown)
+    {
+        sof.Interactive = true;
+        model.Reply(Requirements).Reply("You're welcome.");
+
+        var chat = sof.RunAsync("chat");
+        sof.In.Type("Write the login requirements.");
+        await sof.Out.WaitForAsync("Save this as docs/login-requirements.md?", Ct);
+        sof.In.Type(typed);
+        await sof.Out.WaitForAsync(shown, Ct);
+        sof.In.Type("/quit");
+        var (exitCode, output, _) = await sof.EndedAsync(chat);
+
+        Assert.Equal(ExitCodes.Success, exitCode);
+        Assert.Contains("Not saved; /save saves it later.", output, StringComparison.Ordinal);
+        Assert.Equal([".sof", "sof.json"], Directory.EnumerateFileSystemEntries(sof.Directory).Select(Path.GetFileName).Order(StringComparer.Ordinal));
+    }
+
+    // Ctrl+C at the question abandons it at once, and the session goes on.
+    [Fact]
+    public async Task Ctrl_C_at_the_question_abandons_it()
+    {
+        sof.Interactive = true;
+        model.Reply(Requirements).Reply("Next.");
+
+        var chat = sof.RunAsync("chat");
+        sof.In.Type("Write the login requirements.");
+        await sof.Out.WaitForAsync("Save this as docs/login-requirements.md?", Ct);
+        sof.Press(PosixSignal.SIGINT);
+        await sof.Out.WaitForAsync("Not saved; /save saves it later.", Ct);
+        sof.In.Type("And next?");
+        await sof.Out.WaitForAsync("[dev] Next.", Ct);
+        sof.In.Type("/quit");
+        var (exitCode, output, _) = await sof.EndedAsync(chat);
+
+        Assert.Equal(ExitCodes.Success, exitCode);
+        Assert.DoesNotContain("Press Ctrl+C again", output, StringComparison.Ordinal);
+        Assert.False(Directory.Exists(PathOf("docs")));
+    }
+
+    // The path is checked again just before the write: a link that appears while the owner is asked is refused.
+    [Fact]
+    public async Task A_symbolic_link_made_while_the_owner_is_asked_is_refused()
+    {
+        sof.Interactive = true;
+        Directory.CreateDirectory(PathOf("docs"));
+        sof.Write("docs/login-requirements.md", "Mine.");
+        var outside = Directory.CreateTempSubdirectory("officina-outside-").FullName;
+        try
+        {
+            File.WriteAllText(Path.Combine(outside, "target.md"), "Theirs.");
+            model.Reply("Hi.");
+
+            var chat = sof.RunAsync("chat");
+            sof.In.Type("Say hi.");
+            await sof.Out.WaitForAsync("dev: Completed", Ct);
+            sof.In.Type("/save docs/login-requirements.md");
+            await sof.Out.WaitForAsync("docs/login-requirements.md exists. Overwrite it?", Ct);
+            File.Delete(PathOf("docs/login-requirements.md"));
+            TryLinkFile(PathOf("docs/login-requirements.md"), Path.Combine(outside, "target.md")); // without one, the file is gone instead
+            sof.In.Type("y");
+            await sof.Out.WaitForAsync("error: docs/login-requirements.md changed while you were asked, so it is not saved", Ct);
+            sof.In.Type("/quit");
+            Assert.Equal(ExitCodes.Success, (await sof.EndedAsync(chat)).ExitCode);
+
+            Assert.Equal("Theirs.", File.ReadAllText(Path.Combine(outside, "target.md")));
+        }
+        finally
+        {
+            Directory.Delete(outside, recursive: true);
+        }
     }
 
     // Masking tokens are saved as they are, and the owner is told so.
@@ -303,7 +387,8 @@ public sealed class SaveOutputTests : IDisposable
         model.When(request => Work(request).StartsWith("You lead a team", StringComparison.Ordinal))
             .CallTools(
                 ("create", """{ "id": "a", "title": "Parse", "description": "Parse the input.", "acceptanceCriteria": ["It parses."], "reason": "plan" }"""),
-                ("create", """{ "id": "b", "title": "Print", "dependsOn": ["a"], "reason": "plan" }"""))
+                ("create", """{ "id": "b", "title": "Print", "dependsOn": ["a"], "reason": "plan" }"""),
+                ("create", """{ "id": "c", "title": "Colour", "reason": "plan" }"""))
             .Reply("Planned.");
         model.When(request => Given(request, "Every task is done")).Reply("Done.");
         model.When(request => Work(request).Contains("Do task ", StringComparison.Ordinal))
@@ -312,7 +397,8 @@ public sealed class SaveOutputTests : IDisposable
 
         var chat = sof.RunAsync("chat", "--agent", "team");
         sof.In.Type("Write a parser.");
-        await sof.Out.WaitForAsync("Answer with /approve or /deny.", Ct);
+        await sof.Out.WaitForAsync("Answer with /approve 1 or /deny 1.", Ct);
+        sof.In.Type("/task cancel c Not needed.");
         sof.In.Type("/approve 1");
         await sof.Out.WaitForAsync($"Save this as {plan}?", Ct);
         sof.In.Type("");
@@ -350,8 +436,8 @@ public sealed class SaveOutputTests : IDisposable
     }
 
     [Theory]
-    [InlineData("# Login requirements\nText.", "Ignored.", true, "docs/login-requirements.md")]
-    [InlineData("## `Parser` — design, v2 ##", "Ignored.", true, "docs/parser-design-v2.md")]
+    [InlineData("# Login requirements\nText.", "Ignored.", false, "docs/login-requirements.md")] // a heading alone is not enough
+    [InlineData("## `Parser` — design, v2 ##\n1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n13\n14", "Ignored.", true, "docs/parser-design-v2.md")]
     [InlineData("Short.", "What is it?", false, "docs/what-is-it.md")]
     [InlineData("""{ "steps": ["Parse", "Print"] }""", "Plan the parser.", true, "docs/plans/plan-the-parser.json")]
     [InlineData("""{ "total": 3 }""", "Count them.", false, "docs/count-them.json")]
@@ -367,6 +453,18 @@ public sealed class SaveOutputTests : IDisposable
     /// <summary>Whether any text the agent was given holds <paramref name="text"/>: the lead's later work follows its plan in its conversation.</summary>
     private static bool Given(Sleepyshark.Officina.Core.Extensibility.ModelRequest request, string text) =>
         request.History.Any(message => message.Content.OfType<Sleepyshark.Officina.Core.Messages.TextContent>().Any(content => content.Text.Contains(text, StringComparison.Ordinal)));
+
+    /// <summary>A symbolic link to a file, where the system lets the test make one.</summary>
+    private static void TryLinkFile(string link, string target)
+    {
+        try
+        {
+            File.CreateSymbolicLink(link, target);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+        }
+    }
 
     /// <summary>A symbolic link to a folder, where the system lets the test make one (Windows may not).</summary>
     private static bool TryLink(string link, string target)

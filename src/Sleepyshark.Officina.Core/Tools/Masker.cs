@@ -25,7 +25,7 @@ internal sealed class Masker(Regex patterns)
         {
             if (!tokens.TryGetValue(match.Value, out var token))
             {
-                token = $"[{match.Groups.Values.Skip(1).First(group => group.Success).Name}-{tokens.Count + 1}]";
+                token = $"[{match.Groups.Values.Skip(1).First(group => group.Success).Name}-{tokens.Count + 1}]"; // as HoldsToken finds it
                 tokens[match.Value] = token;
                 values[token] = match.Value;
             }
@@ -38,8 +38,11 @@ internal sealed class Masker(Regex patterns)
     /// Whether the text holds a token, of this run or any other, such as <c>[email-1]</c>: one of the patterns' names, a dash and a
     /// number, in brackets.
     /// </summary>
-    public bool HoldsToken(string text) =>
-        Regex.IsMatch(text, $@"\[({string.Join('|', patterns.GetGroupNames().Where(name => !int.TryParse(name, out _)).Select(Regex.Escape))})-\d+\]");
+    public bool HoldsToken(string text) => HoldsToken(text, patterns.GetGroupNames().Where(name => !int.TryParse(name, out _)));
+
+    /// <summary>Whether the text holds a token of one of the patterns, by their names; never with no patterns.</summary>
+    public static bool HoldsToken(string text, IEnumerable<string> names) =>
+        names.ToList() is { Count: > 0 } named && Regex.IsMatch(text, $@"\[({string.Join('|', named.Select(Regex.Escape))})-\d+\]");
 
     /// <summary>The arguments with each token of this run replaced by its value, just before the tool runs.</summary>
     public JsonElement Restore(JsonElement arguments)

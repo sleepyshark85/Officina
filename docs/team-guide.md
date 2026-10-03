@@ -368,7 +368,7 @@ What to expect:
    again. With no answer within `run.approvalTimeout` (30 minutes), the team stops.
 
    After `/approve`, the session offers to save the plan, with each task's title, description, acceptance criteria and
-   dependencies:
+   dependencies (cancelled tasks are left out):
 
    ```
    Save this as docs/plans/2026-10-03-fix-the-failing-divide-test-the-fix-must-come-first-then.md? [Enter = yes, n = no, or type another path]

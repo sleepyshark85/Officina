@@ -138,8 +138,9 @@ unknown `--agent`, or when no agent was picked; 3 if the session itself fails.
 
 ### Saving results as files
 
-Every reply prints in full. When one looks like a document (Markdown with a heading, 40 lines or more, 2,000
-characters or more, or a structured plan with a `steps` list), the session then asks:
+Every reply prints in full. When one looks like a document (40 lines or more, 2,000 characters or more, Markdown
+with a heading and at least 15 lines or 600 characters, or a structured plan with a `steps` list), the session then
+asks:
 
 ```
 Save this as docs/login-requirements.md? [Enter = yes, n = no, or type another path]
@@ -148,16 +149,22 @@ Save this as docs/login-requirements.md? [Enter = yes, n = no, or type another p
 - **The default path** is `docs/` for a document and `docs/plans/` for a plan, named after the first Markdown heading,
   or else after your message: `.md`, or `.json` for JSON. If the file exists, a numbered name such as
   `login-requirements-2.md` is suggested instead.
-- **Another path or folder:** type it, such as `specs/login.md`, or `specs/` for the suggested name in that folder.
-  Missing folders are created. If the path you type exists, you're asked before it's overwritten.
+- **Answers:** Enter, `y` or `yes` saves; `n` or `no` doesn't (in any case). A path is one word with a `/` or a file
+  extension, such as `specs/login.md`, or `specs/` for the suggested name in that folder. Missing folders are created.
+  If the path you type exists, you're asked before it's overwritten.
+- **Anything else isn't an answer:** nothing is saved ("Not saved; /save saves it later."), and the line is taken as if
+  typed at the prompt: a `/` command runs at once, a command without its `/` is held back as usual, and a message is sent
+  after any that wait. Ctrl+C abandons the question.
 - **Team plans:** after `/approve` on the lead's plan, the session offers to save it as Markdown in
   `docs/plans/<date>-<goal>.md`, with each task's title, description, acceptance criteria and dependencies.
 - **`/save [path]`** saves the last reply's output, the plan you approved, or the report `/report` showed. With no path
   it takes the suggestion, numbered so it never overwrites. Quote a path with spaces: `/save "my notes.md"`.
 - The file is written in your project folder, in the checked-out working tree, and **never committed**: the session
   says `Saved <path>. It is not committed.` Review it and commit it yourself.
-- **Refused:** anything outside the project folder (`..` is resolved), any path through a symbolic link, `.sof/`,
-  `.git`, `sof.json`, `sof.*.json`, the files `sof.json` extends, and the workspace's `protectedPaths`.
+- **Refused:** anything outside the project folder (`..` is resolved), any path through a symbolic link, a path with a
+  `:`, `.sof/`, `.git`, `sof.json`, `sof.*.json`, the files `sof.json` extends, and the workspace's `protectedPaths`. The
+  path is checked again just before the write, and refused if it changed while you were asked. An overwritten file
+  keeps its permissions.
 - **Masking:** when masking is on, the question says so. Masking tokens such as `[email-1]` are saved as they are,
   never the values they stand for; `/save` says when the output holds any.
 - **Piped input** (`sof < script.txt`) and `sof run` never ask. With piped input, `/save` still works, and refuses a path

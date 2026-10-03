@@ -1,4 +1,4 @@
-using System.Text.RegularExpressions;
+using Sleepyshark.Officina.Core.Tools;
 
 namespace Sleepyshark.Officina.Core.Configuration;
 
@@ -24,6 +24,5 @@ public sealed record MaskingOptions
     /// Whether the text holds a masking token, such as <c>[email-1]</c>: one of the patterns' names, a dash and a number, in
     /// brackets. A token stands for a value the text does not hold.
     /// </summary>
-    public bool HoldsToken(string text) =>
-        Regex.IsMatch(text, $@"\[({string.Join('|', (Patterns ?? BuiltInPatterns).Keys.Select(Regex.Escape))})-\d+\]");
+    public bool HoldsToken(string text) => Masker.HoldsToken(text, (Patterns ?? BuiltInPatterns).Keys);
 }

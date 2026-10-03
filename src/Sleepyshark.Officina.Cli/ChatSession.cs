@@ -113,6 +113,9 @@ internal sealed class ChatSession
     }
     private RunCommand.Session? current;
 
+    /// <summary>The question the session asks now, which Ctrl+C abandons; under <see cref="gate"/>.</summary>
+    private CancellationTokenSource? asking;
+
     public ChatSession(ParseResult parse, ConfigurationCommandOptions shared, SofEnvironment host, string? named, bool fresh)
     {
         (this.parse, this.shared, this.host, this.named, this.fresh) = (parse, shared, host, named, fresh);
@@ -356,9 +359,60 @@ internal sealed class ChatSession
         this.message = message;
         var offered = false;
         await GuardedAsync(async token => offered = await MessageAsync(message, token));
-        if (offered && saveable is var (content, suggestion) && await saver.OfferAsync(content, suggestion, ending.Token) is { } line)
+        if (offered && saveable is var (content, suggestion) && await AskAsync(token => saver.OfferAsync(content, suggestion, token)) is { } line)
         {
-            returned.Enqueue(line); // the owner went on without answering
+            await TakeAsync(line, null); // the owner went on without answering
+        }
+    }
+
+    /// <summary>
+    /// A question the session asks the owner, such as whether to save a document; Ctrl+C abandons it at once. Returns a line the
+    /// owner typed that is not an answer.
+    /// </summary>
+    private async Task<string?> AskAsync(Func<CancellationToken, Task<string?>> question)
+    {
+        using var asked = CancellationTokenSource.CreateLinkedTokenSource(ending.Token);
+        lock (gate)
+        {
+            asking = asked;
+        }
+
+        try
+        {
+            return await question(asked.Token);
+        }
+        finally
+        {
+            lock (gate)
+            {
+                asking = null;
+            }
+        }
+    }
+
+    /// <summary>
+    /// A line the owner typed at a question that is not an answer, taken as any typed line is, the check for a command typed
+    /// without its slash included: during a reply (<paramref name="session"/>) as <see cref="DuringAsync"/> takes it, and between
+    /// replies at once, a command before the messages that wait, and a message after them.
+    /// </summary>
+    private async Task TakeAsync(string line, RunCommand.Session? session)
+    {
+        if (HeldBack(line))
+        {
+            return;
+        }
+
+        if (line.StartsWith('/'))
+        {
+            await CommandAsync(line[1..].Trim(), session);
+        }
+        else if (line.Trim() is { Length: > 0 } message)
+        {
+            queued.Enqueue(message);
+            if (session is not null)
+            {
+                status.WriteLine("(it is sent when this reply ends; /drop drops it, and /tell <agent> <text> reaches an agent now)");
+            }
         }
     }
 
@@ -524,20 +578,7 @@ internal sealed class ChatSession
         {
             while (await ReadAsync(lines.Reader, stop) is { } line)
             {
-                if (HeldBack(line))
-                {
-                    continue;
-                }
-
-                if (line.StartsWith('/'))
-                {
-                    await CommandAsync(line[1..].Trim(), session);
-                }
-                else if (line.Trim() is { Length: > 0 } message)
-                {
-                    queued.Enqueue(message);
-                    status.WriteLine("(it is sent when this reply ends; /drop drops it, and /tell <agent> <text> reaches an agent now)");
-                }
+                await TakeAsync(line, session);
             }
 
             inputEnded = true;
@@ -608,7 +649,10 @@ internal sealed class ChatSession
 
                     break;
                 case "save" when words.Count <= 2:
-                    await SaveAsync(words.Count == 2 ? words[1] : null);
+                    await SaveAsync(words.Count == 2 ? words[1] : null, session);
+                    break;
+                case "save":
+                    status.WriteLine("error: /save takes one path; quote a path with spaces, such as /save \"my notes.md\".");
                     break;
                 case "board" or "task" when session is null:
                     await StoredBoardAsync(words, ending.Token);
@@ -683,7 +727,7 @@ internal sealed class ChatSession
     }
 
     /// <summary><c>/save [path]</c>: saves the last reply's output, the plan approved, or the report shown, as a file in the project.</summary>
-    private async Task SaveAsync(string? path)
+    private async Task SaveAsync(string? path, RunCommand.Session? session)
     {
         if (saveable is not var (content, suggestion))
         {
@@ -691,7 +735,10 @@ internal sealed class ChatSession
             return;
         }
 
-        await saver.SaveAsync(content, suggestion, path, ending.Token);
+        if (await AskAsync(token => saver.SaveAsync(content, suggestion, path, token)) is { } line)
+        {
+            await TakeAsync(line, session);
+        }
     }
 
     /// <summary>
@@ -704,19 +751,9 @@ internal sealed class ChatSession
         var now = host.Time.GetLocalNow();
         var (content, suggestion) = (OutputFiles.PlanMarkdown(message, tasks, now), OutputFiles.PlanPath(message, now));
         saveable = (content, suggestion);
-        if (await saver.OfferAsync(content, suggestion, ending.Token) is not { } line)
+        if (await AskAsync(token => saver.OfferAsync(content, suggestion, token)) is { } line)
         {
-            return;
-        }
-
-        if (line.StartsWith('/'))
-        {
-            await CommandAsync(line[1..].Trim(), session);
-        }
-        else
-        {
-            queued.Enqueue(line);
-            status.WriteLine("(it is sent when this reply ends; /tell <agent> <text> reaches an agent now)");
+            await TakeAsync(line, session);
         }
     }
 
@@ -838,6 +875,37 @@ internal sealed class ChatSession
     private void Signalled(PosixSignal signal)
     {
         CancellationTokenSource? reply;
+        CancellationTokenSource? question;
+        lock (gate)
+        {
+            if (signal == PosixSignal.SIGINT && asking is not null)
+            {
+                // A question the session asks, such as whether to save a document, is abandoned, and nothing else.
+                (question, asking) = (asking, null);
+                Interlocked.Exchange(ref interrupted, host.Time.GetTimestamp());
+            }
+            else
+            {
+                question = null;
+            }
+        }
+
+        if (question is not null)
+        {
+            _ = Task.Run(() =>
+            {
+                try
+                {
+                    question.Cancel();
+                }
+                catch (ObjectDisposedException)
+                {
+                    // It was answered meanwhile.
+                }
+            });
+            return;
+        }
+
         lock (gate)
         {
             if (signal != PosixSignal.SIGINT || armed)
