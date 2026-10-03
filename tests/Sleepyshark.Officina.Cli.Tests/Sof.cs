@@ -31,6 +31,9 @@ internal sealed class Sof : IDisposable
     /// <summary>Standard output, which a test can wait on.</summary>
     public Console Out { get; } = new();
 
+    /// <summary>Whether the owner types at a terminal, so a chat session may ask them something; piped input by default.</summary>
+    public bool Interactive { get; set; }
+
     /// <summary>What the owner types; nothing by default.</summary>
     public Owner In { get; private set; } = new();
 
@@ -59,7 +62,7 @@ internal sealed class Sof : IDisposable
         var start = Out.ToString().Length;
         var host = new SofEnvironment(Out, error, Directory, Variables)
         {
-            In = In, Providers = Providers, Sandbox = Sandbox, Time = Time,
+            In = In, Providers = Providers, Sandbox = Sandbox, Time = Time, Interactive = Interactive,
             Signals = handler =>
             {
                 signalled = handler;

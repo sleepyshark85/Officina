@@ -26,4 +26,7 @@ public sealed record HumanRequest(
 {
     /// <summary>For an approval, whether the tool is irreversible, so its effect cannot be taken back (TOOL-10).</summary>
     public bool Irreversible { get; init; }
+
+    /// <summary>For a sign-off, whether it is the owner's approval of a team lead's plan before work starts (TEAM-10).</summary>
+    public bool PlanApproval { get; init; }
 }

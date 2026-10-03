@@ -24,6 +24,9 @@ internal sealed class OwnerQueue(TextWriter output, string prefix = "") : IHuman
     /// <summary>Where requests and everything else for the owner are shown.</summary>
     public TextWriter Output => output;
 
+    /// <summary>Called with each request the owner answers, and the answer, as the answer is given.</summary>
+    public Action<HumanRequest, HumanAnswer>? Answered { get; set; }
+
     /// <summary>What waits for the owner now, by number.</summary>
     public IEnumerable<(int Number, HumanRequest Request)> Waiting =>
         waiting.OrderBy(entry => entry.Key).Select(entry => (entry.Key, entry.Value.Request));
@@ -116,6 +119,7 @@ internal sealed class OwnerQueue(TextWriter output, string prefix = "") : IHuman
             announced.Clear();
         }
 
+        Answered?.Invoke(entry.Request, answer);
         var done = command switch { "approve" => "approved", "deny" => "denied", "change" => "approved with your change", _ => "answered" };
         return $"{done} #{number}: {What(entry.Request)}";
     }

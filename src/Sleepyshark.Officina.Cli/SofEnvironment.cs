@@ -33,6 +33,18 @@ public sealed record SofEnvironment(TextWriter Out, TextWriter Error, string Wor
     /// <summary>The interactive terminal, where a chat session reads lines with a line editor; null elsewhere, and in tests.</summary>
     internal TerminalScreen? Terminal { get; init; }
 
+    /// <summary>
+    /// Whether the owner types at a terminal, so a chat session may ask them something, such as whether to save a document; with
+    /// piped input, nothing is asked. By default, whether there is a <see cref="Terminal"/>.
+    /// </summary>
+    internal bool Interactive
+    {
+        get => interactive ?? Terminal is not null;
+        init => interactive = value;
+    }
+
+    private readonly bool? interactive;
+
     /// <summary>The process's own signals, for <see cref="Signals"/>.</summary>
     public static IDisposable ProcessSignals(Action<PosixSignal> handler) => new Registrations(
         [.. new[] { PosixSignal.SIGINT, PosixSignal.SIGTERM }.Select(signal => PosixSignalRegistration.Create(signal, context =>

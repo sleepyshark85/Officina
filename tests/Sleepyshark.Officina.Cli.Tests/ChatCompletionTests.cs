@@ -15,6 +15,7 @@ public sealed class ChatCompletionTests
     [InlineData("", "/ro", "/rollback")]
     [InlineData("", "/q", "/quit")]
     [InlineData("", "/dr", "/drop")]
+    [InlineData("", "/sa", "/save")]
     [InlineData("", "/Con", "")] // case matters, as it does to the line editor
     [InlineData("", "Hello", "")] // a message
     [InlineData("/config ", "", "show|validate|dry-run")]
