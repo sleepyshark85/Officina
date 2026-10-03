@@ -50,42 +50,54 @@ internal static class InitCommand
             return ExitCodes.Usage;
         }
 
+        if (File.Exists(file))
+        {
+            host.Out.WriteLine($"note: replacing {file}, with no backup: git has the old one if you committed it.");
+        }
+
         if (GitWarning(directory) is { } warning)
         {
             host.Error.WriteLine($"warning: {warning}");
         }
 
-        var found = CommandDetection.Detect(directory);
-        if (found.Count == 0)
+        // With both commands given, nothing is detected, so nothing in the folder can stop a script.
+        var notes = new List<string>();
+        var found = build is not null && test is not null ? [] : CommandDetection.Detect(directory, notes);
+        notes.ForEach(note => host.Out.WriteLine($"note: {note}"));
+        if (found.Count == 0 && (build is null || test is null))
         {
             host.Out.WriteLine("Found no build or test commands to suggest.");
         }
 
         foreach (var (detection, index) in found.Select((detection, index) => (detection, index)))
         {
-            var commands = string.Join(" and ", new[] { detection.Build, detection.Test }.OfType<string>());
+            var commands = string.Join(" and ", new[] { detection.Build?.Line, detection.Test?.Line }.OfType<string>());
             host.Out.WriteLine(index == 0
                 ? $"Found {detection.Toolchain} ({detection.Why}){(commands.Length > 0 ? $": {commands}" : "")}."
                 : $"Also found {detection.Toolchain} ({detection.Why}); sof init suggests the first.");
         }
 
+        var suggested = found.Count > 0 ? found[0] : null;
         var asks = build is null || test is null;
-        build ??= Ask(host, "Build command", found.Select(detection => detection.Build).FirstOrDefault());
-        test ??= build is null ? null : Ask(host, "Test command", found.Select(detection => detection.Test).FirstOrDefault());
+        build ??= Ask(host, "Build command", suggested?.Build?.Line);
+        test ??= build is null ? null : Ask(host, "Test command", suggested?.Test?.Line);
         if (build is null || test is null)
         {
             host.Error.WriteLine($"error: no {(build is null ? "build" : "test")} command, and the input ended. Give both with --build and --test.");
             return ExitCodes.Usage;
         }
 
-        var toolchains = OperatingSystem.IsLinux() ? CommandDetection.Toolchains([build, test], host.Variables.GetValueOrDefault("PATH")) : [];
-        var text = Configuration(build, test, toolchains);
+        // A suggested command keeps its detector's rules; one the owner typed is allowed as typed, and warned about if that is too broad.
+        List<string> allowed = [.. Allowed(host, build, suggested?.Build).Concat(Allowed(host, test, suggested?.Test)).Distinct()];
+        var text = Configuration(build, test, allowed);
         File.WriteAllText(file, text);
         host.Out.WriteLine($"Wrote {file}:");
         host.Out.WriteLine(text);
-        if (toolchains.Count > 0)
+
+        // The folder is this machine's, and may hold more than the toolchain, so it is the owner's to add to the committed file.
+        foreach (var (program, folder) in OperatingSystem.IsLinux() ? CommandDetection.Unseen([build, test], host.Variables.GetValueOrDefault("PATH")) : [])
         {
-            host.Out.WriteLine($"note: the sandbox shows only the system folders, so toolchains lists where the commands' programs are: {string.Join(", ", toolchains)}.");
+            host.Out.WriteLine($"note: your {program} is at {folder}, outside the sandbox's system folders. Add {folder} to capabilities.sandbox.toolchains if the build can't find it.");
         }
 
         IgnoreState(host, directory, asks);
@@ -107,9 +119,13 @@ internal static class InitCommand
             host.Out.Write(suggested is null ? $"{what}: " : $"{what} [{suggested}]: ");
             host.Out.Flush();
             var line = host.In.ReadLine()?.Trim();
+            if (line is null || host.Terminal is null)
+            {
+                host.Out.WriteLine(); // a terminal shows the owner's Enter; piped input and its end show nothing
+            }
+
             if (line is null)
             {
-                host.Out.WriteLine();
                 return suggested;
             }
 
@@ -120,8 +136,25 @@ internal static class InitCommand
         }
     }
 
-    /// <summary>The coding team's <c>sof.json</c>, with what the commands need in the sandbox.</summary>
-    internal static string Configuration(string build, string test, IReadOnlyList<string> toolchains)
+    /// <summary>The commands the rules allow for <paramref name="line"/>: its detector's, or each command of it as typed, with a warning for a broad one.</summary>
+    private static IEnumerable<string> Allowed(SofEnvironment host, string line, Suggestion? suggestion)
+    {
+        if (suggestion is not null && line == suggestion.Line)
+        {
+            return suggestion.Rules;
+        }
+
+        var commands = CommandDetection.Parts([line]).ToList();
+        foreach (var broad in commands.Select(CommandDetection.Broad).OfType<string>())
+        {
+            host.Error.WriteLine($"warning: {broad}");
+        }
+
+        return commands;
+    }
+
+    /// <summary>The coding team's <c>sof.json</c>, with what the commands need in the sandbox: each allowed as itself, and with arguments after it.</summary>
+    internal static string Configuration(string build, string test, IReadOnlyList<string> allowed)
     {
         var sandbox = new JsonObject();
         if (CommandDetection.Hosts([build, test]) is { Count: > 0 } hosts)
@@ -129,12 +162,8 @@ internal static class InitCommand
             sandbox["allowedHosts"] = new JsonArray([.. hosts.Select(host => JsonValue.Create(host))]);
         }
 
-        if (toolchains.Count > 0)
-        {
-            sandbox["toolchains"] = new JsonArray([.. toolchains.Select(folder => JsonValue.Create(folder))]);
-        }
-
-        List<(string Match, string Action)> rules = [.. CommandDetection.Allowed([build, test]).Select(match => (match, "allow")), ("git push*", "deny"), ("git remote*", "deny")];
+        List<(string Match, string Action)> rules =
+            [.. allowed.SelectMany(command => new[] { (command, "allow"), ($"{command} *", "allow") }), ("git push*", "deny"), ("git remote*", "deny")];
         sandbox["commandRules"] = new JsonArray([.. rules.Select(rule => new JsonObject { ["match"] = rule.Match, ["action"] = rule.Action })]);
         var configuration = new JsonObject
         {

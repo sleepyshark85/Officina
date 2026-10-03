@@ -192,28 +192,31 @@ empty line takes the suggestion):
 
 | Project | Found by | Build, test |
 |---|---|---|
-| .NET | `*.sln`, `*.slnx` or `*.csproj` in the folder | `dotnet build`, `dotnet test` (naming one when there are several) |
-| Node | `package.json` with `build` and `test` scripts; pnpm or yarn from their lock files | `npm run build`, `npm test` |
+| .NET | `*.sln`, `*.slnx` or `*.csproj` in the folder | `dotnet build`, `dotnet test`, naming a solution when there are several; with several projects and no solution, it asks |
+| Node | `package.json` with `build` and `test` scripts; pnpm or yarn from their lock files | `npm run build`, `npm test`, with the lock file's install first, such as `npm ci && npm run build` |
 | Python | `pyproject.toml`, `setup.cfg`, `tox.ini`, `setup.py` or `test_*.py` | `python3 -m compileall -q .`, then `python3 -m pytest` if pytest is configured, else `python3 -m unittest` |
 | Rust | `Cargo.toml` | `cargo build`, `cargo test` |
 | Go | `go.mod` | `go build ./...`, `go test ./...` |
 | make | a `Makefile` with `build` and `test` targets | `make build`, `make test` |
 
 It writes `"extends": ["preset:coding-team"]`, the two commands, `run.budget` at $3, and what the commands need in the
-sandbox: their package registry in `allowedHosts` (NuGet, npm, crates.io or the Go proxy), command rules that allow them
-(repeating the preset's `git push` and `git remote` denies, as the list replaces the preset's), and, on Linux,
-`toolchains` for a program outside the system folders, such as `~/.dotnet`. Then it validates the file as
+sandbox: their package registry in `allowedHosts` (NuGet, npm, crates.io or the Go proxy), and command rules that allow
+each command as itself and followed by arguments (`npm test` and `npm test *`, not `npm test:e2e`), repeating the
+preset's `git push` and `git remote` denies, as the list replaces the preset's. Then it validates the file as
 `sof config validate` does. It also:
 
 - takes `--build "<command>"` and `--test "<command>"`, and with both asks nothing, for scripts. With nothing found and
   the input at its end, it fails and says to give them;
-- refuses to replace an existing `sof.json` unless you give `--force`, and takes `--dir <folder>`;
+- warns when a command you type lets an agent run any code: an interpreter or shell with no script or module (`node
+  --test`, `bash -c …`), a package runner or install (`npx`, `npm install`), or `make` with no target;
+- on Linux, notes a program on your `PATH` outside the system folders, which the sandbox doesn't show, such as
+  `~/.dotnet`. It doesn't write `toolchains`: add the folder it names if the build can't find the program;
+- refuses to replace an existing `sof.json` unless you give `--force`, which keeps no backup, and takes `--dir <folder>`;
 - warns when the folder isn't a git repository's top folder, which `sof` needs, and offers to add `.sof/` to `.gitignore`;
 - runs in the shell only: a session refuses `/init`.
 
 A working copy has only what git tracks, so no `node_modules` or virtual environment. If the build needs installed
-packages, make it install them first, such as `npm ci && npm run build`; `sof init` allows the lock-file install of npm,
-pnpm and yarn. Edit `sof.json` for anything else; the [team guide](team-guide.md) explains each part.
+packages, it must install them first, as `sof init` suggests for Node with a lock file. Edit `sof.json` for anything else; the [team guide](team-guide.md) explains each part.
 
 The team guide sets up a lead, developers and a reviewer step by step, and runs them on a small example. When you type a
 goal:
