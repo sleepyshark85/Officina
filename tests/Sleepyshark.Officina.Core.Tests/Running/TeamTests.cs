@@ -74,7 +74,8 @@ public class TeamTests
         Assert.Contains(works, work => work.StartsWith("You lead a team", StringComparison.Ordinal) && work.Contains("on the board with create:", StringComparison.Ordinal));
         Assert.Contains(works, work => work.Contains("Do task a, then submit it with submit;", StringComparison.Ordinal));
         var review = works.First(work => work.StartsWith("Review task a,", StringComparison.Ordinal));
-        Assert.Contains("ask for changes with review, giving your reasons.\n", review, StringComparison.Ordinal);
+        Assert.Contains("ask for changes with review, giving your reasons.", review, StringComparison.Ordinal);
+        Assert.DoesNotContain("checks passed", review, StringComparison.Ordinal);
         Assert.DoesNotContain("tasks.", string.Concat(works), StringComparison.Ordinal);
 
         // RUN-10: cost by agent and by definition.
