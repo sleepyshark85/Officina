@@ -28,9 +28,8 @@ requirement changes at revision 3.
 
 ## Pending
 
-MUSTs still to verify. S21 waits only on TEST-31; the other rows are gaps for the owner to decide on.
+MUSTs still to verify. S21 waits only on TEST-31.
 
 | Requirement | Waits for |
 |---|---|
 | TEST-31 | The live benchmark run, on Linux and Windows, which the owner starts (S21 part 1). Its goals, suites, references and runner are tested offline |
-| CFG-17 | A gap: nothing detects the build and test commands (there is no `sof init`). Tests name CFG-17 only for its safe defaults. The owner decides: build detection, or change the requirement |

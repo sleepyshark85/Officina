@@ -288,6 +288,15 @@ the fix, goes back. That's why the lead's instructions ask it to order tasks wit
 }
 ```
 
+**The fast path:** `sof init` in the `calc` folder writes the preset variant for you. It finds `test_calc.py` and
+suggests `python3 -m compileall -q .` and `python3 -m unittest`; type `python3 -m unittest -v` to edit the second. It
+writes the two commands, `run.budget` at $3, and command rules that allow `python3 -m compileall` and
+`python3 -m unittest`, each as itself and followed by arguments (`python3 -m unittest *`, which allows
+`python3 -m unittest -v` and `python3 -m unittest test_calc`), then the two git denies. Arguments added to a suggestion
+keep its rules; a command typed in its place is allowed as typed. Add
+the team size and the task board's limits by hand.
+See the [user guide](user-guide.md), section 6.
+
 Objects merge key by key, so `"roles": { "developer": { "max": 2 } }` keeps the preset's lead and reviewer. A list, such
 as `commandRules`, a sign-off list or an agent's `tools`, replaces the preset's whole. Run `sof config show --origin` to
 see which value came from the preset and which from your file. To change one role, override only it, such as
@@ -298,7 +307,9 @@ see which value came from the preset and which from your file. To change one rol
 | The preset | Most of the time. You get the full tool set and later fixes to it, and write only your commands, limits and rules |
 | By hand | You want another team shape: other roles, fewer tools, different instructions, or a role that isn't a coder |
 
-For a .NET project, the build needs NuGet, so allow its hosts, and allow the commands:
+For a .NET project, the build needs NuGet, so allow its hosts, and allow the commands. For a folder with a solution or
+project file, `sof init` writes the same hosts, and allows `dotnet build` and `dotnet test` each as itself and
+followed by arguments (`dotnet build *`), which doesn't also allow `dotnet build-server`:
 
 ```jsonc
 "project": { "values": { "buildCommand": "dotnet build", "testCommand": "dotnet test" } },

@@ -52,7 +52,8 @@ The package version is always 0.1.0, so `dotnet tool update` keeps the old build
 
 ## 3. Your first agent
 
-In an empty folder, create `sof.json`:
+For the coding team, `sof init` writes `sof.json` for you: see section 6. For a single agent, in an empty folder, create
+`sof.json`:
 
 ```json
 {
@@ -178,9 +179,47 @@ are refused with an error, not queued; type them again after the reply ends.
 
 ## 6. The coding team
 
-The [team guide](team-guide.md) sets up a lead, developers and a reviewer step by step, and runs them on a small
-example. In short: with `"extends": ["preset:coding-team"]` and your build and test commands in `sof.json`, run
-`sof --agent team` and type a goal. Then:
+Start in the top folder of your project's git repository:
+
+```bash
+sof init                 # writes sof.json for the coding team, asking only for the build and test commands
+git add . && git commit -m "Add sof.json" && git switch -c sof-try
+sof --agent team         # type a goal
+```
+
+`sof init` looks for the commands, the most certain first, says what it found, and asks you to confirm or edit each (an
+empty line takes the suggestion):
+
+| Project | Found by | Build, test |
+|---|---|---|
+| .NET | `*.sln`, `*.slnx` or `*.csproj` in the folder | `dotnet build`, `dotnet test`, naming a solution when there are several; with several projects and no solution, it asks |
+| Node | `package.json` with `build` and `test` scripts; pnpm or yarn from their lock files | `npm run build`, `npm test`, with the lock file's install first, such as `npm ci && npm run build` |
+| Python | `pyproject.toml`, `setup.cfg`, `tox.ini`, `setup.py` or `test_*.py` | `python3 -m compileall -q .`, then `python3 -m pytest` if pytest is configured, else `python3 -m unittest` |
+| Rust | `Cargo.toml` | `cargo build`, `cargo test` |
+| Go | `go.mod` | `go build ./...`, `go test ./...` |
+| make | a `Makefile` with `build` and `test` targets | `make build`, `make test` |
+
+It writes `"extends": ["preset:coding-team"]`, the two commands, `run.budget` at $3, and what the commands need in the
+sandbox: their package registry in `allowedHosts` (NuGet, npm, crates.io or the Go proxy), and command rules that allow
+each command as itself and followed by arguments (`npm test` and `npm test *`, not `npm test:e2e`), repeating the
+preset's `git push` and `git remote` denies, as the list replaces the preset's. Then it validates the file as
+`sof config validate` does. It also:
+
+- takes `--build "<command>"` and `--test "<command>"`, and with both asks nothing, for scripts. With nothing found and
+  the input at its end, it fails and says to give them;
+- warns when a command you type lets an agent run any code: an interpreter or shell with no script or module (`node
+  --test`, `bash -c …`), a package runner or install (`npx`, `npm install`), or `make` with no target;
+- on Linux, notes a program on your `PATH` outside the system folders, which the sandbox doesn't show, such as
+  `~/.dotnet`. It doesn't write `toolchains`: add the folder it names if the build can't find the program;
+- refuses to replace an existing `sof.json` unless you give `--force`, which keeps no backup, and takes `--dir <folder>`;
+- warns when the folder isn't a git repository's top folder, which `sof` needs, and offers to add `.sof/` to `.gitignore`;
+- runs in the shell only: a session refuses `/init`.
+
+A working copy has only what git tracks, so no `node_modules` or virtual environment. If the build needs installed
+packages, it must install them first, as `sof init` suggests for Node with a lock file. Edit `sof.json` for anything else; the [team guide](team-guide.md) explains each part.
+
+The team guide sets up a lead, developers and a reviewer step by step, and runs them on a small example. When you type a
+goal:
 
 1. The lead plans tasks, and you approve the plan before any work starts (`/approve <n>`). To reject it, say why with
    `/tell lead …`, then `/deny <n>`; the lead plans again.
@@ -296,7 +335,6 @@ Write down anything surprising, with the run id; `sof report <run>` and `.sof/so
 
 ## 11. Known limitations
 
-- `sof init` isn't built: write `sof.json` by hand.
 - `sof.json` must sit in the git repository's top folder.
 - Nothing lists runs: note the run id each message or `sof run` prints.
 - Between replies, `/task` changes the last message's run, which has ended, so no agent works on what it adds (section 5).

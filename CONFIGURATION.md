@@ -39,7 +39,7 @@ How the settings fit together (patterns, conditions, merging, validation, preset
 | Every agent | `instructions` | Only the application knows the job |
 | Every write tool | `gates`, or a `gateExemption` with a reason | INV-04 forbids a default |
 | Every application tool, gate, check or knowledge source | its `source` and any settings it declares as required | It is the application's own code |
-| Coding team | `project.values.buildCommand` and `testCommand` | Project-specific. |
+| Coding team | `project.values.buildCommand` and `testCommand` | Project-specific. `sof init` detects them where it can |
 
 Everything else has a default. The API key is read from the `ANTHROPIC_API_KEY` environment
 variable unless you configure another secret.
@@ -61,7 +61,8 @@ One agent, which runs on the default model profile (`claude-opus-5-5`):
 }
 ```
 
-The coding team:
+The coding team, which `sof init` writes with the commands it detects, a low `run.budget` and what the commands need in
+the sandbox (see the [user guide](docs/user-guide.md), section 6):
 
 ```jsonc
 {

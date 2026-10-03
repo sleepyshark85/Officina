@@ -9,8 +9,7 @@ the settings reference is right: it is generated from the code.
 **Not built in v1.** For the open MUSTs below, §17 keeps the spec. The rest wait for a known case (principle 13) unless a
 reason is given:
 
-- Spec kept in §17: per-agent `capabilities` and `policies` (CFG-01, CAP-01, readings for the owner), and `sof init` with
-  command detection (CFG-17).
+- Spec kept in §17: per-agent `capabilities` and `policies` (CFG-01, CAP-01, readings for the owner).
 - `baseUrl`, Message Batches (CLD-11) and the condition roots `checks.<name>`, `outcome` and `stopReason`: S21 records
   why. The `task` root: S18 records why.
 - `operations.secrets.source`: `sof` reads environment variables. `operations.events.store` and `storeModelText`:
@@ -809,5 +808,3 @@ Kept so the shape is known if the owner decides to build them at revision 3.
 - **Per-agent capabilities and policies (CFG-01, CAP-01).** An agent's `capabilities` lists which of the enabled
   capabilities it uses, such as `["workspace", "sandbox", "taskBoard"]`; unset, it uses all. Listing one that is not
   enabled is a CAP-03 error. An agent's `policies`, such as `{ "gates": ["tests-first"] }`, adds gates for all its tools.
-- **`sof init` (CFG-17).** Writes the coding team's `sof.json`, asking only for the build and test commands, and detects
-  them where the project already has them, for example in a `.csproj` or `package.json`.
