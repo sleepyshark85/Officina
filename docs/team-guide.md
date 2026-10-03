@@ -1,7 +1,7 @@
 # Set up a small coding team
 
 This guide builds a coding team by hand: a lead, two developers and a reviewer. It explains what each piece does, then
-shows the same team built on `preset:coding-team`, and runs it on a tiny Python project. Read the
+shows the same team built on `preset:coding-team`, and runs it on a tiny .NET project. Read the
 [user guide](user-guide.md) first for installing `sof` and using a chat session.
 
 > **This costs real money.** Each message to the team is a run that calls Claude many times. The example limits each
@@ -10,63 +10,88 @@ shows the same team built on `preset:coding-team`, and runs it on a tiny Python 
 
 ## 1. The example project
 
-A calculator with a bug, and a feature to add. On Linux (macOS has no sandbox, so the team can't run there):
+A calculator with a bug, and a feature to add. On Linux or Windows (macOS has no sandbox, so the team can't run there),
+with the .NET 10 SDK:
 
 ```bash
 mkdir calc && cd calc
 git init -b main
+dotnet new sln -n Calc
+dotnet new classlib -n Calc -o Calc
+dotnet new xunit -n Calc.Tests -o Calc.Tests
+dotnet add Calc.Tests reference Calc
+dotnet sln add Calc Calc.Tests
+rm Calc/Class1.cs
+rm Calc.Tests/UnitTest1.cs
 ```
 
-`calc.py`:
+That makes `Calc.slnx` with a class library and an xUnit test project. Then add four files.
 
-```python
-"""A tiny calculator."""
+`Calc/Calculator.cs`:
 
+```csharp
+namespace Calc;
 
-def add(a, b):
-    return a + b
+public static class Calculator
+{
+    public static int Add(int a, int b) => a + b;
 
-
-def divide(a, b):
-    return a * b
+    public static int Divide(int a, int b) => a * b;
+}
 ```
 
-`test_calc.py`:
+`Calc.Tests/CalculatorTests.cs`:
 
-```python
-import unittest
+```csharp
+namespace Calc.Tests;
 
-from calc import add, divide
+public class CalculatorTests
+{
+    [Fact]
+    public void Add() => Assert.Equal(5, Calculator.Add(2, 3));
 
-
-class CalcTests(unittest.TestCase):
-    def test_add(self):
-        self.assertEqual(add(2, 3), 5)
-
-    def test_divide(self):
-        self.assertEqual(divide(6, 3), 2)
-
-
-if __name__ == "__main__":
-    unittest.main()
+    [Fact]
+    public void Divide() => Assert.Equal(2, Calculator.Divide(6, 3));
+}
 ```
 
-`.gitignore` (the tests write `__pycache__` into each working copy, and it must not end up in a commit):
+`Directory.Build.props`. A build reads `.git` to record the commit (Source Link), and the sandbox hides `.git`, so
+without this file every build in the Linux sandbox fails with `Access to the path '…/.git' is denied`:
+
+```xml
+<Project>
+  <PropertyGroup>
+    <!-- The sandbox hides .git, so the build must not read it for Source Link. -->
+    <EnableSourceControlManagerQueries>false</EnableSourceControlManagerQueries>
+  </PropertyGroup>
+</Project>
+```
+
+`.gitignore`, so build output doesn't end up in a commit:
 
 ```
 .sof/
-__pycache__/
+bin/
+obj/
 ```
 
-Check that the build passes and a test fails:
+Check that the build passes and one test fails:
 
 ```bash
-python3 -m compileall -q .   # the build: exits 0
-python3 -m unittest -v       # the tests: test_divide fails (18 != 2)
+dotnet build   # Build succeeded.
+dotnet test    # Divide fails (Expected: 2, Actual: 18); Add passes
 ```
 
-It uses only the Python standard library, so the sandbox needs no network. On Windows, write `python` for `python3`
-here and in `sof.json`; this example was checked on Linux.
+### Where is your SDK?
+
+On Linux, the sandbox shows only the system folders (`/usr`, `/bin`, `/lib` and a few more), and finds programs only in
+`/usr/local/bin`, `/usr/bin` and `/bin`. Run `which dotnet` and `dotnet --list-sdks`:
+
+- `/usr/bin/dotnet`, as a distribution's package installs it: nothing to do.
+- Anywhere else, such as `~/.dotnet/dotnet` from Microsoft's install script, or `/usr/lib/dotnet/dotnet` with no link in
+  `/usr/bin`: add the folder that holds `dotnet` (the one before `/sdk` in `dotnet --list-sdks`) to
+  `capabilities.sandbox.toolchains`, as a full path, such as `"toolchains": ["/home/me/.dotnet"]`. Without it, every
+  command fails with `dotnet: not found`. A snap's `dotnet` was not checked.
 
 ## 2. The team, by hand
 
@@ -75,7 +100,7 @@ Save this as `sof.json` in the `calc` folder. Each part is explained below it.
 ```json
 {
   "project": {
-    "values": { "buildCommand": "python3 -m compileall -q .", "testCommand": "python3 -m unittest -v" }
+    "values": { "buildCommand": "dotnet build", "testCommand": "dotnet test" }
   },
   "models": {
     "default": { "effort": "high" },
@@ -148,9 +173,12 @@ Save this as `sof.json` in the `calc` folder. Each part is explained below it.
     "workspace": { "enabled": true, "baselineChecks": ["build", "tests"] },
     "sandbox": {
       "enabled": true,
+      "allowedHosts": ["api.nuget.org", "*.nuget.org"],
       "commandRules": [
-        { "match": "python3 -m unittest*", "action": "allow" },
-        { "match": "python3 -m compileall*", "action": "allow" },
+        { "match": "dotnet build", "action": "allow" },
+        { "match": "dotnet build *", "action": "allow" },
+        { "match": "dotnet test", "action": "allow" },
+        { "match": "dotnet test *", "action": "allow" },
         { "match": "git push*", "action": "deny" },
         { "match": "git remote*", "action": "deny" }
       ]
@@ -159,7 +187,7 @@ Save this as `sof.json` in the `calc` folder. Each part is explained below it.
 }
 ```
 
-Check it before you spend anything:
+If your SDK needs it (section 1), add `"toolchains": [...]` to `sandbox`. Check the file before you spend anything:
 
 ```bash
 sof config validate            # "The configuration is valid."
@@ -189,10 +217,17 @@ sandbox's command rules.
 These rules allow the file writes and `run_command`, so you aren't asked about every edit; commands still pass the
 command rules next.
 
-**Command rules** decide each command a developer runs, first match wins. Here: the build and tests are allowed,
-`git push` and `git remote` are denied, and **anything else is asked about** (`/approve` or `/deny`). Git itself can't
-run in the sandbox, because `.git` is hidden, so there's no point allowing `git status` or `git diff`, and the preset
-no longer has git allow rules. Don't allow an interpreter as a whole, such as `python3 *` or `sh*`: that allows every command.
+**Command rules** decide each command a developer runs, first match wins. Here: `dotnet build` and `dotnet test` are
+allowed, each as itself and followed by arguments (`dotnet test *` allows `dotnet test --filter Divide`, but
+`dotnet build*` would also allow `dotnet build-server`); `git push` and `git remote` are denied; and **anything else is
+asked about** (`/approve` or `/deny`). Git itself can't run in the sandbox, because `.git` is hidden, so there's no
+point allowing `git status` or `git diff`. Don't allow `dotnet *`: that allows `dotnet run` and every tool.
+
+**Allowed hosts** are the only network the sandbox has: NuGet, so the build can restore packages. The sandbox keeps no
+package cache between commands, so each build and test restores again (a few seconds here). Restore also checks
+certificates at `crl3.digicert.com`, `crl4.digicert.com`, `ocsp.digicert.com` and `www.microsoft.com`. The sandbox
+refuses those, restore goes on, and the command's output shows `[Network: refused …]` lines. Add those hosts to quiet
+them.
 
 **Masking** is off because it would replace things that look like emails or phone numbers in source code.
 
@@ -267,7 +302,7 @@ the fix, goes back. That's why the lead's instructions ask it to order tasks wit
 {
   "extends": ["preset:coding-team"],
   "project": {
-    "values": { "buildCommand": "python3 -m compileall -q .", "testCommand": "python3 -m unittest -v" }
+    "values": { "buildCommand": "dotnet build", "testCommand": "dotnet test" }
   },
   "agents": {
     "team": { "pattern": { "roles": { "developer": { "max": 2 } } } }
@@ -276,10 +311,13 @@ the fix, goes back. That's why the lead's instructions ask it to order tasks wit
   "capabilities": {
     "taskBoard": { "maxAttempts": 2, "budget": { "cost": 2 } },
     "sandbox": {
+      "allowedHosts": ["api.nuget.org", "*.nuget.org"],
       // This list replaces the preset's whole, so it repeats the preset's git deny rules.
       "commandRules": [
-        { "match": "python3 -m unittest*", "action": "allow" },
-        { "match": "python3 -m compileall*", "action": "allow" },
+        { "match": "dotnet build", "action": "allow" },
+        { "match": "dotnet build *", "action": "allow" },
+        { "match": "dotnet test", "action": "allow" },
+        { "match": "dotnet test *", "action": "allow" },
         { "match": "git push*", "action": "deny" },
         { "match": "git remote*", "action": "deny" }
       ]
@@ -288,14 +326,12 @@ the fix, goes back. That's why the lead's instructions ask it to order tasks wit
 }
 ```
 
-**The fast path:** `sof init` in the `calc` folder writes the preset variant for you. It finds `test_calc.py` and
-suggests `python3 -m compileall -q .` and `python3 -m unittest`; type `python3 -m unittest -v` to edit the second. It
-writes the two commands, `run.budget` at $3, and command rules that allow `python3 -m compileall` and
-`python3 -m unittest`, each as itself and followed by arguments (`python3 -m unittest *`, which allows
-`python3 -m unittest -v` and `python3 -m unittest test_calc`), then the two git denies. Arguments added to a suggestion
-keep its rules; a command typed in its place is allowed as typed. Add
-the team size and the task board's limits by hand.
-See the [user guide](user-guide.md), section 6.
+**The fast path:** `sof init` in the `calc` folder writes most of this for you. It says
+`Found .NET (Calc.slnx): dotnet build and dotnet test.`, and asks for each command; press Enter twice to take them. It
+writes the two commands, `run.budget` at $3, the NuGet hosts and the same six command rules, then validates the file.
+It leaves out the time limit, the team size and the task board's limits, which you add by hand. If `dotnet` is on your
+`PATH` outside the system folders, such as `~/.dotnet`, it says to add that folder to `toolchains`; it doesn't add it
+itself, and it doesn't say so for `/usr/lib/dotnet`, so check section 1. See the [user guide](user-guide.md), section 6.
 
 Objects merge key by key, so `"roles": { "developer": { "max": 2 } }` keeps the preset's lead and reviewer. A list, such
 as `commandRules`, a sign-off list or an agent's `tools`, replaces the preset's whole. Run `sof config show --origin` to
@@ -306,25 +342,6 @@ see which value came from the preset and which from your file. To change one rol
 |---|---|
 | The preset | Most of the time. You get the full tool set and later fixes to it, and write only your commands, limits and rules |
 | By hand | You want another team shape: other roles, fewer tools, different instructions, or a role that isn't a coder |
-
-For a .NET project, the build needs NuGet, so allow its hosts, and allow the commands. For a folder with a solution or
-project file, `sof init` writes the same hosts, and allows `dotnet build` and `dotnet test` each as itself and
-followed by arguments (`dotnet build *`), which doesn't also allow `dotnet build-server`:
-
-```jsonc
-"project": { "values": { "buildCommand": "dotnet build", "testCommand": "dotnet test" } },
-"capabilities": {
-  "sandbox": {
-    "allowedHosts": ["api.nuget.org", "*.nuget.org"],
-    // Only system folders are visible in the Linux sandbox. If the SDK lives elsewhere (~/.dotnet, a snap), list it:
-    // "toolchains": ["/home/me/.dotnet"],
-    "commandRules": [
-      { "match": "dotnet build*", "action": "allow" }, { "match": "dotnet test*", "action": "allow" },
-      { "match": "git push*", "action": "deny" },      { "match": "git remote*", "action": "deny" }
-    ]
-  }
-}
-```
 
 ## 4. Run it
 
@@ -340,7 +357,7 @@ sof --agent team               # with ANTHROPIC_API_KEY set
 Type the goal as one line:
 
 ```
-Fix the failing test in test_calc.py; the fix must come first. Then add average(numbers) to calc.py, which raises ValueError for an empty list, with tests for both cases.
+Fix the failing Divide test; the fix must come first. Then add Calculator.Average(numbers), which throws ArgumentException for an empty list, with tests for both cases.
 ```
 
 What to expect:
@@ -350,14 +367,15 @@ What to expect:
 
    ```
    #1 lead needs your sign-off: Approve the lead's plan before work starts?
-     average Add average: Proposed, role developer, depends on fix-divide, needs a review
-     fix-divide Fix divide: Ready, role developer, needs a review
+     average Add Average: Proposed, role developer, depends on fix-divide, needs a review
+     fix-divide Fix Divide: Ready, role developer, needs a review
    Answer with /approve or /deny.
    ```
 
    `/status` shows the waiting request and its number again. Check that `average` depends on `fix-divide`; if it
-   doesn't, fix it yourself with `/task edit average --depends fix-divide`. Type `/approve 1`. To change the plan, `/tell lead <what to change>`, then `/deny 1`; the lead plans again. With no
-   answer within `run.approvalTimeout` (30 minutes), the team stops.
+   doesn't, fix it yourself with `/task edit average --depends fix-divide`. Type `/approve 1`. To change the plan,
+   `/tell lead <what to change>`, then `/deny 1`; the lead plans again. With no answer within `run.approvalTimeout`
+   (30 minutes), the team stops.
 2. **Tasks.** A developer takes each ready task, in `.sof/worktrees/<run>-task.<task id>`. Lines such as
    `[developer[1]] running run_command` show what it does. A command no rule allows waits for `/approve` or `/deny`. The
    task with a dependency waits until the one it needs is done.
@@ -368,9 +386,10 @@ What to expect:
 6. **Report.** When every task is done, the lead reports, and the reply ends with
    `team: Completed, cost $…; this session $…`.
 
-To watch spend, each model call prints `[agent] model call: N tokens, $x; cost so far $y`. While it works: `/status` shows each agent and what waits for you, `/board` the tasks, and `/tell lead …` reaches the
-lead. `/task` changes the board as the team works, such as `/task add Add a median --role developer --depends fix-divide`
-or `/task cancel average Not needed`; the team sees the change the next time it looks at the board. Ctrl+C cancels the
+To watch spend, each model call prints `[agent] model call: N tokens, $x; cost so far $y`. While it works: `/status`
+shows each agent and what waits for you, `/board` the tasks, and `/tell lead …` reaches the lead. `/task` changes the
+board as the team works, such as `/task add Add a Median --role developer --depends fix-divide` or
+`/task cancel average Not needed`; the team sees the change the next time it looks at the board. Ctrl+C cancels the
 reply; changes already integrated stay on the branch.
 
 ## 5. Check the result
@@ -382,9 +401,9 @@ In the session, after the reply:
 - `/quit`, then in the shell:
 
 ```bash
-git log --stat            # one commit per task, such as "Task fix-divide", by developer[1] or [2]
-python3 -m unittest -v    # all tests pass
-sof report <run>          # the same report as /report
+git log --stat    # one commit per task, such as "Task fix-divide", by developer[1] or [2]
+dotnet test       # all tests pass
+sof report <run>  # the same report as /report
 ```
 
 Each task's commit message ends with `Officina-Run`, `Officina-Agent` and `Officina-Task` lines. If you don't like the
@@ -396,7 +415,7 @@ branch has its commits. `sof --agent team --new` starts the lead afresh.
 ## 6. Safety
 
 - **Sandbox:** commands and checks run without network (unless `allowedHosts`), with limits on CPU, memory and
-  processes. On Linux, only system folders and the working copy are visible.
+  processes. On Linux, only system folders, the toolchains and the working copy are visible.
 - **Command rules:** anything not allowed is asked about. The git deny rules are a convenience; the sandbox is the
   boundary.
 - **Protected files:** `.git`, `.env*` and `.sof/` are hidden from agents, and `sof.json`, `sof.*.json` and the files
