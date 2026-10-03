@@ -201,7 +201,7 @@ reading git state is allowed, `git push` and `git remote` are denied, and **anyt
 
 ### The capabilities
 
-All are off by default. The team needs these, and `config validate` says if one is missing:
+All are off by default. `config validate` names any that a tool, check or pattern above needs and is off.
 
 | Capability | Why the team needs it |
 |---|---|
