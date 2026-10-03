@@ -297,12 +297,42 @@ public sealed class InitCommandTests : IDisposable
             var (exitCode, output, _) = await sof.EndedAsync(sof.RunAsync("init", "--build", "dotnet build && /usr/bin/make build", "--test", "npm test"));
 
             Assert.Equal(ExitCodes.Success, exitCode);
-            Assert.Contains($"note: your dotnet is at {dotnet}, outside the sandbox's system folders. Add {dotnet} to capabilities.sandbox.toolchains if the build can't find it.", output, StringComparison.Ordinal);
-            Assert.Contains($"note: your npm is at {bin}, outside", output, StringComparison.Ordinal);
+            Assert.Contains(
+                $"note: your dotnet is at {dotnet}, where the sandbox doesn't look. Add {dotnet} to capabilities.sandbox.toolchains, so that commands in the sandbox run it.",
+                output, StringComparison.Ordinal);
+            Assert.Contains($"note: your npm is at {bin}, where", output, StringComparison.Ordinal);
             Assert.DoesNotContain("your make", output, StringComparison.Ordinal); // /usr/bin/make is given with its folder
             Assert.DoesNotContain($"{home},", output, StringComparison.Ordinal);
             Assert.Empty(Load().Capabilities.Sandbox.Toolchains);
             Assert.DoesNotContain("toolchains", File.ReadAllText(Path.Combine(sof.Directory, "sof.json")), StringComparison.Ordinal);
+        }
+        finally
+        {
+            Directory.Delete(home, recursive: true);
+        }
+    }
+
+    // CFG-17: the sandbox runs a program only from the toolchains or its own path, and sees only its system folders and the
+    // toolchains. A program the sandbox runs from a toolchain gets no note; one whose link leads outside the folders the sandbox
+    // sees gets the folder the link leads to, which is the one to add.
+    [Fact]
+    public void A_program_counts_as_found_only_where_the_sandbox_looks_and_after_its_links()
+    {
+        Assert.SkipUnless(OperatingSystem.IsLinux(), "Only the Linux sandbox searches a path of its own.");
+        var home = Directory.CreateTempSubdirectory("officina-home-").FullName;
+        try
+        {
+            var dotnet = Directory.CreateDirectory(Path.Combine(home, "dotnet-sdk")).FullName;
+            var bin = Directory.CreateDirectory(Path.Combine(home, "bin")).FullName;
+            File.WriteAllText(Path.Combine(dotnet, "dotnet-sof-test"), "");
+            File.CreateSymbolicLink(Path.Combine(bin, "dotnet-sof-test"), Path.Combine(dotnet, "dotnet-sof-test"));
+            string[] commands = ["dotnet-sof-test build"];
+
+            Assert.Equal([("dotnet-sof-test", dotnet)], CommandDetection.Unseen(commands, dotnet, []));
+            Assert.Empty(CommandDetection.Unseen(commands, dotnet, [dotnet]));
+            Assert.Equal([("dotnet-sof-test", dotnet)], CommandDetection.Unseen(commands, bin, []));
+            Assert.Equal([("dotnet-sof-test", dotnet)], CommandDetection.Unseen(commands, bin, [bin])); // the link leads out of what the sandbox sees
+            Assert.Empty(CommandDetection.Unseen(commands, "/usr/bin", [])); // nothing to run
         }
         finally
         {

@@ -1,15 +1,19 @@
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Runtime.Versioning;
+using System.Security.Cryptography;
+using System.Text;
 using Sleepyshark.Officina.Core.Extensibility;
 
 namespace Sleepyshark.Officina.Sandbox;
 
 /// <summary>
 /// The Linux sandbox (DESIGN.md §7, S00a). Each command runs in bubblewrap with every namespace unshared: only the
-/// toolchains, read-only, and the working copy exist, and the network has only loopback. Allowed traffic goes through
-/// the filtering proxy, whose Unix socket socat forwards to <c>127.0.0.1:3128</c> inside. A transient systemd user
-/// scope sets the cgroup limits. Killing bubblewrap ends its process namespace, and with it everything the command
-/// started.
+/// toolchains, read-only, the working copy and its home folder exist, and the network has only loopback. Allowed traffic goes through
+/// the filtering proxy, whose Unix socket socat forwards to <c>127.0.0.1:3128</c> inside. Each working copy has a home
+/// folder of its own, which keeps caches such as NuGet's packages from one command to the next until the working copy is
+/// released. A transient systemd user scope sets the cgroup limits. Killing bubblewrap ends its process namespace, and
+/// with it everything the command started.
 /// </summary>
 public sealed class LinuxSandbox : ISandbox
 {
@@ -23,9 +27,18 @@ public sealed class LinuxSandbox : ISandbox
     /// <summary>The host's folders and files that commands see, read-only, besides the toolchains.</summary>
     public static IReadOnlyList<string> SystemPaths => ReadOnly;
 
-    /// <summary>Commands here leave nothing outside the working copy: everything they use is a mount that ends with the command.</summary>
+    /// <summary>The folders commands find programs in, after the toolchains.</summary>
+    public static IReadOnlyList<string> SearchPath { get; } = ["/usr/local/bin", "/usr/bin", "/bin", "/usr/local/sbin", "/usr/sbin", "/sbin"];
+
+    /// <summary>Removes the working copy's home folder. Everything else commands use is a mount that ends with the command.</summary>
     public void Release(string directory, IReadOnlyList<string> toolchains)
     {
+        ArgumentNullException.ThrowIfNull(directory);
+        var home = Home(directory);
+        if (Directory.Exists(home))
+        {
+            Directory.Delete(home, recursive: true);
+        }
     }
 
     public string? Probe()
@@ -43,6 +56,7 @@ public sealed class LinuxSandbox : ISandbox
         return Fails("socat", "-V") is { } socat ? $"socat is missing ({socat}). Install it; it carries allowed traffic to the proxy." : null;
     }
 
+    [UnsupportedOSPlatform("windows")]
     public ValueTask<ISandboxProcess> StartAsync(SandboxCommand command, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(command);
@@ -72,10 +86,14 @@ public sealed class LinuxSandbox : ISandbox
             Add(start, "--ro-bind-try", path, path);
         }
 
-        var environment = new Dictionary<string, string>
+        // In the user's own data folder: the temporary folder is shared with other users.
+        var home = Directory.CreateDirectory(Home(command.Directory), UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute).FullName;
+        Add(start, "--bind", home, home);
+
+        var environment = new Dictionary<string, string>(ToolchainVariables.All)
         {
-            ["PATH"] = string.Join(':', command.Toolchains.Append("/usr/local/bin:/usr/bin:/bin:/usr/local/sbin:/usr/sbin:/sbin")),
-            ["HOME"] = "/tmp",
+            ["PATH"] = string.Join(':', command.Toolchains.Concat(SearchPath)),
+            ["HOME"] = home,
             ["TMPDIR"] = "/tmp",
             ["LANG"] = "C.UTF-8",
         };
@@ -95,8 +113,11 @@ public sealed class LinuxSandbox : ISandbox
                 environment[name] = ProxyAddress;
             }
 
-            // Port 3128 is 0C38 in /proc/net/tcp; the command starts once socat listens there.
-            commandLine = $"socat TCP-LISTEN:3128,bind=127.0.0.1,fork,reuseaddr UNIX-CONNECT:{ProxySocket} & "
+            // Port 3128 is 0C38 in /proc/net/tcp; the command starts once socat listens there. Socat's own messages go to the
+            // command's errors, but not its warnings (socat 1.8 writes one each time a connection ends) or a client's reset of a
+            // connection, such as a program that exits with one open: they say nothing about the command.
+            commandLine = $"(socat TCP-LISTEN:3128,bind=127.0.0.1,fork,reuseaddr UNIX-CONNECT:{ProxySocket} 2>&1 "
+                + "| grep --line-buffered -v -e '] W ' -e 'Connection reset by peer' >&2) & "
                 + "i=0; while [ $i -lt 100 ] && ! grep -q ':0C38 ' /proc/net/tcp; do sleep 0.05; i=$((i+1)); done; " + commandLine;
         }
 
@@ -121,6 +142,11 @@ public sealed class LinuxSandbox : ISandbox
         await process.WaitForExitAsync().ConfigureAwait(false);
         return process.ExitCode;
     }
+
+    /// <summary>The working copy's home folder on the host. Its name comes from the working copy, so each has its own (SBX-06).</summary>
+    private static string Home(string directory) => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData, Environment.SpecialFolderOption.DoNotVerify), "officina", "homes",
+        Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(Path.GetFullPath(directory))))[..16]);
 
     private static void Add(ProcessStartInfo start, params string[] arguments)
     {

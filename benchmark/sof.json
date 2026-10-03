@@ -6,14 +6,20 @@
     "name": "benchmark",
     "values": { "buildCommand": "dotnet build", "testCommand": "dotnet test" }
   },
-  // A list replaces the preset's, so its rules are repeated. Packages come from NuGet; any other command is asked about.
+  // A list replaces the preset's, so its rules are repeated. Packages come from NuGet. Build, test and restore are allowed,
+  // each as itself and with arguments; any other command, such as dotnet new or dotnet run, is asked about, and a run declines it.
   "capabilities": {
     "sandbox": {
       "allowedHosts": ["api.nuget.org", "*.nuget.org"],
       "commandRules": [
         { "match": "git push*", "action": "deny" },
         { "match": "git remote*", "action": "deny" },
-        { "match": "dotnet *", "action": "allow" }
+        { "match": "dotnet build", "action": "allow" },
+        { "match": "dotnet build *", "action": "allow" },
+        { "match": "dotnet test", "action": "allow" },
+        { "match": "dotnet test *", "action": "allow" },
+        { "match": "dotnet restore", "action": "allow" },
+        { "match": "dotnet restore *", "action": "allow" }
       ]
     }
   }

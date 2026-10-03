@@ -74,8 +74,50 @@ public sealed class LinuxSandboxTests : IDisposable
         var (output, _) = await real.RunAsync("env", environment: new Dictionary<string, string> { ["NUGET_TOKEN"] = "t0ken" });
 
         Assert.Contains("NUGET_TOKEN=t0ken", output, StringComparison.Ordinal);
-        Assert.Contains("HOME=/tmp", output, StringComparison.Ordinal);
+        Assert.Contains("DOTNET_NOLOGO=1", output, StringComparison.Ordinal);
         Assert.DoesNotContain("XDG_RUNTIME_DIR", output, StringComparison.Ordinal);
+    }
+
+    // A working copy's home folder keeps what its commands cache, such as NuGet's packages, until the working copy is released.
+    [Fact(Skip = LinuxOnly, SkipUnless = nameof(OnLinux))]
+    public async Task A_working_copys_home_folder_lasts_until_it_is_released()
+    {
+        var (home, _) = await real.RunAsync("echo kept > ~/cache; echo $HOME");
+        home = home.Trim();
+        var (kept, _) = await real.RunAsync("cat ~/cache");
+        using var otherCopy = new RealSandbox(real.Sandbox);
+        var (other, _) = await otherCopy.RunAsync("cat ~/cache; echo $HOME");
+
+        real.Sandbox.Release(real.WorkingCopy, []);
+
+        Assert.Equal("kept\n", kept);
+        Assert.DoesNotContain("kept", other, StringComparison.Ordinal);
+        Assert.DoesNotContain(home, other, StringComparison.Ordinal);
+        Assert.False(Directory.Exists(home));
+        real.Sandbox.Release(real.WorkingCopy, []); // nothing left to remove is not an error
+    }
+
+    // A git worktree's .git is a file, which the sandbox hides. The .NET SDK's Source Link reads it and fails the build unless the
+    // sandbox turns it off, and the SDK's first-run messages, and socat's warnings, must not reach the output.
+    [Fact(Skip = LinuxOnly, SkipUnless = nameof(OnLinux))]
+    public async Task A_dotnet_project_in_a_git_worktree_builds_with_only_the_builds_output()
+    {
+        var git = Path.Combine(real.WorkingCopy, ".git");
+        await File.WriteAllTextAsync(git, $"gitdir: {real.Host}/.git/worktrees/copy", Ct);
+        await File.WriteAllTextAsync(Path.Combine(real.WorkingCopy, "Lib.csproj"),
+            """<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup></Project>""", Ct);
+        await File.WriteAllTextAsync(Path.Combine(real.WorkingCopy, "Lib.cs"), "namespace Lib; public static class Answer { public const int Value = 42; }", Ct);
+
+        // The SDK of the dotnet that runs the tests: three folders above the runtime's.
+        var dotnet = Path.GetFullPath(Path.Combine(System.Runtime.InteropServices.RuntimeEnvironment.GetRuntimeDirectory(), "..", "..", ".."));
+        var (output, exitCode) = await real.RunAsync("dotnet build", ["api.nuget.org"], hidden: [git], toolchains: [dotnet]);
+
+        Assert.True(exitCode == 0, output);
+        Assert.Contains("Build succeeded.", output, StringComparison.Ordinal);
+        foreach (var noise in new[] { "Welcome to .NET", "Telemetry", "certificate", "workloads", "socat", ".git" })
+        {
+            Assert.DoesNotContain(noise, output, StringComparison.OrdinalIgnoreCase);
+        }
     }
 
     [Fact(Skip = LinuxOnly, SkipUnless = nameof(OnLinux))]

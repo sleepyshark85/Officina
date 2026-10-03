@@ -95,14 +95,16 @@ internal static class InitCommand
         host.Out.WriteLine(text);
 
         // The folder is this machine's, and may hold more than the toolchain, so it is the owner's to add to the committed file.
-        foreach (var (program, folder) in OperatingSystem.IsLinux() ? CommandDetection.Unseen([build, test], host.Variables.GetValueOrDefault("PATH")) : [])
+        var configuration = SofConfiguration.Load(directory, null, host.Variables, []);
+        var toolchains = configuration.Options.Capabilities.Sandbox.Toolchains;
+        foreach (var (program, folder) in OperatingSystem.IsLinux() ? CommandDetection.Unseen([build, test], host.Variables.GetValueOrDefault("PATH"), toolchains) : [])
         {
-            host.Out.WriteLine($"note: your {program} is at {folder}, outside the sandbox's system folders. Add {folder} to capabilities.sandbox.toolchains if the build can't find it.");
+            host.Out.WriteLine($"note: your {program} is at {folder}, where the sandbox doesn't look. Add {folder} to capabilities.sandbox.toolchains, so that commands in the sandbox run it.");
         }
 
         IgnoreState(host, directory, asks);
 
-        var code = ValidateCommand.Validate(SofConfiguration.Load(directory, null, host.Variables, []), host);
+        var code = ValidateCommand.Validate(configuration, host);
         if (code == ExitCodes.Success)
         {
             host.Out.WriteLine("Next: commit, switch to a branch of its own, and run sof --agent team with ANTHROPIC_API_KEY set.");
