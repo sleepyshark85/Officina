@@ -17,7 +17,7 @@ internal sealed class ChatCompletion(RootCommand root, Func<IEnumerable<string>>
     private readonly Command task = new TaskCommand().Command;
 
     /// <summary>The session's own commands, which are not in the command line.</summary>
-    private static readonly string[] SessionCommands = ["status", "approve", "deny", "change", "answer", "tell", "mode", "pause", "cancel", "checkpoint", "board", "task", "memory", "new", "drop", "save", "help", "quit"];
+    private static readonly string[] SessionCommands = ["status", "approve", "deny", "change", "answer", "tell", "mode", "pause", "cancel", "checkpoint", "board", "task", "memory", "new", "drop", "save", "show", "history", "help", "quit"];
 
     private static readonly string[] Modes = ["ask", "auto", "readOnly"];
 

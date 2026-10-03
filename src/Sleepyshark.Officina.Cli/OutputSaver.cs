@@ -18,14 +18,14 @@ internal sealed class OutputSaver(string root, Func<OfficinaOptions> options, St
     /// <summary>
     /// At a terminal, asks the owner whether to save the output at <paramref name="suggestion"/>, at another path, or not at all.
     /// An answer is Enter, y, yes, n or no in any case, or a path: one word with a slash or a file extension. Anything else is
-    /// not an answer: a command or a message the owner went on with, which is returned for the session to take as typed. A
-    /// cancelled question, by Ctrl+C, ends at once.
+    /// not an answer: a command or a message the owner went on with, which is returned for the session to take as typed, with the
+    /// path saved at, if the output was saved. A cancelled question, by Ctrl+C, ends at once.
     /// </summary>
-    public async Task<string?> OfferAsync(string content, string suggestion, CancellationToken ct)
+    public async Task<(string? Saved, string? Leftover)> OfferAsync(string content, string suggestion, CancellationToken ct)
     {
         if (!interactive)
         {
-            return null;
+            return (null, null);
         }
 
         var configuration = options();
@@ -44,12 +44,12 @@ internal sealed class OutputSaver(string root, Func<OfficinaOptions> options, St
             if (answer is null)
             {
                 status.WriteLine(Later);
-                return null;
+                return (null, null);
             }
             else if (Is(answer, "n", "no"))
             {
                 status.WriteLine(Later);
-                return null;
+                return (null, null);
             }
             else if (answer.Length == 0 || Is(answer, "y", "yes"))
             {
@@ -62,22 +62,23 @@ internal sealed class OutputSaver(string root, Func<OfficinaOptions> options, St
             else
             {
                 status.WriteLine(Later);
-                return line;
+                return (null, line);
             }
 
             var (saved, leftover) = await SaveAsync(content, path, Path.GetFileName(suggestion), configuration, ct);
-            if (saved || leftover is not null || ct.IsCancellationRequested)
+            if (saved is not null || leftover is not null || ct.IsCancellationRequested)
             {
-                return leftover;
+                return (saved, leftover);
             }
         }
     }
 
     /// <summary>
-    /// <c>/save [path]</c>: saves the output at the path, or at the suggestion, numbered so no file is overwritten. Returns a line
-    /// typed at the question whether to overwrite that is not an answer, for the session to take as typed.
+    /// <c>/save [path]</c>: saves the output at the path, or at the suggestion, numbered so no file is overwritten. Returns the path
+    /// saved at, if it was, and a line typed at the question whether to overwrite that is not an answer, for the session to take
+    /// as typed.
     /// </summary>
-    public async Task<string?> SaveAsync(string content, string suggestion, string? path, CancellationToken ct)
+    public async Task<(string? Saved, string? Leftover)> SaveAsync(string content, string suggestion, string? path, CancellationToken ct)
     {
         var configuration = options();
         if (configuration.Policies.Masking.HoldsToken(content))
@@ -85,7 +86,7 @@ internal sealed class OutputSaver(string root, Func<OfficinaOptions> options, St
             status.WriteLine(TokensNote);
         }
 
-        return (await SaveAsync(content, path ?? OutputFiles.Free(root, suggestion), Path.GetFileName(suggestion), configuration, ct)).Leftover;
+        return await SaveAsync(content, path ?? OutputFiles.Free(root, suggestion), Path.GetFileName(suggestion), configuration, ct);
     }
 
     /// <summary>
@@ -101,13 +102,13 @@ internal sealed class OutputSaver(string root, Func<OfficinaOptions> options, St
 
     private static bool Is(string answer, params string[] words) => words.Any(word => string.Equals(answer, word, StringComparison.OrdinalIgnoreCase));
 
-    /// <returns>Whether the file was written, and a line typed at the question whether to overwrite that is not an answer.</returns>
-    private async Task<(bool Saved, string? Leftover)> SaveAsync(string content, string path, string fileName, OfficinaOptions configuration, CancellationToken ct)
+    /// <returns>The path of the file written, relative to the project, if it was, and a line typed at the question whether to overwrite that is not an answer.</returns>
+    private async Task<(string? Saved, string? Leftover)> SaveAsync(string content, string path, string fileName, OfficinaOptions configuration, CancellationToken ct)
     {
         if (OutputFiles.Resolve(root, path, fileName, configuration, out var refusal) is not { } target)
         {
             status.WriteLine($"error: {refusal}");
-            return (false, null);
+            return (null, null);
         }
 
         var (full, relative) = target;
@@ -117,7 +118,7 @@ internal sealed class OutputSaver(string root, Func<OfficinaOptions> options, St
             if (!interactive)
             {
                 status.WriteLine($"error: {relative} exists, and is not overwritten without asking; give another path, such as {OutputFiles.Free(root, relative)}.");
-                return (false, null);
+                return (null, null);
             }
 
             status.WriteLine($"{relative} exists. Overwrite it? [y = yes, Enter = no]");
@@ -126,7 +127,7 @@ internal sealed class OutputSaver(string root, Func<OfficinaOptions> options, St
             if (answer is null || !Is(answer, "y", "yes"))
             {
                 status.WriteLine($"{relative} is left as it was.");
-                return (false, answer is null || answer.Length == 0 || Is(answer, "n", "no") ? null : line);
+                return (null, answer is null || answer.Length == 0 || Is(answer, "n", "no") ? null : line);
             }
         }
 
@@ -134,7 +135,7 @@ internal sealed class OutputSaver(string root, Func<OfficinaOptions> options, St
         if (OutputFiles.Resolve(root, path, fileName, configuration, out refusal) != target || File.Exists(full) != existed)
         {
             status.WriteLine($"error: {relative} changed while you were asked, so it is not saved{(refusal.Length > 0 ? $": {refusal}" : ".")}");
-            return (false, null);
+            return (null, null);
         }
 
         try
@@ -144,11 +145,11 @@ internal sealed class OutputSaver(string root, Func<OfficinaOptions> options, St
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
             status.WriteLine($"error: {relative} was not saved: {exception.Message}");
-            return (false, null);
+            return (null, null);
         }
 
         status.WriteLine($"Saved {relative}. It is not committed.");
-        return (true, null);
+        return (relative, null);
     }
 
     private const string TokensNote = "note: this holds masking tokens, such as [email-1], in place of the values they mask; the file gets the tokens.";

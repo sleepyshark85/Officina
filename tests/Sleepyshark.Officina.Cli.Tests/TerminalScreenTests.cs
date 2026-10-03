@@ -59,6 +59,27 @@ public sealed class TerminalScreenTests : IDisposable
         Assert.Equal("\u001b[2K\u001b[1G> approve 1\u001b[12G\u001b[2K\u001b[1G> approve 1\u001b[3G", terminal.ToString());
     }
 
+    // While the terminal is handed over to a pager, nothing is printed or drawn over it; what came meanwhile follows, in order,
+    // once it is taken back.
+    [Fact]
+    public void What_comes_while_the_terminal_is_handed_over_waits_and_then_follows_in_order()
+    {
+        var output = screen.Writer(terminal);
+        output.NewLine = "\n";
+
+        screen.Draw("> ");
+        var handle = screen.HandOver();
+        output.WriteLine("[dev] model call: 10 tokens");
+        screen.Draw("\u001b[2K\u001b[1G> ");
+        output.WriteLine("#1 dev asks to run note");
+        Assert.Equal("> ", terminal.ToString());
+
+        handle.Dispose();
+        handle.Dispose(); // taken back once
+
+        Assert.Equal($"> {ClearLine}[dev] model call: 10 tokens\n\u001b[2K\u001b[1G> {ClearLine}#1 dev asks to run note\n", terminal.ToString());
+    }
+
     // Standard error shares the screen: an error clears the prompt line too, and goes to its own stream.
     [Fact]
     public void An_error_clears_the_prompt_line_and_goes_to_standard_error()

@@ -247,7 +247,8 @@ public sealed class SaveOutputTests : IDisposable
         Assert.Contains(
             "error: docs/login-requirements.md exists, and is not overwritten without asking; give another path, such as docs/login-requirements-2.md.",
             output, StringComparison.Ordinal);
-        Assert.Contains("error: /save takes one path; quote a path with spaces, such as /save \"my notes.md\".", output, StringComparison.Ordinal);
+        Assert.Contains(
+            "error: /save takes one path, after a reply's number if you give one; quote a path with spaces, such as /save \"my notes.md\".", output, StringComparison.Ordinal);
         Assert.Single(Directory.GetFiles(PathOf("docs")));
     }
 

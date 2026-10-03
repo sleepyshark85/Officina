@@ -192,7 +192,7 @@ internal static partial class OutputFiles
     private static string FirstLine(string text) => text.Trim().Split('\n')[0].Trim();
 
     /// <summary>The text of the first Markdown heading, such as <c># Login requirements</c>; null if there is none.</summary>
-    private static string? Heading(string text) => MarkdownHeading().Match(text) is { Success: true } heading ? heading.Groups["text"].Value : null;
+    internal static string? Heading(string text) => MarkdownHeading().Match(text) is { Success: true } heading ? heading.Groups["text"].Value : null;
 
     private static JsonElement? Json(string text)
     {
