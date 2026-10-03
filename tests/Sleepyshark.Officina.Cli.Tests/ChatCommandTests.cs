@@ -117,7 +117,7 @@ public sealed class ChatCommandTests : IDisposable
         sof.In.Type("/approve 2");
         await sof.Out.WaitForAsync("error: nothing waits for you with that number; #1 does.", Ct);
         sof.In.Type("/approve");
-        await sof.Out.WaitForAsync("approved #1.", Ct);
+        await sof.Out.WaitForAsync("""approved #1: dev note { "text": "Uses SQLite." }""", Ct);
         sof.In.Dispose(); // the session ends once the messages that waited have their replies
         var (exitCode, output, _) = await sof.EndedAsync(chat);
 
@@ -128,30 +128,52 @@ public sealed class ChatCommandTests : IDisposable
         Assert.Equal(3, model.Requests.Count);
     }
 
-    // A plain line that starts with a command's name, typed during a reply, is likely the command without its /: it is not queued,
-    // which would start a run of its own, until it is typed again as the next line.
+    // A plain line shaped like a command, typed during a reply, is likely the command without its /: it is not queued, which would
+    // start a run of its own, until it is typed again as the next line. Prose that starts with a command's name is a message.
     [Fact]
-    public async Task A_line_that_looks_like_a_command_is_queued_only_once_it_is_typed_again()
+    public async Task During_a_reply_a_line_shaped_like_a_command_is_queued_only_once_it_is_typed_again()
     {
-        model.CallTools(("note", """{ "text": "Uses SQLite." }""")).Reply("Noted.").Reply("A message.");
+        model.CallTools(("note", """{ "text": "Uses SQLite." }""")).Reply("Noted.").Reply("Written.").Reply("Approved?");
 
         var chat = sof.RunAsync("chat");
         sof.In.Type("Note the database.");
         await sof.Out.WaitForAsync("#1 dev asks to run note", Ct);
         sof.In.Type("approve");
         await sof.Out.WaitForAsync("That looks like a command: type /approve. To send it as a message instead, type it again.", Ct);
-        sof.In.Type("Status of the parser?");
-        await sof.Out.WaitForAsync("That looks like a command: type /Status of the parser?.", Ct);
-        sof.In.Type("Status of the parser?");
+        sof.In.Type("Help me write a parser.");
         await sof.Out.WaitForAsync("(it is sent when this reply ends", Ct);
+        sof.In.Type("approve 1");
+        await sof.Out.WaitForAsync("That looks like a command: type /approve …. To send it as a message instead, type it again.", Ct);
+        sof.In.Type("approve 1");
         sof.In.Type("/approve 1");
         sof.In.Dispose();
         var (exitCode, output, _) = await sof.EndedAsync(chat);
 
         Assert.Equal(ExitCodes.Success, exitCode);
-        Assert.Single(output.Split('\n'), line => line.StartsWith("(it is sent when this reply ends", StringComparison.Ordinal));
-        Assert.Equal(3, model.Requests.Count); // the note, its reply, and the message typed twice; "approve" was never sent
-        Assert.Equal(Message.User("Status of the parser?"), model.Requests[2].History[^1]);
+        Assert.Equal(2, output.Split('\n').Count(line => line.StartsWith("That looks like a command", StringComparison.Ordinal)));
+        Assert.Equal(4, model.Requests.Count); // the note, its reply, then the two messages; the first "approve" was never sent
+        Assert.Equal(Message.User("Help me write a parser."), model.Requests[2].History[^1]);
+        Assert.Equal(Message.User("approve 1"), model.Requests[3].History[^1]);
+    }
+
+    // Between replies a line shaped like a command would start a paid run at once, so it is held back too, until it is typed again.
+    [Fact]
+    public async Task Between_replies_a_line_shaped_like_a_command_is_sent_only_once_it_is_typed_again()
+    {
+        model.Reply("Fine.").Reply("Status: fine.");
+
+        var chat = sof.RunAsync("chat");
+        sof.In.Type("Tell me why the build fails.");
+        await sof.Out.WaitForAsync("dev: Completed", Ct);
+        sof.In.Type("status");
+        await sof.Out.WaitForAsync("That looks like a command: type /status. To send it as a message instead, type it again.", Ct);
+        sof.In.Type("status");
+        await sof.Out.WaitForAsync("[dev] Status: fine.", Ct);
+        sof.In.Dispose();
+        var (exitCode, _, _) = await sof.EndedAsync(chat);
+
+        Assert.Equal(ExitCodes.Success, exitCode);
+        Assert.Equal([Message.User("Tell me why the build fails."), Message.User("status")], model.Requests.Select(request => request.History[^1]));
     }
 
     // /drop drops the messages that wait for the reply, and the reply goes on.

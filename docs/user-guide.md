@@ -107,10 +107,11 @@ or a piped script can each spend a full budget without asking you.
 
 **Typing during a reply.** Commands work at once. A message waits, and is sent when the reply ends; to reach an agent
 now, use `/tell`. `/status` lists the messages that wait, and `/drop` drops them without cancelling the reply. A line
-whose first word is a command's name, such as `approve` or `status`, is probably that command without its `/`, and as a
-message it would start a run of its own: it isn't queued, and the session says `That looks like a command: type
-/approve.` To send it as a message anyway, type it again as your next line. The reply never loses text: when you type,
-the line it is writing ends and your prompt is drawn below.
+shaped like a command without its `/` (a command's name alone, or followed by a number, an agent or a mode, such as
+`approve`, `approve 1`, `status` or `tell lead …`) would start a run of its own as a message, so it is held back,
+during a reply and between replies, and the session says `That looks like a command: type /approve …`. To send it as
+a message anyway, type it again as your next line. Prose such as "Help me write…" is a message as usual. The reply
+never loses text: when you type, the line it is writing ends and your prompt is drawn below.
 
 **Keys.** At a terminal, lines are edited with a line editor:
 
@@ -138,9 +139,11 @@ unknown `--agent`, or when no agent was picked; 3 if the session itself fails.
 ## 5. Commands
 
 In a session, type each after a `/`. In `sof run` (section 8), type the first table's commands, `status`, `mode`,
-`board` and `task` without the `/`. Numbers come from `/status`, and keep growing through a session. When one request
-waits for you, `/approve`, `/deny`, `/change` and `/answer` act on it without its number, and say which they answered;
-when several wait, they list them and ask for the number.
+`board` and `task` without the `/`. Numbers come from `/status`, and keep growing through a session. Each answer says
+what it answered, such as `approved #2: developer[1] run_command {…}`. `/approve`, `/deny`, `/change` and `/answer`
+may leave out the number when one request waits and no other was shown since your last answer; otherwise, such as when
+#1 went away and #2 arrived, they list what waits and ask for the number. An irreversible call always needs its
+number. Words after `/approve <n>` or `/deny <n>` are allowed, and not passed on.
 
 **While a reply runs** (between replies they say no reply is running):
 

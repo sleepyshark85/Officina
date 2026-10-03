@@ -48,7 +48,10 @@ public sealed class RunCommandTests : IDisposable
         await sof.Out.WaitForAsync("cost so far: $1.50", Ct);
         sof.In.Type("approve 7");
         await sof.Out.WaitForAsync("error: nothing waits for you with that number; #1 does.", Ct);
-        sof.In.Type("approve 1");
+        sof.In.Type("change 1"); // the changed arguments forgotten: refused, and #1 still waits
+        await sof.Out.WaitForAsync("error: change needs the call's changed arguments as a JSON object, such as change 3 {\"path\": \"a.txt\"}.", Ct);
+        sof.In.Type("approve 1 looks good");
+        await sof.Out.WaitForAsync("""approved #1: dev note { "text": "Uses SQLite." }""", Ct);
         await sof.Out.WaitForAsync("#2 dev asks: Which database?", Ct);
         sof.In.Type("tell dev Keep it short.");
         sof.In.Type("answer 2 Postgres.");
@@ -292,7 +295,7 @@ public sealed class RunCommandTests : IDisposable
             """.ReplaceLineEndings("\n"),
             output,
             StringComparison.Ordinal);
-        Assert.Contains("\napproved #1.\n", output, StringComparison.Ordinal);
+        Assert.Contains("\napproved #1: lead: Approve the lead's plan before work starts?\n", output, StringComparison.Ordinal);
     }
 
     private static string Work(ModelRequest request) =>

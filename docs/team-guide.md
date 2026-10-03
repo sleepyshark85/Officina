@@ -363,8 +363,8 @@ What to expect:
    ```
 
    `/status` shows the waiting request and its number again. Check that `average` depends on `fix-divide`; if it
-   doesn't, fix it yourself with `/task edit average --depends fix-divide`. Type `/approve 1`, or just `/approve` while
-   it is the only request that waits. To change the plan, `/tell lead <what to change>`, then `/deny 1`; the lead plans
+   doesn't, fix it yourself with `/task edit average --depends fix-divide`. Type `/approve 1` (or just `/approve`, as no
+   other request was shown since). To change the plan, `/tell lead <what to change>`, then `/deny 1`; the lead plans
    again. With no answer within `run.approvalTimeout` (30 minutes), the team stops.
 2. **Tasks.** A developer takes each ready task, in `.sof/worktrees/<run>-task.<task id>`. Lines such as
    `[developer[1]] running run_command` show what it does. A command no rule allows waits for `/approve` or `/deny`. The

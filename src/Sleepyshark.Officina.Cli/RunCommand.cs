@@ -391,8 +391,8 @@ internal static class RunCommand
                 case "status":
                     status.Print(queue);
                     return null;
-                case "approve" or "deny" or "change" or "answer" when Answer(words[0], line[words[0].Length..].Trim()) is { } answer:
-                    return queue.Answer(answer.Number, words[0], answer.Answer);
+                case "approve" or "deny" or "change" or "answer":
+                    return Answer(words[0], line[words[0].Length..].Trim(), queue);
                 case "tell" when words.Length == 3 && team:
                     runner.Send(runId, words[1], Sender.Owner, words[2]); // HITL-03: an agent of the run's team, by its id
                     return null;
@@ -437,11 +437,13 @@ internal static class RunCommand
     }
 
     /// <summary>
-    /// <c>approve [n]</c>, <c>deny [n]</c>, <c>change [n] &lt;json&gt;</c> and <c>answer [n] &lt;text&gt;</c>: the number of the request, if
-    /// typed, and the answer; null when the command is not typed as one of these. In change and answer a number is the request's
-    /// only when something follows it, so <c>answer 42</c> answers the only question with 42.
+    /// <c>approve [n]</c>, <c>deny [n]</c>, <c>change [n] &lt;json&gt;</c> and <c>answer [n] &lt;text&gt;</c>, carried out on the
+    /// request with that number, or without one on the request the owner has seen (<see cref="OwnerQueue.Answer"/>). Words after
+    /// approve and deny, such as a reason, are taken and not used, as the channel has no reason. In change and answer a number is
+    /// the request's only when something follows it, so <c>answer 42</c> answers with 42, and <c>change 3</c> is refused as it has
+    /// no arguments.
     /// </summary>
-    private static (int? Number, HumanAnswer Answer)? Answer(string command, string rest)
+    private static string Answer(string command, string rest, OwnerQueue queue)
     {
         int? number = null;
         if (rest.Split(' ', 2, StringSplitOptions.RemoveEmptyEntries) is [var first, .. var after]
@@ -451,14 +453,29 @@ internal static class RunCommand
             rest = after.Length > 0 ? after[0].Trim() : "";
         }
 
-        HumanAnswer? answer = (command, rest) switch
+        HumanAnswer? answer = command switch
         {
-            ("approve", "") => HumanAnswer.Approve,
-            ("deny", "") => HumanAnswer.Deny,
-            ("change", { Length: > 0 }) => HumanAnswer.ApproveChanged(JsonDocument.Parse(rest).RootElement.Clone()),
-            ("answer", { Length: > 0 }) => HumanAnswer.Reply(rest),
-            _ => null,
+            "approve" => HumanAnswer.Approve,
+            "deny" => HumanAnswer.Deny,
+            "change" => Arguments(rest) is { } arguments ? HumanAnswer.ApproveChanged(arguments) : null,
+            _ => rest.Length > 0 ? HumanAnswer.Reply(rest) : null,
         };
-        return answer is null ? null : (number, answer);
+        return answer is null
+            ? command == "change" ? $"error: change needs the call's changed arguments as a JSON object, such as {queue.Prefix}change 3 {{\"path\": \"a.txt\"}}." : "error: answer needs your answer's text."
+            : queue.Answer(number, command, answer);
+    }
+
+    /// <summary>The changed arguments of a call, which are a JSON object; null if the text is not one.</summary>
+    private static JsonElement? Arguments(string text)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(text);
+            return document.RootElement.ValueKind == JsonValueKind.Object ? document.RootElement.Clone() : null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
     }
 }
