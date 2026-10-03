@@ -24,11 +24,11 @@ internal sealed class TaskCommand
     private readonly Argument<string[]> why = new("reason") { Description = "Why it is cancelled.", Arity = ArgumentArity.OneOrMore };
     private readonly Option<string> newTitle = new("--title") { Description = "A new title." };
     private readonly Option<string> description = new("--description") { Description = "What the work is, in more words." };
-    private readonly Option<string[]> criteria = new("--criteria") { Description = "An acceptance criterion; repeat it for several. On edit, they replace the task's.", AllowMultipleArgumentsPerToken = false };
-    private readonly Option<string> depends = new("--depends") { Description = "The tasks it depends on, such as a,b; \"\" for none." };
+    private readonly Option<string[]> criteria = new("--criteria") { Description = "An acceptance criterion; repeat it for several. On edit, they replace the task's list.", AllowMultipleArgumentsPerToken = false };
+    private readonly Option<string> depends = new("--depends") { Description = "The tasks it depends on, such as a,b; \"\" for none. On edit, they replace the task's list." };
     private readonly Option<string> role = new("--role") { Description = "The role that does it." };
     private readonly Option<int?> rank = new("--priority") { Description = "Higher comes first (default 0)." };
-    private readonly Option<string> checks = new("--checks") { Description = "The checks that must pass before it is in review, such as build,tests; \"\" for none." };
+    private readonly Option<string> checks = new("--checks") { Description = "The checks that must pass before it is in review, such as build,tests; \"\" for none. On edit, they replace the task's list." };
     private readonly Option<decimal?> budget = new("--budget") { Description = "The most its turns may cost, in USD." };
     private readonly Option<bool?> review = new("--review") { Description = "Whether it requires a review: true or false." };
     private readonly Option<string> reason = new("--reason") { Description = "Why, as the board records it." };
@@ -136,6 +136,12 @@ internal sealed class TaskCommand
         if (name == "cancel" && target.Live && before.GetValueOrDefault(taskId) is { State: TaskState.InProgress or TaskState.InReview, Assignee: { } working })
         {
             notes.Add($"note: {working} may work on it until its turn ends; {target.Prefix}cancel {working} stops it now.");
+        }
+
+        if (name == "cancel" && (await board.ReadAsync(ct)).Where(task => task.State == TaskState.Proposed && task.DependsOn.Contains(taskId)).Select(task => task.Id).ToList()
+            is { Count: > 0 } waiting)
+        {
+            notes.Add($"note: {string.Join(", ", waiting)} depend on {taskId}, so they stay Proposed until you change their --depends or cancel them.");
         }
 
         if (target.Note is { } note)

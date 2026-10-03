@@ -152,7 +152,7 @@ In a session, type each after a `/`. In `sof run` (section 8), type the first ta
 | `/new` | The next message starts a new conversation |
 | `/report [run]` | The report of the reply that runs or the last message's run, or of any run |
 | `/board` | The task board: each task's id, title, status, assignee, role, dependencies, priority and spend of its budget |
-| `/task add <title> [options]`, `/task edit <id> [options]` | Add or change a task. Options: `--description`, `--criteria` (repeat it), `--depends a,b`, `--role`, `--priority <n>`, `--checks c1,c2`, `--budget <usd>`, `--review true\|false`, `--reason`; edit takes `--title` too. An added task's id is `owner-1`, `owner-2`, … |
+| `/task add <title> [options]`, `/task edit <id> [options]` | Add or change a task. Options: `--description`, `--criteria` (repeat it), `--depends a,b`, `--role`, `--priority <n>`, `--checks c1,c2`, `--budget <usd>`, `--review true\|false`, `--reason`; edit takes `--title` too, and its `--depends`, `--checks` and `--criteria` replace the task's list. An added task's id is `owner-1`, `owner-2`, … |
 | `/task priority <id> <n>`, `/task assign <id> <agent>`, `/task cancel <id> <reason>` | Reprioritise, reassign (to an agent such as `developer[1]`) or cancel a task |
 | `/task show <id>` | A task, with every change to it: who, when, what and why |
 | `/config validate`, `/config show [--origin]`, `/config dry-run …` | As on the command line |
@@ -165,6 +165,8 @@ does. Between replies they act on the last message's run, which has ended: a cha
 but no agent works on that board again, so ask for new work in your next message. A change is refused while another
 process holds that run, and after `/rollback` (resume the run, and change its board while it runs). The board refuses
 what breaks its rules, such as a dependency cycle, a check that does not exist, or cancelling a task that is done.
+Tasks that depend on a cancelled task stay Proposed until you change their `--depends` or cancel them too. A task
+cancelled while its change is being integrated may still land on the branch; a warning says so.
 
 **Between replies only:** `/resume <run>`, `/rollback <run> [--to <n>]`, `/run --input <text>`. While a reply runs they
 are refused with an error, not queued; type them again after the reply ends.

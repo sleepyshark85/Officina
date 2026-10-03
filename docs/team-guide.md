@@ -358,7 +358,7 @@ What to expect:
    `team: Completed, cost $…; this session $…`.
 
 To watch spend, each model call prints `[agent] model call: N tokens, $x; cost so far $y`. While it works: `/status` shows each agent and what waits for you, `/board` the tasks, and `/tell lead …` reaches the
-lead. `/task` changes the board as the team works, such as `/task add Add a median --role developer --depends average`
+lead. `/task` changes the board as the team works, such as `/task add Add a median --role developer --depends fix-divide`
 or `/task cancel average Not needed`; the team sees the change the next time it looks at the board. Ctrl+C cancels the
 reply; changes already integrated stay on the branch.
 

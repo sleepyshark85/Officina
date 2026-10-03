@@ -203,7 +203,16 @@ internal sealed class TeamRun
                 continue;
             }
 
-            changed |= (await board.CompleteAsync(task.Id, "integrated", ct).ConfigureAwait(false)).Accepted;
+            var completed = await board.CompleteAsync(task.Id, "integrated", ct).ConfigureAwait(false);
+            changed |= completed.Accepted;
+            if (!completed.Accepted)
+            {
+                // The owner or the lead cancelled it while it was integrated (TASK-08): the change is on the branch all the same.
+                await steps.PublishAsync(
+                    team, new Warning($"task {task.Id}'s change was integrated into the branch, but the task was not marked done: {completed.Text} Revert its commit if it is not wanted."), ct)
+                    .ConfigureAwait(false);
+            }
+
             await steps.CheckpointAsync(team, CheckpointPoint.Integration, ct).ConfigureAwait(false);
             closed.Add(task.Id);
             await CloseAsync(workspace, copy, task.Id, ct).ConfigureAwait(false);

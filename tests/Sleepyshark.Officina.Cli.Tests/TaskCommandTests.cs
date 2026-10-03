@@ -170,7 +170,7 @@ public sealed class TaskCommandTests : IDisposable
         sof.In.Type("/task priority t2 7");
         await sof.Out.WaitForAsync("Changed: t2 priority 0 → 7.", Ct);
         sof.In.Type("/task cancel t1 Not needed.");
-        await sof.Out.WaitForAsync("Changed: t1 state Ready → Cancelled.", Ct);
+        await sof.Out.WaitForAsync("note: t2 depend on t1, so they stay Proposed until you change their --depends or cancel them.", Ct);
         sof.In.Type("/task show owner-1");
         await sof.Out.WaitForAsync("  acceptance criteria: One.; Two.", Ct);
         sof.In.Type("/task show t2");
