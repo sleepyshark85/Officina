@@ -27,6 +27,9 @@ internal sealed class OwnerQueue(TextWriter output, string prefix = "") : IHuman
     /// <summary>Called with each request the owner answers, and the answer, as the answer is given.</summary>
     public Action<HumanRequest, HumanAnswer>? Answered { get; set; }
 
+    /// <summary>Called with the asking agent just before a request is shown, such as to show what the agent wrote that was folded.</summary>
+    public Action<string>? Asking { get; set; }
+
     /// <summary>What waits for the owner now, by number.</summary>
     public IEnumerable<(int Number, HumanRequest Request)> Waiting =>
         waiting.OrderBy(entry => entry.Key).Select(entry => (entry.Key, entry.Value.Request));
@@ -42,6 +45,7 @@ internal sealed class OwnerQueue(TextWriter output, string prefix = "") : IHuman
         }
 
         waiting[number] = (request, answer);
+        Asking?.Invoke(request.Agent);
         output.WriteLine($"#{number} {Describe(number, request)}");
         try
         {

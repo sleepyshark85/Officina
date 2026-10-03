@@ -8,16 +8,18 @@ namespace Sleepyshark.Officina.Cli;
 /// <summary>
 /// What each agent is doing, and the cost so far, from the events it is given (UX-01). Each change is printed as a line as it
 /// happens; <see cref="Print"/> shows everything at a glance, with what waits for the owner. One view can follow several
-/// runs one after another, as in <c>sof chat</c>, and its cost is then theirs together.
+/// runs one after another, as in <c>sof chat</c>, and its cost is then theirs together. It keeps the text each run's agents
+/// write (<see cref="SoFar"/>, <see cref="EndRun"/>).
 /// </summary>
 /// <param name="output">Where the lines go.</param>
 /// <param name="queue">The integration queue's length and waiting time, when the workspace is on (WS-09).</param>
 /// <param name="stream">Whether the model's text is printed as it is generated (LAT-02), each agent's after its name.</param>
 /// <param name="fold">
 /// Whether long text is folded, as in a chat session at a terminal: the text of one model call that runs past
-/// <see cref="LongLines"/> lines shows its first <see cref="ShownLines"/>, then a line that counts the rest as it comes, which
-/// ends as <c>… N more lines</c>. Text of up to <see cref="LongLines"/> lines is printed in full: its lines after the first
-/// <see cref="ShownLines"/> once the call ends, as until then it may still grow long.
+/// <see cref="LongLines"/> lines shows its first <see cref="ShownLines"/>, then one line, <c>… (folded; /show to read)</c>, and
+/// nothing more until the call ends, which says <c>… N more lines</c>. Text of up to <see cref="LongLines"/> lines is printed in
+/// full: its lines after the first <see cref="ShownLines"/> once the call ends, as until then it may still grow long. Before
+/// the owner is asked something, what the asking agent's last call folded is printed (<see cref="Unfold"/>).
 /// </param>
 internal sealed class StatusView(TextWriter output, Func<IntegrationQueueStatus?>? queue = null, bool stream = false, bool fold = false)
 {
@@ -26,8 +28,6 @@ internal sealed class StatusView(TextWriter output, Func<IntegrationQueueStatus?
 
     /// <summary>The lines long text shows before it is folded.</summary>
     internal const int ShownLines = 12;
-
-    private const string ClearLine = "\r\u001b[2K";
 
     private readonly Dictionary<string, string> doing = new(StringComparer.Ordinal);
     private decimal cost;
@@ -41,11 +41,14 @@ internal sealed class StatusView(TextWriter output, Func<IntegrationQueueStatus?
     /// <summary>The text each agent writes in its model call now, and how much of it is printed.</summary>
     private readonly Dictionary<string, Block> blocks = new(StringComparer.Ordinal);
 
-    /// <summary>The line that counts folded text, while it is the last thing printed: it is rewritten in place.</summary>
-    private string? progress;
+    /// <summary>The text of each model call of the run that has ended, in order, with its agent.</summary>
+    private readonly List<(string Agent, string Text)> written = [];
 
-    /// <summary>The text of the model call that ended last.</summary>
-    private string? lastText;
+    /// <summary>What each agent's last model call folded and is not shown, until the agent writes again.</summary>
+    private readonly Dictionary<string, string> unshown = new(StringComparer.Ordinal);
+
+    /// <summary>The lines of the run's text folded and not shown.</summary>
+    private int hidden;
 
     /// <summary>The cost of the events applied so far.</summary>
     public decimal Cost
@@ -59,8 +62,11 @@ internal sealed class StatusView(TextWriter output, Func<IntegrationQueueStatus?
         }
     }
 
-    /// <summary>A writer whose lines are printed as <see cref="WriteLine"/> prints them, for what else shares the view's output.</summary>
-    public TextWriter Writer() => TextWriter.Synchronized(new LineWriter(this));
+    /// <summary>
+    /// A writer whose lines are printed as <see cref="WriteLine"/> prints them, to <paramref name="stream"/> if given, such as
+    /// standard error: for what else shares the view's screen.
+    /// </summary>
+    public TextWriter Writer(TextWriter? stream = null) => TextWriter.Synchronized(new LineWriter(this, stream));
 
     public void Apply(CoreEvent coreEvent)
     {
@@ -109,10 +115,50 @@ internal sealed class StatusView(TextWriter output, Func<IntegrationQueueStatus?
     }
 
     /// <summary>
-    /// Ends the text the agents write, as their run has ended, and returns the text of the model call that ended last, such as
-    /// what the agent was writing when the run was cancelled; null if there is none.
+    /// Before the owner is asked something by <paramref name="agent"/>: what its model call now, or its last one, folded is
+    /// printed, as the owner must see what the agent said before deciding.
     /// </summary>
-    public string? EndRun()
+    public void Unfold(string agent)
+    {
+        lock (doing)
+        {
+            string rest;
+            if (blocks.TryGetValue(agent, out var block) && block.Printed < block.Text.Length)
+            {
+                var all = block.Text.ToString();
+                rest = all[block.Printed..];
+                (block.Printed, block.Folded, block.Live) = (all.Length, false, true);
+            }
+            else if (unshown.Remove(agent, out var folded))
+            {
+                rest = folded;
+                hidden -= LineCount(folded);
+            }
+            else
+            {
+                return;
+            }
+
+            Line($"[{agent}] … the folded lines, as you are asked:");
+            Show(agent, rest);
+            EndLine();
+        }
+    }
+
+    /// <summary>The text the run's agents have written so far, each model call's in order, in a team with each agent's name.</summary>
+    public string SoFar()
+    {
+        lock (doing)
+        {
+            return Transcript([.. written, .. blocks.Select(block => (block.Key, block.Value.Text.ToString()))]);
+        }
+    }
+
+    /// <summary>
+    /// Ends the text the agents write, as their run has ended, and returns all of it (<see cref="SoFar"/>), and how many of its
+    /// lines were folded and not shown.
+    /// </summary>
+    public (string Text, int Hidden) EndRun()
     {
         lock (doing)
         {
@@ -121,8 +167,11 @@ internal sealed class StatusView(TextWriter output, Func<IntegrationQueueStatus?
                 EndText(agent);
             }
 
-            (var text, lastText) = (lastText, null);
-            return text;
+            var ended = (Transcript(written), hidden);
+            written.Clear();
+            unshown.Clear();
+            hidden = 0;
+            return ended;
         }
     }
 
@@ -162,39 +211,52 @@ internal sealed class StatusView(TextWriter output, Func<IntegrationQueueStatus?
     /// <summary>The lines of a text: those its line breaks end, and one more if text follows the last.</summary>
     internal static int LineCount(string text) => text.Count(character => character == '\n') + (text.Length > 0 && !text.EndsWith('\n') ? 1 : 0);
 
-    /// <summary>Text of a model call: printed as it comes, or with <c>fold</c> held and counted once it is past the first lines.</summary>
+    /// <summary>How many more lines there are, such as <c>9 more lines</c>.</summary>
+    internal static string More(int lines) => lines == 1 ? "1 more line" : $"{lines} more lines";
+
+    /// <summary>The text of model calls, one after another; with more than one agent, each after its agent's name.</summary>
+    private static string Transcript(List<(string Agent, string Text)> calls)
+    {
+        var texts = calls.Where(call => call.Text.Trim().Length > 0).ToList();
+        var team = texts.Select(call => call.Agent).Distinct().Count() > 1;
+        return string.Join("\n\n", texts.Select(call => team ? $"[{call.Agent}] {call.Text.Trim()}" : call.Text.Trim()));
+    }
+
+    /// <summary>Text of a model call: printed as it comes, or with <c>fold</c> held once it is past the first lines.</summary>
     private void Text(string agent, string text)
     {
         if (!blocks.TryGetValue(agent, out var block))
         {
             blocks[agent] = block = new Block();
+            unshown.Remove(agent);
         }
 
         block.Text.Append(text);
-        if (!fold)
+        if (!fold || block.Live)
         {
             Show(agent, text);
             block.Printed = block.Text.Length;
             return;
         }
 
-        if (!block.Folded)
+        if (block.Folded)
         {
-            // Up to the end of the first lines; nothing after them until the text is known to be short or long.
-            var all = block.Text.ToString();
-            var cut = Cut(all);
-            if (cut > block.Printed)
-            {
-                Show(agent, all[block.Printed..cut]);
-                block.Printed = cut;
-            }
-
-            block.Folded = LineCount(all) > LongLines;
+            return;
         }
 
-        if (block.Printed < block.Text.Length)
+        // Up to the end of the first lines; nothing after them until the text is known to be short or long.
+        var all = block.Text.ToString();
+        var cut = Cut(all);
+        if (cut > block.Printed)
         {
-            Progress($"[{agent}] … writing ({More(Hidden(block))} so far)");
+            Show(agent, all[block.Printed..cut]);
+            block.Printed = cut;
+        }
+
+        if (LineCount(all) > LongLines)
+        {
+            block.Folded = true;
+            Line($"[{agent}] … (folded; /show to read)");
         }
     }
 
@@ -207,14 +269,14 @@ internal sealed class StatusView(TextWriter output, Func<IntegrationQueueStatus?
         }
 
         var all = block.Text.ToString();
-        if (all.Trim().Length > 0)
-        {
-            lastText = all;
-        }
-
+        written.Add((agent, all));
         if (block.Folded)
         {
-            Line($"[{agent}] … {More(Hidden(block))}");
+            var rest = all[block.Printed..];
+            var more = LineCount(all) - LineCount(all[..block.Printed]);
+            hidden += more;
+            unshown[agent] = rest;
+            Line($"[{agent}] … {More(more)}");
         }
         else if (block.Printed < all.Length)
         {
@@ -225,7 +287,6 @@ internal sealed class StatusView(TextWriter output, Func<IntegrationQueueStatus?
     /// <summary>Prints text an agent wrote, after its name when the last text printed was not its own.</summary>
     private void Show(string agent, string text)
     {
-        EraseProgress();
         if (streaming != agent)
         {
             EndLine();
@@ -236,43 +297,6 @@ internal sealed class StatusView(TextWriter output, Func<IntegrationQueueStatus?
         output.Write(text);
         midLine = !text.EndsWith('\n');
     }
-
-    /// <summary>The line that counts folded text: it replaces itself while it is the last thing printed, and is otherwise printed anew.</summary>
-    private void Progress(string line)
-    {
-        if (line == progress)
-        {
-            return;
-        }
-
-        if (progress is not null)
-        {
-            output.Write(ClearLine + line);
-        }
-        else
-        {
-            EndLine();
-            output.Write(line);
-        }
-
-        (progress, midLine) = (line, true);
-    }
-
-    /// <summary>Clears the line that counts folded text, when it is the last thing printed, so what is printed next takes its place.</summary>
-    private void EraseProgress()
-    {
-        if (progress is not null)
-        {
-            output.Write(ClearLine);
-            (progress, midLine) = (null, false);
-        }
-    }
-
-    /// <summary>How many more lines there are, such as <c>9 more lines</c>.</summary>
-    internal static string More(int lines) => lines == 1 ? "1 more line" : $"{lines} more lines";
-
-    /// <summary>The lines of the agent's text not printed.</summary>
-    private static int Hidden(Block block) => LineCount(block.Text.ToString()) - LineCount(block.Text.ToString(0, block.Printed));
 
     /// <summary>Where the first <see cref="ShownLines"/> lines of the text end: after the line break that ends the last of them, or at its end.</summary>
     private static int Cut(string text)
@@ -290,13 +314,12 @@ internal sealed class StatusView(TextWriter output, Func<IntegrationQueueStatus?
         return at + 1;
     }
 
-    /// <summary>A line of its own, after any text still on the line.</summary>
-    private void Line(string line)
+    /// <summary>A line of its own, after any text still on the line, to <paramref name="to"/> if given.</summary>
+    private void Line(string line, TextWriter? to = null)
     {
-        EraseProgress();
         EndLine();
         streaming = null;
-        output.WriteLine(line);
+        (to ?? output).WriteLine(line);
     }
 
     private void EndLine()
@@ -316,10 +339,13 @@ internal sealed class StatusView(TextWriter output, Func<IntegrationQueueStatus?
         public int Printed { get; set; }
 
         public bool Folded { get; set; }
+
+        /// <summary>Whether the rest is printed as it comes: once the owner was asked, nothing of it is folded.</summary>
+        public bool Live { get; set; }
     }
 
     /// <summary>Prints each line written to it as a line of the view; text that has not ended its line waits for the rest.</summary>
-    private sealed class LineWriter(StatusView view) : TextWriter
+    private sealed class LineWriter(StatusView view, TextWriter? stream) : TextWriter
     {
         private readonly StringBuilder pending = new();
 
@@ -335,7 +361,11 @@ internal sealed class StatusView(TextWriter output, Func<IntegrationQueueStatus?
             var text = pending.ToString();
             if (text.LastIndexOf('\n') is var end and >= 0)
             {
-                view.WriteLine(text[..end].TrimEnd('\r').ReplaceLineEndings("\n"));
+                lock (view.doing)
+                {
+                    view.Line(text[..end].TrimEnd('\r').ReplaceLineEndings("\n"), stream);
+                }
+
                 pending.Clear().Append(text[(end + 1)..]);
             }
         }

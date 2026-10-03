@@ -35,13 +35,13 @@ internal sealed class Sof : IDisposable
     public bool Interactive { get; set; }
 
     /// <summary>What each program run in the foreground, such as <c>/show</c>'s pager, was run as, and given.</summary>
-    public List<(string Program, IReadOnlyList<string> Arguments, string Text)> Foregrounded { get; } = [];
+    public List<(string Program, string Arguments, string Text)> Foregrounded { get; } = [];
 
     /// <summary>
     /// Stands in for running a program in the foreground at the terminal, such as a pager: by default it is recorded in
-    /// <see cref="Foregrounded"/> and ends at once.
+    /// <see cref="Foregrounded"/> and ends at once, with exit code 0.
     /// </summary>
-    public Func<string, IReadOnlyList<string>, string, Task<bool>>? Foreground { get; set; }
+    public Func<string, string, string, CancellationToken, Task<int?>>? Foreground { get; set; }
 
     /// <summary>What the owner types; nothing by default.</summary>
     public Owner In { get; private set; } = new();
@@ -72,14 +72,14 @@ internal sealed class Sof : IDisposable
         var host = new SofEnvironment(Out, error, Directory, Variables)
         {
             In = In, Providers = Providers, Sandbox = Sandbox, Time = Time, Interactive = Interactive,
-            Foreground = (program, arguments, text) =>
+            Foreground = (program, arguments, text, ct) =>
             {
                 lock (Foregrounded)
                 {
                     Foregrounded.Add((program, arguments, text));
                 }
 
-                return Foreground?.Invoke(program, arguments, text) ?? Task.FromResult(true);
+                return Foreground?.Invoke(program, arguments, text, ct) ?? Task.FromResult<int?>(0);
             },
             Signals = handler =>
             {

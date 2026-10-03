@@ -34,13 +34,13 @@ public sealed class LongReplyTests : IDisposable
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     /// <summary>$PAGER, as the shell runs it.</summary>
-    private static string TestPager => OperatingSystem.IsWindows() ? "cmd.exe /c test-pager" : "/bin/sh -c test-pager";
+    private static string TestPager => OperatingSystem.IsWindows() ? "cmd.exe /d /s /c \"test-pager\"" : "/bin/sh -c \"test-pager\"";
 
     public void Dispose() => sof.Dispose();
 
-    private static string Command(string program, IEnumerable<string> arguments) => string.Join(" ", arguments.Prepend(program));
+    private static string Command(string program, string arguments) => $"{program} {arguments}".TrimEnd();
 
-    private static string? Command((string Program, string[] Arguments)? pager) => pager is var (program, arguments) ? Command(program, arguments) : null;
+    private static string? Command((string Program, string Arguments)? pager) => pager is var (program, arguments) ? Command(program, arguments) : null;
 
     // A reply of 20 lines prints in full; one of 21 shows its first 12, and says how many more lines there are, their size,
     // and how to read and keep them.
@@ -66,7 +66,7 @@ public sealed class LongReplyTests : IDisposable
         Assert.Equal(!folded, output.Contains($"Point {lines}.", StringComparison.Ordinal));
         if (folded)
         {
-            Assert.Contains("[dev] … writing (", output, StringComparison.Ordinal); // the count of what is not shown, as it comes
+            Assert.Contains("Point 12.\n[dev] … (folded; /show to read)\n", output, StringComparison.Ordinal);
             Assert.Contains("[dev] … 9 more lines\n", output, StringComparison.Ordinal);
             Assert.Contains($"… 9 more lines ({Encoding.UTF8.GetByteCount(text)} bytes). /show to read all · /save to keep it\n", output, StringComparison.Ordinal);
         }
@@ -129,9 +129,9 @@ public sealed class LongReplyTests : IDisposable
         await sof.Out.WaitForAsync("dev: Completed", 2, Ct);
         sof.In.Type("/show");
         sof.In.Type("/show 1");
-        sof.In.Type("/show #2");
+        sof.In.Type("/show 2");
         sof.In.Type("/show 3");
-        sof.In.Type("/show me");
+        sof.In.Type("/show #2");
         sof.In.Type("/quit");
         var (exitCode, output, _) = await sof.EndedAsync(chat);
 
@@ -180,35 +180,73 @@ public sealed class LongReplyTests : IDisposable
         Assert.Equal("Hi.\n", File.ReadAllText(Path.Combine(sof.Directory, "notes", "hi.md")));
     }
 
-    // While a reply runs, its text is not all written: /show needs the number of an earlier reply, and /history lists the one
-    // that runs.
+    // While a reply runs, /show opens its text so far, as does /show with its number; /show n an earlier reply, and /history
+    // lists the one that runs.
     [Fact]
-    public async Task While_a_reply_runs_show_needs_an_earlier_reply_s_number()
+    public async Task While_a_reply_runs_show_opens_its_text_so_far()
     {
         sof.Interactive = true;
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        sof.Providers["claude"] = new StallingModel(model, 2, release.Task);
+        var stalled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        sof.Providers["claude"] = new StallingModel(model, 2, release.Task, stalled);
         model.Reply("Hi.").Reply(Streamed(Points(3)));
 
         var chat = sof.RunAsync("chat");
         sof.In.Type("Say hi.");
         await sof.Out.WaitForAsync("[dev] Hi.", Ct);
         sof.In.Type("List the points.");
-        await sof.Out.WaitForAsync("Point 3.", Ct);
+        await stalled.Task.WaitAsync(Ct);
         sof.In.Type("/show");
-        await sof.Out.WaitForAsync("error: the reply is still running; wait for it to end, or /show <n> for an earlier one (/history lists them).", Ct);
+        sof.In.Type("/show 2");
+        sof.In.Type("/show 1");
         sof.In.Type("/history");
         await sof.Out.WaitForAsync(": running", Ct);
-        sof.In.Type("/show 1");
-        sof.In.Type("/status"); // carried out once /show 1 is
-        await sof.Out.WaitForAsync("cost so far: ", Ct);
         release.SetResult();
-        await sof.Out.WaitForAsync("dev: Completed", Ct);
+        await sof.Out.WaitForAsync("dev: Completed", 2, Ct);
         sof.In.Type("/quit");
         var (_, output, _) = await sof.EndedAsync(chat);
 
-        Assert.Equal("Hi.", Assert.Single(sof.Foregrounded).Text.Trim());
+        Assert.Equal([Points(3), Points(3), "Hi."], sof.Foregrounded.Select(paged => paged.Text.Trim()));
         Assert.Matches(@"\n2\. dev, run …[0-9a-f]{8}: running\n", output);
+    }
+
+    // An agent's folded text before it asks the owner, such as a warning about the write it asks to make, is printed before
+    // the request, so the owner sees it before deciding. A reply's text is every model call's: /show opens all of it, while
+    // the request waits and after the reply.
+    [Fact]
+    public async Task Folded_text_is_printed_before_the_owner_is_asked_and_the_reply_keeps_every_call_s_text()
+    {
+        sof.Interactive = true;
+        sof.Write("sof.json", """
+            {
+              "providers": { "claude": { "prices": { "claude-opus-5-5": { "input": 1 } } } },
+              "agents": { "dev": { "instructions": "Work.", "tools": ["owner"] } },
+              "tools": { "write_file": { "source": "builtin:record.propose_finding", "approval": "always" } },
+              "toolSets": { "owner": ["write_file"] },
+              "capabilities": { "humanInteraction": { "enabled": true } }
+            }
+            """);
+        var warning = "IMPORTANT: this write will also wipe your notes.txt. Approve only if that is fine.";
+        var text = string.Join("\n", Enumerable.Range(1, 29).Select(number => number == 25 ? warning : $"Step {number}."));
+        model.Reply([
+            .. Streamed(text).SkipLast(1),
+            new ContentReceived(new ToolUseContent("call-1", "write_file", System.Text.Json.JsonDocument.Parse("""{ "text": "notes" }""").RootElement)),
+            new Stopped(StopReason.WantsTools)]).Reply("Done.");
+
+        var chat = sof.RunAsync("chat");
+        sof.In.Type("Write the file.");
+        await sof.Out.WaitForAsync("#1 dev asks to run write_file", Ct);
+        sof.In.Type("/show");
+        sof.In.Type("/approve 1");
+        await sof.Out.WaitForAsync("dev: Completed", Ct);
+        sof.In.Type("/show");
+        sof.In.Type("/quit");
+        var (_, output, _) = await sof.EndedAsync(chat);
+
+        Assert.True(output.IndexOf(warning, StringComparison.Ordinal) < output.IndexOf("#1 dev asks to run write_file", StringComparison.Ordinal));
+        Assert.Contains("[dev] … the folded lines, as you are asked:\n[dev] Step 13.\n", output, StringComparison.Ordinal);
+        Assert.Equal([text, $"{text}\n\nDone."], sof.Foregrounded.Select(paged => paged.Text.Trim()));
+        Assert.DoesNotContain("/show to read all", output, StringComparison.Ordinal); // nothing is left folded
     }
 
     // With piped input, or output that is not a terminal, every reply prints in full, and /show prints, without a pager.
@@ -232,12 +270,15 @@ public sealed class LongReplyTests : IDisposable
         Assert.Empty(sof.Foregrounded);
     }
 
-    // A pager that cannot be started leaves the reply printed, and says so.
-    [Fact]
-    public async Task A_pager_that_cannot_be_started_leaves_the_reply_printed()
+    // A pager that cannot be started, or fails, such as a $PAGER that is not a command (127 from the shell), leaves the reply
+    // printed, and says so.
+    [Theory]
+    [InlineData(null, "could not be started")]
+    [InlineData(127, "ended with exit code 127")]
+    public async Task A_pager_that_cannot_be_started_or_fails_leaves_the_reply_printed(int? exitCode, string why)
     {
         sof.Interactive = true;
-        sof.Foreground = (_, _, _) => Task.FromResult(false);
+        sof.Foreground = (_, _, _, _) => Task.FromResult(exitCode);
         var points = Points(25);
         model.Reply(Streamed(points));
 
@@ -245,11 +286,11 @@ public sealed class LongReplyTests : IDisposable
         sof.In.Type("List the points.");
         await sof.Out.WaitForAsync("/show to read all", Ct);
         sof.In.Type("/show");
-        await sof.Out.WaitForAsync("could not be started", Ct);
+        await sof.Out.WaitForAsync(why, Ct);
         sof.In.Type("/quit");
         var (_, output, _) = await sof.EndedAsync(chat);
 
-        Assert.Contains($"note: the pager, {TestPager.Split(" ")[0]}, could not be started, so the reply is printed.\n{points}", output, StringComparison.Ordinal);
+        Assert.Contains($"note: the pager, {TestPager.Split(" ")[0]}, {why}, so the reply is printed.\n{points}", output, StringComparison.Ordinal);
     }
 
     // While the pager has the terminal, Ctrl+C is the pager's: the session neither cancels anything nor counts it.
@@ -259,11 +300,11 @@ public sealed class LongReplyTests : IDisposable
         sof.Interactive = true;
         var paging = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var quit = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        sof.Foreground = async (_, _, _) =>
+        sof.Foreground = async (_, _, _, _) =>
         {
             paging.SetResult();
             await quit.Task;
-            return true;
+            return 0;
         };
         model.Reply("Hi.").Reply("Again.");
 
@@ -284,18 +325,57 @@ public sealed class LongReplyTests : IDisposable
         Assert.DoesNotContain("Ctrl+C", output, StringComparison.Ordinal);
     }
 
+    // SIGTERM while the pager runs ends the session: the pager is stopped first.
+    [Fact]
+    public async Task SIGTERM_while_the_pager_runs_stops_it_and_ends_the_session()
+    {
+        sof.Interactive = true;
+        var paging = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var stopped = false;
+        sof.Foreground = async (_, _, _, ct) =>
+        {
+            paging.SetResult();
+            try
+            {
+                await Task.Delay(Timeout.Infinite, ct);
+            }
+            finally
+            {
+                stopped = true;
+            }
+
+            return 0;
+        };
+        model.Reply("Hi.");
+
+        var chat = sof.RunAsync("chat");
+        sof.In.Type("Say hi.");
+        await sof.Out.WaitForAsync("dev: Completed", Ct);
+        sof.In.Type("/show");
+        await paging.Task.WaitAsync(Ct);
+        sof.Press(PosixSignal.SIGTERM);
+        var (exitCode, output, _) = await sof.EndedAsync(chat);
+
+        Assert.Equal(ExitCodes.Success, exitCode);
+        Assert.True(stopped);
+        Assert.Contains("The session has ended.", output, StringComparison.Ordinal);
+        Assert.DoesNotContain("note: the pager", output, StringComparison.Ordinal);
+    }
+
     // Ctrl+C while a folded reply streams cancels it as ever; what it had written is the reply /show opens.
     [Fact]
     public async Task Ctrl_C_during_a_folded_reply_cancels_it_and_show_opens_what_was_written()
     {
         sof.Interactive = true;
-        sof.Providers["claude"] = new StallingModel(model, 1, Task.Delay(Timeout.Infinite, Ct));
+        var stalled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        sof.Providers["claude"] = new StallingModel(model, 1, Task.Delay(Timeout.Infinite, Ct), stalled);
         var points = Points(30);
         model.Reply(Streamed(points));
 
         var chat = sof.RunAsync("chat");
         sof.In.Type("List the points.");
-        await sof.Out.WaitForAsync("[dev] … writing (18 more lines so far)", Ct);
+        await sof.Out.WaitForAsync("[dev] … (folded; /show to read)", Ct);
+        await stalled.Task.WaitAsync(Ct);
         sof.Press(PosixSignal.SIGINT);
         await sof.Out.WaitForAsync("/show to read all", Ct);
         sof.In.Type("/show");
@@ -361,22 +441,41 @@ public sealed class LongReplyTests : IDisposable
         Assert.Contains("Point 11.\n", output, StringComparison.Ordinal);
         Assert.DoesNotContain("Point 12.", output, StringComparison.Ordinal);
         Assert.Contains("… 18 more lines (", output, StringComparison.Ordinal);
-        Assert.Equal(report, Assert.Single(sof.Foregrounded).Text.Trim());
+        var shown = Assert.Single(sof.Foregrounded).Text.Trim();
+        Assert.StartsWith("[lead] Planned.\n\n", shown, StringComparison.Ordinal); // every call's text, each after its agent's name
+        Assert.Contains("[developer[1]] Submitted.", shown, StringComparison.Ordinal);
+        Assert.EndsWith($"[lead] {report}", shown, StringComparison.Ordinal);
     }
 
     // $PAGER first, run by the shell; else less -R when it is on the path; else more on Windows, and on other systems none.
-    [Fact]
-    public void The_pager_is_PAGER_or_less_or_more_on_Windows()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void The_pager_is_PAGER_or_less_or_more_on_Windows(bool windows)
     {
         var folder = Path.Combine(sof.Directory, "bin");
         Directory.CreateDirectory(folder);
-        var less = Path.Combine(folder, OperatingSystem.IsWindows() ? "less.exe" : "less");
+        var less = Path.Combine(folder, windows ? "less.exe" : "less");
         File.WriteAllText(less, "");
 
-        Assert.Equal(TestPager, Command(Pager.Find(new Dictionary<string, string> { ["PAGER"] = "test-pager", ["PATH"] = folder })));
-        Assert.Equal($"{less} -R", Command(Pager.Find(new Dictionary<string, string> { ["PAGER"] = " ", ["PATH"] = folder })));
-        Assert.Equal(OperatingSystem.IsWindows() ? "more.com" : null, Command(Pager.Find(new Dictionary<string, string> { ["PATH"] = sof.Directory })));
+        Assert.Equal(
+            windows ? "cmd.exe /d /s /c \"test-pager\"" : "/bin/sh -c \"test-pager\"",
+            Command(Pager.Find(new Dictionary<string, string> { ["PAGER"] = "test-pager", ["PATH"] = folder }, windows)));
+        Assert.Equal($"{less} -R", Command(Pager.Find(new Dictionary<string, string> { ["PAGER"] = " ", ["PATH"] = folder }, windows)));
+        Assert.Equal(windows ? "more.com" : null, Command(Pager.Find(new Dictionary<string, string> { ["PATH"] = sof.Directory }, windows)));
     }
+
+    // $PAGER is given to the shell as one argument, as .NET splits a command line; to cmd as it is, between quotes /s strips.
+    [Theory]
+    [InlineData("less -R", "\"less -R\"")]
+    [InlineData("less \"-P x\"", "\"less \\\"-P x\\\"\"")]
+    [InlineData(@"C:\tools\", @"""C:\tools\\""")]
+    [InlineData(@"a\\""b", @"""a\\\\\""b""")]
+    public void PAGER_is_quoted_as_one_argument(string pager, string quoted) => Assert.Equal(quoted, Pager.Quote(pager));
+
+    [Fact]
+    public void PAGER_with_quotes_reaches_cmd_as_it_is() =>
+        Assert.Equal(@"/d /s /c """"C:\Program Files\Git\usr\bin\less.exe"" -R""", Pager.CmdArguments(@"""C:\Program Files\Git\usr\bin\less.exe"" -R"));
 
     private static string Points(int count) => string.Join("\n", Enumerable.Range(1, count).Select(number => $"Point {number}."));
 
@@ -390,9 +489,9 @@ public sealed class LongReplyTests : IDisposable
 
     /// <summary>
     /// A model whose call number <paramref name="stalling"/> stalls once its text is written, before it stops, until
-    /// <paramref name="release"/> completes or the call is cancelled.
+    /// <paramref name="release"/> completes or the call is cancelled; <paramref name="stalled"/> is set as it stalls.
     /// </summary>
-    private sealed class StallingModel(ScriptedModelProvider inner, int stalling, Task release) : IModelProvider
+    private sealed class StallingModel(ScriptedModelProvider inner, int stalling, Task release, TaskCompletionSource? stalled = null) : IModelProvider
     {
         private int calls;
 
@@ -405,6 +504,7 @@ public sealed class LongReplyTests : IDisposable
             {
                 if (modelEvent is Stopped && stalls)
                 {
+                    stalled?.TrySetResult();
                     await release.WaitAsync(ct);
                 }
 

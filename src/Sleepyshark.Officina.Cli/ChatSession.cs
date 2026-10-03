@@ -46,8 +46,8 @@ internal sealed class ChatSession
         such as "approve 1", is held back; type it again to send it as a message. /approve to /memory act on the reply that runs; between
         replies, /board and /task act on the last message's run. /resume <run>, /rollback and /run work only between replies;
         type them again when the reply ends.
-        At a terminal, a reply of more than {StatusView.LongLines} lines shows its first {StatusView.ShownLines}. /history lists the session's replies, and
-        /show [n] opens the last reply, or reply n, in a pager.
+        At a terminal, a model call's text of more than {StatusView.LongLines} lines shows its first {StatusView.ShownLines}. /history lists the session's
+        replies, and /show [n] opens the last reply, or reply n, all its text, in a pager; while a reply runs, its text so far.
         /save [path] saves the last reply's output, the plan approved, or the report /report showed, as a file in the project, not
         committed; /save n [path] saves reply n.
         """;
@@ -143,7 +143,7 @@ internal sealed class ChatSession
 
         // What waits for the owner, and what a command prints, are printed as the view's lines: they never run into folded text,
         // and are never folded.
-        owner = new OwnerQueue(status.Writer(), "/");
+        owner = new OwnerQueue(status.Writer(), "/") { Asking = status.Unfold };
         saver = new OutputSaver(shared.Directory(parse, host), () => shared.Load(parse, host).Options, status, ReadAnswerAsync, host.Interactive);
         owner.Answered = (request, answer) =>
         {
@@ -397,13 +397,13 @@ internal sealed class ChatSession
         }
     }
 
-    /// <summary>Whether the reply is long, so was folded: only at a terminal.</summary>
-    private bool Folded(Reply reply) => fold && StatusView.LineCount(reply.Content) > StatusView.LongLines;
+    /// <summary>Whether some of the reply's text was folded and is not shown: only at a terminal.</summary>
+    private static bool Folded(Reply reply) => reply.Hidden > 0;
 
-    /// <summary>What a folded reply does not show, its size, and where it was saved, if it was.</summary>
+    /// <summary>What a folded reply does not show, the size of all its text, and where it was saved, if it was.</summary>
     private static string Summary(Reply reply)
     {
-        var more = $"… {StatusView.More(StatusView.LineCount(reply.Content) - StatusView.ShownLines)} ({Size(reply.Content)})";
+        var more = $"… {StatusView.More(reply.Hidden)} ({Size(reply.Text)})";
         return reply.Saved is { } saved ? $"{more}, saved as {saved}. /show to read all" : $"{more}. /show to read all · /save to keep it";
     }
 
@@ -539,7 +539,7 @@ internal sealed class ChatSession
 
         current = session;
         AgentResult result;
-        string? streamed;
+        (string Text, int Hidden) streamed;
         try
         {
             result = await RunCommand.WatchAsync(session, status, () => session.Runner.RunAsync(work, ct), stop => DuringAsync(session, stop));
@@ -555,13 +555,14 @@ internal sealed class ChatSession
             streamed = status.EndRun();
         }
 
-        // A reply that did not complete is what the agent was writing when it stopped, if anything, rather than why it stopped.
+        // A reply that did not complete is what its agents wrote before it stopped, if anything, rather than why it stopped.
         var completed = result.Outcome == AgentOutcome.Completed;
-        var content = completed || streamed is null ? result.Output : streamed;
+        var text = streamed.Text.Length > 0 ? streamed.Text : result.Output;
+        var content = completed ? result.Output : text;
         Reply reply;
         lock (replies)
         {
-            reply = new Reply(replies.Count + 1, agent, session.RunId, content, OutputFiles.Suggest(content, work.Input), completed);
+            reply = new Reply(replies.Count + 1, agent, session.RunId, content, text, streamed.Hidden, OutputFiles.Suggest(content, work.Input), completed);
             replies.Add(reply);
         }
 
@@ -759,7 +760,7 @@ internal sealed class ChatSession
 
         var nested = host with
         {
-            Out = owner.Output, Error = error, Terminal = null, WorkingDirectory = shared.Directory(parse, host), Variables = variables,
+            Out = owner.Output, Error = status.Writer(error), Terminal = null, WorkingDirectory = shared.Directory(parse, host), Variables = variables,
             In = new SessionReader(lines.Reader, returned), Signals = null, InSession = true,
         };
         return session is null
@@ -831,55 +832,85 @@ internal sealed class ChatSession
     }
 
     /// <summary>
-    /// <c>/show [n]</c>: opens reply n, or the last reply, in a pager at a terminal, and prints it elsewhere, or when there is no
-    /// pager. The terminal is handed to the pager until it ends: the line editor reads no keys, what is printed meanwhile waits,
-    /// and Ctrl+C is the pager's. While a reply runs, its own text is not one to show yet, so <c>/show</c> needs a number.
+    /// <c>/show [n]</c>: opens reply n, or the last reply, all its text, in a pager at a terminal, and prints it elsewhere, or
+    /// when there is no pager or the pager fails. While a reply runs, it is that reply's text so far. The terminal is handed to
+    /// the pager until it ends: the line editor reads no keys, what is printed meanwhile waits, and Ctrl+C is the pager's; the
+    /// session ending, as by SIGTERM, stops the pager.
     /// </summary>
     private async Task ShowAsync(List<string> words, RunCommand.Session? session)
     {
-        Reply? reply;
+        string? text;
         switch (words)
         {
+            case [] when session is not null:
+                text = SoFar();
+                break;
             case []:
-                reply = Last(session);
+                text = Last()?.Text;
                 break;
             case [var typed] when Number(typed) is { } number:
-                reply = Numbered(number);
+                text = session is not null && number == Running() ? SoFar() : Numbered(number)?.Text;
                 break;
             default:
                 status.WriteLine("error: /show takes a reply's number, such as /show 2; /history lists them.");
                 return;
         }
 
-        if (reply is null)
+        if (text is null)
         {
             return;
         }
 
         if (!host.Interactive || Pager.Find(host.Variables) is not var (program, arguments))
         {
-            status.WriteLine(reply.Content);
+            status.WriteLine(text);
             return;
         }
 
-        bool shown;
+        int? exitCode;
         Interlocked.Exchange(ref paging, 1);
         try
         {
             using (host.Terminal?.HandOver())
             {
-                shown = await host.Foreground(program, arguments, reply.Content);
+                // Ended by a line break, so a pager that writes in place leaves the cursor at the start of a line.
+                exitCode = await host.Foreground(program, arguments, text.EndsWith('\n') ? text : text + "\n", ending.Token);
             }
+        }
+        catch (OperationCanceledException) when (ending.IsCancellationRequested)
+        {
+            return; // the session ends
         }
         finally
         {
             Interlocked.Exchange(ref paging, 0);
         }
 
-        if (!shown)
+        if (exitCode != 0)
         {
-            status.WriteLine($"note: the pager, {program}, could not be started, so the reply is printed.");
-            status.WriteLine(reply.Content);
+            status.WriteLine($"note: the pager, {program}, {(exitCode is { } code ? $"ended with exit code {code}" : "could not be started")}, so the reply is printed.");
+            status.WriteLine(text);
+        }
+    }
+
+    /// <summary>The text of the reply that runs so far; null, with why, if there is none yet.</summary>
+    private string? SoFar()
+    {
+        if (status.SoFar() is { Length: > 0 } text)
+        {
+            return text;
+        }
+
+        status.WriteLine("Nothing is written yet in the reply that runs.");
+        return null;
+    }
+
+    /// <summary>The number of the reply that runs, or would run next.</summary>
+    private int Running()
+    {
+        lock (replies)
+        {
+            return replies.Count + 1;
         }
     }
 
@@ -894,9 +925,9 @@ internal sealed class ChatSession
 
         var lines = all.Select(reply =>
         {
-            var count = StatusView.LineCount(reply.Content);
+            var count = StatusView.LineCount(reply.Text);
             var saved = reply.Saved is { } path ? $"; saved as {path}" : "";
-            return $"{reply.Number}. {reply.Agent}, run {Short(reply.RunId)}: {Title(reply.Content)} ({count} line{(count == 1 ? "" : "s")}, {Size(reply.Content)}{saved})";
+            return $"{reply.Number}. {reply.Agent}, run {Short(reply.RunId)}: {Title(reply.Content)} ({count} line{(count == 1 ? "" : "s")}, {Size(reply.Text)}{saved})";
         }).ToList();
         if (session is not null)
         {
@@ -906,15 +937,9 @@ internal sealed class ChatSession
         status.WriteLine(lines.Count == 0 ? "No reply yet in this session." : string.Join("\n", lines));
     }
 
-    /// <summary>The last reply that ended; null, with why, if there is none or one runs, whose text is not all written yet.</summary>
-    private Reply? Last(RunCommand.Session? session)
+    /// <summary>The last reply that ended; null, with why, if there is none.</summary>
+    private Reply? Last()
     {
-        if (session is not null)
-        {
-            status.WriteLine("error: the reply is still running; wait for it to end, or /show <n> for an earlier one (/history lists them).");
-            return null;
-        }
-
         lock (replies)
         {
             if (replies.Count > 0)
@@ -942,9 +967,9 @@ internal sealed class ChatSession
         return null;
     }
 
-    /// <summary>A reply's number, such as <c>2</c> or <c>#2</c>; null if the word is not one.</summary>
+    /// <summary>A reply's number, such as <c>2</c>; null if the word is not one.</summary>
     private static int? Number(string word) =>
-        int.TryParse(word.TrimStart('#'), NumberStyles.None, CultureInfo.InvariantCulture, out var number) ? number : null;
+        int.TryParse(word, NumberStyles.None, CultureInfo.InvariantCulture, out var number) ? number : null;
 
     /// <summary>A run id cut short: its last 8 characters, as the first ones of ids made close together are alike.</summary>
     private static string Short(string runId) => runId.Length > 8 ? $"…{runId[^8..]}" : runId;
@@ -1183,10 +1208,15 @@ internal sealed class ChatSession
     /// <param name="Number">Its number in the session, from 1.</param>
     /// <param name="Agent">The agent the session chats with.</param>
     /// <param name="RunId">The run of its message.</param>
-    /// <param name="Content">Its output, or, if it did not complete, what the agent was writing when it stopped.</param>
+    /// <param name="Content">Its output, which <c>/save</c> saves, or, if it did not complete, what its agents wrote before it stopped.</param>
+    /// <param name="Text">
+    /// What its agents wrote, each model call's text, which <c>/show</c> opens: in a team, after each agent's name. The output is
+    /// the last model call's text, so it is the end of this.
+    /// </param>
+    /// <param name="Hidden">The lines of its text folded and not shown.</param>
     /// <param name="Suggestion">Where <c>/save</c> saves it by default.</param>
     /// <param name="Completed">Whether it completed.</param>
-    private sealed record Reply(int Number, string Agent, string RunId, string Content, string Suggestion, bool Completed)
+    private sealed record Reply(int Number, string Agent, string RunId, string Content, string Text, int Hidden, string Suggestion, bool Completed)
     {
         /// <summary>Where it was saved last, relative to the project; null if it was not.</summary>
         public string? Saved { get; set; }

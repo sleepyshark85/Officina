@@ -46,10 +46,11 @@ public sealed record SofEnvironment(TextWriter Out, TextWriter Error, string Wor
     private readonly bool? interactive;
 
     /// <summary>
-    /// Runs a program in the foreground at the terminal, such as <c>/show</c>'s pager, with the text as its standard input, and
-    /// returns once it ends; false if it could not be started (<see cref="Pager.RunAsync"/>).
+    /// Runs a program, with its command line, in the foreground at the terminal, such as <c>/show</c>'s pager, with the text as its
+    /// standard input, and returns its exit code once it ends; null if it could not be started. Cancelled, it stops the program
+    /// (<see cref="Pager.RunAsync"/>).
     /// </summary>
-    internal Func<string, IReadOnlyList<string>, string, Task<bool>> Foreground { get; init; } = Pager.RunAsync;
+    internal Func<string, string, string, CancellationToken, Task<int?>> Foreground { get; init; } = Pager.RunAsync;
 
     /// <summary>The process's own signals, for <see cref="Signals"/>.</summary>
     public static IDisposable ProcessSignals(Action<PosixSignal> handler) => new Registrations(

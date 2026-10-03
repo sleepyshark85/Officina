@@ -44,6 +44,10 @@ internal sealed partial class TerminalScreen(TextWriter console)
     {
         lock (gate)
         {
+            // The program starts on a line of its own: the editor's prompt is cleared, and unfinished printed text ended.
+            console.Write(midLine ? console.NewLine : "\r\u001b[2K");
+            console.Flush();
+            midLine = false;
             held = [];
             keys.Held = true;
         }
@@ -51,13 +55,18 @@ internal sealed partial class TerminalScreen(TextWriter console)
         return new Handle(this);
     }
 
-    /// <summary>Takes the terminal back: what waited is printed and drawn, and the editor reads keys again.</summary>
+    /// <summary>
+    /// Takes the terminal back: what waited is printed and drawn, and the editor reads keys again. The program has left the
+    /// cursor at the start of a line, as a pager does with text that ends its last line, or where it was, on the line cleared
+    /// for it, as a pager does on a screen of its own; so printing starts there, and nothing the program wrote is cleared.
+    /// </summary>
     private void TakeBack()
     {
         lock (gate)
         {
             var waiting = held ?? [];
             held = null;
+            midLine = false;
             foreach (var (stream, text) in waiting)
             {
                 if (stream is null)

@@ -139,20 +139,21 @@ unknown `--agent`, or when no agent was picked; 3 if the session itself fails.
 
 ### Long replies
 
-At a terminal, a reply of **more than 20 lines** shows its first 12, then folds the rest so the conversation stays
-readable. The rule counts lines, not the document check below: folding is about screen space, and a short Markdown
-document still fits on the screen.
+At a terminal, an agent's text of **more than 20 lines** in one model call shows its first 12, then folds the rest so the
+conversation stays readable. The rule counts lines, not the document check below: folding is about screen space, and a
+short Markdown document still fits on the screen.
 
 ```
 [assistant] # Login requirements
 … (the first 12 lines)
-[assistant] … writing (37 more lines so far)
+[assistant] … (folded; /show to read)
+[assistant] … 240 more lines
 ```
 
-- **While it streams,** the first 12 lines print as they come. Then one line counts the rest, rewritten in place, so you
-  can see that work goes on. Tool calls, costs and requests print as usual. Ctrl+C still cancels the reply. When the
-  model call ends, the count line becomes `[assistant] … 240 more lines`. A reply of 13 to 20 lines isn't folded: its
-  lines after the 12th print together when the model call ends, as until then it might still grow long.
+- **While it streams,** the first 12 lines print as they come, then one line, `… (folded; /show to read)`, and nothing
+  more of that text until the model call ends, which says `… 240 more lines`. Tool calls, costs and requests print as
+  usual, and Ctrl+C still cancels the reply. Text of 13 to 20 lines isn't folded: its lines after the 12th print
+  together when the model call ends, as until then it might still grow long.
 - **When the reply ends** (after the offer to save it, if it's a document), one line says what's folded:
 
   ```
@@ -161,34 +162,37 @@ document still fits on the screen.
 
   If you saved it, the line names the file: `… 240 more lines (18 KB), saved as docs/login-requirements.md. /show to
   read all`.
+- **Before an agent asks you something,** such as to approve a write, what it folded in its last model call is printed
+  in full, so you see what it said before you decide. A request itself, such as the lead's plan to sign off, is never
+  folded: you see every task and acceptance criterion you approve.
 - **Every agent's text folds the same way,** one model call at a time. In a team, a developer's long text folds, and so
-  does the lead's report, the team's reply. `/show` opens the reply: in a team, the lead's report.
-- **Requests that wait for you are never folded.** A sign-off, such as the lead's plan, prints in full with every task
-  and acceptance criterion, so you see everything you approve.
-- **A reply that was cancelled** keeps what the agent wrote before it stopped: `/show` opens that.
-- **`/show [n]`** opens the last reply, or reply `n`, in a pager: `$PAGER` (run by the shell, as git runs it), else
-  `less -R`, else `more` on Windows. Press `q` to close it and get your prompt back. While the pager is open, the session
-  reads no keys, and what the reply prints meanwhile waits and appears when you close it. With no pager, `/show` prints
-  the reply. While a reply runs, `/show` without a number is refused (`wait for it to end, or /show <n> for an earlier
-  one`), as its text isn't all written yet.
+  does the lead's report, the team's reply.
+- **`/show [n]`** opens the last reply, or reply `n`, in a pager: **all its text**, every model call's, in a team each
+  after its agent's name (`[developer[1]] …`). **While a reply runs,** `/show` opens its text so far, such as while an
+  approval waits. The pager is `$PAGER` (run by the shell, as git runs it), else `less -R`, else `more` on Windows.
+  Press `q` to close it and get your prompt back. While the pager is open, the session reads no keys, what the reply
+  prints meanwhile waits and appears when you close it, and Ctrl+C is the pager's. With no pager, or if the pager
+  fails, `/show` prints the text.
+- **A reply that was cancelled** keeps what its agents wrote before it stopped.
 - **`/history`** lists the session's replies, one line each: number, agent, run id (its last 8 characters), the first
-  heading or line, size, and where it was saved:
+  heading or line of its output, the size of its text, and where it was saved:
 
   ```
   1. assistant, run …2e85e003: Login requirements (252 lines, 18 KB; saved as docs/login-requirements.md)
   2. assistant, run …95e59528: Done. (1 line, 5 bytes)
   ```
 
-- **`/save n [path]`** saves reply `n`.
+- **`/save n [path]`** saves reply `n`'s output: its last model call's text (in a team, the lead's report), as `/save`
+  does for the last reply.
 - The replies are kept for the session only; each run's report and storage keep them too.
-- **Not folded:** piped input (`sof < script.txt`), output that isn't a terminal, and `sof run` print every reply in
-  full, and `/show` prints it.
+- **Not folded:** piped input (`sof < script.txt`), output that isn't a terminal (`sof | tee log`, which also turns the
+  line editor off), and `sof run` print every reply in full, and `/show` prints the text.
 
 ### Saving results as files
 
-Every reply prints, long ones folded (above). When one looks like a document (40 lines or more, 2,000 characters or more, Markdown
-with a heading and at least 15 lines or 600 characters, or a structured plan with a `steps` list), the session then
-asks:
+Every reply prints, long ones folded (above). When one looks like a document (40 lines or more, 2,000 characters or
+more, Markdown with a heading and at least 15 lines or 600 characters, or a structured plan with a `steps` list), the
+session then asks:
 
 ```
 Save this as docs/login-requirements.md? [Enter = yes, n = no, or type another path]
@@ -251,7 +255,7 @@ number. Words after `/approve <n>` or `/deny <n>` are allowed, and not passed on
 | `/new` | The next message starts a new conversation |
 | `/report [run]` | The report of the reply that runs or the last message's run, or of any run |
 | `/save [n] [path]` | Save the last reply's output, reply `n`, the plan you approved, or the report `/report` showed, as a file in the project, uncommitted (section 4, Saving results as files) |
-| `/show [n]` | Open the last reply, or reply `n`, in a pager; without a terminal, print it (section 4, Long replies). While a reply runs, give an earlier reply's number |
+| `/show [n]` | Open all the text of the last reply, or reply `n`, in a pager; while a reply runs, its text so far; without a terminal, print it (section 4, Long replies) |
 | `/history` | The session's replies, one line each: number, agent, run, first heading or line, size, and where it was saved |
 | `/board` | The task board: each task's id, title, status, assignee, role, dependencies, priority and spend of its budget |
 | `/task add <title> [options]`, `/task edit <id> [options]` | Add or change a task. Options: `--description`, `--criteria` (repeat it), `--depends a,b`, `--role`, `--priority <n>`, `--checks c1,c2`, `--budget <usd>`, `--review true\|false`, `--reason`; edit takes `--title` too, and its `--depends`, `--checks` and `--criteria` replace the task's list. An added task's id is `owner-1`, `owner-2`, … |
@@ -401,7 +405,7 @@ Do these in order; each costs more than the last. Keep `--budget` low, watch `/s
 - [ ] Typing during a reply: ask for something long, then try `/status`, type a message (it waits, and is sent when the
       reply ends), and press Ctrl+C: the reply stops, the waiting message is dropped, and the session goes on. Then try
       `/report`, `/config validate`, Tab after `/con`, Up, and end with Ctrl+C twice.
-- [ ] Long replies: ask for something of more than 20 lines. It shows 12 lines, a count while it writes, then
+- [ ] Long replies: ask for something of more than 20 lines. It shows 12 lines, `… (folded; /show to read)`, then
       `… N more lines`. `/show` opens it in `less`; `q` brings your prompt back and typing works. `/history` lists it.
 - [ ] A tool agent in a scratch git repository with one commit. `keepWorkingCopies` is on, so there's no working-copy
       warning. Approve one write and deny one; the kept working copy is under `.sof/worktrees`:

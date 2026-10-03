@@ -72,12 +72,31 @@ public sealed class TerminalScreenTests : IDisposable
         output.WriteLine("[dev] model call: 10 tokens");
         screen.Draw("\u001b[2K\u001b[1G> ");
         output.WriteLine("#1 dev asks to run note");
-        Assert.Equal("> ", terminal.ToString());
+        Assert.Equal($"> {ClearLine}", terminal.ToString()); // the prompt is cleared for the program
 
         handle.Dispose();
         handle.Dispose(); // taken back once
 
-        Assert.Equal($"> {ClearLine}[dev] model call: 10 tokens\n\u001b[2K\u001b[1G> {ClearLine}#1 dev asks to run note\n", terminal.ToString());
+        Assert.Equal($"> {ClearLine}{ClearLine}[dev] model call: 10 tokens\n\u001b[2K\u001b[1G> {ClearLine}#1 dev asks to run note\n", terminal.ToString());
+    }
+
+    // A program the terminal is handed to, such as a pager that writes in place, starts on a line of its own, and what it
+    // wrote stays: printing afterwards starts where it left the cursor, at the start of a line.
+    [Fact]
+    public void The_program_starts_on_a_line_of_its_own_and_what_it_wrote_stays()
+    {
+        var output = screen.Writer(terminal);
+        output.NewLine = "\n";
+
+        output.Write("[dev] partial");
+        using (screen.HandOver())
+        {
+            terminal.Write("Done.\n"); // the pager, writing to the terminal itself
+        }
+
+        output.WriteLine("next");
+
+        Assert.Equal($"{ClearLine}[dev] partial\nDone.\n{ClearLine}next\n", terminal.ToString());
     }
 
     // Standard error shares the screen: an error clears the prompt line too, and goes to its own stream.

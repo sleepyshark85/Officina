@@ -386,9 +386,9 @@ What to expect:
    the commit is added to `sof-try`. The working copy is removed.
 6. **Report.** When every task is done, the lead reports, and the reply ends with
    `team: Completed, cost $…; this session $…`. A report of more than 20 lines shows its first 12, then
-   `… N more lines (… KB). /show to read all · /save to keep it`: `/show` opens it in a pager (`q` closes it), and
-   `/history` lists the session's replies. A developer's long text folds the same way while the team works (user
-   guide, section 4, Long replies).
+   `… N more lines (… KB). /show to read all · /save to keep it`. `/show` opens all the reply's text in a pager, each
+   agent's after its name (`q` closes it), even while the team works; `/save` saves the report, and `/history` lists the
+   session's replies. A developer's long text folds the same way (user guide, section 4, Long replies).
 
 To watch spend, each model call prints `[agent] model call: N tokens, $x; cost so far $y`. While it works: `/status`
 shows each agent and what waits for you, `/board` the tasks, and `/tell lead …` reaches the lead. `/task` changes the

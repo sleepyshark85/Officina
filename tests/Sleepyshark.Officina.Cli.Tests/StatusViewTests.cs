@@ -7,8 +7,6 @@ namespace Sleepyshark.Officina.Cli.Tests;
 /// <summary>What <c>sof run</c> and <c>sof chat</c> show of a run's events (UX-01), and how a chat at a terminal folds long text.</summary>
 public class StatusViewTests
 {
-    private const string ClearLine = "\r\u001b[2K";
-
     private long sequence;
 
     // The console's costs read the same in every culture, so a program reading them, such as the benchmark's runner, reads them right.
@@ -30,24 +28,24 @@ public class StatusViewTests
         }
     }
 
-    // Text of 21 lines, one more than is long, shows its first 12 as they come; then one line counts the rest in place, and ends
-    // as what was not shown.
+    // Long text shows its first 12 lines as they come, then one line that says it is folded, and
+    // nothing more until the call ends, which says how much is not shown.
     [Fact]
-    public void Long_text_shows_its_first_lines_then_counts_the_rest_in_place()
+    public void Long_text_shows_its_first_lines_then_one_line_until_the_call_ends()
     {
         using var output = new StringWriter { NewLine = "\n" };
         var view = new StatusView(output, stream: true, fold: true);
 
-        Stream(view, "dev", 21);
+        Stream(view, "dev", 30);
         view.Apply(Event("dev", new ModelCallEnded(StopReason.Finished, new Usage(10, 0, 0, 0), 0m)));
 
-        var expected = "[dev] " + Lines(1, 12) + "[dev] … writing (1 more line so far)"
-            + string.Concat(Enumerable.Range(2, 8).Select(more => $"{ClearLine}[dev] … writing ({more} more lines so far)"))
-            + $"{ClearLine}[dev] … 9 more lines\n[dev] model call: 10 tokens, $0.00; cost so far $0.00\n";
-        Assert.Equal(expected, output.ToString());
+        Assert.Equal(
+            $"[dev] {Lines(1, 12)}[dev] … (folded; /show to read)\n[dev] … 18 more lines\n[dev] model call: 10 tokens, $0.00; cost so far $0.00\n",
+            output.ToString());
+        Assert.Equal((Lines(1, 30).TrimEnd(), 18), view.EndRun());
     }
 
-    // Text of 20 lines is not long: what was held after the first 12 is printed in full when the call ends, in place of the count.
+    // Text of 20 lines is not long: what was held after the first 12 is printed in full when the call ends.
     [Fact]
     public void Text_up_to_the_limit_is_printed_in_full()
     {
@@ -55,31 +53,52 @@ public class StatusViewTests
         var view = new StatusView(output, stream: true, fold: true);
 
         Stream(view, "dev", 20);
+        Assert.Equal($"[dev] {Lines(1, 12)}", output.ToString());
         view.Apply(Event("dev", new ModelCallEnded(StopReason.Finished, new Usage(10, 0, 0, 0), 0m)));
 
-        var text = output.ToString();
-        Assert.Contains($"{ClearLine}{Lines(13, 20)}[dev] model call", text, StringComparison.Ordinal);
-        Assert.DoesNotContain("more lines\n", text, StringComparison.Ordinal);
-        Assert.Equal(20, text.Split('\n').Count(line => line.Contains("Line ", StringComparison.Ordinal)));
+        Assert.StartsWith($"[dev] {Lines(1, 20)}[dev] model call", output.ToString(), StringComparison.Ordinal);
+        Assert.Equal(0, view.EndRun().Hidden);
     }
 
-    // A line printed while text is folded, such as a request that waits for the owner, takes the count's place, never runs into
-    // it, and is never folded; the count comes back below it.
+    // Before the owner is asked something, what the asking agent's last call folded is printed in full, and is no longer
+    // counted as not shown.
     [Fact]
-    public void A_line_printed_while_text_is_folded_takes_the_count_s_place()
+    public void Folded_text_is_printed_before_its_agent_asks_the_owner()
     {
         using var output = new StringWriter { NewLine = "\n" };
         var view = new StatusView(output, stream: true, fold: true);
         var requests = view.Writer();
         requests.NewLine = "\n";
 
-        Stream(view, "dev", 14);
-        requests.WriteLine("#1 lead needs your sign-off: Approve the plan?\n  a Parse\n  b Print\nAnswer with /approve 1 or /deny 1.");
-        view.Apply(Event("dev", new TextGenerated("Line 15\n")));
+        Stream(view, "dev", 29);
+        view.Apply(Event("dev", new ModelCallEnded(StopReason.WantsTools, new Usage(10, 0, 0, 0), 0m)));
+        view.Unfold("lead"); // another agent folded nothing
+        view.Unfold("dev");
+        requests.WriteLine("#1 dev asks to run write_file {}: write.");
+        view.Unfold("dev"); // once
 
         Assert.EndsWith(
-            $"[dev] … writing (2 more lines so far){ClearLine}#1 lead needs your sign-off: Approve the plan?\n  a Parse\n  b Print\nAnswer with /approve 1 or /deny 1.\n[dev] … writing (3 more lines so far)",
+            $"[dev] … 17 more lines\n[dev] model call: 10 tokens, $0.00; cost so far $0.00\n[dev] … the folded lines, as you are asked:\n[dev] {Lines(13, 29)}#1 dev asks to run write_file {{}}: write.\n",
             output.ToString(), StringComparison.Ordinal);
+        Assert.Equal(0, view.EndRun().Hidden);
+    }
+
+    // Two agents' text interleaved: each keeps its name where its text starts a line again, and each folds on its own. A run's
+    // text has each model call's text, after its agent's name.
+    [Fact]
+    public void Two_agents_text_folds_each_on_its_own_and_keeps_their_names()
+    {
+        using var output = new StringWriter { NewLine = "\n" };
+        var view = new StatusView(output, stream: true, fold: true);
+
+        view.Apply(Event("lead", new TextGenerated("Hello wor")));
+        Stream(view, "dev", 25);
+        view.Apply(Event("lead", new TextGenerated("ld, and more.")));
+        view.Apply(Event("dev", new ModelCallEnded(StopReason.Finished, new Usage(1, 0, 0, 0), 0m)));
+        view.Apply(Event("lead", new ModelCallEnded(StopReason.Finished, new Usage(1, 0, 0, 0), 0m)));
+
+        Assert.StartsWith($"[lead] Hello wor\n[dev] {Lines(1, 12)}[dev] … (folded; /show to read)\n[lead] ld, and more.\n[dev] … 13 more lines\n", output.ToString(), StringComparison.Ordinal);
+        Assert.Equal(($"[dev] {Lines(1, 25).TrimEnd()}\n\n[lead] Hello world, and more.", 13), view.EndRun());
     }
 
     // sof run and piped chats print every line as it comes.
@@ -93,22 +112,26 @@ public class StatusViewTests
         view.Apply(Event("dev", new ModelCallEnded(StopReason.Finished, new Usage(10, 0, 0, 0), 0m)));
 
         Assert.StartsWith($"[dev] {Lines(1, 30)}[dev] model call", output.ToString(), StringComparison.Ordinal);
-        Assert.Equal(Lines(1, 30), view.EndRun());
+        Assert.Equal((Lines(1, 30).TrimEnd(), 0), view.EndRun());
     }
 
-    // The text of the call that ended last is what the run ends with, such as what was being written when the reply was cancelled.
+    // A run's text is every model call's, so far while it runs, and what was being written when it was cancelled at its end.
     [Fact]
-    public void The_run_ends_with_the_text_written_last()
+    public void The_run_s_text_is_every_call_s()
     {
         using var output = new StringWriter { NewLine = "\n" };
         var view = new StatusView(output, stream: true, fold: true);
 
+        view.Apply(Event("dev", new TextGenerated("Let me look.")));
+        view.Apply(Event("dev", new ModelCallEnded(StopReason.WantsTools, new Usage(1, 0, 0, 0), 0m)));
         Stream(view, "dev", 25);
-        var text = view.EndRun();
+        Assert.Equal($"Let me look.\n\n{Lines(1, 25).TrimEnd()}", view.SoFar());
+        var (text, hidden) = view.EndRun();
 
-        Assert.Equal(Lines(1, 25), text);
-        Assert.EndsWith($"{ClearLine}[dev] … 13 more lines\n", output.ToString(), StringComparison.Ordinal);
-        Assert.Null(view.EndRun());
+        Assert.Equal($"Let me look.\n\n{Lines(1, 25).TrimEnd()}", text);
+        Assert.Equal(13, hidden);
+        Assert.EndsWith("[dev] … 13 more lines\n", output.ToString(), StringComparison.Ordinal);
+        Assert.Equal(("", 0), view.EndRun());
     }
 
     private static string Lines(int from, int to) => string.Concat(Enumerable.Range(from, to - from + 1).Select(number => $"Line {number}\n"));
