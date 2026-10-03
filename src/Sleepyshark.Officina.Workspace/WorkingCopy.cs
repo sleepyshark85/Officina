@@ -46,8 +46,9 @@ public sealed class WorkingCopy : IWorkingCopy
     /// <param name="ct">Cancels the read.</param>
     public async Task<string> ReadAsync(string path, int? firstLine = null, int? lineCount = null, CancellationToken ct = default)
     {
-        var (full, relative) = Resolve(path, change: false);
-        var text = await ReadTextAsync(full, relative, path, ct).ConfigureAwait(false);
+        var relative = Resolve(path, change: false);
+        using var file = CopyFile.Open(Directory, relative, path, create: false);
+        var text = await ReadTextAsync(file, relative, path, ct).ConfigureAwait(false);
         if (firstLine is null)
         {
             return text;
@@ -81,62 +82,61 @@ public sealed class WorkingCopy : IWorkingCopy
     public async Task EditAsync(string path, string oldText, string newText, CancellationToken ct = default)
     {
         ArgumentException.ThrowIfNullOrEmpty(oldText);
-        var (full, relative) = Resolve(path, change: true);
-        var text = await ReadTextAsync(full, relative, path, ct, check: true).ConfigureAwait(false);
+        var relative = Resolve(path, change: true);
+        using var file = CopyFile.Open(Directory, relative, path, create: false);
+        var text = await ReadTextAsync(file, relative, path, ct, check: true).ConfigureAwait(false);
         var at = text.IndexOf(oldText, StringComparison.Ordinal);
         if (at < 0 || text.IndexOf(oldText, at + 1, StringComparison.Ordinal) >= 0)
         {
             throw new WorkspaceException($"The text to replace must occur exactly once in {path}, but it occurs {(at < 0 ? "nowhere" : "more than once")}.");
         }
 
-        await WriteTextAsync(full, relative, string.Concat(text.AsSpan(0, at), newText, text.AsSpan(at + oldText.Length)), ct).ConfigureAwait(false);
+        await WriteTextAsync(file, relative, string.Concat(text.AsSpan(0, at), newText, text.AsSpan(at + oldText.Length)), ct).ConfigureAwait(false);
     }
 
     /// <summary>Creates a file, or replaces one the agent has read since it last changed (WS-07).</summary>
     public async Task WriteAsync(string path, string content, CancellationToken ct = default)
     {
-        var (full, relative) = Resolve(path, change: true);
-        if (File.Exists(full))
+        var relative = Resolve(path, change: true);
+        using var file = CopyFile.Open(Directory, relative, path, create: true);
+        if (await file.ReadAsync(ct).ConfigureAwait(false) is not null)
         {
-            await ReadTextAsync(full, relative, path, ct, check: true).ConfigureAwait(false);
+            await ReadTextAsync(file, relative, path, ct, check: true).ConfigureAwait(false);
         }
 
-        System.IO.Directory.CreateDirectory(Path.GetDirectoryName(full)!);
-        await WriteTextAsync(full, relative, content, ct).ConfigureAwait(false);
+        await WriteTextAsync(file, relative, content, ct).ConfigureAwait(false);
     }
 
     /// <summary>Deletes a file the agent has read since it last changed (WS-07).</summary>
     public async Task DeleteAsync(string path, CancellationToken ct = default)
     {
-        var (full, relative) = Resolve(path, change: true);
-        await ReadTextAsync(full, relative, path, ct, check: true).ConfigureAwait(false);
-        File.Delete(full);
+        var relative = Resolve(path, change: true);
+        using var file = CopyFile.Open(Directory, relative, path, create: false);
+        await ReadTextAsync(file, relative, path, ct, check: true).ConfigureAwait(false);
+        file.Delete();
         seen.TryRemove(relative, out _);
     }
 
     /// <summary>Moves a file the agent has read since it last changed, to a path where no file exists (WS-07).</summary>
     public async Task MoveAsync(string path, string newPath, CancellationToken ct = default)
     {
-        var (source, sourceRelative) = Resolve(path, change: true);
-        var (target, targetRelative) = Resolve(newPath, change: true);
+        var sourceRelative = Resolve(path, change: true);
+        var targetRelative = Resolve(newPath, change: true);
+        using var source = CopyFile.Open(Directory, sourceRelative, path, create: false);
         await ReadTextAsync(source, sourceRelative, path, ct, check: true).ConfigureAwait(false);
-        if (Path.Exists(target))
-        {
-            throw new WorkspaceException($"{newPath} already exists.");
-        }
-
-        System.IO.Directory.CreateDirectory(Path.GetDirectoryName(target)!);
-        File.Move(source, target);
+        using var target = CopyFile.Open(Directory, targetRelative, newPath, create: true);
+        source.MoveTo(target);
         seen.TryRemove(sourceRelative, out var hash);
         seen[targetRelative] = hash!;
     }
 
-    /// <summary>The full path of a file the agent may reach, and its path relative to the copy with '/' separators.</summary>
-    private (string Full, string Relative) Resolve(string path, bool change)
+    /// <summary>The path relative to the copy, with '/' separators, of a file the agent may reach.</summary>
+    /// <remarks>Links are refused when the file is opened (<see cref="CopyFile"/>).</remarks>
+    private string Resolve(string path, bool change)
     {
         var full = Path.GetFullPath(path, Directory);
         var relative = Path.GetRelativePath(Directory, full).Replace('\\', '/');
-        if (relative is "." or ".." || relative.StartsWith("../", StringComparison.Ordinal) || Path.IsPathRooted(relative) || Linked(full))
+        if (relative is "." or ".." || relative.StartsWith("../", StringComparison.Ordinal) || Path.IsPathRooted(relative))
         {
             throw new WorkspaceException($"{path} is outside the workspace.");
         }
@@ -146,32 +146,13 @@ public sealed class WorkingCopy : IWorkingCopy
             throw NotFound(path);
         }
 
-        return change && readOnly.Match(relative).HasMatches ? throw new WorkspaceException($"{path} is read-only.") : (full, relative);
-    }
-
-    /// <summary>Whether the path, or a folder on the way to it, is a link, which could lead outside the copy.</summary>
-    private bool Linked(string full)
-    {
-        for (var path = full; path.Length > Directory.Length; path = Path.GetDirectoryName(path)!)
-        {
-            if (Path.Exists(path) && File.GetAttributes(path).HasFlag(FileAttributes.ReparsePoint))
-            {
-                return true;
-            }
-        }
-
-        return false;
+        return change && readOnly.Match(relative).HasMatches ? throw new WorkspaceException($"{path} is read-only.") : relative;
     }
 
     /// <summary>Reads a file and remembers its hash; with <paramref name="check"/>, first requires it unchanged since the agent last saw it.</summary>
-    private async Task<string> ReadTextAsync(string full, string relative, string path, CancellationToken ct, bool check = false)
+    private async Task<string> ReadTextAsync(CopyFile file, string relative, string path, CancellationToken ct, bool check = false)
     {
-        if (!File.Exists(full))
-        {
-            throw NotFound(path);
-        }
-
-        var bytes = await File.ReadAllBytesAsync(full, ct).ConfigureAwait(false);
+        var bytes = await file.ReadAsync(ct).ConfigureAwait(false) ?? throw NotFound(path);
         var hash = Convert.ToHexString(SHA256.HashData(bytes));
         if (check && (!seen.TryGetValue(relative, out var known) || known != hash))
         {
@@ -182,10 +163,10 @@ public sealed class WorkingCopy : IWorkingCopy
         return Encoding.UTF8.GetString(bytes);
     }
 
-    private async Task WriteTextAsync(string full, string relative, string text, CancellationToken ct)
+    private async Task WriteTextAsync(CopyFile file, string relative, string text, CancellationToken ct)
     {
         var bytes = Encoding.UTF8.GetBytes(text);
-        await File.WriteAllBytesAsync(full, bytes, ct).ConfigureAwait(false);
+        await file.WriteAsync(bytes, ct).ConfigureAwait(false);
         seen[relative] = Convert.ToHexString(SHA256.HashData(bytes));
     }
 

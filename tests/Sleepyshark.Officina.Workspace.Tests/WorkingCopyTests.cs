@@ -147,18 +147,156 @@ public sealed class WorkingCopyTests : IAsyncLifetime
     [Fact]
     public async Task A_link_cannot_lead_outside_the_working_copy()
     {
-        var outside = Path.Combine(repository.Root, "outside.txt");
-        await File.WriteAllTextAsync(outside, "outside\n", Ct);
+        var outside = Path.Combine(repository.Root, "outside");
+        Directory.CreateDirectory(outside);
+        await File.WriteAllTextAsync(Path.Combine(outside, "f.txt"), "outside\n", Ct);
+        TryLink(Path.Combine(copy.Directory, "link.txt"), Path.Combine(outside, "f.txt"));
+        TryLink(Path.Combine(copy.Directory, "linked"), outside);
+        await copy.ReadAsync("src/a.txt", ct: Ct);
+
+        var refused = new List<string>();
+        foreach (var call in new Func<Task>[]
+        {
+            () => copy.ReadAsync("link.txt", ct: Ct), () => copy.ReadAsync("linked/f.txt", ct: Ct),
+            () => copy.WriteAsync("link.txt", "x", Ct), () => copy.WriteAsync("linked/new.txt", "x", Ct), () => copy.WriteAsync("linked/new/f.txt", "x", Ct),
+            () => copy.DeleteAsync("linked/f.txt", Ct), () => copy.MoveAsync("linked/f.txt", "f.txt", Ct), () => copy.MoveAsync("src/a.txt", "linked/a.txt", Ct),
+        })
+        {
+            refused.Add((await Assert.ThrowsAsync<WorkspaceException>(call)).Message);
+        }
+
+        Assert.Equal(
+            ["link.txt", "linked/f.txt", "link.txt", "linked/new.txt", "linked/new/f.txt", "linked/f.txt", "linked/f.txt", "linked/a.txt"],
+            refused.Select(message => message.Replace(" is outside the workspace.", "", StringComparison.Ordinal)));
+        Assert.Equal(["f.txt"], Directory.GetFileSystemEntries(outside).Select(Path.GetFileName));
+        Assert.Equal("outside\n", await File.ReadAllTextAsync(Path.Combine(outside, "f.txt"), Ct));
+    }
+
+    // A process in the sandbox may replace a folder with a link while the host reads or writes the copy. Each test races
+    // calls against a folder that keeps turning into a link to one outside and back; nothing outside may be read or changed.
+    [Fact]
+    public async Task A_write_racing_a_folder_replaced_by_a_link_stays_in_the_working_copy()
+    {
+        var outside = await RaceAsync(i => copy.WriteAsync($"race/w{i}.txt", "x", Ct));
+
+        Assert.Equal(["f.txt"], Directory.GetFileSystemEntries(outside).Select(Path.GetFileName));
+    }
+
+    [Fact]
+    public async Task A_read_racing_a_folder_replaced_by_a_link_stays_in_the_working_copy()
+    {
+        var read = new List<string>();
+        await RaceAsync(async _ => read.Add(await copy.ReadAsync("race/f.txt", ct: Ct)));
+
+        Assert.DoesNotContain("outside\n", read);
+    }
+
+    [Fact]
+    public async Task A_delete_or_move_racing_a_folder_replaced_by_a_link_stays_in_the_working_copy()
+    {
+        // The file to delete or move has the content of the one outside, so having read either lets the call go ahead.
+        var outside = await RaceAsync(async i =>
+        {
+            await copy.WriteAsync($"m{i}.txt", "outside\n", Ct);
+            await Attempt(() => copy.WriteAsync("race/f.txt", "outside\n", Ct));
+            await Attempt(() => copy.ReadAsync("race/f.txt", ct: Ct));
+            await ((i % 3) switch
+            {
+                0 => copy.DeleteAsync("race/f.txt", Ct),
+                1 => copy.MoveAsync("race/f.txt", $"moved/f{i}.txt", Ct),
+                _ => copy.MoveAsync($"m{i}.txt", $"race/m{i}.txt", Ct),
+            });
+        });
+
+        Assert.Equal(["f.txt"], Directory.GetFileSystemEntries(outside).Select(Path.GetFileName));
+        Assert.Equal("outside\n", await File.ReadAllTextAsync(Path.Combine(outside, "f.txt"), Ct));
+    }
+
+    /// <summary>
+    /// Repeats a call, for a bounded time, while another thread keeps replacing the folder <c>race</c> of the copy with a
+    /// link to a folder outside it, and back. The call may fail, as the folder may be a link when it runs, but some calls
+    /// must get through. Returns the folder outside.
+    /// </summary>
+    private async Task<string> RaceAsync(Func<int, Task> call)
+    {
+        var outside = Path.Combine(repository.Root, "outside");
+        var race = Path.Combine(copy.Directory, "race");
+        Directory.CreateDirectory(outside);
+        await File.WriteAllTextAsync(Path.Combine(outside, "f.txt"), "outside\n", Ct);
+        TryLink(race, outside);
+
+        using var stop = new CancellationTokenSource();
+        var flipper = Task.Run(() =>
+        {
+            while (!stop.IsCancellationRequested)
+            {
+                try
+                {
+                    if (new DirectoryInfo(race).LinkTarget is null)
+                    {
+                        if (Directory.Exists(race))
+                        {
+                            Directory.Delete(race, recursive: true);
+                        }
+
+                        Directory.CreateSymbolicLink(race, outside);
+                    }
+                    else
+                    {
+                        Directory.Delete(race);
+                        Directory.CreateDirectory(race);
+                        File.WriteAllText(Path.Combine(race, "f.txt"), "inside\n");
+                    }
+                }
+                catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+                {
+                    // The host holds the folder, or is writing in it; try again.
+                }
+            }
+        }, Ct);
+
+        var (watch, succeeded) = (System.Diagnostics.Stopwatch.StartNew(), 0);
+        for (var i = 0; watch.Elapsed < TimeSpan.FromSeconds(2); i++)
+        {
+            succeeded += await Attempt(() => call(i)) ? 1 : 0;
+        }
+
+        await stop.CancelAsync();
+        await flipper;
+        Assert.True(succeeded > 0, "No call got through while the folder was real.");
+        return outside;
+    }
+
+    private static async Task<bool> Attempt(Func<Task> call)
+    {
         try
         {
-            File.CreateSymbolicLink(Path.Combine(copy.Directory, "link.txt"), outside);
+            await call();
+            return true;
+        }
+        catch (Exception exception) when (exception is WorkspaceException or IOException or UnauthorizedAccessException)
+        {
+            // Refused while the folder was a link, or missing while it was being replaced.
+            return false;
+        }
+    }
+
+    private static void TryLink(string path, string target)
+    {
+        try
+        {
+            if (Directory.Exists(target))
+            {
+                Directory.CreateSymbolicLink(path, target);
+            }
+            else
+            {
+                File.CreateSymbolicLink(path, target);
+            }
         }
         catch (Exception exception) when (exception is UnauthorizedAccessException or IOException)
         {
             Assert.Skip("Creating links needs a privilege this machine does not grant.");
         }
-
-        var read = await Assert.ThrowsAsync<WorkspaceException>(() => copy.ReadAsync("link.txt", ct: Ct));
-        Assert.Equal("link.txt is outside the workspace.", read.Message);
     }
 }

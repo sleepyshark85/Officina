@@ -1,5 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
+  <PropertyGroup>
+    <!-- For the generated Linux system calls of LinuxCopyFile. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\Sleepyshark.Officina.Core\Sleepyshark.Officina.Core.csproj" />
   </ItemGroup>
