@@ -12,7 +12,7 @@ namespace Sleepyshark.Officina.Workspace;
 [SupportedOSPlatform("windows")]
 internal sealed class WindowsCopyFile : CopyFile
 {
-    private const uint ReadAttributes = 0x80, GenericRead = 0x80000000, GenericWrite = 0x40000000;
+    private const uint ListFolder = 0x1, ReadAttributes = 0x80, GenericRead = 0x80000000, GenericWrite = 0x40000000;
     private const uint BackupSemantics = 0x02000000, OpenReparsePoint = 0x00200000;
     private const int FileNotFound = 2, PathNotFound = 3, AccessDenied = 5;
 
@@ -131,7 +131,8 @@ internal sealed class WindowsCopyFile : CopyFile
     /// <summary>Opens a folder and holds it open, so that it cannot be renamed, deleted or replaced; null if it cannot be opened.</summary>
     private SafeFileHandle? OpenFolder(string path, bool followLink)
     {
-        var handle = Native.CreateFileW(path, ReadAttributes, FileShare.ReadWrite, IntPtr.Zero, FileMode.Open, BackupSemantics | (followLink ? 0 : OpenReparsePoint), IntPtr.Zero);
+        // Windows applies a handle's sharing only if it was opened to read, write or delete, so it lists the folder.
+        var handle = Native.CreateFileW(path, ListFolder | ReadAttributes, FileShare.ReadWrite, IntPtr.Zero, FileMode.Open, BackupSemantics | (followLink ? 0 : OpenReparsePoint), IntPtr.Zero);
         if (handle.IsInvalid)
         {
             var error = Marshal.GetLastPInvokeError();
