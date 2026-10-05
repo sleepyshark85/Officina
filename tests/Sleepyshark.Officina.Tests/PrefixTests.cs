@@ -89,6 +89,7 @@ public class PrefixTests
             first with { Tools = [Agents.SearchTool("Changed.")], Instructions = "B", Messages = [hi, hello] },
             first with { Tools = [Agents.SearchTool("Changed.")], Instructions = "B", Messages = [hi, new Message(Role.Assistant, [ScriptedModel.TextBlock("Hi.")])] },
             first with { Tools = [Agents.SearchTool("Changed.")], Instructions = "B", Messages = ImmutableArray<Message>.Empty },
+            first with { Tools = [Agents.SearchTool("Changed.")], Instructions = "B", Messages = ImmutableArray<Message>.Empty, OutputSchema = """{"type":"string"}""" },
         ];
 
         Assert.Equal(
@@ -97,6 +98,7 @@ public class PrefixTests
                 "Request 4: the instructions differ from request 3's.",
                 "Request 5: message 2 differs from request 4's.",
                 "Request 6: has 0 messages, fewer than request 5's 2.",
+                "Request 7: the output schema differs from request 6's.",
             ],
             PrefixStability.Problems(requests));
     }

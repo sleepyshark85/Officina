@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\samples\extraction\Extraction.csproj" />
+    <ProjectReference Include="..\..\samples\chat-assistant\ChatAssistant.csproj" />
+    <ProjectReference Include="..\..\samples\background-agent\BackgroundAgent.csproj" />
+    <ProjectReference Include="..\..\src\Sleepyshark.Officina.Testing\Sleepyshark.Officina.Testing.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
+  </ItemGroup>
+
+</Project>

@@ -53,6 +53,27 @@ public class CancellationTests
     }
 
     [Fact]
+    public async Task A_run_cancelled_while_it_connects_its_tool_sources_stops_as_cancelled_and_calls_no_model()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var model = new ScriptedModel().Reply("Unused.");
+        var sink = new RecordingSink();
+        var tool = new Tool("lookup", "Looks up.", """{"type":"object"}""", ToolKind.Read, (_, _) => Task.FromResult(new ToolOutput("ok")))
+        {
+            Source = new CancellingSource(cancellation),
+        };
+        var agent = Agents.With(model, tools: tool) with { AuditSink = sink };
+        var conversation = new Conversation();
+
+        var result = await agent.RunAsync(conversation, "Hi", cancellationToken: cancellation.Token);
+
+        Assert.Equal(new Stopped(StopReason.Cancelled, null, default), Agents.Outcome(result));
+        Assert.Empty(model.Requests);
+        Assert.Empty(conversation.Messages);
+        Assert.Equal([AuditKind.RunStarted, AuditKind.RunEnded], sink.Entries.Select(entry => entry.Kind));
+    }
+
+    [Fact]
     public async Task A_second_run_on_a_conversation_in_use_throws_and_the_first_one_finishes()
     {
         var agent = Agents.With(StreamingParis().Reply("Hello."));
@@ -107,5 +128,19 @@ public class CancellationTests
         Assert.Equal(
             [("c1", "interrupted"), ("c2", "interrupted")],
             sink.Entries.Where(entry => entry.Kind == AuditKind.ToolEnded && entry.Outcome == "interrupted").Select(entry => (entry.CallId, entry.Outcome)));
+    }
+
+    /// <summary>A tool source, such as an MCP server, that is still connecting when the host cancels the run.</summary>
+    private sealed class CancellingSource(CancellationTokenSource host) : IToolSource
+    {
+        public string Name => "slow";
+
+        public async Task ConnectAsync(CancellationToken cancellationToken)
+        {
+            await host.CancelAsync();
+            await Task.Delay(Timeout.Infinite, cancellationToken);
+        }
+
+        public IReadOnlyList<ToolSourceChange> TakeChanges() => [];
     }
 }

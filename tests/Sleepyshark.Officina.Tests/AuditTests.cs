@@ -145,7 +145,7 @@ public class AuditTests
     }
 
     [Fact]
-    public async Task Refusals_failures_and_prefix_mismatches_are_recorded_as_the_run_ends()
+    public async Task Refusals_failures_prefix_mismatches_and_budget_stops_are_recorded_as_the_run_ends()
     {
         var sink = new RecordingSink();
         var model = new ScriptedModel().Reply(new BlockReceived(ScriptedModel.TextBlock("No.")), new ModelStopped(ModelStopReason.Refusal, "cyber")).Fail(new InvalidOperationException("Overloaded."));
@@ -155,9 +155,14 @@ public class AuditTests
         await agent.RunAsync(conversation, "Hack it.", cancellationToken: Ct);
         await agent.RunAsync(conversation, "Again.", cancellationToken: Ct);
         await (agent with { Instructions = "Changed." }).RunAsync(conversation, "Again.", cancellationToken: Ct);
+        await (agent with { Budget = new Budget { ModelCalls = 0 } }).RunAsync(conversation, "Again.", cancellationToken: Ct);
 
         Assert.Equal(
-            [("Stopped: Refusal", "cyber"), ("Failed: ModelError", "Overloaded."), ("Failed: PrefixMismatch", "The agent's tools, instructions or model settings differ from those this conversation was started with. Start a new conversation.")],
+            [
+                ("Stopped: Refusal", "cyber"), ("Failed: ModelError", "Overloaded."),
+                ("Failed: PrefixMismatch", "The agent's tools, instructions or model settings differ from those this conversation was started with. Start a new conversation."),
+                ("Stopped: Budget", "The model call budget is used up: 0 of 0."),
+            ],
             sink.Entries.Where(entry => entry.Kind == AuditKind.RunEnded).Select(entry => (entry.Outcome!, entry.Detail!)));
     }
 

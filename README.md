@@ -11,8 +11,9 @@ PostgreSQL in Docker.
 - [`CLAUDE.md`](CLAUDE.md): working notes and conventions.
 
 - [`docs/plan/phase-1.md`](docs/plan/phase-1.md): the phase 1 slices.
+- [`docs/traceability.md`](docs/traceability.md): each phase 1 requirement and its tests.
 
-Status: phase 1, slice S06 (Bookshop console).
+Status: phase 1 complete, pending S13b (the demo script and the live smoke test).
 
 ## Build and test
 
@@ -33,6 +34,10 @@ dotnet test
 | `src/Sleepyshark.Officina.Testing` | The test kit |
 | `apps/BookshopAssistant` | The reference application |
 | `samples/hello` | A live chat with Claude (needs `ANTHROPIC_API_KEY`); not part of `dotnet test` |
+| `samples/extraction` | GEN-06: a stateless classifier with typed output and no tools |
+| `samples/chat-assistant` | GEN-06: a chat assistant with a conversation and memory per user, and a tool |
+| `samples/background-agent` | GEN-06: an unattended job with app tools, an MCP server over HTTP, the JSON-lines audit sink and a budget |
+| `tests/Samples.Tests` | The GEN-06 samples, offline with the scripted model |
 | `tests/BookshopAssistant.Tests` | The application's tools and console flows against the real database (TEST-09) |
 | `tests/` | Tests; `Sleepyshark.Officina.Dependencies.Tests` enforces the dependency rules (TEST-05) |
 

@@ -149,18 +149,23 @@ public sealed class MemoryTests : IDisposable
     {
         var store = new InMemoryMemoryStore();
         await store.WriteAsync("sam", "long.md", string.Join('\n', Enumerable.Repeat(new string('x', 99), 400)), Ct);
+        await store.WriteAsync("sam", "one-line.md", new string('y', 20_000), Ct);
 
         var results = await RunAsync(
             store,
             "sam",
             new { command = "view", path = "/memories/long.md" },
             new { command = "view", path = "/memories/long.md", view_range = ToEnd },
-            new { command = "create", path = "/memories/big.md", file_text = new string('x', MemoryTool.MaxFileLength + 1) });
+            new { command = "create", path = "/memories/big.md", file_text = new string('x', MemoryTool.MaxFileLength + 1) },
+            new { command = "view", path = "/memories/one-line.md" });
 
         Assert.EndsWith("\n[Truncated at 16000 characters: view the rest with view_range.]", results[0].Content, StringComparison.Ordinal);
         Assert.InRange(results[0].Content.Length, 15_000, 16_200);
         Assert.False(results[1].IsError);
         Assert.True(results[2].IsError);
+
+        // A view with no line break to end at is cut at the limit.
+        Assert.Contains($"\t{new string('y', 16_000 - "     1\t".Length)}\n[Truncated", results[3].Content, StringComparison.Ordinal);
         Assert.Null(await store.ReadAsync("sam", "big.md", Ct));
     }
 

@@ -115,8 +115,10 @@ public sealed class ExportTests(BookshopDatabase database) : IClassFixture<Books
 
         using var kill = System.Diagnostics.Process.Start("kill", ["-INT", "--", $"-{group}"]);
         await kill.WaitForExitAsync(TestContext.Current.CancellationToken);
+        var waited = System.Diagnostics.Stopwatch.StartNew();
         while (server.Any(id => Directory.Exists($"/proc/{id}") && Stat(id).State != "Z"))
         {
+            Assert.True(waited.Elapsed < TimeSpan.FromSeconds(10), "The server's processes were still running 10 s after the interrupt.");
             await Task.Delay(50, TestContext.Current.CancellationToken);
         }
 

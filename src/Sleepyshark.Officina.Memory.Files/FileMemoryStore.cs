@@ -11,7 +11,9 @@ namespace Sleepyshark.Officina.Memory.Files;
 /// </summary>
 /// <remarks>
 /// It guards against the model's paths, not against other processes changing the directory while it runs. On a
-/// case-insensitive file system, paths within one scope that differ only in case name the same file.
+/// case-insensitive file system, paths within one scope that differ only in case name the same file. A scope's directory
+/// name is twice as long as its UTF-8 bytes, and file systems allow names of 255 characters at most, so creating a file
+/// fails in a scope of more than 127 UTF-8 bytes, although <see cref="MemoryPath"/> accepts it.
 /// </remarks>
 public sealed class FileMemoryStore(string root) : IMemoryStore
 {

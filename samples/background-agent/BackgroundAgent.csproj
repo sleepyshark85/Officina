@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Sleepyshark.Officina\Sleepyshark.Officina.csproj" />
+    <ProjectReference Include="..\..\src\Sleepyshark.Officina.Audit.JsonLines\Sleepyshark.Officina.Audit.JsonLines.csproj" />
+    <ProjectReference Include="..\..\src\Sleepyshark.Officina.Mcp\Sleepyshark.Officina.Mcp.csproj" />
+  </ItemGroup>
+
+</Project>
