@@ -13,7 +13,7 @@ PostgreSQL in Docker.
 - [`docs/plan/phase-1.md`](docs/plan/phase-1.md): the phase 1 slices.
 - [`docs/traceability.md`](docs/traceability.md): each phase 1 requirement and its tests.
 
-Status: phase 1: slices S01–S13 merged; see [`docs/demo.md`](docs/demo.md) and [`docs/traceability.md`](docs/traceability.md).
+Status: phase 1; S13b (the demo script and the live smoke test) remaining. Requirements map to tests in [`docs/traceability.md`](docs/traceability.md).
 
 ## Build and test
 
