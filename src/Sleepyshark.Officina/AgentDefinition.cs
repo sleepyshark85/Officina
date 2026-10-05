@@ -94,12 +94,17 @@ public sealed record AgentDefinition
         init => field = value ?? throw new ArgumentNullException(nameof(value));
     } = TimeProvider.System;
 
-    /// <summary>Runs the agent and returns its result; see <see cref="StreamAsync"/>.</summary>
+    /// <summary>Runs the agent without a memory scope and returns its result; see <see cref="StreamAsync(Conversation, string, string?, string?, CancellationToken)"/>.</summary>
+    public Task<RunResult> RunAsync(
+        Conversation conversation, string message, string? context = null, CancellationToken cancellationToken = default) =>
+        RunAsync(conversation, message, context, null, cancellationToken);
+
+    /// <summary>Runs the agent and returns its result; see <see cref="StreamAsync(Conversation, string, string?, string?, CancellationToken)"/>.</summary>
     public async Task<RunResult> RunAsync(
-        Conversation conversation, string message, string? context = null, CancellationToken cancellationToken = default)
+        Conversation conversation, string message, string? context, string? memoryScope, CancellationToken cancellationToken = default)
     {
         RunResult? result = null;
-        await foreach (var runEvent in StreamAsync(conversation, message, context, cancellationToken).ConfigureAwait(false))
+        await foreach (var runEvent in StreamAsync(conversation, message, context, memoryScope, cancellationToken).ConfigureAwait(false))
         {
             result = (runEvent as RunEnded)?.Result ?? result;
         }
@@ -111,6 +116,11 @@ public sealed record AgentDefinition
     public Task<RunResult> RunAsync(string message, string? context = null, CancellationToken cancellationToken = default) =>
         RunAsync(new Conversation(), message, context, cancellationToken);
 
+    /// <summary>Runs the agent without a memory scope; see <see cref="StreamAsync(Conversation, string, string?, string?, CancellationToken)"/>.</summary>
+    public IAsyncEnumerable<RunEvent> StreamAsync(
+        Conversation conversation, string message, string? context = null, CancellationToken cancellationToken = default) =>
+        StreamAsync(conversation, message, context, null, cancellationToken);
+
     /// <summary>
     /// Runs the agent on <paramref name="conversation"/> (a new one, or one this definition's runs used before) with a new
     /// user <paramref name="message"/>, and streams what happens, ending with <see cref="RunEnded"/>. While the model asks
@@ -119,10 +129,12 @@ public sealed record AgentDefinition
     /// the run as <see cref="StopReason.Cancelled"/> (AGT-05). The message and context are appended only together with the
     /// model's reply, so a run that gets none leaves the conversation unchanged. A host that stops reading the events
     /// abandons the run: the model call is disposed and no <see cref="RunEnded"/> comes. One run at a time may use a
-    /// conversation; starting another throws <see cref="InvalidOperationException"/>.
+    /// conversation; starting another throws <see cref="InvalidOperationException"/>. <paramref name="memoryScope"/> names
+    /// whose memory the run sees (MEM-03), one of the scopes <see cref="MemoryPath"/> accepts; an agent with the memory tool
+    /// needs one.
     /// </summary>
     public IAsyncEnumerable<RunEvent> StreamAsync(
-        Conversation conversation, string message, string? context = null, CancellationToken cancellationToken = default)
+        Conversation conversation, string message, string? context, string? memoryScope, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(conversation);
         ArgumentException.ThrowIfNullOrWhiteSpace(message);
@@ -142,7 +154,16 @@ public sealed record AgentDefinition
             throw new InvalidOperationException("The agent's context management needs a capability its model does not have (HIST-03).");
         }
 
-        return RunEngine.StreamAsync(this, conversation, message, context, cancellationToken);
+        if (memoryScope is not null)
+        {
+            MemoryPath.CheckScope(memoryScope);
+        }
+        else if (Tools.Any(tool => tool.IsMemory))
+        {
+            throw new ArgumentException("The agent has memory, so the run needs a memory scope.", nameof(memoryScope));
+        }
+
+        return RunEngine.StreamAsync(this, conversation, message, context, memoryScope, cancellationToken);
     }
 
     /// <summary>

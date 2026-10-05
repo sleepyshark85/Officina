@@ -57,7 +57,7 @@ public sealed record AuditEntry
 
     public required string Agent { get; init; }
 
-    /// <summary>Whose memory the run sees; none until runs have memory.</summary>
+    /// <summary>Whose memory the run sees, as the host named it in the run input; null for a run without one.</summary>
     public string? MemoryScope { get; init; }
 
     /// <summary>The run's trace (EVT-02), in W3C hex form; null when nothing listens to the core's telemetry.</summary>
@@ -93,7 +93,7 @@ public sealed record AuditEntry
 /// Turns a run's important events into audit entries (ARCHITECTURE §3), numbered and written one at a time. Without a
 /// sink it records nothing and every record succeeds (GEN-02).
 /// </summary>
-internal sealed class AuditRecorder(AgentDefinition agent, Conversation conversation, Activity? runSpan) : IDisposable
+internal sealed class AuditRecorder(AgentDefinition agent, Conversation conversation, Activity? runSpan, string? memoryScope) : IDisposable
 {
     /// <summary>The longest text an entry keeps per field, in characters.</summary>
     internal const int MaxTextLength = 4_000;
@@ -129,6 +129,7 @@ internal sealed class AuditRecorder(AgentDefinition agent, Conversation conversa
                     Run = Run,
                     Conversation = conversation.Id,
                     Agent = agent.Name,
+                    MemoryScope = memoryScope,
                     TraceId = (step ?? runSpan)?.TraceId.ToHexString(),
                     SpanId = (step ?? runSpan)?.SpanId.ToHexString(),
                     Kind = kind,

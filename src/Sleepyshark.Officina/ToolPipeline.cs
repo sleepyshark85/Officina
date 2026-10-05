@@ -13,8 +13,9 @@ namespace Sleepyshark.Officina;
 /// it and runs alone (TOOL-03); approvals are asked one at a time, in call order. Every call gets exactly one result,
 /// in call order (CTX-06), and every failure is an error result, never an exception (TOOL-05). What happens is written
 /// to <paramref name="events"/> as it happens (EVT-01). Each call that starts gets a span under <paramref name="run"/> (EVT-02).
+/// The memory tool's calls run in <paramref name="memoryScope"/> (MEM-03).
 /// </summary>
-internal sealed class ToolPipeline(AgentDefinition agent, AuditRecorder audit, Activity? run, ChannelWriter<RunEvent> events)
+internal sealed class ToolPipeline(AgentDefinition agent, AuditRecorder audit, Activity? run, ChannelWriter<RunEvent> events, string? memoryScope)
 {
     /// <summary>The longest result the model gets, in characters (TOOL-06): about 16k tokens.</summary>
     internal const int MaxResultLength = 64_000;
@@ -109,7 +110,7 @@ internal sealed class ToolPipeline(AgentDefinition agent, AuditRecorder audit, A
             return (default, new ToolOutput($"The input does not match the tool's schema:\n{string.Join("\n", problems)}", true));
         }
 
-        if (!tool.NeedsApproval)
+        if (!tool.NeedsApproval || (tool.IsMemory && MemoryTool.Views(input)))
         {
             return (input, null);
         }
@@ -161,7 +162,8 @@ internal sealed class ToolPipeline(AgentDefinition agent, AuditRecorder audit, A
         ToolOutput output;
         try
         {
-            output = await tool.Handler(input, cancellationToken).ConfigureAwait(false)
+            output = await (tool.Memory is { } memory ? MemoryTool.RunAsync(memory, memoryScope!, input, cancellationToken) : tool.Handler(input, cancellationToken))
+                .ConfigureAwait(false)
                 ?? throw new InvalidOperationException("The tool returned no output.");
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)

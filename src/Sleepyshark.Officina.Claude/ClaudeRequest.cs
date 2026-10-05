@@ -6,7 +6,8 @@ using Anthropic.Models.Beta.Messages;
 namespace Sleepyshark.Officina.Claude;
 
 /// <summary>
-/// Lays out one request (CTX-01, CTX-03, ARCHITECTURE §10): the tools sorted by name, each with eager input streaming;
+/// Lays out one request (CTX-01, CTX-03, ARCHITECTURE §10): the tools sorted by name, each with eager input streaming,
+/// and the memory tool as Claude's native <c>memory_20250818</c>;
 /// the instructions as one system block with a cache point; automatic caching for the tail; then the conversation, where
 /// an operator message is a mid-conversation <c>system</c> message (CTX-02) and a block with raw JSON is sent as that JSON,
 /// byte for byte (MDL-05). A tool result is a <c>tool_result</c> block, with <c>is_error</c> when the call failed; a user
@@ -88,6 +89,12 @@ internal static class ClaudeRequest
 
     private static BetaToolUnion Tool(Tool tool)
     {
+        // The memory tool is Claude's own, which the model is trained on: it has no schema or description of ours (MEM-01).
+        if (tool.IsMemory)
+        {
+            return new BetaMemoryTool20250818();
+        }
+
         using var schema = JsonDocument.Parse(tool.InputSchema);
         return new BetaTool
         {

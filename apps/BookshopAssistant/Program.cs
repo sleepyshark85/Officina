@@ -3,7 +3,8 @@
 // metrics and logs go over OTLP to the dashboard in compose.yaml (APP-20): OTEL_EXPORTER_OTLP_ENDPOINT, by default
 // http://localhost:4317; BOOKSHOP_DASHBOARD_URL is where /audit links to, by default http://localhost:18888. Exports go to
 // the exports folder, through the filesystem MCP server the compose file runs in Docker (APP-12). Demo mode (APP-17), with
-// --demo or BOOKSHOP_DEMO=1, compacts and clears old tool results early enough to see in a short session.
+// --demo or BOOKSHOP_DEMO=1, compacts and clears old tool results early enough to see in a short session. What the
+// assistant remembers for each staff member is kept under BOOKSHOP_DATA, by default the data folder of the current one.
 using BookshopAssistant;
 using Microsoft.Extensions.Logging;
 using Npgsql;
@@ -15,6 +16,7 @@ using OpenTelemetry.Trace;
 using Sleepyshark.Officina;
 using Sleepyshark.Officina.Claude;
 using Sleepyshark.Officina.Mcp;
+using Sleepyshark.Officina.Memory.Files;
 
 var connectionString = Environment.GetEnvironmentVariable("BOOKSHOP_CONNECTION_STRING");
 if (string.IsNullOrWhiteSpace(connectionString))
@@ -55,9 +57,11 @@ using var model = new ClaudeModel
 };
 using var summaryModel = new ClaudeModel { Model = "claude-opus-5-5", Effort = ClaudeEffort.Low, MaxOutputTokens = 4_000 };
 var audit = new AuditTable(database);
+var data = Environment.GetEnvironmentVariable("BOOKSHOP_DATA") is { Length: > 0 } folder ? folder : "data";
+var memory = new FileMemoryStore(Path.Combine(data, "memory"));
 var console = new BookshopConsole(
     Console.In, Console.Out, TimeProvider.System, echoInput: Console.IsInputRedirected, audit, new SessionStore(database), dashboard,
-    logging.CreateLogger<BookshopConsole>());
+    logging.CreateLogger<BookshopConsole>(), memory: memory);
 
 // Ctrl+C stops the reply in progress and the session goes on (APP-03); with no reply in progress, it quits.
 // An exception here would end the process, so none escapes.
@@ -95,7 +99,7 @@ await using var stopExports = exports;
 
 var password = new NpgsqlConnectionStringBuilder(connectionString).Password;
 var agent = BookshopAgent.Create(
-    model, new BookshopTools(database), console, audit, password is null ? [] : [password], TimeProvider.System, exports.Tools, demo);
+    model, new BookshopTools(database), memory, console, audit, password is null ? [] : [password], TimeProvider.System, exports.Tools, demo);
 if (demo)
 {
     await Console.Out.WriteLineAsync("Demo mode: compaction from 50,000 input tokens, and old tool results cleared after 4 tool calls.");

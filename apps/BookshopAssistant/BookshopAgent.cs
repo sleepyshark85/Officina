@@ -3,20 +3,21 @@ using Sleepyshark.Officina;
 namespace BookshopAssistant;
 
 /// <summary>
-/// The chat agent (ARCHITECTURE §12.1): frozen instructions, the bookshop tools and, when given, the export tools of the
-/// filesystem MCP server (APP-12). Who and when come as run context.
+/// The chat agent (ARCHITECTURE §12.1): frozen instructions, the bookshop tools, memory (APP-11) and, when given, the
+/// export tools of the filesystem MCP server (APP-12). Who and when come as run context; what is remembered, the model
+/// reads through the memory tool.
 /// </summary>
 public static class BookshopAgent
 {
     /// <summary>The agent; in <c>demo</c> mode (APP-17), compaction and clearing come early enough to see in a short session.</summary>
     public static AgentDefinition Create(
-        IModel model, BookshopTools tools, IApprover approver, IAuditSink audit, IEnumerable<string> secrets, TimeProvider time,
-        IEnumerable<Tool>? exportTools = null, bool demo = false) => new()
+        IModel model, BookshopTools tools, IMemoryStore memory, IApprover approver, IAuditSink audit, IEnumerable<string> secrets,
+        TimeProvider time, IEnumerable<Tool>? exportTools = null, bool demo = false) => new()
         {
             Name = "bookshop",
             Model = model,
             Instructions = Instructions,
-            Tools = [.. tools.All, .. exportTools ?? []],
+            Tools = [.. tools.All, MemoryTool.Create(memory), .. exportTools ?? []],
             Approver = approver,
             AuditSink = audit,
             Time = time,
@@ -67,6 +68,8 @@ public static class BookshopAgent
         - Asked to export a report, such as a customer's order history, look up the data, then write it as a CSV file
           with a header row into the exports folder, /projects/exports, named for its content (for example
           order-history-alice-martin.csv). Writing a file needs the staff member's approval. Tell them the file's name.
+        - Your memory belongs to the staff member you are talking to. Keep their preferences and standing notes there,
+          such as how they like prices shown, and follow them.
 
         How to answer:
         - Be brief and concrete: a few sentences, or a short list when there are several items. Name books by title and

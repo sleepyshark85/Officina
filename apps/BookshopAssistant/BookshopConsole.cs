@@ -24,10 +24,12 @@ public sealed record Budgets(decimal Reply, decimal Session)
 /// cost, and stops when it reaches its own or its session's budget (APP-14). A session left with <c>/new</c>,
 /// <c>/resume</c> or <c>/quit</c> is summarized, and <c>/sessions</c> summarizes the sessions it lists that were left
 /// without one, as after a crash (APP-15).
+/// Each staff member has a memory scope of their own in <paramref name="memory"/>, which their runs see and
+/// <c>/memory</c> shows (APP-11).
 /// </summary>
 public sealed partial class BookshopConsole(
     TextReader input, TextWriter output, TimeProvider time, bool echoInput, AuditTable audit, SessionStore sessions, Uri dashboard,
-    ILogger? logger = null, Budgets? budgets = null) : IApprover
+    ILogger? logger = null, Budgets? budgets = null, IMemoryStore? memory = null) : IApprover
 {
     /// <summary>The name of the console's activity source, for the exporter to listen to.</summary>
     public const string SourceName = "BookshopAssistant";
@@ -40,6 +42,7 @@ public sealed partial class BookshopConsole(
           /resume <id>    Go on with the session with that id.
           /cost           Show this session's tokens and cost.
           /audit [<id>]   Show the audit trail of this session, or of the session with that id.
+          /memory         Show what the assistant remembers for you.
           /quit           Leave the assistant.
         Anything else is a message to the assistant. Ctrl+C stops a reply in progress.
         """;
@@ -144,6 +147,9 @@ public sealed partial class BookshopConsole(
                 case { } command when Argument(command, "/audit") is { } id:
                     await ShowAuditAsync(id.Length > 0 ? id : session.Id);
                     continue;
+                case "/memory":
+                    await ShowMemoryAsync(MemoryScope(staffMember));
+                    continue;
                 case ['/', ..] command:
                     await output.WriteLineAsync($"Unknown command {command}. Type /help for commands.");
                     continue;
@@ -151,7 +157,7 @@ public sealed partial class BookshopConsole(
 
             // The run context is sent at the start of the session and again only when it changes (APP-13).
             var current = BookshopAgent.Context(time.GetLocalNow(), staffMember);
-            await ReplyAsync(agent, session, line, current == session.Context ? null : current);
+            await ReplyAsync(agent, session, line, current == session.Context ? null : current, MemoryScope(staffMember));
         }
 
         await LeaveAsync(session);
@@ -175,7 +181,11 @@ public sealed partial class BookshopConsole(
     {
         while (await ReadAsync("Who is using the assistant? Your name: ") is { } name)
         {
-            if (!string.IsNullOrWhiteSpace(name))
+            if (!string.IsNullOrWhiteSpace(name) && !MemoryPath.IsValidScope(MemoryScope(name)))
+            {
+                await output.WriteLineAsync("Please give a name without any of \\ / : * ? \" < > | %.");
+            }
+            else if (!string.IsNullOrWhiteSpace(name))
             {
                 await output.WriteLineAsync($"Hello, {name.Trim()}.");
                 return name.Trim();
@@ -327,6 +337,31 @@ public sealed partial class BookshopConsole(
         return summary;
     }
 
+    /// <summary>A staff member's memory scope: their name, so it is the same whatever case they type it in.</summary>
+    private static string MemoryScope(string staffMember) => staffMember.Trim().ToLowerInvariant();
+
+    /// <summary>Shows every file of the staff member's memory, with its text (APP-11).</summary>
+    private async Task ShowMemoryAsync(string scope)
+    {
+        try
+        {
+            var files = memory is null ? [] : (await memory.ListAsync(scope, CancellationToken.None)).OrderBy(file => file.Path, StringComparer.Ordinal).ToList();
+            await output.WriteLineAsync(files.Count == 0 ? "Nothing remembered yet." : "Remembered:");
+            foreach (var file in files)
+            {
+                await output.WriteLineAsync($"{MemoryTool.Root}/{file.Path}");
+                foreach (var line in (await memory!.ReadAsync(scope, file.Path, CancellationToken.None) ?? "").TrimEnd('\n').Split('\n'))
+                {
+                    await output.WriteLineAsync($"  {line}");
+                }
+            }
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            await output.WriteLineAsync($"The memory could not be read: {exception.Message}");
+        }
+    }
+
     private async Task ShowAuditAsync(string session)
     {
         try
@@ -344,7 +379,7 @@ public sealed partial class BookshopConsole(
     /// Streams one reply, saving the session after every step of it, within the reply's budget or what is left of the
     /// session's, whichever is less.
     /// </summary>
-    private async Task ReplyAsync(AgentDefinition agent, Session session, string message, string? context)
+    private async Task ReplyAsync(AgentDefinition agent, Session session, string message, string? context, string memoryScope)
     {
         using var span = Source.StartActivity("reply");
         using var cancellation = new CancellationTokenSource();
@@ -358,7 +393,7 @@ public sealed partial class BookshopConsole(
         var (spent, spentCost) = (default(Usage), 0m);
         try
         {
-            await foreach (var runEvent in budgeted.StreamAsync(conversation, message, context, cancellation.Token))
+            await foreach (var runEvent in budgeted.StreamAsync(conversation, message, context, memoryScope, cancellation.Token))
             {
                 switch (runEvent)
                 {
