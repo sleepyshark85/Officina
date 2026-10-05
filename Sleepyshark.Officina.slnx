@@ -10,5 +10,6 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Sleepyshark.Officina.Dependencies.Tests/Sleepyshark.Officina.Dependencies.Tests.csproj" />
+    <Project Path="tests/Sleepyshark.Officina.Tests/Sleepyshark.Officina.Tests.csproj" />
   </Folder>
 </Solution>
