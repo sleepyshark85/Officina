@@ -7,8 +7,12 @@ namespace BookshopAssistant;
 /// <summary>A stored session: its conversation, who started it, and what its replies used.</summary>
 public sealed record StoredSession(Conversation Conversation, string StaffMember, Usage Usage, decimal Cost);
 
-/// <summary>A session as <c>/sessions</c> lists it.</summary>
-public sealed record SessionListing(string Id, string StaffMember, string? Title, decimal Cost, DateTimeOffset Updated);
+/// <summary>
+/// A session as <c>/sessions</c> lists it, with its summary (APP-15); <paramref name="Stale"/> when it has none, or was
+/// updated after it.
+/// </summary>
+public sealed record SessionListing(
+    string Id, string StaffMember, string? Title, string? Summary, IReadOnlyList<string> Changes, decimal Cost, DateTimeOffset Updated, bool Stale);
 
 /// <summary>
 /// The session store (APP-10, ARCHITECTURE §12.1): the <c>sessions</c> table, one row per conversation, keyed by the
@@ -35,10 +39,15 @@ public sealed class SessionStore(NpgsqlDataSource database)
         """;
 
     private const string ListSql = """
-        select id, staff_member, title, cost, updated
+        select id, staff_member, title, summary, coalesce(changes, '{}'), cost, updated, summarized is null or summarized < updated
         from sessions
         order by updated desc
         limit $1
+        """;
+
+    private const string SummarySql = """
+        update sessions set title = $2, summary = $3, changes = $4, summarized = now()
+        where id = $1
         """;
 
     /// <summary>
@@ -95,9 +104,23 @@ public sealed class SessionStore(NpgsqlDataSource database)
         while (await reader.ReadAsync(cancellationToken))
         {
             sessions.Add(new SessionListing(
-                reader.GetString(0), reader.GetString(1), reader.IsDBNull(2) ? null : reader.GetString(2), reader.GetDecimal(3), reader.GetFieldValue<DateTimeOffset>(4)));
+                reader.GetString(0), reader.GetString(1), reader.IsDBNull(2) ? null : reader.GetString(2), reader.IsDBNull(3) ? null : reader.GetString(3),
+                reader.GetFieldValue<string[]>(4), reader.GetDecimal(5), reader.GetFieldValue<DateTimeOffset>(6), reader.GetBoolean(7)));
         }
 
         return sessions;
+    }
+
+    /// <summary>Stores the summary of session <paramref name="id"/> (APP-15), as of now.</summary>
+    public async Task SaveSummaryAsync(string id, SessionSummary summary, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(summary);
+        await using var command = database.CreateCommand(SummarySql);
+        foreach (var value in new object[] { id, summary.Title, summary.Summary, summary.Changes.ToArray() })
+        {
+            command.Parameters.Add(new NpgsqlParameter { Value = value });
+        }
+
+        await command.ExecuteNonQueryAsync(cancellationToken);
     }
 }

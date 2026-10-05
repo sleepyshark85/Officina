@@ -39,7 +39,12 @@ public interface IModel
 /// The most output tokens the remaining budget allows (BUD-01), when it limits them: the model uses this or its own
 /// limit, whichever is lower. It is not part of the prefix.
 /// </param>
-public sealed record ModelRequest(ImmutableArray<Tool> Tools, string Instructions, ImmutableArray<Message> Messages, int? MaxOutputTokens = null);
+/// <param name="OutputSchema">
+/// The JSON schema the reply must match, when the agent requires typed output (OUT-01): the provider sends it as its
+/// structured output format, adjusted to what it accepts.
+/// </param>
+public sealed record ModelRequest(
+    ImmutableArray<Tool> Tools, string Instructions, ImmutableArray<Message> Messages, int? MaxOutputTokens = null, string? OutputSchema = null);
 
 /// <summary>Something the model streams while it replies.</summary>
 public abstract record ModelEvent;

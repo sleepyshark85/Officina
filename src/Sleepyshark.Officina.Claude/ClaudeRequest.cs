@@ -8,7 +8,8 @@ namespace Sleepyshark.Officina.Claude;
 /// the instructions as one system block with a cache point; automatic caching for the tail; then the conversation, where
 /// an operator message is a mid-conversation <c>system</c> message (CTX-02) and a block with raw JSON is sent as that JSON,
 /// byte for byte (MDL-05). A tool result is a <c>tool_result</c> block, with <c>is_error</c> when the call failed; a user
-/// message that follows a tool results message is a second user turn, which the API joins to the first.
+/// message that follows a tool results message is a second user turn, which the API joins to the first. A typed output
+/// schema goes as the structured output format, adjusted (OUT-01); the tool choice is never forced.
 /// </summary>
 internal static class ClaudeRequest
 {
@@ -20,7 +21,9 @@ internal static class ClaudeRequest
             Model = model.Model,
             MaxTokens = Math.Min(model.MaxOutputTokens, request.MaxOutputTokens ?? int.MaxValue),
             Thinking = new BetaThinkingConfigAdaptive(),
-            OutputConfig = new BetaOutputConfig { Effort = Effort(model.Effort) },
+            OutputConfig = request.OutputSchema is null
+                ? new BetaOutputConfig { Effort = Effort(model.Effort) }
+                : new BetaOutputConfig { Effort = Effort(model.Effort), Format = new BetaJsonOutputFormat { Schema = OutputSchema.Adjust(request.OutputSchema) } },
             CacheControl = cache,
             Tools = [.. request.Tools.OrderBy(tool => tool.Name, StringComparer.Ordinal).Select(Tool)],
             System = new List<BetaTextBlockParam> { new() { Text = request.Instructions, CacheControl = cache } },

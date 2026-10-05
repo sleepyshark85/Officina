@@ -47,6 +47,9 @@ public sealed record AgentDefinition
         }
     } = [];
 
+    /// <summary>The typed output the agent requires, if any (OUT-01); without one, a run's result is its text (GEN-05).</summary>
+    public OutputContract? Output { get; init; }
+
     /// <summary>Names the agent in the audit trail (AUD-03); it is not sent to the model.</summary>
     public string Name { get; init; } = "agent";
 
@@ -97,6 +100,10 @@ public sealed record AgentDefinition
 
         return result!;
     }
+
+    /// <summary>A stateless run (GEN-03): on a new conversation, which is discarded afterwards.</summary>
+    public Task<RunResult> RunAsync(string message, string? context = null, CancellationToken cancellationToken = default) =>
+        RunAsync(new Conversation(), message, context, cancellationToken);
 
     /// <summary>
     /// Runs the agent on <paramref name="conversation"/> (a new one, or one this definition's runs used before) with a new
@@ -156,7 +163,7 @@ public sealed record AgentDefinition
     internal static string Cut(string text, int length) =>
         text.Length <= length ? text : text[..(char.IsHighSurrogate(text[length - 1]) ? length - 1 : length)];
 
-    /// <summary>A hash of everything in the cached prefix: model settings, instructions and tools (CTX-04).</summary>
+    /// <summary>A hash of everything in the cached prefix: model settings, instructions, tools and output schema (CTX-04).</summary>
     internal string Fingerprint()
     {
         using var buffer = new MemoryStream();
@@ -177,6 +184,12 @@ public sealed record AgentDefinition
             }
 
             writer.WriteEndArray();
+            if (Output is not null)
+            {
+                writer.WritePropertyName("output");
+                writer.WriteRawValue(Output.Schema);
+            }
+
             writer.WriteEndObject();
         }
 
