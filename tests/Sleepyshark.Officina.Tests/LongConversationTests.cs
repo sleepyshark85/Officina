@@ -84,6 +84,18 @@ public class LongConversationTests
         Assert.False(Agents.With(model).CanContinue(conversation));
     }
 
+    /// <summary>
+    /// Pins the fingerprint of an agent with neither typed output nor context management: the SHA-256 of
+    /// <c>{"model":…,"instructions":…,"tools":[…]}</c>. A change to it stops every stored session from resuming (CTX-04).
+    /// </summary>
+    [Fact]
+    public void The_fingerprint_of_a_plain_agent_does_not_change()
+    {
+        var agent = Agents.With(new ScriptedModel(), tools: Agents.SearchTool());
+
+        Assert.Equal("b4e28e3b1737858911d2b39b69bef5f10afe9dc44e2351e44211a6c874ba9279", agent.Fingerprint());
+    }
+
     [Fact]
     public void An_empty_setting_leaves_the_prefix_as_no_setting_does()
     {
