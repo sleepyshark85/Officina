@@ -8,9 +8,10 @@ namespace BookshopAssistant;
 /// </summary>
 public static class BookshopAgent
 {
+    /// <summary>The agent; in <c>demo</c> mode (APP-17), compaction and clearing come early enough to see in a short session.</summary>
     public static AgentDefinition Create(
         IModel model, BookshopTools tools, IApprover approver, IAuditSink audit, IEnumerable<string> secrets, TimeProvider time,
-        IEnumerable<Tool>? exportTools = null) => new()
+        IEnumerable<Tool>? exportTools = null, bool demo = false) => new()
         {
             Name = "bookshop",
             Model = model,
@@ -20,7 +21,28 @@ public static class BookshopAgent
             AuditSink = audit,
             Time = time,
             Secrets = [.. secrets],
+            ContextManagement = demo ? Demo : LongConversations,
         };
+
+    /// <summary>
+    /// How long sessions stay short (HIST-01, HIST-02): compaction at Claude's default threshold, and clearing of old tool
+    /// results only when it frees at least about two broad searches' worth, as each clearing rewrites the cached tail.
+    /// </summary>
+    public static readonly ContextManagement LongConversations = new()
+    {
+        CompactAt = 150_000,
+        ClearToolResults = new ToolResultClearing(After: 20, Keep: 5, AtLeastTokens: 20_000),
+    };
+
+    /// <summary>
+    /// Demo mode (APP-17): compaction at Claude's minimum, which four broad catalogue searches reach, and clearing once a
+    /// conversation holds more than four tool calls, so it does not clear those searches before they compact.
+    /// </summary>
+    public static readonly ContextManagement Demo = new()
+    {
+        CompactAt = 50_000,
+        ClearToolResults = new ToolResultClearing(After: 4, Keep: 2),
+    };
 
     /// <summary>The run context (APP-13, CTX-02): today's date and who is at the counter.</summary>
     public static string Context(DateTimeOffset now, string staffMember) =>

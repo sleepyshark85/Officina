@@ -81,6 +81,12 @@ public sealed record AgentDefinition
     /// </summary>
     public Budget? Budget { get; init; }
 
+    /// <summary>
+    /// How the provider shortens a long conversation on its side (HIST-01, HIST-02); none by default. It needs a model with
+    /// the capabilities it uses (HIST-03), and is part of the prefix.
+    /// </summary>
+    public ContextManagement? ContextManagement { get; init; }
+
     /// <summary>The clock for audit times, durations and span times; tests give a fake one.</summary>
     public TimeProvider Time
     {
@@ -128,6 +134,12 @@ public sealed record AgentDefinition
         if (Budget?.Cost is not null && Model.Price is null)
         {
             throw new InvalidOperationException("The budget limits cost, but the model has no price.");
+        }
+
+        if ((ContextManagement?.CompactAt is not null && !Model.Capabilities.HasFlag(ModelCapabilities.Compaction))
+            || (ContextManagement?.ClearToolResults is not null && !Model.Capabilities.HasFlag(ModelCapabilities.ContextEditing)))
+        {
+            throw new InvalidOperationException("The agent's context management needs a capability its model does not have (HIST-03).");
         }
 
         return RunEngine.StreamAsync(this, conversation, message, context, cancellationToken);
@@ -188,6 +200,25 @@ public sealed record AgentDefinition
             {
                 writer.WritePropertyName("output");
                 writer.WriteRawValue(Output.Schema);
+            }
+
+            // An empty setting asks for nothing, so it leaves the fingerprint as no setting does.
+            if (ContextManagement is { } context && (context.CompactAt is not null || context.ClearToolResults is not null))
+            {
+                writer.WriteStartObject("contextManagement");
+                if (context.CompactAt is { } compactAt)
+                {
+                    writer.WriteNumber("compactAt", compactAt);
+                }
+
+                if (context.ClearToolResults is { } clearing)
+                {
+                    writer.WriteNumber("clearAfter", clearing.After);
+                    writer.WriteNumber("clearKeep", clearing.Keep);
+                    writer.WriteNumber("clearAtLeastTokens", clearing.AtLeastTokens);
+                }
+
+                writer.WriteEndObject();
             }
 
             writer.WriteEndObject();

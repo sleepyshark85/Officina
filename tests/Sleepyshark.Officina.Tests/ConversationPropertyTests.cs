@@ -10,7 +10,8 @@ namespace Sleepyshark.Officina.Tests;
 /// TEST-07: over generated sequences of runs on one conversation, with cancels, model failures and tool calls (reads and
 /// writes, errors, invalid input, denials, unknown tools, writes whose audit fails), each saved and resumed, the
 /// conversation always passes the role-sequence check, the prefix stays byte-identical, every tool call has exactly one
-/// result, no write runs before its audit entry, and no secret reaches the events or the audit trail.
+/// result, no write runs before its audit entry, no secret reaches the events or the audit trail, and a compaction block
+/// stays in the conversation as received (HIST-01, MDL-05).
 /// </summary>
 public class ConversationPropertyTests
 {
@@ -33,6 +34,7 @@ public class ConversationPropertyTests
     public enum Ending
     {
         Text,
+        Compacted,
         ModelFailure,
         OutputLimitWithTools,
         ContextFullWithTools,
@@ -57,6 +59,8 @@ public class ConversationPropertyTests
         (replies, ending, cancelAt, attended) => new RunSpec(replies, ending, cancelAt, attended));
 
     private const string Secret = "hunter2";
+
+    private static readonly ContentBlock Compaction = new(null, """{"type":"compaction","content":"Earlier: the customer asked for x."}""");
 
     private static readonly JsonSerializerOptions Print = new() { Converters = { new JsonStringEnumConverter() } };
 
@@ -98,7 +102,7 @@ public class ConversationPropertyTests
                 },
                 needsApproval);
 
-            var model = new ScriptedModel();
+            var model = new ScriptedModel { Capabilities = ModelCapabilities.Compaction };
             foreach (var reply in run.ToolReplies)
             {
                 model.Reply([new TextDelta("Working."), .. reply.Select(call => new BlockReceived(ScriptedModel.ToolCallBlock(ToolCall(call, ++ids)))), new ModelStopped(ModelStopReason.ToolUse)]);
@@ -107,6 +111,9 @@ public class ConversationPropertyTests
             _ = run.Ending switch
             {
                 Ending.Text => model.Reply("Done."),
+                Ending.Compacted => model.Reply(
+                    new BlockReceived(Compaction), new TextDelta("Done."), new BlockReceived(ScriptedModel.TextBlock("Done.")),
+                    new CompactionReported(50_000, 500), new ModelStopped(ModelStopReason.End)),
                 Ending.ModelFailure => model.Fail(new InvalidOperationException("boom"), new TextDelta("Do")),
                 _ => model.Reply(
                     new TextDelta("Let me"),
@@ -127,6 +134,7 @@ public class ConversationPropertyTests
                 Secrets = [Secret],
                 Tools = [Make("read", ToolKind.Read, false), Make("write", ToolKind.Write, false), Make("guarded", ToolKind.Write, true)],
                 Approver = run.Attended ? new InputApprover() : null,
+                ContextManagement = new ContextManagement { CompactAt = 50_000 },
             };
 
             if (run.CancelAt == 6)
@@ -149,6 +157,11 @@ public class ConversationPropertyTests
             Assert.Single(events.OfType<RunEnded>());
             Assert.True(result is not Failed failed || failed.Error == "boom" || (run.Ending == Ending.EndWithTools && failed.Reason == FailureReason.UnexpectedStop), $"The run failed: {result}");
             Assert.Null(RoleSequence.Problem(conversation.Messages));
+            if (run.Ending == Ending.Compacted && result is Completed)
+            {
+                Assert.Equal(Compaction.Raw, conversation.Messages[^1].Blocks[0].Raw);
+            }
+
             var calls = conversation.Messages.SelectMany(message => message.Blocks).Select(block => block.ToolCall?.Id).OfType<string>().ToList();
             var results = conversation.Messages.SelectMany(message => message.Blocks).Select(block => block.ToolResult?.CallId).OfType<string>().ToList();
             Assert.Equal(calls, results);

@@ -45,6 +45,12 @@ public static class Telemetry
 
     private static readonly Counter<long> Approvals = Meter.CreateCounter<long>("officina.tool.approvals", "{approval}", "Approvals, by answer.");
 
+    private static readonly Counter<long> Compactions = Meter.CreateCounter<long>(
+        "officina.model.compactions", "{compaction}", "Compactions of the conversation by the provider (HIST-04).");
+
+    private static readonly Counter<long> Clearings = Meter.CreateCounter<long>(
+        "officina.model.clearings", "{clearing}", "Model calls for which the provider cleared old tool results (HIST-04).");
+
     private static readonly Counter<long> Runs = Meter.CreateCounter<long>("officina.runs", "{run}", "Runs, by result.");
 
     private static readonly Counter<long> AuditFailures = Meter.CreateCounter<long>(
@@ -148,6 +154,22 @@ public static class Telemetry
 
         SetContent(activity, agent, "gen_ai.output.messages", () => Messages("assistant", text()));
         Stop(activity, agent, error is null ? null : ("model_error", error));
+    }
+
+    /// <summary>Records a compaction on the model call's span, and counts it.</summary>
+    internal static void Compacted(Activity? activity, AgentDefinition agent, CompactionReported compaction)
+    {
+        Compactions.Add(1, Dimensions(agent));
+        activity?.SetTag("officina.compaction.tokens", compaction.Tokens);
+        activity?.SetTag("officina.compaction.summary_tokens", compaction.SummaryTokens);
+    }
+
+    /// <summary>Records a clearing of old tool results on the model call's span, and counts it.</summary>
+    internal static void Cleared(Activity? activity, AgentDefinition agent, ClearingReported clearing)
+    {
+        Clearings.Add(1, Dimensions(agent));
+        activity?.SetTag("officina.clearing.tokens", clearing.Tokens);
+        activity?.SetTag("officina.clearing.tool_calls", clearing.ToolCalls);
     }
 
     /// <summary>Counts a retry of a model call.</summary>

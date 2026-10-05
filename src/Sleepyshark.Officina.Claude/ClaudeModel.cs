@@ -61,6 +61,9 @@ public sealed class ClaudeModel : IModel, IDisposable
         init;
     }
 
+    /// <summary>Server-side compaction and tool-result clearing, through the beta context management (ARCHITECTURE §10).</summary>
+    public ModelCapabilities Capabilities => ModelCapabilities.Compaction | ModelCapabilities.ContextEditing;
+
     public string Provider => "anthropic";
 
     public string Name => Model;

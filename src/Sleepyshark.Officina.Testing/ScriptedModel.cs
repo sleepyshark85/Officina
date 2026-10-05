@@ -23,6 +23,9 @@ public sealed class ScriptedModel : IModel
     /// <summary>What its tokens cost; none by default.</summary>
     public ModelPrice? Price { get; init; }
 
+    /// <summary>What it declares it supports; none by default.</summary>
+    public ModelCapabilities Capabilities { get; init; }
+
     /// <summary>The requests received so far, in order.</summary>
     public IReadOnlyList<ModelRequest> Requests
     {

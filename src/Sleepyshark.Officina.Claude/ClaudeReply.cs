@@ -5,8 +5,8 @@ using Anthropic.Models.Beta.Messages;
 namespace Sleepyshark.Officina.Claude;
 
 /// <summary>
-/// Reads a complete streamed reply: each content block with its JSON as <see cref="ContentBlock.Raw"/> (MDL-05), the usage
-/// of the call as one increment, and the stop reason.
+/// Reads a complete streamed reply: each content block with its JSON as <see cref="ContentBlock.Raw"/> (MDL-05), what the
+/// provider did to shorten the conversation (HIST-04), the usage of the call as one increment, and the stop reason.
 /// </summary>
 internal static class ClaudeReply
 {
@@ -24,9 +24,33 @@ internal static class ClaudeReply
             read.Add(new BlockReceived(new ContentBlock(text, json.GetRawText(), call)));
         }
 
+        read.AddRange(ContextEdits(message));
         read.Add(new UsageReceived(Usage(message.Usage)));
         read.Add(Stop(message));
         return read;
+    }
+
+    /// <summary>
+    /// A compaction, from the call's compaction iteration: what it read is what it summarized, and what it wrote is the
+    /// summary. A clearing of tool results, from the edits the API applied; compaction is not among them (spike S02).
+    /// </summary>
+    private static IEnumerable<ModelEvent> ContextEdits(BetaMessage message)
+    {
+        foreach (var iteration in Iterations(message.Usage).Where(iteration => Word(iteration, "type") == "compaction"))
+        {
+            yield return new CompactionReported(
+                Tokens(iteration, "input_tokens") + Tokens(iteration, "cache_read_input_tokens") + Tokens(iteration, "cache_creation_input_tokens"),
+                Tokens(iteration, "output_tokens"));
+        }
+
+        if (message.RawData.TryGetValue("context_management", out var context) && context.ValueKind == JsonValueKind.Object
+            && context.TryGetProperty("applied_edits", out var edits) && edits.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var edit in edits.EnumerateArray().Where(edit => Word(edit, "type") == "clear_tool_uses_20250919"))
+            {
+                yield return new ClearingReported(Tokens(edit, "cleared_input_tokens"), (int)Tokens(edit, "cleared_tool_uses"));
+            }
+        }
     }
 
     /// <summary>The stop reason, by its raw word, so a reason added later keeps its word as the detail.</summary>
@@ -52,9 +76,9 @@ internal static class ClaudeReply
     /// </summary>
     private static Usage Usage(BetaUsage usage)
     {
-        if (usage.RawData.TryGetValue("iterations", out var iterations) && iterations.ValueKind == JsonValueKind.Array && iterations.GetArrayLength() > 0)
+        if (Iterations(usage) is { Count: > 0 } iterations)
         {
-            return iterations.EnumerateArray().Aggregate(default(Usage), (sum, iteration) => sum + new Usage(
+            return iterations.Aggregate(default(Usage), (sum, iteration) => sum + new Usage(
                 Tokens(iteration, "input_tokens"), Tokens(iteration, "output_tokens"),
                 Tokens(iteration, "cache_read_input_tokens"), Tokens(iteration, "cache_creation_input_tokens"),
                 iteration.TryGetProperty("cache_creation", out var written) && written.ValueKind == JsonValueKind.Object ? Tokens(written, "ephemeral_1h_input_tokens") : 0));
@@ -89,6 +113,13 @@ internal static class ClaudeReply
 
         return usage;
     }
+
+    /// <summary>The call's iterations, such as a compaction and then the reply; none when the call reports none.</summary>
+    private static List<JsonElement> Iterations(BetaUsage usage) =>
+        usage.RawData.TryGetValue("iterations", out var iterations) && iterations.ValueKind == JsonValueKind.Array ? [.. iterations.EnumerateArray()] : [];
+
+    private static string? Word(JsonElement element, string name) =>
+        element.TryGetProperty(name, out var word) && word.ValueKind == JsonValueKind.String ? word.GetString() : null;
 
     private static long Tokens(JsonElement iteration, string name) =>
         iteration.TryGetProperty(name, out var count) && count.ValueKind == JsonValueKind.Number ? count.GetInt64() : 0;

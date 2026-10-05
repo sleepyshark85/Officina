@@ -24,6 +24,9 @@ public interface IModel
     /// <summary>What the model's tokens cost (BUD-02); null when unknown, and then they cost nothing in results and budgets.</summary>
     ModelPrice? Price { get; }
 
+    /// <summary>What the provider supports beyond the basic contract; none unless the model declares it (HIST-03).</summary>
+    ModelCapabilities Capabilities => ModelCapabilities.None;
+
     /// <summary>
     /// Sends one request and streams the reply: text deltas and complete blocks as they arrive, usage, and last a
     /// <see cref="ModelStopped"/>. Each retry is announced by a <see cref="ModelRetried"/>.
@@ -43,8 +46,10 @@ public interface IModel
 /// The JSON schema the reply must match, when the agent requires typed output (OUT-01): the provider sends it as its
 /// structured output format, adjusted to what it accepts.
 /// </param>
+/// <param name="ContextManagement">How the provider shortens the conversation on its side, if at all (HIST-01, HIST-02).</param>
 public sealed record ModelRequest(
-    ImmutableArray<Tool> Tools, string Instructions, ImmutableArray<Message> Messages, int? MaxOutputTokens = null, string? OutputSchema = null);
+    ImmutableArray<Tool> Tools, string Instructions, ImmutableArray<Message> Messages, int? MaxOutputTokens = null, string? OutputSchema = null,
+    ContextManagement? ContextManagement = null);
 
 /// <summary>Something the model streams while it replies.</summary>
 public abstract record ModelEvent;

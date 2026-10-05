@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using System.Diagnostics;
+using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Threading.Channels;
 
@@ -114,6 +115,11 @@ internal static class RunEngine
             }
 
             spending.AddCall(reply.Usage);
+            foreach (var (kind, detail) in reply.ContextEdits)
+            {
+                await audit.RecordAsync(kind, detail: detail).ConfigureAwait(false);
+            }
+
             var usage = spending.Usage;
 
             // A reply the lowered output limit cut short stopped for the budget, once the budget allows no more.
@@ -214,6 +220,9 @@ internal static class RunEngine
 
         public string? Error { get; set; }
 
+        /// <summary>What the provider did to shorten the conversation for this call, for the audit trail (HIST-04).</summary>
+        public List<(AuditKind Kind, string Detail)> ContextEdits { get; } = [];
+
         public int Retries { get; set; }
 
         /// <summary>How long the first text took to arrive, if any did.</summary>
@@ -224,7 +233,7 @@ internal static class RunEngine
     private static async IAsyncEnumerable<RunEvent> CallModelAsync(
         AgentDefinition agent, ImmutableArray<Message> messages, int? limit, Activity? run, Reply reply, [EnumeratorCancellation] CancellationToken cancellationToken)
     {
-        var request = new ModelRequest(agent.Tools, agent.Instructions, messages, limit, agent.Output?.Schema);
+        var request = new ModelRequest(agent.Tools, agent.Instructions, messages, limit, agent.Output?.Schema, agent.ContextManagement);
         var (started, span) = (agent.Time.GetTimestamp(), Telemetry.StartModelCall(agent, run));
         var streamed = false;
         IAsyncEnumerator<ModelEvent>? stream = null;
@@ -278,6 +287,16 @@ internal static class RunEngine
                     case ModelStopped stopped:
                         reply.Stop = stopped;
                         break;
+                    case CompactionReported compacted:
+                        reply.ContextEdits.Add((AuditKind.Compacted, Say($"{compacted.Tokens:N0} tokens summarized into {compacted.SummaryTokens:N0}.")));
+                        Telemetry.Compacted(span, agent, compacted);
+                        yield return new ConversationCompacted(compacted.Tokens, compacted.SummaryTokens);
+                        break;
+                    case ClearingReported cleared:
+                        reply.ContextEdits.Add((AuditKind.Cleared, Say($"Results of {cleared.ToolCalls:N0} tool calls cleared: {cleared.Tokens:N0} tokens.")));
+                        Telemetry.Cleared(span, agent, cleared);
+                        yield return new ToolResultsCleared(cleared.Tokens, cleared.ToolCalls);
+                        break;
                 }
             }
 
@@ -323,6 +342,8 @@ internal static class RunEngine
         (_, { } error) => new Failed(FailureReason.InvalidOutput, error, usage),
         var (value, _) => new Completed(text, usage) { Output = value },
     };
+
+    private static string Say(FormattableString text) => text.ToString(CultureInfo.InvariantCulture);
 
     /// <summary>Runs a step of the model call; returns the failure's message, or null when it succeeded or the run was cancelled.</summary>
     private static async ValueTask<string?> TryAsync(Func<ValueTask> step, CancellationToken cancellationToken)

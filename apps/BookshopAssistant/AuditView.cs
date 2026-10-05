@@ -43,6 +43,7 @@ public static class AuditView
             $"{entry.Outcome}  tokens: {usage.Input + usage.CacheRead + usage.CacheWrite:N0} in ({usage.CacheRead:N0} cached), {usage.Output:N0} out, ${entry.Cost ?? 0:0.0000}"),
         { Kind: AuditKind.ApprovalAnswered, Detail: { } reason } => $"{entry.Outcome}: {reason}",
         { Kind: AuditKind.ToolEnded, Duration: { } duration } => string.Create(CultureInfo.InvariantCulture, $"{entry.Outcome}  {duration.TotalMilliseconds:N0} ms"),
+        { Kind: AuditKind.Compacted or AuditKind.Cleared } => entry.Detail ?? "",
         _ => entry.Outcome ?? "",
     };
 }
