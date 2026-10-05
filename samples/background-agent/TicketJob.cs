@@ -22,7 +22,8 @@ public sealed record TicketOutcome(
 /// It has no approver, so a call that needs approval is denied and the model is told (GEN-04). Its tools are the
 /// helpdesk's, from an MCP server over Streamable HTTP (MCP-01), and the application's own refund tool. Its record goes
 /// to a JSON-lines audit file (AUD-04), each job is limited by a budget (BUD-01), and it returns typed output beside its
-/// side effect, a note on the ticket. Each job is one stateless run, on a conversation named after its ticket.
+/// side effect, a note on the ticket. Each job is one stateless run, on a conversation named after its ticket. It has no
+/// memory: §8 allows one per job or tenant, but memory is optional (GEN-02), and a job that starts afresh needs none.
 /// </summary>
 public sealed class TicketJob : IAsyncDisposable
 {
@@ -48,24 +49,33 @@ public sealed class TicketJob : IAsyncDisposable
         // The host decides what each of the server's tools may do, rather than trusting its annotations (MCP-02).
         var helpdesk = await McpToolSource.ConnectAsync(
             server, [new AllowedTool("get_ticket", ToolKind.Read), new AllowedTool("add_note", ToolKind.Write)], cancellationToken).ConfigureAwait(false);
-        var audit = new JsonLinesAuditSink(auditFile);
-        var refundTool = Tool.FromFunction(
-            "issue_refund",
-            "Refunds a customer for a ticket. A person must approve each refund.",
-            ToolKind.Write,
-            ([Description("The ticket's id.")] string ticketId, [Description("The amount, in pounds.")] decimal amount) => refund(ticketId, amount),
-            needsApproval: true);
-        return new TicketJob(helpdesk, audit, new AgentDefinition
+        try
         {
-            Name = "ticket-job",
-            Model = model,
-            Instructions = Instructions,
-            Tools = [.. helpdesk.Tools, refundTool],
-            Output = OutputContract.For<TicketOutcome>(),
-            AuditSink = audit,
-            Budget = PerJob,
-            Secrets = [token],
-        });
+            var refundTool = Tool.FromFunction(
+                "issue_refund",
+                "Refunds a customer for a ticket. A person must approve each refund.",
+                ToolKind.Write,
+                ([Description("The ticket's id.")] string ticketId, [Description("The amount, in pounds.")] decimal amount) => refund(ticketId, amount),
+                needsApproval: true);
+            var agent = new AgentDefinition
+            {
+                Name = "ticket-job",
+                Model = model,
+                Instructions = Instructions,
+                Tools = [.. helpdesk.Tools, refundTool],
+                Output = OutputContract.For<TicketOutcome>(),
+                Budget = PerJob,
+                Secrets = [token],
+            };
+            var audit = new JsonLinesAuditSink(auditFile);
+            return new TicketJob(helpdesk, audit, agent with { AuditSink = audit });
+        }
+        catch
+        {
+            // Nothing else holds the connection yet, so it is closed here.
+            await helpdesk.DisposeAsync().ConfigureAwait(false);
+            throw;
+        }
     }
 
     /// <summary>Handles one ticket; the result says how the run ended, and on completion holds the <see cref="TicketOutcome"/>.</summary>

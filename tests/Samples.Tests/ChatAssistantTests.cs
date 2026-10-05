@@ -50,6 +50,20 @@ public class ChatAssistantTests
     }
 
     [Fact]
+    public async Task A_conversation_of_a_changed_definition_is_started_anew_rather_than_failing()
+    {
+        await Assistant(new ScriptedModel().Reply("Hello.")).ReplyAsync("ana", "Hi.", Ct);
+
+        // An upgrade changed the model settings, which are part of the prefix (CTX-04).
+        var upgraded = new ScriptedModel { Settings = "scripted, effort high" }.Reply("Hello again.");
+        var result = await Assistant(upgraded).ReplyAsync("ana", "Hi again.", Ct);
+
+        Assert.Equal("Hello again.", Assert.IsType<Completed>(result).Text);
+        Assert.Equal(["Hi again.", "Today is 2026-10-06."], upgraded.Requests[0].Messages.Select(message => message.Text));
+        Assert.DoesNotContain("Hi.", conversations["ana"], StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Memory_is_kept_per_user_across_conversations_and_one_user_never_sees_another_s()
     {
         var model = new ScriptedModel()

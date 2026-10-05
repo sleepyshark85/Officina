@@ -13,7 +13,7 @@ PostgreSQL in Docker.
 - [`docs/plan/phase-1.md`](docs/plan/phase-1.md): the phase 1 slices.
 - [`docs/traceability.md`](docs/traceability.md): each phase 1 requirement and its tests.
 
-Status: phase 1 complete, pending S13b (the demo script and the live smoke test).
+Status: phase 1: slices S01–S13 merged; see [`docs/demo.md`](docs/demo.md) and [`docs/traceability.md`](docs/traceability.md).
 
 ## Build and test
 
@@ -62,3 +62,5 @@ so on Linux the exported files are owned by root: readable, and deletable from t
 The assistant remembers each staff member's preferences across sessions, under `data/memory` (or `$BOOKSHOP_DATA/memory`);
 `/memory` shows them. Memory follows the staff member at the counter: a session resumed by someone else uses their
 memory, not the memory of the member who started it. Try *I prefer prices with tax*, then ask for a price in a new session.
+
+Traces leave out message text and tool inputs and results; `BOOKSHOP_TELEMETRY_CONTENT=1` puts them in, for debugging.

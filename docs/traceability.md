@@ -51,7 +51,7 @@ only a live run or inspection checks, noted in the last column.
 | GEN-02 | Core/RunTests: `An_agent_with_only_a_model_and_instructions_runs_statelessly`; Core/AgentDefinitionTests: `A_definition_needs_a_model_and_instructions` | |
 | GEN-03 | Core/OutputTests: `A_stateless_run_starts_a_new_conversation_each_time`; Core/RunTests: `A_scripted_multi_turn_conversation_completes_with_text`; Samples/ExtractionTests, Samples/ChatAssistantTests | |
 | GEN-04 | Core/ToolLoopTests: `An_unattended_run_denies_calls_that_need_approval_and_tells_the_model_why`, `An_approved_call_runs`; Samples/BackgroundAgentTests: `An_unattended_job_reads_the_ticket_is_denied_the_refund_…` | |
-| GEN-05 | Core/RunTests: `A_scripted_multi_turn_conversation_completes_with_text` (text); Core/OutputTests: `A_valid_reply_completes_with_the_typed_output_…` (typed); Samples/BackgroundAgentTests: `An_unattended_job_…` (typed output beside a side effect) | |
+| GEN-05 | Core/RunTests: `A_scripted_multi_turn_conversation_completes_with_text` (text); Core/OutputTests: `A_valid_reply_completes_with_the_typed_output_…` (typed); Core/ToolLoopTests: `GEN_05_a_run_whose_work_is_its_side_effect_ends_after_its_write_tool` (side effects); Samples/BackgroundAgentTests: `An_unattended_job_…` (typed output beside a side effect) | |
 | GEN-06 | Samples/ExtractionTests, Samples/ChatAssistantTests, Samples/BackgroundAgentTests (all) | |
 
 ## Agent and turn loop (AGT)
@@ -72,7 +72,7 @@ only a live run or inspection checks, noted in the last column.
 |---|---|---|
 | MDL-01 | Every Core test reaches the model through the model interface (the scripted model); Deps: `The_core_referencing_any_package_fails` | Inspection |
 | MDL-02 | Claude/RequestTests: `Stored_blocks_reach_the_wire_byte_for_byte_and_the_request_streams`; Claude/StreamTests: `Text_streams_as_it_arrives_…`; Deps: `A_package_other_than_Claude_referencing_the_Anthropic_SDK_fails` | |
-| MDL-03 | Claude/StreamTests: `The_settings_name_every_setting_that_shapes_a_request`; Claude/RequestTests: `The_request_body_matches_the_golden_layout` (effort sent explicitly; it is a required setting) | |
+| MDL-03 | Claude/StreamTests: `The_settings_name_every_setting_that_shapes_a_request`; Claude/RequestTests: `The_request_body_matches_the_golden_layout` (effort sent explicitly; it is a required setting); Core/PrefixTests: `A_changed_prefix_fails_the_run_with_a_prefix_mismatch_before_any_model_call` (its "model settings" case: settings are fixed for a conversation) | |
 | MDL-04 | Claude/RetryTests (all) | |
 | MDL-05 | Core/RunTests: `Reply_blocks_are_appended_exactly_as_received`; Claude/RequestTests: `A_reply_is_stored_and_replayed_unchanged_on_the_next_request`; Claude/LongConversationTests: `The_compaction_block_is_kept_and_replayed_as_received_and_the_run_reports_it` | |
 | MDL-06 | Claude/StreamTests: `A_refusal_carries_its_category`; Core/RunTests: `Every_stop_reason_maps_to_its_result_and_the_reply_is_kept` | |
@@ -132,7 +132,7 @@ only a live run or inspection checks, noted in the last column.
 | ID | Tests | Also checked by |
 |---|---|---|
 | OUT-01 | Core/OutputTests: `A_valid_reply_completes_with_the_typed_output_and_the_request_carries_the_schema_as_exported`, `The_exported_schema_names_members_in_camel_case_…`; Claude/OutputTests: `An_exported_type_s_schema_is_sent_adjusted_as_the_output_format_…`, `A_structured_reply_comes_back_as_the_typed_output`; Samples/ExtractionTests | |
-| OUT-02 | Core/OutputTests: `An_exception_from_the_output_type_s_constructor_ends_the_run_as_failed`; Samples/ExtractionTests: `Output_that_does_not_match_the_type_fails_the_run_and_classifies_nothing`; App/SummaryTests: `APP_15_output_that_does_not_match_the_schema_is_told_…` | |
+| OUT-02 | Core/OutputTests: `Output_that_fails_to_validate_or_deserialize_ends_the_run_as_failed_with_the_errors_and_no_correction_round`, `An_exception_from_the_output_type_s_constructor_ends_the_run_as_failed`; Samples/ExtractionTests: `Output_that_does_not_match_the_type_fails_the_run_and_classifies_nothing`; App/SummaryTests: `APP_15_output_that_does_not_match_the_schema_is_told_…` | |
 
 ## Budgets (BUD)
 

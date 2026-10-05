@@ -31,6 +31,29 @@ public class ToolLoopTests
     }
 
     [Fact]
+    public async Task GEN_05_a_run_whose_work_is_its_side_effect_ends_after_its_write_tool()
+    {
+        var restocked = new ConcurrentQueue<string>();
+        var restock = Agents.Tool(
+            "restock",
+            schema: Agents.SearchSchema,
+            kind: ToolKind.Write,
+            handler: (input, _) =>
+            {
+                restocked.Enqueue(input.GetProperty("query").GetString()!);
+                return Task.FromResult(new ToolOutput("ok"));
+            });
+        var model = new ScriptedModel().CallTools(new ToolCall("c1", "restock", """{"query":"Gaudy Night"}""")).Reply("Done.");
+
+        var result = await Agents.With(model, tools: restock).RunAsync("Restock Gaudy Night.", cancellationToken: Ct);
+
+        // The host acts on what the tool changed, not on the reply's text.
+        Assert.IsType<Completed>(result);
+        Assert.Equal(["Gaudy Night"], restocked);
+        Assert.Equal(2, model.Requests.Count);
+    }
+
+    [Fact]
     public async Task Invalid_input_a_thrown_handler_a_denial_and_an_unknown_tool_each_come_back_as_error_results_and_the_run_continues()
     {
         var model = new ScriptedModel()
