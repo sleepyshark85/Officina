@@ -1,0 +1,175 @@
+# S02 run output. 2026-10-05, NuGet Anthropic 12.53.0, claude-opus-5-5. Each feature was run separately (dotnet run -- <name>); outputs concatenated.
+# Totals per block are per run. midsys and structured shown from their second run; first runs cost $0.0229 and $0.0179, and a first, shorter updates run $0.0215.
+
+===== compact =====
+count_tokens: 2000 lines = 88184 tokens -> using 1179 lines (~52k)
+context_management json: {"edits":[{"type":"compact_20260112","trigger":{"type":"input_tokens","value":50000}}]}
+  stream: content_block_start compaction {"type":"compaction","content":null}
+  [compact#1] stop=end_turn blocks=[compaction(content=1156ch), thinking(text=0ch, sig=996ch), text("Volume 42 of the mystery series")]
+  [compact#1] usage in=2 out=85 cache_read=2615 cache_write=558 | call $0.2677 running $0.2677 | replayed blocks checked=0 mismatched=0
+  [compact#1] usage.iterations=[{"input_tokens":48,"output_tokens":578,"cache_read_input_tokens":2615,"cache_creation_input_tokens":50090,"cache_creation":{"ephemeral_5m_input_tokens":50090,"ephemeral_1h_input_tokens":0},"type":"compaction"},{"input_tokens":2,"output_tokens":85,"cache_read_input_tokens":2615,"cache_creation_input_tokens":558,"cache_creation":{"ephemeral_5m_input_tokens":558,"ephemeral_1h_input_tokens":0},"type":"message"}]
+  [compact#1] context_management={"applied_edits":[]}
+  stream: compaction_delta events=1
+  compaction block (first 400 chars): {"type":"compaction","content":"**Role and rules:** I am the assistant for the small bookshop \u00ABCaf\u00E9 Libro\u00BB and should answer briefly and precisely. Policies 1\u201360 all say the same thing for every topic: check the catalog first, never invent stock levels, and quote prices in euros.\n\n**Catalog:** The user supplied items 0001\u20131179, all following one regular pattern:\n- **Tit…(+863)
+  [compact#2] stop=end_turn blocks=[text("Shelf Q2.")]
+  [compact#2] usage in=4 out=10 cache_read=2615 cache_write=665 | call $0.0041 running $0.2718 | replayed blocks checked=3 mismatched=0
+  [compact#2] usage.iterations=[{"input_tokens":4,"output_tokens":10,"cache_read_input_tokens":2615,"cache_creation_input_tokens":665,"cache_creation":{"ephemeral_5m_input_tokens":665,"ephemeral_1h_input_tokens":0},"type":"message"}]
+  [compact#2] context_management={"applied_edits":[]}
+  [compact#3] stop=end_turn blocks=[thinking(text=0ch, sig=956ch), text("17.42 EUR.")]
+  [compact#3] usage in=4 out=45 cache_read=3280 cache_write=25 | call $0.0017 running $0.2735 | replayed blocks checked=4 mismatched=0
+  [compact#3] usage.iterations=[{"input_tokens":4,"output_tokens":45,"cache_read_input_tokens":3280,"cache_creation_input_tokens":25,"cache_creation":{"ephemeral_5m_input_tokens":25,"ephemeral_1h_input_tokens":0},"type":"message"}]
+  [compact#3] context_management={"applied_edits":[]}
+
+ROUND TRIP: replayed assistant blocks checked=7 mismatched=0
+TOTAL: input=58 output=718 cache_read=11125 write5m=51338 write1h=0 cost=$0.2735
+
+===== clear =====
+context_management json: {"edits":[{"type":"clear_tool_uses_20250919","trigger":{"type":"tool_uses","value":2},"keep":{"type":"tool_uses","value":1}}]}
+  [clear#1] stop=tool_use blocks=[tool_use(lookup_book {"id":1})]
+  [clear#1] usage in=4 out=47 cache_read=0 cache_write=3035 | call $0.0161 running $0.0161 | replayed blocks checked=0 mismatched=0
+  [clear#1] context_management={"applied_edits":[]}
+  [clear#2] stop=tool_use blocks=[tool_use(lookup_book {"id":2})]
+  [clear#2] usage in=2 out=47 cache_read=3035 cache_write=2674 | call $0.0149 running $0.0311 | replayed blocks checked=1 mismatched=0
+  [clear#2] context_management={"applied_edits":[]}
+  [clear#3] stop=tool_use blocks=[tool_use(lookup_book {"id":3})]
+  [clear#3] usage in=80 out=48 cache_read=5709 cache_write=2672 | call $0.0158 running $0.0468 | replayed blocks checked=2 mismatched=0
+  [clear#3] context_management={"applied_edits":[]}
+  [clear#4] stop=tool_use blocks=[tool_use(lookup_book {"id":4})]
+  [clear#4] usage in=2 out=47 cache_read=3035 cache_write=2808 | call $0.0156 running $0.0624 | replayed blocks checked=3 mismatched=0
+  [clear#4] context_management={"applied_edits":[{"type":"clear_tool_uses_20250919","cleared_input_tokens":4892,"cleared_tool_uses":2}]}
+  [clear#5] stop=end_turn blocks=[thinking(text=0ch, sig=976ch), text("I looked up all four books, but I can only confirm the author for two of them:\n\n…(+369)")]
+  [clear#5] usage in=80 out=221 cache_read=5843 cache_write=2672 | call $0.0193 running $0.0817 | replayed blocks checked=4 mismatched=0
+  [clear#5] context_management={"applied_edits":[{"type":"clear_tool_uses_20250919","cleared_input_tokens":4799,"cleared_tool_uses":2}]}
+
+ROUND TRIP: replayed assistant blocks checked=10 mismatched=0
+TOTAL: input=168 output=410 cache_read=17622 write5m=13861 write1h=0 cost=$0.0817
+
+===== memory =====
+tools json: [{"name":"memory","type":"memory_20250818"}]
+  [memA#1] stop=tool_use blocks=[tool_use(memory {"command":"view","path":"/memories"})]
+  [memA#1] usage in=111 out=69 cache_read=0 cache_write=4269 | call $0.0232 running $0.0232 | replayed blocks checked=0 mismatched=0
+    memory {"command":"view","path":"/memories"} -> Here are the files and directories up to 2 levels deep in /memories:\n
+  [memA#2] stop=tool_use blocks=[tool_use(memory {"command":"create","path":"/memories/customers/ana.md","file_text":"# Customer: Ana\n- Loves mystery novels\n- Dislikes horror (avoid recommending horror)\n"})]
+  [memA#2] usage in=208 out=137 cache_read=4269 cache_write=0 | call $0.0044 running $0.0276 | replayed blocks checked=1 mismatched=0
+    memory {"command":"create","path":"/memories/customers/ana.md","file_text":"# Customer: Ana\n- Loves mystery novels\n- Dislikes horror (avoid recommending horror)\n"} -> File created successfully at: /memories/customers/ana.md
+  [memA#3] stop=end_turn blocks=[text("I've saved it, Ana. You love mystery novels and don't like horror, so I'll keep …(+92)")]
+  [memA#3] usage in=368 out=60 cache_read=4269 cache_write=0 | call $0.0035 running $0.0311 | replayed blocks checked=2 mismatched=0
+  store after A: {"/memories/customers/ana.md":"# Customer: Ana\n- Loves mystery novels\n- Dislikes horror (avoid recommending horror)\n"}
+  [memB#1] stop=tool_use blocks=[tool_use(memory {"command":"view","path":"/memories"})]
+  [memB#1] usage in=96 out=69 cache_read=4269 cache_write=0 | call $0.0026 running $0.0337 | replayed blocks checked=0 mismatched=0
+    memory {"command":"view","path":"/memories"} -> Here are the files and directories up to 2 levels deep in /memories:\n85	/memories/customers/ana.md
+  [memB#2] stop=tool_use blocks=[tool_use(memory {"command":"view","path":"/memories/customers/ana.md"})]
+  [memB#2] usage in=206 out=77 cache_read=4269 cache_write=0 | call $0.0032 running $0.0370 | replayed blocks checked=1 mismatched=0
+    memory {"command":"view","path":"/memories/customers/ana.md"} ->      1	# Customer: Ana\n     2	- Loves mystery novels\n     3	- Dislikes horror (avoid recommending horror)\n     4	
+  [memB#3] stop=end_turn blocks=[thinking(text=0ch, sig=992ch), text("If you're Ana, try our mystery shelf today, since my notes say you love mysterie…(+31)")]
+  [memB#3] usage in=338 out=95 cache_read=4269 cache_write=0 | call $0.0041 running $0.0411 | replayed blocks checked=2 mismatched=0
+
+ROUND TRIP: replayed assistant blocks checked=6 mismatched=0
+TOTAL: input=1327 output=507 cache_read=21345 write5m=4269 write1h=0 cost=$0.0411
+
+===== updates =====
+thinking json: {"type":"adaptive","display":"updates"}
+  [updates#1] stop=tool_use blocks=[thinking(text=0ch, sig=956ch), text("I'll start with the first title, "The Name of the Rose", and check its stock and…(+7)"), tool_use(check_stock {"title":"The Name of the Rose"}), tool_use(get_price {"title":"The Name of the Rose"})]
+  [updates#1] usage in=4 out=172 cache_read=2975 cache_write=152 | call $0.0048 running $0.0048 | replayed blocks checked=0 mismatched=0
+    stream: thinking_delta=1 signature_delta=1 deltas=[]
+    thinking block: {"type":"thinking","signature":"CAQSxAUKEAgSGAI4AUIIdGhpbmtpbmcSDGBXnna6gCqVnyNiwRoMdube1JIVLIZxK/K0IjDhc8CzOUzfsKiZGasIh6LqaUsJ0AMxLfW0iNAn/NYS87P2PzLAM1FxYQD/15lZ4ccq4QSWLGpXzB0Rn6whx\u002Bc1ef3JaaWABn0N3u/moUYFrR5Qbr7KY00nMRMKchrk0v\u002BujPWGLz4mjfvfjT\u00…(+789)
+  [updates#2] stop=tool_use blocks=[text(""The Name of the Rose" costs €16.90 but is out of stock (0 copies). Next I'll ch…(+18)"), tool_use(check_stock {"title":"Gaudy Night"}), tool_use(get_price {"title":"Gaudy Night"})]
+  [updates#2] usage in=2 out=149 cache_read=3127 cache_write=242 | call $0.0048 running $0.0096 | replayed blocks checked=4 mismatched=0
+    stream: thinking_delta=0 signature_delta=0 deltas=
+  [updates#3] stop=tool_use blocks=[text(""Gaudy Night" costs €14.90 and we have 3 copies. Last, I'll check "The Daughter …(+9)"), tool_use(check_stock {"title":"The Daughter of Time"}), tool_use(get_price {"title":"The Daughter of Time"})]
+  [updates#3] usage in=2 out=149 cache_read=3369 cache_write=217 | call $0.0047 running $0.0144 | replayed blocks checked=7 mismatched=0
+    stream: thinking_delta=0 signature_delta=0 deltas=
+  [updates#4] stop=end_turn blocks=[thinking(text=0ch, sig=984ch), text(""The Daughter of Time" costs €16.90 but is out of stock (0 copies).\n\n| Title | S…(+259)")]
+  [updates#4] usage in=2 out=174 cache_read=3586 cache_write=217 | call $0.0053 running $0.0197 | replayed blocks checked=10 mismatched=0
+    stream: thinking_delta=1 signature_delta=1 deltas=[]
+    thinking block: {"type":"thinking","signature":"CAQS2QUKEAgSGAI4AUIIdGhpbmtpbmcSDIB1ZUVzb7mT5t1TLRoM3YIpAEYLerwECAyMIjAbeo2I7yYf7vZGb5S\u002B42EmPIWFARsI269tGNmQ97dwLxo/upqzZ3tCpTFZCyNQOj4q9gQzOkVkJed4RCXttWVd6Q9uon1KzWFeKQPPkg7tgQv9Qkx30EKS04MTJfmAvLvPhTWilkPuqGlDG7laNO6wIdT…(+807)
+
+ROUND TRIP: replayed assistant blocks checked=21 mismatched=0
+TOTAL: input=10 output=644 cache_read=13057 write5m=828 write1h=0 cost=$0.0197
+
+(second updates run: UPDATES_PLAIN=1, no narration request, effort high)
+===== updates =====
+thinking json: {"type":"adaptive","display":"updates"}
+  [updates#1] stop=tool_use blocks=[thinking(text=0ch, sig=1032ch), text("I'll start with the first title."), tool_use(check_stock {"title":"The Name of the Rose"}), tool_use(get_price {"title":"The Name of the Rose"})]
+  [updates#1] usage in=4 out=173 cache_read=2975 cache_write=134 | call $0.0047 running $0.0047 | replayed blocks checked=0 mismatched=0
+    stream: thinking_delta=1 signature_delta=1 deltas=[]
+    thinking block: {"type":"thinking","signature":"CAQS/QUKEAgSGAI4AUIIdGhpbmtpbmcSDEJOTu/ecClAUfCpHhoMCoJUcwhvU8n\u002BIMUKIjDdQkvdygEVneXTb6rRu6NgefoMkUbsUnuT1heyD/J3ExkTnnTutHs1oC5wCHlKQxUqmgVZwkD5bGiH4ENzzD/ObBTBNGZsw17OvDaVXHOQW4RNPt/O8AAbMFFXDrB1LuoyW6w57sXCw2aYBm58VWBYFS0…(+895)
+  [updates#2] stop=tool_use blocks=[tool_use(check_stock {"title":"Gaudy Night"}), tool_use(get_price {"title":"Gaudy Night"})]
+  [updates#2] usage in=2 out=104 cache_read=3109 cache_write=243 | call $0.0039 running $0.0087 | replayed blocks checked=4 mismatched=0
+    stream: thinking_delta=0 signature_delta=0 deltas=
+  [updates#3] stop=tool_use blocks=[tool_use(check_stock {"title":"The Daughter of Time"}), tool_use(get_price {"title":"The Daughter of Time"})]
+  [updates#3] usage in=2 out=106 cache_read=3352 cache_write=172 | call $0.0037 running $0.0123 | replayed blocks checked=6 mismatched=0
+    stream: thinking_delta=0 signature_delta=0 deltas=
+  [updates#4] stop=tool_use blocks=[tool_use(check_stock {"title":"The Daughter of Time"})]
+  [updates#4] usage in=2 out=55 cache_read=3524 cache_write=174 | call $0.0027 running $0.0150 | replayed blocks checked=8 mismatched=0
+    stream: thinking_delta=0 signature_delta=0 deltas=
+  [updates#5] stop=end_turn blocks=[thinking(text=0ch, sig=1012ch), text("Only one of the three is in stock, so the cheapest in-stock title is **Gaudy Nig…(+216)")]
+  [updates#5] usage in=2 out=163 cache_read=3698 cache_write=64 | call $0.0043 running $0.0193 | replayed blocks checked=9 mismatched=0
+    stream: thinking_delta=1 signature_delta=1 deltas=[]
+    thinking block: {"type":"thinking","signature":"CAQS7wUKEAgSGAI4AUIIdGhpbmtpbmcSDDbn4s34B1Qs961SBxoMx\u002Bne4iIjRLdGo9b9IjAtsogfCIbS2NbHyI8383CEd5XB\u002BR2K7xKw4IDi1yPu1FLmplHwbnUYLG8GnnW9na4qjAUbNTFmr0eyQiO7rBBlXY/9PzKgS\u002BD1zl7/YXGqH55HnVOmR7xupACKZkc6YaCaNVeQFFatfjrjT…(+870)
+
+ROUND TRIP: replayed assistant blocks checked=27 mismatched=0
+TOTAL: input=12 output=601 cache_read=16658 write5m=787 write1h=0 cost=$0.0193
+
+===== midsys =====
+  [midsys#1] stop=end_turn blocks=[thinking(text=0ch, sig=872ch), text("Hi, Ana Muñoz! Welcome back to Café Libro. Today is **Monday, October 5, 2026**.…(+26)")]
+  [midsys#1] usage in=2 out=82 cache_read=2671 cache_write=0 | call $0.0022 running $0.0022 | replayed blocks checked=0 mismatched=0
+    request messages: "messages":[{"role":"user","content":"Hi! Greet me by name and tell me today\u0027s date."},{"role":"system","content":"Run context: today is 2026-10-05; the customer is Ana Mu\u00F1oz (loyalty member)."}],"stream":true}
+    stored text block raw: {"type":"text","text":"Hi, Ana Mu\u00F1oz! Welcome back to Caf\u00E9 Libro. Today is **Monday, October 5, 2026**. How can I help you today?"}
+  [midsys#2] stop=end_turn blocks=[thinking(text=0ch, sig=1096ch), text("Try **Agatha Christie's *And Then There Were None***, a gripping classic where t…(+154)")]
+  [midsys#2] usage in=2 out=129 cache_read=2671 cache_write=137 | call $0.0038 running $0.0060 | replayed blocks checked=2 mismatched=0
+  [midsys#3] stop=end_turn blocks=[thinking(text=0ch, sig=1000ch), text("Try **Tana French's *In the Woods***, an atmospheric Dublin police mystery about…(+118)")]
+  [midsys#3] usage in=2 out=96 cache_read=2808 cache_write=177 | call $0.0034 running $0.0094 | replayed blocks checked=4 mismatched=0
+
+ROUND TRIP: replayed assistant blocks checked=6 mismatched=0
+TOTAL: input=6 output=307 cache_read=8150 write5m=314 write1h=0 cost=$0.0094
+
+===== structured =====
+exported schema: {"type":"object","properties":{"title":{"type":"string"},"author":{"type":"string"},"year":{"type":["string","integer"],"pattern":"^-?(?:0|[1-9]\\d*)$"},"price":{"type":["string","number"],"pattern":"^-?(?:0|[1-9]\\d*)(?:\\.\\d\u002B)?$"},"genre":{"enum":["Mystery","Horror","History"]},"tags":{"type":"array","items":{"type":"string"}},"isbn":{"type":["string","null"]},"note":{"type":["object","null"],"properties":{"text":{"type":"string"}},"required":["text"]}},"required":["title","author","year","price","genre","tags","isbn","note"]}
+    exported-as-is REJECTED 400: {"type":"error","error":{"type":"invalid_request_error","message":"output_config.format.schema: For 'object' type, 'additionalProperties' must be explicitly set to false"},"request_id":"req_011CfjF4MnACHLcNaKR97GNB"}
+  [exported-closed] stop=end_turn blocks=[text("{"title":"The Murder of Roger Ackroyd","author":"Agatha Christie","year":1926,"p…(+270)")]
+  [exported-closed] usage in=578 out=150 cache_read=0 cache_write=0 | call $0.0053 running $0.0053 | replayed blocks checked=0 mismatched=0
+    exported-closed accepted; output: {"title":"The Murder of Roger Ackroyd","author":"Agatha Christie","year":1926,"price":12.99,"genre":"Mystery","tags":["classic","whodunit","Hercule Poirot","twist ending"],"isbn":null,"note":{"text":"Picked for Ana: a landmark Golden Age mystery with one of the most famous twist endings in the genre…(+50)
+    exported-closed deserializes into BookPick: yes
+  [probe-type-array-null] stop=end_turn blocks=[text("{"x":"example"}")]
+  [probe-type-array-null] usage in=215 out=10 cache_read=0 cache_write=0 | call $0.0011 running $0.0064 | replayed blocks checked=0 mismatched=0
+    probe-type-array-null accepted; output: {"x":"example"}
+  [probe-enum] stop=end_turn blocks=[text("{"x":"Mystery"}")]
+  [probe-enum] usage in=221 out=13 cache_read=0 cache_write=0 | call $0.0011 running $0.0075 | replayed blocks checked=0 mismatched=0
+    probe-enum accepted; output: {"x":"Mystery"}
+  [probe-pattern] stop=end_turn blocks=[text("{"x":"Hello world"}")]
+  [probe-pattern] usage in=221 out=13 cache_read=0 cache_write=0 | call $0.0011 running $0.0087 | replayed blocks checked=0 mismatched=0
+    probe-pattern accepted; output: {"x":"Hello world"}
+  [probe-number-or-string] stop=end_turn blocks=[text("{"x":42}")]
+  [probe-number-or-string] usage in=272 out=8 cache_read=0 cache_write=0 | call $0.0012 running $0.0099 | replayed blocks checked=0 mismatched=0
+    probe-number-or-string accepted; output: {"x":42}
+    probe-minimum-maximum REJECTED 400: {"type":"error","error":{"type":"invalid_request_error","message":"output_config.format.schema: For 'integer' type, properties maximum, minimum are not supported"},"request_id":"req_011CfjF5GiKzg979cZkdZA9e"}
+  [probe-minLength] stop=end_turn blocks=[text("{"x":"example"}")]
+  [probe-minLength] usage in=223 out=10 cache_read=0 cache_write=0 | call $0.0011 running $0.0110 | replayed blocks checked=0 mismatched=0
+    probe-minLength accepted; output: {"x":"example"}
+  [probe-format-date] stop=end_turn blocks=[text("{"x":"2024-01-15"}")]
+  [probe-format-date] usage in=211 out=15 cache_read=0 cache_write=0 | call $0.0011 running $0.0121 | replayed blocks checked=0 mismatched=0
+    probe-format-date accepted; output: {"x":"2024-01-15"}
+    probe-minItems-maxItems REJECTED 400: {"type":"error","error":{"type":"invalid_request_error","message":"output_config.format.schema: For 'array' type, property 'maxItems' is not supported"},"request_id":"req_011CfjF5v2QhWotAqfwguB9H"}
+  [probe-default] stop=end_turn blocks=[text("{"x":"x"}")]
+  [probe-default] usage in=211 out=10 cache_read=0 cache_write=0 | call $0.0010 running $0.0132 | replayed blocks checked=0 mismatched=0
+    probe-default accepted; output: {"x":"x"}
+  [probe-minItems-only] stop=end_turn blocks=[text("{"x":["example"]}")]
+  [probe-minItems-only] usage in=229 out=11 cache_read=0 cache_write=0 | call $0.0011 running $0.0143 | replayed blocks checked=0 mismatched=0
+    probe-minItems-only accepted; output: {"x":["example"]}
+    probe-number-minimum REJECTED 400: {"type":"error","error":{"type":"invalid_request_error","message":"output_config.format.schema: For 'number' type, property 'minimum' is not supported"},"request_id":"req_011CfjF6GNmgk7jDVuBFEuj3"}
+  [probe-pattern-enforced] stop=end_turn blocks=[thinking(text=0ch, sig=988ch), text("{"x":"000"}")]
+  [probe-pattern-enforced] usage in=220 out=72 cache_read=0 cache_write=0 | call $0.0023 running $0.0166 | replayed blocks checked=0 mismatched=0
+    probe-pattern-enforced accepted; output: {"x":"000"}
+  [probe-anyOf-null] stop=end_turn blocks=[text("{"x":"example"}")]
+  [probe-anyOf-null] usage in=236 out=10 cache_read=0 cache_write=0 | call $0.0011 running $0.0178 | replayed blocks checked=0 mismatched=0
+    probe-anyOf-null accepted; output: {"x":"example"}
+  [probe-ref-defs] stop=end_turn blocks=[text("{"x":{"v":"example"}}")]
+  [probe-ref-defs] usage in=293 out=15 cache_read=0 cache_write=0 | call $0.0015 running $0.0193 | replayed blocks checked=0 mismatched=0
+    probe-ref-defs accepted; output: {"x":{"v":"example"}}
+  [probe-$schema] stop=end_turn blocks=[text("{"x":"For Ana, I'd pick \"The Thursday Murder Club\" by Richard Osman. Four shar…(+404)")]
+  [probe-$schema] usage in=234 out=179 cache_read=0 cache_write=0 | call $0.0045 running $0.0238 | replayed blocks checked=0 mismatched=0
+    probe-$schema accepted; output: {"x":"For Ana, I'd pick \"The Thursday Murder Club\" by Richard Osman. Four sharp-witted retirees in an English retirement village meet weekly to look into cold cases, and then a real murder lands on their doorstep. It's clever, funny, and warm, with a twisty puzzle that keeps you guessing. It works…(+184)
+
+ROUND TRIP: replayed assistant blocks checked=0 mismatched=0
+TOTAL: input=3364 output=516 cache_read=0 write5m=0 write1h=0 cost=$0.0238
