@@ -2,7 +2,15 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Sleepyshark.Officina\Sleepyshark.Officina.csproj" />
+    <ProjectReference Include="..\..\src\Sleepyshark.Officina.Audit.JsonLines\Sleepyshark.Officina.Audit.JsonLines.csproj" />
     <ProjectReference Include="..\..\src\Sleepyshark.Officina.Testing\Sleepyshark.Officina.Testing.csproj" />
+  </ItemGroup>
+
+  <!-- Test only: property tests (TEST-07), a reference schema validator (TEST-08) and a fake clock. -->
+  <ItemGroup>
+    <PackageReference Include="CsCheck" />
+    <PackageReference Include="JsonSchema.Net" />
+    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
   </ItemGroup>
 
 </Project>

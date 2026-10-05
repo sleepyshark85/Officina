@@ -7,7 +7,8 @@ namespace Sleepyshark.Officina.Claude;
 /// Lays out one request (CTX-01, CTX-03, ARCHITECTURE §10): the tools sorted by name, each with eager input streaming;
 /// the instructions as one system block with a cache point; automatic caching for the tail; then the conversation, where
 /// an operator message is a mid-conversation <c>system</c> message (CTX-02) and a block with raw JSON is sent as that JSON,
-/// byte for byte (MDL-05).
+/// byte for byte (MDL-05). A tool result is a <c>tool_result</c> block, with <c>is_error</c> when the call failed; a user
+/// message that follows a tool results message is a second user turn, which the API joins to the first.
 /// </summary>
 internal static class ClaudeRequest
 {
@@ -78,6 +79,23 @@ internal static class ClaudeRequest
                         if (block.Raw is not null)
                         {
                             writer.WriteRawValue(block.Raw, skipInputValidation: true);
+                        }
+                        else if (block.ToolResult is { } result)
+                        {
+                            writer.WriteStartObject();
+                            writer.WriteString("type", "tool_result");
+                            writer.WriteString("tool_use_id", result.CallId);
+                            if (result.Content.Length > 0)
+                            {
+                                writer.WriteString("content", result.Content);
+                            }
+
+                            if (result.IsError)
+                            {
+                                writer.WriteBoolean("is_error", true);
+                            }
+
+                            writer.WriteEndObject();
                         }
                         else
                         {

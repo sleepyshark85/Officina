@@ -6,8 +6,7 @@ namespace Sleepyshark.Officina.Testing;
 /// <summary>
 /// A model that answers with replies scripted in advance, in order, and records every request (TEST-01). It needs no
 /// network or API key, and is safe to call from concurrent runs. Like the Claude API, it rejects a request whose
-/// messages do not start with a user message, repeat a role back to back, or have an operator message that does not
-/// follow a user message or is neither last nor followed by an assistant message.
+/// messages break the <see cref="RoleSequence"/>.
 /// </summary>
 public sealed class ScriptedModel : IModel
 {
@@ -51,9 +50,24 @@ public sealed class ScriptedModel : IModel
         return Enqueue(ThenThrow(streamedFirst, exception));
     }
 
+    /// <summary>Adds a reply that requests these tool calls and stops for tool use.</summary>
+    public ScriptedModel CallTools(params ToolCall[] calls)
+    {
+        ArgumentNullException.ThrowIfNull(calls);
+        return Reply([.. calls.Select(call => new BlockReceived(ToolCallBlock(call))), new ModelStopped(ModelStopReason.ToolUse)]);
+    }
+
     /// <summary>A text block as a provider sends it, with its raw JSON.</summary>
     public static ContentBlock TextBlock(string text) =>
         new(text, JsonSerializer.Serialize(new { type = "text", text }));
+
+    /// <summary>A tool call block as a provider sends it, with its raw JSON and its neutral view.</summary>
+    public static ContentBlock ToolCallBlock(ToolCall call)
+    {
+        ArgumentNullException.ThrowIfNull(call);
+        using var input = JsonDocument.Parse(call.Input);
+        return new(null, JsonSerializer.Serialize(new { type = "tool_use", id = call.Id, name = call.Name, input = input.RootElement }), call);
+    }
 
     public async IAsyncEnumerable<ModelEvent> StreamAsync(
         ModelRequest request, [EnumeratorCancellation] CancellationToken cancellationToken)
@@ -87,20 +101,9 @@ public sealed class ScriptedModel : IModel
 
     private static void CheckRoles(ModelRequest request)
     {
-        var roles = request.Messages.Select(message => message.Role).ToList();
-        for (var index = 0; index < roles.Count; index++)
+        if (RoleSequence.Problem(request.Messages) is { } problem)
         {
-            var problem =
-                index == 0 && roles[0] != Role.User ? "does not start with a user message"
-                : index > 0 && roles[index] == roles[index - 1] ? $"has two {roles[index]} messages in a row"
-                : roles[index] == Role.Operator && roles[index - 1] != Role.User ? "has an operator message that does not follow a user message"
-                : roles[index] == Role.Operator && index + 1 < roles.Count && roles[index + 1] != Role.Assistant
-                    ? "has an operator message that is neither last nor followed by an assistant message"
-                : null;
-            if (problem is not null)
-            {
-                throw new InvalidOperationException($"The request {problem} (message {index + 1} of {string.Join(", ", roles)}).");
-            }
+            throw new InvalidOperationException($"The request is invalid: {problem}");
         }
     }
 

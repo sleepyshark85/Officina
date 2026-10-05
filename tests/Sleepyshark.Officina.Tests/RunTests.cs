@@ -104,7 +104,7 @@ public class RunTests
         { new ModelStopped(ModelStopReason.ContextFull), new Stopped(StopReason.ContextFull, null, default) },
         {
             new ModelStopped(ModelStopReason.ToolUse),
-            new Failed(FailureReason.UnexpectedStop, "The model stopped for a reason the run cannot act on: ToolUse.", default)
+            new Failed(FailureReason.UnexpectedStop, "The model stopped to use tools but called none.", default)
         },
         {
             new ModelStopped(ModelStopReason.Unknown, "pause_turn"),

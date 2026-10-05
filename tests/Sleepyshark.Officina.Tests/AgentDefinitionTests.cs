@@ -36,7 +36,7 @@ public class AgentDefinitionTests
     [Fact]
     public void Tools_are_sorted_by_name_and_names_are_unique()
     {
-        var agent = Agents.With(new ScriptedModel(), tools: [Agents.SearchTool(), new Tool("cancel", "Cancels an order.", "{}")]);
+        var agent = Agents.With(new ScriptedModel(), tools: [Agents.SearchTool(), Agents.Tool("cancel", "Cancels an order.")]);
 
         Assert.Equal(["cancel", "search"], agent.Tools.Select(tool => tool.Name));
         Assert.Throws<ArgumentException>(() => Agents.With(new ScriptedModel(), tools: [Agents.SearchTool(), Agents.SearchTool("Again.")]));
@@ -47,6 +47,6 @@ public class AgentDefinitionTests
     {
         Assert.Throws<ArgumentNullException>(() => new AgentDefinition { Model = null!, Instructions = "Help." });
         Assert.Throws<ArgumentException>(() => new AgentDefinition { Model = new ScriptedModel(), Instructions = " " });
-        Assert.Throws<ArgumentException>(() => new Tool("search", "Searches.", "[]"));
+        Assert.Throws<ArgumentException>(() => Agents.Tool("search", "Searches.", "[]"));
     }
 }

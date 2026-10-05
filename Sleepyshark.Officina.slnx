@@ -4,6 +4,7 @@
   </Folder>
   <Folder Name="/src/">
     <Project Path="src/Sleepyshark.Officina/Sleepyshark.Officina.csproj" />
+    <Project Path="src/Sleepyshark.Officina.Audit.JsonLines/Sleepyshark.Officina.Audit.JsonLines.csproj" />
     <Project Path="src/Sleepyshark.Officina.Claude/Sleepyshark.Officina.Claude.csproj" />
     <Project Path="src/Sleepyshark.Officina.Mcp/Sleepyshark.Officina.Mcp.csproj" />
     <Project Path="src/Sleepyshark.Officina.Testing/Sleepyshark.Officina.Testing.csproj" />
