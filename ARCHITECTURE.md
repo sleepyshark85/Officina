@@ -447,7 +447,7 @@ flowchart LR
 | Budgets and cost | Status line and `/cost`; a small budget stops a reply | APP-14, BUD |
 | Persistent sessions | Quit, restart, `/resume`: the conversation continues | APP-10, AGT-06 |
 | Memory across sessions | A preference stated in one session is applied in a new one; `/memory` shows it | APP-11, MEM |
-| Long conversations | Demo mode compacts a short session and reports it | APP-17, HIST |
+| Long conversations | Demo mode reaches compaction with large catalogue searches, clears old tool results after a few calls, and reports both | APP-17, HIST |
 | MCP | Export an order history as CSV into `exports` | APP-12, MCP |
 | Run context | The assistant knows today's date and who it is talking to | APP-13, CTX-02 |
 | Typed output, stateless runs | Session titles and summaries in `/sessions` | APP-15, OUT, GEN-03 |

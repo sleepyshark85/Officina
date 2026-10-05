@@ -40,7 +40,7 @@ every phase 1 capability in one place.
 | APP-14 | After each reply a status line shows tokens, cache read share, the reply's cost and the session's cost. A per-reply and a per-session budget apply; reaching one stops the reply and says why. |
 | APP-15 | When a session is left (`/new`, `/resume`, `/quit`), a separate **stateless** agent with **typed output** writes the session's title, a summary and the changes made, which `/sessions` shows. A session left without one (a crash) is summarized the next time `/sessions` lists it. |
 | APP-16 | Audit entries go to a database table through the application's own audit sink. `/audit` shows a session's entries in order, grouped by run: time, kind, tool and outcome, approvals, cost, and a link to the run's trace in the telemetry dashboard (APP-20). |
-| APP-17 | A demo mode lowers the compaction and tool-result clearing thresholds to the provider's minimum (Claude: compaction at 50,000 input tokens) and reports each when it happens (HIST-01, HIST-02). Clearing shows after a few tool calls; the demo script reaches compaction with a few large catalogue searches, about $0.25 per compaction. |
+| APP-17 | A demo mode lowers the compaction threshold to the provider's minimum (Claude: 50,000 input tokens) and the tool-result clearing threshold to a few tool calls, and reports each when it happens (HIST-01, HIST-02). The demo script reaches compaction with a few large catalogue searches, so the seed data and the result size limit (TOOL-06) allow results of 10–15k tokens; a compaction costs about $0.25. |
 | APP-18 | If the database stops mid-session, tools return errors, the assistant says so, and the session continues once it is back. |
 | APP-19 | A demo script (`docs/demo.md`) walks through every capability above with the prompts to type and what to expect. |
 | APP-20 | **Observability.** The compose file also runs an OpenTelemetry dashboard (D11). The application exports the core's traces and metrics (EVT-02) and its own logs to it, so a reply can be followed as a trace: run → model calls → tool calls, with tokens, cache reads, cost, approval wait and errors on each step. Metrics show tokens, cost, cache hit ratio, latency, tool outcomes and approvals over time. The demo script shows how to go from an `/audit` entry to its trace and back. |
@@ -100,7 +100,7 @@ The core serves any agentic purpose, not only the reference application. These r
 |---|---|
 | MDL-01 | The core reaches models only through its own model interface: streamed text, content blocks, usage and stop reason. |
 | MDL-02 | A Claude implementation ships, on the official Anthropic C# SDK, which is used in that package only. Requests are streamed. |
-| MDL-03 | Claude settings (model, effort, thinking display, max output tokens) are set on the Claude model object and fixed for a conversation. Effort is set explicitly, never left to a model default. |
+| MDL-03 | Claude settings (model, effort, max output tokens) are set on the Claude model object and fixed for a conversation. Effort is set explicitly, never left to a model default. |
 | MDL-04 | Transient failures (rate limits, overload, network, including errors mid-stream) are retried with backoff, honouring `Retry-After`. What is left becomes `Failed`. |
 | MDL-05 | Every content block the model returns (text, reasoning, tool use, server tool results, compaction) is kept in the conversation exactly as received, and replayed unchanged. |
 | MDL-06 | A refusal is a `Stopped(Refusal)` result with the provider's category. The refusal fallback to another model is not used in phase 1 (D10). |
@@ -167,7 +167,7 @@ The core serves any agentic purpose, not only the reference application. These r
 
 | ID | Requirement |
 |---|---|
-| BUD-01 | A run can be limited by cost (currency), tokens, model calls and wall time. Each limit is checked before every model call, and a call's output token limit is lowered to what the remaining cost and token budget allows, so one call cannot overshoot by more than its input. |
+| BUD-01 | A run can be limited by cost (currency), tokens, model calls and wall time. Each limit is checked before every model call, and a call's output token limit is lowered to what the remaining cost and token budget allows, so one call overshoots by at most its input (about twice that when it compacts, as compaction reads the prompt again). |
 | BUD-02 | Cost is computed from a price table per model that prices cache reads and writes, and the host can replace it. |
 | BUD-03 | Every result reports usage: tokens (input, output, cache read, cache write), cost, model calls, tool calls and duration. |
 
@@ -175,7 +175,7 @@ The core serves any agentic purpose, not only the reference application. These r
 
 | ID | Requirement |
 |---|---|
-| EVT-01 | A run can be consumed as a stream of events: text deltas, reasoning updates, tool call started and finished, approval asked and answered, compaction, conversation appended (AGT-08), usage, result. |
+| EVT-01 | A run can be consumed as a stream of events: text deltas, tool call started and finished, approval asked and answered, compaction, conversation appended (AGT-08), usage, result. |
 | EVT-02 | Runs, model calls and tool calls emit OpenTelemetry traces and metrics through the platform's own tracing and metrics primitives (no exporter in the core; the host chooses one). Names and attributes follow the OpenTelemetry semantic conventions for generative AI where they exist. One trace per run, with a span per model call (tokens by kind, cache reads and writes, cost, stop reason, retries, time to first token) and per tool call (tool, read or write, outcome, duration, approval wait). Metrics: tokens and cost by agent and model, cache hit ratio, model call and tool call duration, tool outcomes, approvals by answer, results by kind, compactions, retries. |
 | EVT-04 | Message text and tool inputs and results are not put in telemetry by default; the host can opt in. Telemetry is for operation, the audit trail (AUD) is for the record. |
 | EVT-03 | Secrets passed to the core (API keys, MCP credentials) never appear in events, traces or exceptions. |
@@ -201,7 +201,7 @@ the fact.
 | TEST-01 | A test kit ships with a scripted model (replies given in advance, requests recorded), a scripted approver, an in-memory memory store and a fake MCP server, so any agent runs offline and deterministically. |
 | TEST-02 | A **prefix stability** check: across the calls of a scripted multi-turn run, each request's tools, instructions and earlier messages are byte-identical to the previous request's. This also holds across a restart: a conversation saved to JSON and resumed with a freshly built definition produces the same prefix. It runs for the reference application and every GEN-06 sample. |
 | TEST-03 | The test suite needs no API key and no network; CI runs it on Linux and Windows. Tests that need the Docker database run on Linux only. |
-| TEST-04 | The reference application has a live smoke test against the Docker database, run on demand with an API key, which drives APP-09, asserts cache reads from the second call on, and forces a compaction. |
+| TEST-04 | The reference application has a live smoke test against the Docker database, run on demand with an API key, which drives APP-09, asserts cache reads from the second call on, and forces a compaction (about $0.25 per run). |
 | TEST-05 | A dependency check, run as a test, fails if the Anthropic SDK is referenced outside the Claude package. |
 | TEST-06 | Telemetry is tested by collecting the spans and metrics of scripted runs in memory: span tree, attributes, and that no message text or secret appears by default (EVT-03, EVT-04). |
 
@@ -260,6 +260,6 @@ the architecture only keeps room for it.
 | D9 | Audit is separate from events: events stream to the host for display; audit is a durable trail through its own sink (AUD). | Decided |
 | D10 | No refusal fallback in phase 1. **Reason:** a fallback reply comes from another model, the API keeps routing the conversation there for a while, and after a mid-reply fallback the client must leave earlier blocks out when sending history back. That breaks CTX-04 and MDL-05. A refusal is `Stopped(Refusal)`; NS-19 brings the fallback back when needed. | Decided |
 | D11 | Telemetry is viewed in an OpenTelemetry dashboard run from the application's compose file (the standalone .NET Aspire dashboard: one container, receives traces, metrics and logs). The core only emits (EVT-02); exporting is the host's choice. | Decided (owner) |
-| D12 | Compaction is the provider's threshold compaction (HIST-01). The newer on-demand compaction (Claude: `compact-2026-09-04`) is not used: it has the client drop the compacted messages from the front of the history, which principle 5 forbids. | Proposed |
+| D12 | Compaction is the provider's threshold compaction (HIST-01). The newer on-demand compaction (Claude: `compact-2026-09-04`, per the provider's docs; not tested in S02) is not used: it has the client drop the compacted messages from the front of the history, which principle 5 and HIST-03 forbid. | Proposed |
 | Q1 | PostgreSQL client library: the plain provider (Npgsql), not an object mapper, as the queries are few and fixed. | Decided (owner) |
 | Q2 | JSON Schema validation under the core's no-dependency rule (the platform can export a schema from a type but not validate one): a small validator in the core for the subset the core itself produces (TOOL-01, OUT-01) and MCP servers commonly use; a full validator package only if a real schema needs it. | Decided (owner) |
