@@ -80,7 +80,13 @@ public sealed class Tool
     /// <summary>The source the tool comes from, such as an MCP server; null for the application's own tools.</summary>
     public IToolSource? Source { get; init; }
 
+    /// <summary>Whether this is the memory tool (MEM-01), which a provider with a native memory tool presents as that tool.</summary>
+    public bool IsMemory => Memory is not null;
+
     internal JsonElement Schema { get; }
+
+    /// <summary>The memory tool's store; its calls run in the run's memory scope instead of through <see cref="Handler"/>.</summary>
+    internal IMemoryStore? Memory { get; init; }
 
     internal Func<JsonElement, CancellationToken, Task<ToolOutput>> Handler { get; }
 

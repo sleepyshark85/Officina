@@ -181,7 +181,7 @@ public static class Telemetry
             new("gen_ai.tool.name", call.Name),
             new("gen_ai.tool.call.id", call.Id),
             new("gen_ai.tool.type", "function"),
-            new("officina.tool.source", tool?.Source?.Name ?? "application"),
+            new("officina.tool.source", tool?.Source?.Name ?? (tool?.IsMemory == true ? "memory" : "application")),
             new("officina.tool.kind", tool is null ? null : Word(tool.Kind)),
             .. Content(agent, "gen_ai.tool.call.arguments", () => agent.Redact(call.Input)),
         ]);

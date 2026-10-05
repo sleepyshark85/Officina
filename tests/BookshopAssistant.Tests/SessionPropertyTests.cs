@@ -55,8 +55,8 @@ public class SessionPropertyTests(BookshopDatabase database) : IClassFixture<Boo
 
             model.Reply([.. step.Thinking ? [new BlockReceived(new ContentBlock(null, """{ "type" : "thinking", "thinking": "", "signature" : "c2ln+/=" }"""))] : Array.Empty<ModelEvent>(),
                 new BlockReceived(ScriptedModel.TextBlock(step.Text)), new ModelStopped(ModelStopReason.End)]);
-            var agent = BookshopAgent.Create(model, database.Tools, new ScriptedApprover(), new AuditTable(database.DataSource), [], TimeProvider.System);
-            await foreach (var runEvent in agent.StreamAsync(conversation, $"Say {step.Text}", step.Context ? $"Context: {step.Text}" : null, TestContext.Current.CancellationToken))
+            var agent = BookshopAgent.Create(model, database.Tools, new InMemoryMemoryStore(), new ScriptedApprover(), new AuditTable(database.DataSource), [], TimeProvider.System);
+            await foreach (var runEvent in agent.StreamAsync(conversation, $"Say {step.Text}", step.Context ? $"Context: {step.Text}" : null, "sam", TestContext.Current.CancellationToken))
             {
                 if (runEvent is ConversationAppended)
                 {

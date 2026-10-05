@@ -37,19 +37,22 @@ internal static class ConsoleSession
     /// <param name="summaries">The summarizer's scripted model; without one, sessions are not summarized.</param>
     /// <param name="exportTools">The export server's tools (APP-12); none by default.</param>
     /// <param name="demo">Whether the agent runs in demo mode (APP-17).</param>
+    /// <param name="memory">The memory store; by default an empty one in memory.</param>
     public static async Task<string> RunAsync(
         BookshopDatabase database, ScriptedModel model, IEnumerable<object> script, TimeProvider? time = null, string? cancelOn = null,
-        Budgets? budgets = null, ScriptedModel? summaries = null, IEnumerable<Tool>? exportTools = null, bool demo = false)
+        Budgets? budgets = null, ScriptedModel? summaries = null, IEnumerable<Tool>? exportTools = null, bool demo = false,
+        IMemoryStore? memory = null)
     {
         var output = new Transcript(cancelOn);
         var audit = new AuditTable(database.DataSource);
         var clock = new FakeTimeProvider(Start);
+        memory ??= new InMemoryMemoryStore();
         var console = new BookshopConsole(
             new ScriptedInput(script), output, time ?? clock, echoInput: true, audit,
-            new SessionStore(database.DataSource), Dashboard, budgets: budgets);
+            new SessionStore(database.DataSource), Dashboard, budgets: budgets, memory: memory);
         output.Console = console;
         await console.RunAsync(
-            BookshopAgent.Create(model, database.Tools, console, audit, [BookshopDatabase.Password], clock, exportTools, demo),
+            BookshopAgent.Create(model, database.Tools, memory, console, audit, [BookshopDatabase.Password], clock, exportTools, demo),
             summaries is null ? null : SessionSummarizer.Create(summaries, clock));
         return output.ToString();
     }

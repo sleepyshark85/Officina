@@ -3,6 +3,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Sleepyshark.Officina\Sleepyshark.Officina.csproj" />
     <ProjectReference Include="..\..\src\Sleepyshark.Officina.Audit.JsonLines\Sleepyshark.Officina.Audit.JsonLines.csproj" />
+    <ProjectReference Include="..\..\src\Sleepyshark.Officina.Memory.Files\Sleepyshark.Officina.Memory.Files.csproj" />
     <ProjectReference Include="..\..\src\Sleepyshark.Officina.Testing\Sleepyshark.Officina.Testing.csproj" />
   </ItemGroup>
 

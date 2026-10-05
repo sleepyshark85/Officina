@@ -4,3 +4,4 @@ TestResults/
 *.user
 .vs/
 .claude/
+data/

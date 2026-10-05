@@ -13,7 +13,7 @@ internal static class RunEngine
     internal const int MaxModelCalls = 25;
 
     public static async IAsyncEnumerable<RunEvent> StreamAsync(
-        AgentDefinition agent, Conversation conversation, string message, string? context,
+        AgentDefinition agent, Conversation conversation, string message, string? context, string? memoryScope,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         conversation.StartRun();
@@ -21,11 +21,12 @@ internal static class RunEngine
         var ended = false;
         try
         {
-            using var audit = new AuditRecorder(agent, conversation, span);
+            using var audit = new AuditRecorder(agent, conversation, span, memoryScope);
             span?.SetTag("officina.run.id", audit.Run);
+            span?.SetTag("officina.memory.scope", memoryScope);
             await audit.RecordAsync(AuditKind.RunStarted).ConfigureAwait(false);
             var (result, spending) = (new StrongBox<RunResult>(), new Spending(agent));
-            await foreach (var runEvent in LoopAsync(agent, conversation, message, context, audit, span, spending, result, cancellationToken).ConfigureAwait(false))
+            await foreach (var runEvent in LoopAsync(agent, conversation, message, context, memoryScope, audit, span, spending, result, cancellationToken).ConfigureAwait(false))
             {
                 yield return runEvent;
             }
@@ -57,7 +58,7 @@ internal static class RunEngine
 
     /// <summary>Calls the model and runs the tools it asks for, until a stop that ends the run; leaves the run's result in <paramref name="result"/>.</summary>
     private static async IAsyncEnumerable<RunEvent> LoopAsync(
-        AgentDefinition agent, Conversation conversation, string message, string? context, AuditRecorder audit, Activity? span,
+        AgentDefinition agent, Conversation conversation, string message, string? context, string? memoryScope, AuditRecorder audit, Activity? span,
         Spending spending, StrongBox<RunResult> result, [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         var fingerprint = agent.Fingerprint();
@@ -161,7 +162,7 @@ internal static class RunEngine
             // cancelled, and the run waits for them, so none runs on after it, nor on a conversation another run may take.
             var events = Channel.CreateUnbounded<RunEvent>(new UnboundedChannelOptions { SingleReader = true });
             using var tools = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            var running = RunToolsAsync(new ToolPipeline(agent, audit, span, events.Writer), toolCalls, events.Writer, tools.Token);
+            var running = RunToolsAsync(new ToolPipeline(agent, audit, span, events.Writer, memoryScope), toolCalls, events.Writer, tools.Token);
             var relayed = false;
             try
             {
