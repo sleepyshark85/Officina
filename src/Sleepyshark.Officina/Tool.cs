@@ -144,10 +144,10 @@ public sealed class Tool
     }
 
     /// <summary>
-    /// How typed functions read their input and write their output: members in camel case, numbers never read from strings,
-    /// nullable annotations and required members respected, unknown properties refused, enums by name.
+    /// How typed functions read their input and write their output, and how typed output is read (OUT-01): members in camel case,
+    /// numbers never read from strings, nullable annotations and required members respected, unknown properties refused, enums by name.
     /// </summary>
-    private static readonly JsonSerializerOptions Json = new()
+    internal static readonly JsonSerializerOptions Json = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         RespectNullableAnnotations = true,
@@ -157,7 +157,7 @@ public sealed class Tool
         TypeInfoResolver = new DefaultJsonTypeInfoResolver(),
     };
 
-    private static readonly JsonSchemaExporterOptions Exporter = new()
+    internal static readonly JsonSchemaExporterOptions Exporter = new()
     {
         TreatNullObliviousAsNonNullable = true,
         TransformSchemaNode = (context, node) =>

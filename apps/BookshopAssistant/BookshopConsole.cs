@@ -21,7 +21,9 @@ public sealed record Budgets(decimal Reply, decimal Session)
 /// parent of the run's trace, so the console's logs join that trace (APP-20); <c>/audit</c> reads <paramref name="audit"/>
 /// and links each run to its trace on <paramref name="dashboard"/> (APP-16). Each conversation is a session, saved in
 /// <paramref name="sessions"/> after every step of a reply (APP-10); each reply ends with a status line of its tokens and
-/// cost, and stops when it reaches its own or its session's budget (APP-14).
+/// cost, and stops when it reaches its own or its session's budget (APP-14). A session left with <c>/new</c>,
+/// <c>/resume</c> or <c>/quit</c> is summarized, and <c>/sessions</c> summarizes the sessions it lists that were left
+/// without one, as after a crash (APP-15).
 /// </summary>
 public sealed partial class BookshopConsole(
     TextReader input, TextWriter output, TimeProvider time, bool echoInput, AuditTable audit, SessionStore sessions, Uri dashboard,
@@ -53,6 +55,7 @@ public sealed partial class BookshopConsole(
     private readonly ConcurrentDictionary<string, TaskCompletionSource<Approval>> approvals = new();
     private CancellationTokenSource? reply;
     private Task<string?>? pendingRead;
+    private AgentDefinition? summarizer;
     private bool atLineStart = true;
 
     /// <summary>Cancels the reply in progress (APP-03); false when there is none.</summary>
@@ -76,10 +79,14 @@ public sealed partial class BookshopConsole(
         }
     }
 
-    /// <summary>Runs the session until <c>/quit</c> or the end of input. <paramref name="agent"/> must have this console as its approver.</summary>
-    public async Task RunAsync(AgentDefinition agent)
+    /// <summary>
+    /// Runs the session until <c>/quit</c> or the end of input. <paramref name="agent"/> must have this console as its
+    /// approver; without a <paramref name="summarizer"/>, sessions are not summarized.
+    /// </summary>
+    public async Task RunAsync(AgentDefinition agent, AgentDefinition? summarizer = null)
     {
         ArgumentNullException.ThrowIfNull(agent);
+        this.summarizer = summarizer;
         await output.WriteLineAsync("Bookshop Assistant. Type /help for commands.");
         var staffMember = await AskStaffMemberAsync();
         if (staffMember is null)
@@ -96,11 +103,13 @@ public sealed partial class BookshopConsole(
                 case "":
                     continue;
                 case "/quit":
+                    await LeaveAsync(session);
                     return;
                 case "/help":
                     await output.WriteLineAsync(Help);
                     continue;
                 case "/new":
+                    await LeaveAsync(session);
                     session = Session.New(staffMember);
                     await output.WriteLineAsync($"New session {session.Id}.");
                     continue;
@@ -113,7 +122,12 @@ public sealed partial class BookshopConsole(
                         $"Session {session.Id}: {Tokens(session.Usage)}; cost ${session.Cost:0.0000} of its ${budgets.Session:0.00} budget."));
                     continue;
                 case { } command when Argument(command, "/resume") is { } id:
-                    session = await ResumeAsync(agent, id) ?? session;
+                    if (await ResumeAsync(agent, id) is { } resumed)
+                    {
+                        await LeaveAsync(session, resumed.Id);
+                        session = resumed;
+                    }
+
                     continue;
                 case { } command when Argument(command, "/audit") is { } id:
                     await ShowAuditAsync(id.Length > 0 ? id : session.Id);
@@ -127,6 +141,8 @@ public sealed partial class BookshopConsole(
             var current = BookshopAgent.Context(time.GetLocalNow(), staffMember);
             await ReplyAsync(agent, session, line, current == session.Context ? null : current);
         }
+
+        await LeaveAsync(session);
     }
 
     public async Task<Approval> ApproveAsync(Tool tool, ToolCall toolCall, CancellationToken cancellationToken)
@@ -166,12 +182,33 @@ public sealed partial class BookshopConsole(
         try
         {
             var listed = await sessions.ListAsync(Listed, CancellationToken.None);
+            var summaries = new Dictionary<string, SessionSummary>();
+            foreach (var left in listed.Where(each => each.Stale && each.Id != current.Id && summarizer is not null))
+            {
+                if (await sessions.LoadAsync(left.Id, CancellationToken.None) is { } stored && await SummarizeAsync(left.Id, stored.Conversation) is { } summary)
+                {
+                    summaries[left.Id] = summary;
+                }
+            }
+
             await output.WriteLineAsync(listed.Count == 0 ? "No sessions yet." : "Sessions, most recent first:");
             foreach (var each in listed)
             {
+                var (title, text, changes) = summaries.TryGetValue(each.Id, out var fresh)
+                    ? (fresh.Title, fresh.Summary, fresh.Changes)
+                    : (each.Title, each.Summary, each.Changes);
                 await output.WriteLineAsync(string.Create(
                     CultureInfo.InvariantCulture,
-                    $"{(each.Id == current.Id ? "*" : " ")} {each.Id}  {TimeZoneInfo.ConvertTime(each.Updated, time.LocalTimeZone):ddd d MMM HH:mm}  {each.StaffMember}  {each.Title ?? "(no title yet)"}  ${each.Cost:0.0000}"));
+                    $"{(each.Id == current.Id ? "*" : " ")} {each.Id}  {TimeZoneInfo.ConvertTime(each.Updated, time.LocalTimeZone):ddd d MMM HH:mm}  {each.StaffMember}  {title ?? "(no title yet)"}  ${each.Cost:0.0000}"));
+                if (text is not null)
+                {
+                    await output.WriteLineAsync($"    {text}");
+                }
+
+                if (changes.Count > 0)
+                {
+                    await output.WriteLineAsync($"    Changes: {string.Join("; ", changes)}");
+                }
             }
         }
         catch (Exception exception) when (exception is Npgsql.NpgsqlException or TimeoutException)
@@ -224,6 +261,51 @@ public sealed partial class BookshopConsole(
             Cost = stored.Cost,
             Context = stored.Conversation.Messages.LastOrDefault(message => message.Role == Role.Operator)?.Text,
         };
+    }
+
+    /// <summary>
+    /// Summarizes <paramref name="session"/> as it is left (APP-15), unless nothing was said in it since this console took
+    /// it up, or <paramref name="next"/> is the same session.
+    /// </summary>
+    private async Task LeaveAsync(Session session, string? next = null)
+    {
+        if (summarizer is not null && session.Changed && session.Id != next && await SummarizeAsync(session.Id, session.Conversation) is { } summary)
+        {
+            await WriteLineAsync($"Session {session.Id} summarized: {summary.Title}");
+        }
+    }
+
+    /// <summary>
+    /// Runs the summarizer on a session's conversation and stores its summary; returns it, or null when the run or the
+    /// store failed, which is told.
+    /// </summary>
+    private async Task<SessionSummary?> SummarizeAsync(string id, Conversation conversation)
+    {
+        var result = await summarizer!.RunAsync(SessionSummarizer.Transcript(conversation));
+        if (result is not Completed { Output: SessionSummary summary })
+        {
+            var reason = result switch
+            {
+                Failed failed => failed.Error,
+                Stopped stopped => $"stopped: {stopped.Reason}",
+                _ => "no summary",
+            };
+            LogSummaryFailed(logger, id, reason);
+            await WriteLineAsync($"[Session {id} could not be summarized: {reason}]");
+            return null;
+        }
+
+        try
+        {
+            await sessions.SaveSummaryAsync(id, summary, CancellationToken.None);
+        }
+        catch (Exception exception) when (exception is Npgsql.NpgsqlException or TimeoutException)
+        {
+            LogSummaryFailed(logger, id, exception.Message);
+            await WriteLineAsync($"[The summary of session {id} could not be saved: {exception.Message}]");
+        }
+
+        return summary;
     }
 
     private async Task ShowAuditAsync(string session)
@@ -289,6 +371,7 @@ public sealed partial class BookshopConsole(
                         (spent, spentCost) = (spent + reported.Usage, spentCost + reported.Cost);
                         break;
                     case ConversationAppended { Message: var appended }:
+                        session.Changed = true;
                         session.Context = appended.Role == Role.Operator ? appended.Text : session.Context;
                         saveFailed |= !await SaveAsync(session, session.Usage + spent, session.Cost + spentCost, saveFailed);
                         break;
@@ -466,6 +549,9 @@ public sealed partial class BookshopConsole(
     [LoggerMessage(Level = LogLevel.Information, Message = "Reply in conversation {Conversation} ended {Result}: {InputTokens} input tokens, {OutputTokens} output tokens")]
     private static partial void LogReplyEnded(ILogger logger, string conversation, string result, long inputTokens, long outputTokens);
 
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Session {Session} could not be summarized: {Error}")]
+    private static partial void LogSummaryFailed(ILogger logger, string session, string error);
+
     [LoggerMessage(Level = LogLevel.Warning, Message = "Session {Session} could not be saved: {Error}")]
     private static partial void LogSaveFailed(ILogger logger, string session, string error);
 
@@ -489,6 +575,9 @@ public sealed partial class BookshopConsole(
 
         /// <summary>Whether the session has a row in the store yet.</summary>
         public bool Stored { get; set; }
+
+        /// <summary>Whether the conversation grew since this console took it up, so leaving it needs a new summary.</summary>
+        public bool Changed { get; set; }
 
         /// <summary>A new session, with an id short enough to type in <c>/resume</c>; one that collides fails its first save.</summary>
         public static Session New(string staffMember) => new(new Conversation { Id = Guid.NewGuid().ToString("N")[..12] }, staffMember);

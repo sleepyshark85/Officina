@@ -1,0 +1,61 @@
+{
+  "effort": "low",
+  "format": {
+    "type": "json_schema",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "count": {
+          "type": "integer"
+        },
+        "maximum": {
+          "type": "number"
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z]\u002B$",
+            "minLength": 1
+          },
+          "minItems": 1
+        },
+        "pairs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "a": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "note": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": [
+                "object",
+                "null"
+              ],
+              "properties": {
+                "text": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            }
+          ]
+        }
+      },
+      "required": [
+        "count"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

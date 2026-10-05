@@ -1,6 +1,7 @@
 -- Sessions (APP-10): one row per conversation, saved after every step of a reply. The conversation is the core's JSON,
--- kept as text so it reads back byte for byte (jsonb would rewrite it). Title and summary come from the summarizer
--- (APP-15); the usage and cost columns add up the session's replies for /cost and the session budget (APP-14).
+-- kept as text so it reads back byte for byte (jsonb would rewrite it). Title, summary and changes come from the
+-- summarizer (APP-15), as of the time in summarized: a session updated since needs a new summary. The usage and cost
+-- columns add up the session's replies for /cost and the session budget (APP-14).
 
 create table sessions (
     id                 text primary key,
@@ -8,6 +9,8 @@ create table sessions (
     conversation       text not null,
     title              text,
     summary            text,
+    changes            text[],
+    summarized         timestamptz,
     input_tokens       bigint not null,
     output_tokens      bigint not null,
     cache_read_tokens  bigint not null,

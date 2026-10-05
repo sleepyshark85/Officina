@@ -1,0 +1,71 @@
+{
+  "effort": "low",
+  "format": {
+    "type": "json_schema",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "customer": {
+          "type": "string"
+        },
+        "mood": {
+          "enum": [
+            "Calm",
+            "Busy"
+          ]
+        },
+        "lines": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "bookId": {
+                "description": "The book\u0027s id.",
+                "type": "integer"
+              },
+              "copies": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "bookId",
+              "copies"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "gift": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "properties": {
+            "bookId": {
+              "description": "The book\u0027s id.",
+              "type": "integer"
+            },
+            "copies": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "bookId",
+            "copies"
+          ],
+          "additionalProperties": false
+        },
+        "total": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "customer",
+        "mood",
+        "lines",
+        "gift",
+        "total"
+      ],
+      "additionalProperties": false
+    }
+  }
+}
