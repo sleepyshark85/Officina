@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Checks the dependency rules of the whole solution (TEST-05) by reading each project's restore output.
+    The references only make restoring or testing this project restore every product project first.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\**\*.csproj" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\apps\**\*.csproj" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+</Project>

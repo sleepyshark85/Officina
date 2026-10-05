@@ -1,0 +1,14 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Sleepyshark.Officina/Sleepyshark.Officina.csproj" />
+    <Project Path="src/Sleepyshark.Officina.Claude/Sleepyshark.Officina.Claude.csproj" />
+    <Project Path="src/Sleepyshark.Officina.Mcp/Sleepyshark.Officina.Mcp.csproj" />
+    <Project Path="src/Sleepyshark.Officina.Testing/Sleepyshark.Officina.Testing.csproj" />
+  </Folder>
+  <Folder Name="/apps/">
+    <Project Path="apps/BookshopAssistant/BookshopAssistant.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Sleepyshark.Officina.Dependencies.Tests/Sleepyshark.Officina.Dependencies.Tests.csproj" />
+  </Folder>
+</Solution>

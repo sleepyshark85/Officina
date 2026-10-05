@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The only project allowed to reference the Anthropic SDK (TEST-05). -->
+
+  <ItemGroup>
+    <PackageReference Include="Anthropic" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Sleepyshark.Officina\Sleepyshark.Officina.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -10,4 +10,24 @@ PostgreSQL in Docker.
 - [`ARCHITECTURE.md`](ARCHITECTURE.md): concepts, components, contracts and flows.
 - [`CLAUDE.md`](CLAUDE.md): working notes and conventions.
 
-Status: design. No code yet.
+- [`docs/plan/phase-1.md`](docs/plan/phase-1.md): the phase 1 slices.
+
+Status: phase 1, skeleton (slice S01).
+
+## Build and test
+
+Needs the .NET 10 SDK. The tests need no API key and no network.
+
+```sh
+dotnet build
+dotnet test
+```
+
+| Path | Holds |
+|---|---|
+| `src/Sleepyshark.Officina` | The core; depends on the .NET base library only |
+| `src/Sleepyshark.Officina.Claude` | The Claude adapter; the only project that may reference the Anthropic SDK |
+| `src/Sleepyshark.Officina.Mcp` | The MCP tool source |
+| `src/Sleepyshark.Officina.Testing` | The test kit |
+| `apps/BookshopAssistant` | The reference application |
+| `tests/` | Tests; `Sleepyshark.Officina.Dependencies.Tests` enforces the dependency rules (TEST-05) |
