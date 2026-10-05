@@ -77,10 +77,11 @@ internal static class RunEngine
             usage += reply.Usage;
             var toolCalls = reply.Blocks.Select(block => block.ToolCall).OfType<ToolCall>().ToList();
 
-            // A reply cut off before its stop reason is not appended (AGT-05), nor is one without content. Nor is one cut
-            // off by the output limit while it requested tools: its last tool input may be incomplete (the SDK keeps an
-            // empty one), so its calls cannot run, and replaying it would send the model input it never wrote.
-            if (reply.Error is not null || reply.Stop is null || reply.Blocks.Count == 0 || (reply.Stop.Reason == ModelStopReason.MaxTokens && toolCalls.Count > 0))
+            // A reply cut off before its stop reason is not appended (AGT-05), nor is one without content. Nor is one that
+            // requested tools but stopped for another reason (output limit, context full, refusal, end, unknown): its calls
+            // do not run, as its last tool input may be cut short (the SDK keeps an empty one), and appending it would leave
+            // calls without results, which the provider rejects. The run ends with the result its stop reason maps to.
+            if (reply.Error is not null || reply.Stop is null || reply.Blocks.Count == 0 || (toolCalls.Count > 0 && reply.Stop.Reason != ModelStopReason.ToolUse))
             {
                 result.Value = reply.Error is not null ? new Failed(FailureReason.ModelError, reply.Error, usage)
                     : reply.Stop is null ? new Stopped(StopReason.Cancelled, null, usage)

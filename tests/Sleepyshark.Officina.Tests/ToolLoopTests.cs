@@ -196,6 +196,107 @@ public class ToolLoopTests
         Assert.Null(RoleSequence.Problem(conversation.Messages));
     }
 
+    public static TheoryData<ModelStopped, RunResult> StopsWithTools => new()
+    {
+        { new ModelStopped(ModelStopReason.ContextFull), new Stopped(StopReason.ContextFull, null, default) },
+        { new ModelStopped(ModelStopReason.Refusal, "cyber"), new Stopped(StopReason.Refusal, "cyber", default) },
+        { new ModelStopped(ModelStopReason.End), new Completed("Let me look.", default) },
+        { new ModelStopped(ModelStopReason.Unknown, "pause_turn"), new Failed(FailureReason.UnexpectedStop, "The model stopped for a reason the run cannot act on: pause_turn.", default) },
+    };
+
+    [Theory]
+    [MemberData(nameof(StopsWithTools))]
+    public async Task A_reply_with_tool_calls_that_stops_for_another_reason_is_held_back_like_the_output_limit(ModelStopped stop, RunResult expected)
+    {
+        var ran = false;
+        var model = new ScriptedModel()
+            .Reply(new BlockReceived(ScriptedModel.TextBlock("Let me look.")), new BlockReceived(ScriptedModel.ToolCallBlock(Search("c1"))), stop)
+            .Reply("Hello.");
+        var tool = Agents.Tool("search", schema: Agents.SearchSchema, handler: (_, _) => Task.FromResult(new ToolOutput($"{ran = true}")));
+        var agent = Agents.With(model, tools: tool);
+        var conversation = new Conversation();
+
+        var result = await agent.RunAsync(conversation, "Find it.", "Date: 2026-10-05.", Ct);
+
+        Assert.Equal(expected, result);
+        Assert.False(ran);
+        Assert.Empty(conversation.Messages);
+        Assert.IsType<Completed>(await agent.RunAsync(conversation, "Hi.", cancellationToken: Ct));
+    }
+
+    [Fact]
+    public async Task A_pattern_that_takes_too_long_and_a_null_output_come_back_as_error_results()
+    {
+        var model = new ScriptedModel()
+            .CallTools(new ToolCall("c1", "match", JsonSerializer.Serialize(new { text = new string('a', 40) + "!" })), new ToolCall("c2", "empty", "{}"))
+            .Reply("Neither worked.");
+        var agent = Agents.With(
+            model,
+            tools: [
+                Agents.Tool("match", schema: """{"type":"object","properties":{"text":{"type":"string","pattern":"^(a+)+$"}}}"""),
+                Agents.Tool("empty", handler: (_, _) => Task.FromResult(new ToolOutput(null!))),
+            ]);
+        var conversation = new Conversation();
+
+        var result = await agent.RunAsync(conversation, "Go.", cancellationToken: Ct);
+
+        Assert.Equal("Neither worked.", Assert.IsType<Completed>(result).Text);
+        var results = Results(conversation, 2);
+        Assert.All(results, toolResult => Assert.True(toolResult.IsError));
+        Assert.StartsWith("The input could not be validated:", results[0].Content, StringComparison.Ordinal);
+        Assert.Contains("Content", results[1].Content, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task A_call_approved_after_the_host_cancelled_does_not_start()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var ran = false;
+        var model = new ScriptedModel().CallTools(new ToolCall("c1", "order", "{}"));
+        var order = Agents.Tool("order", kind: ToolKind.Write, needsApproval: true, handler: (_, _) => Task.FromResult(new ToolOutput($"{ran = true}")));
+        var agent = Agents.With(model, tools: order) with { Approver = new CancellingApprover(cancellation) };
+        var conversation = new Conversation();
+
+        var result = await agent.RunAsync(conversation, "Order it.", cancellationToken: cancellation.Token);
+
+        Assert.Equal(StopReason.Cancelled, Assert.IsType<Stopped>(result).Reason);
+        Assert.False(ran);
+        Assert.Equal([new ToolResult("c1", "The call was cancelled before it started.", true)], Results(conversation, 2));
+    }
+
+    [Fact]
+    public async Task A_write_waiting_for_reads_when_the_host_cancels_does_not_start()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var wrote = false;
+        var model = new ScriptedModel().CallTools(Search("c1"), new ToolCall("c2", "save", "{}"));
+        var search = Agents.Tool("search", schema: Agents.SearchSchema, handler: async (_, _) =>
+        {
+            await cancellation.CancelAsync();
+            return new ToolOutput("found");
+        });
+        var save = Agents.Tool("save", kind: ToolKind.Write, handler: (_, _) => Task.FromResult(new ToolOutput($"{wrote = true}")));
+        var conversation = new Conversation();
+
+        var result = await Agents.With(model, tools: [search, save]).RunAsync(conversation, "Find and save.", cancellationToken: cancellation.Token);
+
+        Assert.Equal(StopReason.Cancelled, Assert.IsType<Stopped>(result).Reason);
+        Assert.False(wrote);
+        Assert.Equal(
+            [new ToolResult("c1", "found", false), new ToolResult("c2", "The call was cancelled before it started.", true)],
+            Results(conversation, 2));
+    }
+
+    /// <summary>Approves, while the host cancels the run: a cancel that lands during approval.</summary>
+    private sealed class CancellingApprover(CancellationTokenSource cancellation) : IApprover
+    {
+        public async Task<Approval> ApproveAsync(Tool tool, ToolCall toolCall, CancellationToken cancellationToken)
+        {
+            await cancellation.CancelAsync();
+            return Approval.Granted;
+        }
+    }
+
     [Fact]
     public async Task A_run_that_keeps_calling_tools_stops_at_the_iteration_limit_with_the_last_results_kept()
     {

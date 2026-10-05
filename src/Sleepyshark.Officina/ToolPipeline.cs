@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using System.Globalization;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 namespace Sleepyshark.Officina;
 
@@ -34,6 +35,12 @@ internal sealed class ToolPipeline(AgentDefinition agent, AuditRecorder audit)
             {
                 results[at] = await EndAsync(call, rejected, null).ConfigureAwait(false);
                 continue;
+            }
+
+            // The host may have cancelled while the approver decided or while this write waited for the reads before it.
+            if (cancellationToken.IsCancellationRequested)
+            {
+                break;
             }
 
             var running = Task.Run(async () => results[at] = await InvokeAsync(tool!, call, input, cancellationToken).ConfigureAwait(false), CancellationToken.None);
@@ -77,7 +84,16 @@ internal sealed class ToolPipeline(AgentDefinition agent, AuditRecorder audit)
             return (default, new ToolOutput($"The input is not valid JSON: {exception.Message}", true));
         }
 
-        var problems = SchemaValidator.Validate(tool.Schema, input);
+        List<string> problems;
+        try
+        {
+            problems = SchemaValidator.Validate(tool.Schema, input);
+        }
+        catch (RegexMatchTimeoutException exception)
+        {
+            return (default, new ToolOutput($"The input could not be validated: {exception.Message}", true));
+        }
+
         if (problems.Count > 0)
         {
             return (default, new ToolOutput($"The input does not match the tool's schema:\n{string.Join("\n", problems)}", true));
@@ -155,7 +171,7 @@ internal sealed class ToolPipeline(AgentDefinition agent, AuditRecorder audit)
             ? content
             : string.Create(
                 CultureInfo.InvariantCulture,
-                $"{content[..MaxResultLength]}\n[Truncated: the result had {content.Length} characters; only the first {MaxResultLength} are shown.]");
+                $"{AgentDefinition.Cut(content, MaxResultLength)}\n[Truncated: the result had {content.Length} characters; only the first {MaxResultLength} are shown.]");
         await audit.RecordAsync(AuditKind.ToolEnded, call.Name, call.Id, call.Input, output.IsError ? "error" : "ok", content, duration).ConfigureAwait(false);
         return new ToolResult(call.Id, content, output.IsError);
     }

@@ -23,8 +23,9 @@ public enum StopReason
     Refusal,
 
     /// <summary>
-    /// The reply reached the output token limit. A reply that also requested tools is not appended, nor are the user message
-    /// and run context it answers, and its tools do not run: its last tool input may be cut short.
+    /// The reply reached the output token limit. A reply that requested tools but stopped for any reason other than tool
+    /// use is not appended, nor are the user message and run context it answers, and its tools do not run: its last tool
+    /// input may be cut short, and its calls would be left without results.
     /// </summary>
     OutputLimit,
 

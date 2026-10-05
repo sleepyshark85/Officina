@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using System.Security.Cryptography;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 
 namespace Sleepyshark.Officina;
@@ -107,11 +108,23 @@ public sealed record AgentDefinition
         return RunEngine.StreamAsync(this, conversation, message, context, cancellationToken);
     }
 
-    /// <summary>A hash of everything in the cached prefix: model settings, instructions and tools (CTX-04).</summary>
-    /// <summary>Replaces each of <see cref="Secrets"/> in <paramref name="text"/>.</summary>
-    internal string Redact(string text) =>
-        Secrets.Where(secret => secret.Length > 0).Aggregate(text, (redacted, secret) => redacted.Replace(secret, "[redacted]", StringComparison.Ordinal));
+    /// <summary>
+    /// Replaces each of <see cref="Secrets"/> in <paramref name="text"/>, as written and as escaped inside a JSON string
+    /// (a tool input is JSON text, where a <c>"</c> or <c>\</c> in a secret is escaped).
+    /// </summary>
+    internal string Redact(string text) => Secrets
+        .Where(secret => secret.Length > 0)
+        .SelectMany(secret => new[] { secret, JsonEncodedText.Encode(secret, JavaScriptEncoder.UnsafeRelaxedJsonEscaping).Value })
+        .Aggregate(text, (redacted, secret) => redacted.Replace(secret, "[redacted]", StringComparison.Ordinal));
 
+    /// <summary>
+    /// <paramref name="text"/> cut to at most <paramref name="length"/> characters, never between the two halves of a
+    /// surrogate pair.
+    /// </summary>
+    internal static string Cut(string text, int length) =>
+        text.Length <= length ? text : text[..(char.IsHighSurrogate(text[length - 1]) ? length - 1 : length)];
+
+    /// <summary>A hash of everything in the cached prefix: model settings, instructions and tools (CTX-04).</summary>
     internal string Fingerprint()
     {
         using var buffer = new MemoryStream();

@@ -19,7 +19,10 @@ public enum ToolKind
 }
 
 /// <summary>What a tool's handler returns: content for the model, and whether it is an error result (TOOL-05).</summary>
-public sealed record ToolOutput(string Content, bool IsError = false);
+public sealed record ToolOutput(string Content, bool IsError = false)
+{
+    public string Content { get; } = Content ?? throw new ArgumentNullException(nameof(Content));
+}
 
 /// <summary>
 /// A tool the model may request (TOOL-01, ARCHITECTURE §4.2). Its name, description and input schema are part of the

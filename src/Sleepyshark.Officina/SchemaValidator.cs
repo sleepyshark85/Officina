@@ -7,7 +7,9 @@ namespace Sleepyshark.Officina;
 /// <summary>
 /// Validates JSON against the subset of JSON Schema (draft 2020-12) that the core's schemas use (Q2, TOOL-02): those the
 /// platform's schema exporter makes for tools and typed output, and those MCP servers commonly send. A schema outside
-/// the subset is refused when it is defined, so a schema is never half checked.
+/// the subset is refused when it is defined, so a schema is never half checked. A <c>pattern</c> is a .NET regular
+/// expression, not ECMA-262: <c>\d</c> and <c>\w</c> also match non-ASCII digits and letters. A pattern that runs past
+/// its timeout throws <see cref="RegexMatchTimeoutException"/>.
 /// </summary>
 internal static class SchemaValidator
 {
@@ -17,7 +19,7 @@ internal static class SchemaValidator
 
     private static readonly HashSet<string> Types = ["object", "array", "string", "number", "integer", "boolean", "null"];
 
-    private static readonly TimeSpan PatternTimeout = TimeSpan.FromSeconds(1);
+    private static readonly TimeSpan PatternTimeout = TimeSpan.FromMilliseconds(100);
 
     /// <summary>Throws <see cref="ArgumentException"/> if <paramref name="schema"/> uses anything outside the subset.</summary>
     public static void CheckSubset(JsonElement schema, string path = "")

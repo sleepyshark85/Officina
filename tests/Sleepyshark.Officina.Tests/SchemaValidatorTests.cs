@@ -7,9 +7,9 @@ namespace Sleepyshark.Officina.Tests;
 /// <summary>The schema validator (Q2, TOOL-02), and TEST-08: it agrees with an established validator on the subset.</summary>
 public class SchemaValidatorTests
 {
-    private static readonly Gen<string> Number = Gen.OneOfConst("0", "1", "-2", "3", "1.5", "2.0", "-0.5", "100");
+    private static readonly Gen<string> Number = Gen.OneOfConst("0", "1", "-2", "3", "1.5", "2.0", "-0.5", "100", "1e2", "2.5E-1", "-3e0");
 
-    private static readonly Gen<string> Text = Gen.OneOfConst("\"\"", "\"a\"", "\"ab\"", "\"abc\"", "\"123\"", "\"b1\"", "\"Ab c\"");
+    private static readonly Gen<string> Text = Gen.OneOfConst("\"\"", "\"a\"", "\"ab\"", "\"abc\"", "\"123\"", "\"b1\"", "\"Ab c\"", "\"é\"", "\"😀\"", "\"a😀\"", "\"\\u00e9b\"");
 
     private static readonly Gen<string> Name = Gen.OneOfConst("a", "b", "c");
 

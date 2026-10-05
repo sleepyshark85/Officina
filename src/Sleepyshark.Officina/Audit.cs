@@ -38,7 +38,7 @@ public sealed record AuditEntry
 {
     public required DateTimeOffset Time { get; init; }
 
-    /// <summary>The entry's place in its run, from 1.</summary>
+    /// <summary>The entry's place in its run, from 1. A gap means an entry the sink failed to write.</summary>
     public required long Sequence { get; init; }
 
     public required string Run { get; init; }
@@ -104,7 +104,7 @@ internal sealed class AuditRecorder(AgentDefinition agent, Conversation conversa
                 new AuditEntry
                 {
                     Time = agent.Time.GetUtcNow(),
-                    Sequence = sequence + 1,
+                    Sequence = ++sequence,
                     Run = run,
                     Conversation = conversation.Id,
                     Agent = agent.Name,
@@ -118,7 +118,6 @@ internal sealed class AuditRecorder(AgentDefinition agent, Conversation conversa
                     Usage = usage,
                 },
                 CancellationToken.None).ConfigureAwait(false);
-            sequence++;
             return true;
         }
 #pragma warning disable CA1031 // A sink may fail in any way; the caller decides what a missing entry means.
@@ -145,6 +144,6 @@ internal sealed class AuditRecorder(AgentDefinition agent, Conversation conversa
         text = agent.Redact(text);
         return text.Length <= MaxTextLength
             ? text
-            : string.Create(CultureInfo.InvariantCulture, $"{text[..MaxTextLength]}… [truncated: {text.Length} characters]");
+            : string.Create(CultureInfo.InvariantCulture, $"{AgentDefinition.Cut(text, MaxTextLength)}… [truncated: {text.Length} characters]");
     }
 }

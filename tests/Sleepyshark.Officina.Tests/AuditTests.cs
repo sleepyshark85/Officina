@@ -116,6 +116,35 @@ public class AuditTests
     }
 
     [Fact]
+    public async Task An_entry_the_sink_failed_to_write_leaves_a_gap_in_the_sequence()
+    {
+        var sink = new RecordingSink(entry => entry.Kind == AuditKind.ToolStarted);
+        var model = new ScriptedModel().CallTools(new ToolCall("c1", "look", "{}")).Reply("Done.");
+
+        await (Agents.With(model, tools: Agents.Tool("look")) with { AuditSink = sink }).RunAsync(new Conversation(), "Look.", cancellationToken: Ct);
+
+        Assert.Equal([1L, 3, 4], sink.Entries.Select(entry => entry.Sequence));
+    }
+
+    [Fact]
+    public async Task A_secret_is_redacted_as_escaped_in_JSON_too_and_truncation_keeps_surrogate_pairs_whole()
+    {
+        var sink = new RecordingSink();
+        var secret = "pa\"ss\\word";
+        // The redacted input puts the first emoji's high surrogate last in the kept text, so the cut must leave it out.
+        var input = """{"query":"pa\"ss\\word """ + new string('x', AuditRecorder.MaxTextLength - 22) + "😀😀\"}";
+        var model = new ScriptedModel().CallTools(new ToolCall("c1", "search", input)).Reply("Done.");
+
+        await (Agents.With(model, tools: Agents.SearchTool()) with { AuditSink = sink, Secrets = [secret] }).RunAsync(new Conversation(), "Go.", cancellationToken: Ct);
+
+        var started = sink.Entries.Single(entry => entry.Kind == AuditKind.ToolStarted).Input!;
+        Assert.StartsWith("""{"query":"[redacted] xxx""", started, StringComparison.Ordinal);
+        var kept = started[..started.IndexOf('…', StringComparison.Ordinal)];
+        Assert.False(char.IsHighSurrogate(kept[^1]));
+        Assert.Equal(AuditRecorder.MaxTextLength - 1, kept.Length);
+    }
+
+    [Fact]
     public async Task Refusals_failures_and_prefix_mismatches_are_recorded_as_the_run_ends()
     {
         var sink = new RecordingSink();

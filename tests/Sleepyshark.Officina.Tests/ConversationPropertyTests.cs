@@ -35,6 +35,9 @@ public class ConversationPropertyTests
         Text,
         ModelFailure,
         OutputLimitWithTools,
+        ContextFullWithTools,
+        RefusalWithTools,
+        EndWithTools,
     }
 
     /// <summary>One tool call: which tool, how it goes, and whether the approver approves it.</summary>
@@ -105,7 +108,16 @@ public class ConversationPropertyTests
             {
                 Ending.Text => model.Reply("Done."),
                 Ending.ModelFailure => model.Fail(new InvalidOperationException("boom"), new TextDelta("Do")),
-                _ => model.Reply(new TextDelta("Let me"), new BlockReceived(ScriptedModel.ToolCallBlock(new ToolCall($"cut{++ids}", "read", "{}"))), new ModelStopped(ModelStopReason.MaxTokens)),
+                _ => model.Reply(
+                    new TextDelta("Let me"),
+                    new BlockReceived(ScriptedModel.ToolCallBlock(new ToolCall($"cut{++ids}", "read", "{}"))),
+                    new ModelStopped(run.Ending switch
+                    {
+                        Ending.ContextFullWithTools => ModelStopReason.ContextFull,
+                        Ending.RefusalWithTools => ModelStopReason.Refusal,
+                        Ending.EndWithTools => ModelStopReason.End,
+                        _ => ModelStopReason.MaxTokens,
+                    })),
             };
             var agent = new AgentDefinition
             {
