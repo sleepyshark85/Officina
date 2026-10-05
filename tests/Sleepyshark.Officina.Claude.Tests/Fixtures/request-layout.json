@@ -1,0 +1,103 @@
+{
+  "model": "claude-opus-5-5",
+  "max_tokens": 8000,
+  "thinking": {
+    "type": "adaptive"
+  },
+  "output_config": {
+    "effort": "high"
+  },
+  "cache_control": {
+    "type": "ephemeral",
+    "ttl": "1h"
+  },
+  "tools": [
+    {
+      "name": "add_to_cart",
+      "description": "Adds a book to the cart.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "isbn": {
+            "type": "string"
+          },
+          "copies": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "isbn"
+        ]
+      },
+      "eager_input_streaming": true
+    },
+    {
+      "name": "search",
+      "description": "Searches the catalogue.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "query"
+        ]
+      },
+      "eager_input_streaming": true
+    }
+  ],
+  "system": [
+    {
+      "type": "text",
+      "text": "You are the assistant of a bookshop.",
+      "cache_control": {
+        "type": "ephemeral",
+        "ttl": "1h"
+      }
+    }
+  ],
+  "messages": [
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "Is Gaudy Night in stock?"
+        }
+      ]
+    },
+    {
+      "role": "system",
+      "content": "Today is 2026-10-05."
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "thinking",
+          "signature": "EqQBCkYIBRgCKkB\u002Bsig/a==",
+          "thinking": ""
+        },
+        {
+          "type": "text",
+          "text": "Looking up \u00ABCaf\u00E9 Libro\u00BB."
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "And its price?"
+        }
+      ]
+    },
+    {
+      "role": "system",
+      "content": "Today is 2026-10-05."
+    }
+  ]
+}

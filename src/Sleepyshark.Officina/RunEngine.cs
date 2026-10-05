@@ -60,6 +60,10 @@ internal static class RunEngine
                         case TextDelta delta:
                             yield return new TextStreamed(delta.Text);
                             break;
+                        case ModelRestarted:
+                            blocks.Clear();
+                            yield return new ReplyRestarted();
+                            break;
                         case BlockReceived received:
                             blocks.Add(received.Block);
                             break;
@@ -77,7 +81,10 @@ internal static class RunEngine
                 {
                     var disposing = reply;
                     reply = null;
-                    error ??= await TryAsync(async () => await disposing.DisposeAsync().ConfigureAwait(false), cancellationToken).ConfigureAwait(false);
+                    var disposed = await TryAsync(async () => await disposing.DisposeAsync().ConfigureAwait(false), cancellationToken).ConfigureAwait(false);
+
+                    // Once the stop reason has arrived the reply is complete, and a failure to close the call does not lose it.
+                    error ??= stop is null ? disposed : null;
                 }
             }
             finally

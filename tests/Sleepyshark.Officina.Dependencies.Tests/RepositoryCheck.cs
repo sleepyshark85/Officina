@@ -1,6 +1,6 @@
 namespace Sleepyshark.Officina.Dependencies.Tests;
 
-/// <summary>Applies <see cref="DependencyRules"/> to every project under <c>src/</c>, <c>apps/</c> and <c>tests/</c> of a repository.</summary>
+/// <summary>Applies <see cref="DependencyRules"/> to every project under <c>src/</c>, <c>apps/</c>, <c>samples/</c> and <c>tests/</c> of a repository.</summary>
 internal static class RepositoryCheck
 {
     // This project spells out the forbidden names, so its own source is not scanned.
@@ -46,7 +46,7 @@ internal static class RepositoryCheck
         throw new InvalidOperationException("Could not find the repository root above " + AppContext.BaseDirectory);
     }
 
-    private static readonly string[] ProjectFolders = ["src", "apps", "tests"];
+    private static readonly string[] ProjectFolders = ["src", "apps", "samples", "tests"];
 
     private static IEnumerable<string> ProjectFiles(string root) =>
         ProjectFolders

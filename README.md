@@ -30,4 +30,5 @@ dotnet test
 | `src/Sleepyshark.Officina.Mcp` | The MCP tool source |
 | `src/Sleepyshark.Officina.Testing` | The test kit |
 | `apps/BookshopAssistant` | The reference application |
+| `samples/hello` | A live chat with Claude (needs `ANTHROPIC_API_KEY`); not part of `dotnet test` |
 | `tests/` | Tests; `Sleepyshark.Officina.Dependencies.Tests` enforces the dependency rules (TEST-05) |

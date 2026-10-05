@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Sleepyshark.Officina\Sleepyshark.Officina.csproj" />
+    <ProjectReference Include="..\..\src\Sleepyshark.Officina.Claude\Sleepyshark.Officina.Claude.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Hand-written in the Claude API's documented SSE format, with the shapes spikes S00b and S02 observed. -->
+    <None Include="Fixtures\**" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

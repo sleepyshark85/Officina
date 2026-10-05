@@ -6,6 +6,9 @@ public abstract record RunEvent;
 /// <summary>A piece of the model's reply text.</summary>
 public sealed record TextStreamed(string Text) : RunEvent;
 
+/// <summary>The model call was retried after its reply had started: discard the text streamed so far, as the reply starts again.</summary>
+public sealed record ReplyRestarted : RunEvent;
+
 /// <summary>Tokens a model call reported.</summary>
 public sealed record UsageReported(Usage Usage) : RunEvent;
 

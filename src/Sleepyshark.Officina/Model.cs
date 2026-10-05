@@ -16,7 +16,7 @@ public interface IModel
 
     /// <summary>
     /// Sends one request and streams the reply: text deltas and complete blocks as they arrive, usage, and last a
-    /// <see cref="ModelStopped"/>.
+    /// <see cref="ModelStopped"/>. A retry after the reply has started is announced by a <see cref="ModelRestarted"/>.
     /// </summary>
     IAsyncEnumerable<ModelEvent> StreamAsync(ModelRequest request, CancellationToken cancellationToken);
 }
@@ -32,6 +32,12 @@ public sealed record TextDelta(string Text) : ModelEvent;
 
 /// <summary>A complete content block of the reply, in reply order.</summary>
 public sealed record BlockReceived(ContentBlock Block) : ModelEvent;
+
+/// <summary>
+/// The call was retried after its reply had started (MDL-04): everything streamed before this belongs to a reply that
+/// will not come, and the reply starts again.
+/// </summary>
+public sealed record ModelRestarted : ModelEvent;
 
 /// <summary>Tokens the call used since its previous report: reports are increments, and the run adds them up.</summary>
 public sealed record UsageReceived(Usage Usage) : ModelEvent;
