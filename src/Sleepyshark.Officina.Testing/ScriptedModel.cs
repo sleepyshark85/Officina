@@ -16,6 +16,10 @@ public sealed class ScriptedModel : IModel
 
     public string Settings { get; init; } = "scripted";
 
+    public string Provider { get; init; } = "scripted";
+
+    public string Name { get; init; } = "scripted";
+
     /// <summary>The requests received so far, in order.</summary>
     public IReadOnlyList<ModelRequest> Requests
     {

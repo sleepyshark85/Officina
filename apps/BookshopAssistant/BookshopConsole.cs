@@ -1,4 +1,7 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Sleepyshark.Officina;
 
 namespace BookshopAssistant;
@@ -7,16 +10,27 @@ namespace BookshopAssistant;
 /// The console (ARCHITECTURE §12.1): asks who is using it, then reads messages and commands, streams each reply with its
 /// tool activity, asks approval for changes, and cancels a reply on request (APP-01, APP-03, APP-06, APP-13). It is also
 /// the agent's approver: the run announces each approval in its event stream, the console asks the staff member there,
-/// in order with everything shown before it, and hands the answer to the waiting run.
+/// in order with everything shown before it, and hands the answer to the waiting run. Each reply is a span of its own, the
+/// parent of the run's trace, so the console's logs join that trace (APP-20); <c>/audit</c> reads <paramref name="audit"/>
+/// and links each run to its trace on <paramref name="dashboard"/> (APP-16).
 /// </summary>
-public sealed class BookshopConsole(TextReader input, TextWriter output, TimeProvider time, bool echoInput) : IApprover
+public sealed partial class BookshopConsole(
+    TextReader input, TextWriter output, TimeProvider time, bool echoInput, AuditTable audit, Uri dashboard, ILogger? logger = null) : IApprover
 {
+    /// <summary>The name of the console's activity source, for the exporter to listen to.</summary>
+    public const string SourceName = "BookshopAssistant";
+
     private const string Help = """
         Commands:
-          /help   Show this help.
-          /quit   Leave the assistant.
+          /help           Show this help.
+          /audit [<id>]   Show the audit trail of this conversation, or of the conversation with that id.
+          /quit           Leave the assistant.
         Anything else is a message to the assistant. Ctrl+C stops a reply in progress.
         """;
+
+    private static readonly ActivitySource Source = new(SourceName);
+
+    private readonly ILogger logger = logger ?? NullLogger.Instance;
 
     private readonly ConcurrentDictionary<string, TaskCompletionSource<Approval>> approvals = new();
     private CancellationTokenSource? reply;
@@ -68,6 +82,11 @@ public sealed class BookshopConsole(TextReader input, TextWriter output, TimePro
                 case "/help":
                     await output.WriteLineAsync(Help);
                     continue;
+                case { } command when command == "/audit" || command.StartsWith("/audit ", StringComparison.Ordinal):
+                    // Sessions come in S08; until then a conversation is named by its id.
+                    var id = command["/audit".Length..].Trim();
+                    await ShowAuditAsync(id.Length > 0 ? id : conversation.Id);
+                    continue;
                 case ['/', ..] command:
                     await output.WriteLineAsync($"Unknown command {command}. Type /help for commands.");
                     continue;
@@ -107,9 +126,23 @@ public sealed class BookshopConsole(TextReader input, TextWriter output, TimePro
         return null;
     }
 
+    private async Task ShowAuditAsync(string conversation)
+    {
+        try
+        {
+            var entries = await audit.ReadAsync(conversation, CancellationToken.None);
+            await output.WriteLineAsync(AuditView.Format(conversation, entries, dashboard, time.LocalTimeZone));
+        }
+        catch (Exception exception) when (exception is Npgsql.NpgsqlException or TimeoutException)
+        {
+            await output.WriteLineAsync($"The audit trail could not be read: {exception.Message}");
+        }
+    }
+
     /// <summary>Streams one reply; returns the run context the conversation received, if it received one.</summary>
     private async Task<string?> ReplyAsync(AgentDefinition agent, Conversation conversation, string message, string? context)
     {
+        using var span = Source.StartActivity("reply");
         using var cancellation = new CancellationTokenSource();
         Volatile.Write(ref reply, cancellation);
         string? appendedContext = null;
@@ -148,6 +181,12 @@ public sealed class BookshopConsole(TextReader input, TextWriter output, TimePro
                         appendedContext = appended.Text;
                         break;
                     case RunEnded { Result: var result }:
+                        LogReplyEnded(logger, conversation.Id, result.GetType().Name, result.Usage.Input + result.Usage.CacheRead + result.Usage.CacheWrite, result.Usage.Output);
+                        if (result is Failed failure)
+                        {
+                            LogReplyFailed(logger, conversation.Id, failure.Reason, failure.Error);
+                        }
+
                         await WriteLineAsync(result switch
                         {
                             Completed => "",
@@ -266,4 +305,10 @@ public sealed class BookshopConsole(TextReader input, TextWriter output, TimePro
     }
 
     private static string FirstLine(string text) => text.Split('\n', 2)[0];
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Reply in conversation {Conversation} ended {Result}: {InputTokens} input tokens, {OutputTokens} output tokens")]
+    private static partial void LogReplyEnded(ILogger logger, string conversation, string result, long inputTokens, long outputTokens);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Reply in conversation {Conversation} failed ({Reason}): {Error}")]
+    private static partial void LogReplyFailed(ILogger logger, string conversation, FailureReason reason, string error);
 }

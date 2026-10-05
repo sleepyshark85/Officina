@@ -123,8 +123,66 @@ public class RetryTests
 
         var events = await CollectAsync(model, Hi);
 
-        Assert.Equal([new TextDelta("Hel"), new ModelRestarted(), new TextDelta("Hello.")], events.Where(each => each is TextDelta or ModelRestarted));
+        Assert.Equal([new TextDelta("Hel"), new ModelRetried(), new TextDelta("Hello.")], events.Where(each => each is TextDelta or ModelRetried));
         Assert.Equal("Hello.", Assert.Single(events.OfType<BlockReceived>()).Block.Text);
+    }
+
+    [Fact]
+    public async Task A_retry_before_anything_streamed_is_reported_too()
+    {
+        var api = new FakeApi().Error(529, "overloaded_error").Error(429, "rate_limit_error").Stream(Sse.Text());
+        using var model = Model(api, new InstantTime());
+
+        var events = await CollectAsync(model, Hi);
+
+        Assert.Equal([new ModelRetried(), new ModelRetried(), new TextDelta("Hello.")], events.Take(3));
+        Assert.Equal(new UsageReceived(new Usage(10, 5, 0, 0)), Assert.Single(events.OfType<UsageReceived>()));
+    }
+
+    [Fact]
+    public async Task The_tokens_of_an_attempt_that_failed_mid_stream_are_reported_before_the_retry()
+    {
+        var api = new FakeApi()
+            .Stream(Sse.Events(
+                Sse.Start,
+                """{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}""",
+                """{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hel"}}""",
+                """{"type":"message_delta","delta":{"stop_reason":null,"stop_sequence":null},"usage":{"output_tokens":3}}""",
+                Sse.Error("overloaded_error")))
+            .Stream(Sse.Text());
+        using var model = Model(api, new InstantTime());
+
+        var events = await CollectAsync(model, Hi);
+
+        Assert.Equal(
+            [new UsageReceived(new Usage(10, 3, 0, 0)), new ModelRetried(), new UsageReceived(new Usage(10, 5, 0, 0))],
+            events.Where(each => each is UsageReceived or ModelRetried));
+    }
+
+    [Fact]
+    public async Task The_tokens_of_a_last_attempt_that_failed_mid_stream_are_reported_before_the_failure()
+    {
+        var api = new FakeApi();
+        for (var attempt = 0; attempt < ClaudeErrors.MaxAttempts; attempt++)
+        {
+            api.Stream(Sse.Events(Sse.Start, Sse.Error("overloaded_error")));
+        }
+
+        using var model = Model(api, new InstantTime());
+        var events = new List<ModelEvent>();
+
+        var failure = await Assert.ThrowsAsync<ClaudeException>(async () =>
+        {
+            await foreach (var modelEvent in model.StreamAsync(Hi, Ct))
+            {
+                events.Add(modelEvent);
+            }
+        });
+
+        Assert.Equal(ClaudeFailure.Transient, failure.Failure);
+        Assert.Equal(ClaudeErrors.MaxAttempts, events.OfType<UsageReceived>().Count());
+        Assert.Equal(ClaudeErrors.MaxAttempts - 1, events.OfType<ModelRetried>().Count());
+        Assert.Equal(new UsageReceived(new Usage(10, 1, 0, 0)), events[^1]);
     }
 
     [Fact]
@@ -140,7 +198,7 @@ public class RetryTests
 
         var events = await CollectAsync(model, Hi);
 
-        Assert.Equal([new TextDelta("Hel"), new ModelRestarted(), new TextDelta("Hello.")], events.Where(each => each is TextDelta or ModelRestarted));
+        Assert.Equal([new TextDelta("Hel"), new ModelRetried(), new TextDelta("Hello.")], events.Where(each => each is TextDelta or ModelRetried));
     }
 
     [Fact]

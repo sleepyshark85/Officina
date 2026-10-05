@@ -62,6 +62,31 @@ internal static class ClaudeReply
         return new Usage(usage.InputTokens, usage.OutputTokens, usage.CacheReadInputTokens ?? 0, usage.CacheCreationInputTokens ?? 0);
     }
 
+    /// <summary>
+    /// The tokens an attempt reported before it failed mid-stream: its start's usage, updated by any later delta, whose
+    /// counts are totals so far. Zero when the attempt failed before it started.
+    /// </summary>
+    public static Usage Partial(IEnumerable<BetaRawMessageStreamEvent> events)
+    {
+        var usage = default(Usage);
+        foreach (var streamEvent in events)
+        {
+            if (streamEvent.TryPickStart(out var start))
+            {
+                usage = Usage(start.Message.Usage);
+            }
+            else if (streamEvent.TryPickDelta(out var delta))
+            {
+                var counts = delta.Usage;
+                usage = new Usage(
+                    counts.InputTokens ?? usage.Input, counts.OutputTokens, counts.CacheReadInputTokens ?? usage.CacheRead,
+                    counts.CacheCreationInputTokens ?? usage.CacheWrite);
+            }
+        }
+
+        return usage;
+    }
+
     private static long Tokens(JsonElement iteration, string name) =>
         iteration.TryGetProperty(name, out var count) && count.ValueKind == JsonValueKind.Number ? count.GetInt64() : 0;
 

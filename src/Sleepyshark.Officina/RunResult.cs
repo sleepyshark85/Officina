@@ -4,7 +4,7 @@ namespace Sleepyshark.Officina;
 /// <param name="Usage">Tokens used by the run's model calls.</param>
 public abstract record RunResult(Usage Usage);
 
-/// <summary>The model finished; <paramref name="Text"/> is its final reply's text.</summary>
+/// <summary>The model finished; <paramref name="Text"/> is its final reply's text, with the agent's secrets redacted (EVT-03).</summary>
 public sealed record Completed(string Text, Usage Usage) : RunResult(Usage);
 
 /// <summary>The run ended early for <paramref name="Reason"/>; <paramref name="Detail"/> is a refusal's category, when the provider gives one.</summary>

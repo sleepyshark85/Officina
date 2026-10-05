@@ -58,7 +58,7 @@ public sealed record AgentDefinition
 
     /// <summary>
     /// Values that never reach the model, the events or the audit trail, such as a password a tool's back end uses: each is
-    /// redacted from tool results and audit entries (EVT-03, AUD-05).
+    /// redacted from tool results, audit entries and telemetry (EVT-03, AUD-05).
     /// </summary>
     public ImmutableArray<string> Secrets
     {
@@ -66,7 +66,13 @@ public sealed record AgentDefinition
         init => field = value.IsDefault ? [] : value;
     } = [];
 
-    /// <summary>The clock for audit times and durations; tests give a fake one.</summary>
+    /// <summary>
+    /// Whether telemetry carries message text, tool inputs and tool results (EVT-04); off by default, as the audit trail is
+    /// for the record. <see cref="Secrets"/> are redacted from it either way (EVT-03).
+    /// </summary>
+    public bool TelemetryContent { get; init; }
+
+    /// <summary>The clock for audit times, durations and span times; tests give a fake one.</summary>
     public TimeProvider Time
     {
         get;
@@ -110,11 +116,15 @@ public sealed record AgentDefinition
 
     /// <summary>
     /// Replaces each of <see cref="Secrets"/> in <paramref name="text"/>, as written and as escaped inside a JSON string
-    /// (a tool input is JSON text, where a <c>"</c> or <c>\</c> in a secret is escaped).
+    /// (a tool input is JSON text, where a <c>"</c> or <c>\</c> in a secret is escaped, and other characters may be
+    /// escaped as <c>\uXXXX</c>).
     /// </summary>
     internal string Redact(string text) => Secrets
         .Where(secret => secret.Length > 0)
-        .SelectMany(secret => new[] { secret, JsonEncodedText.Encode(secret, JavaScriptEncoder.UnsafeRelaxedJsonEscaping).Value })
+        .SelectMany(secret => new[]
+        {
+            secret, JsonEncodedText.Encode(secret, JavaScriptEncoder.UnsafeRelaxedJsonEscaping).Value, JsonEncodedText.Encode(secret).Value,
+        })
         .Aggregate(text, (redacted, secret) => redacted.Replace(secret, "[redacted]", StringComparison.Ordinal));
 
     /// <summary>

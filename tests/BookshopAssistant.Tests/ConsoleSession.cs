@@ -14,21 +14,26 @@ internal static class ConsoleSession
     /// <summary>Monday 5 October 2026, 08:00 UTC; the fake clock's local time zone is UTC.</summary>
     public static readonly DateTimeOffset Start = new(2026, 10, 5, 8, 0, 0, TimeSpan.Zero);
 
+    /// <summary>Where the console links runs to their traces.</summary>
+    public static readonly Uri Dashboard = new("http://dashboard.test/");
+
     /// <summary>Runs a session and returns its transcript.</summary>
     /// <param name="database">The database the tools use.</param>
     /// <param name="model">The scripted model.</param>
     /// <param name="script">
     /// The staff member's input: each string is a line they type, and each <see cref="Func{Task}"/> runs before the next line is read.
     /// </param>
-    /// <param name="time">The console's clock; by default a fake one stopped at <see cref="Start"/>.</param>
+    /// <param name="time">The console's clock; by default a fake one stopped at <see cref="Start"/>, which the agent always uses for its audit times.</param>
     /// <param name="cancelOn">When the transcript first contains this text, the console is asked to cancel the reply, as Ctrl+C does.</param>
     public static async Task<string> RunAsync(
         BookshopDatabase database, ScriptedModel model, IEnumerable<object> script, TimeProvider? time = null, string? cancelOn = null)
     {
         var output = new Transcript(cancelOn);
-        var console = new BookshopConsole(new ScriptedInput(script), output, time ?? new FakeTimeProvider(Start), echoInput: true);
+        var audit = new AuditTable(database.DataSource);
+        var clock = new FakeTimeProvider(Start);
+        var console = new BookshopConsole(new ScriptedInput(script), output, time ?? clock, echoInput: true, audit, Dashboard);
         output.Console = console;
-        await console.RunAsync(BookshopAgent.Create(model, database.Tools, console, [BookshopDatabase.Password]));
+        await console.RunAsync(BookshopAgent.Create(model, database.Tools, console, audit, [BookshopDatabase.Password], clock));
         return output.ToString();
     }
 
