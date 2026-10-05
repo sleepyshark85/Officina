@@ -1,0 +1,64 @@
+# Officina — working notes for Claude sessions
+
+Officina is a purpose-neutral .NET 10 library for building agentic applications. Packages are named under
+`Sleepyshark.Officina`. Phase 1 is accepted against one reference application, **Bookshop Assistant**: an interactive
+console chatbot over PostgreSQL in Docker.
+
+It replaces `~/sources/agentic-core` (the first Officina, built top-down for a coding team, now archived). Its Claude
+provider, MCP client, test kit and spike findings (`docs/spikes/` there) are reused: see ARCHITECTURE §13.
+
+## Where things are
+
+- `REQUIREMENTS.md`: what to build (IDs such as `TOOL-03`), phase 1 and north star, with decisions in §7.
+- `ARCHITECTURE.md`: concepts, components, contracts and flows. **It holds no code, type names or API names;** keep it
+  that way. Implementation detail goes in code and its comments.
+
+## Start here (not done yet)
+
+1. `git init`, a short README, first commit of the docs; a GitHub repository if the owner approves (ask: private or public).
+2. A phase 1 plan in `docs/plan/`: small vertical slices, each ending in something that runs, with offline tests.
+   Suggested order: skeleton and dependency check → minimal Claude loop (streaming, caching) → tool pipeline with
+   approval and audit → bookshop database in Docker and the console → sessions, budgets, status line → memory →
+   compaction → MCP → session summarizer → GEN-06 samples, demo script, live smoke test.
+3. Check prerequisites: Docker, the .NET 10 SDK, an Anthropic API key or `ant auth login` for live tests.
+4. Open question Q1 (REQUIREMENTS §7): plain PostgreSQL driver (recommended) or an object mapper.
+
+## How we work
+
+- **Every change goes through a branch and a pull request** to `main`, docs included. Never push to `main`, and never
+  merge without the owner's go-ahead. Branches: `slice/<id>-<slug>`, `docs/<topic>`, `fix/<slug>`.
+- **The simplest thing that works.** Build only what the slice's acceptance criteria need: no abstraction without a
+  current user, no setting without a known case (until then, a constant), no optimization without a measured target.
+  Prefer a framework feature over custom code. Simplicity never at the cost of separation of concerns or clear design.
+- **Tests replace only system boundaries:** the model provider (scripted model), network and MCP servers, the clock,
+  environment and secrets, the human (scripted approver), storage back ends where a real one is impractical. Everything
+  inside Officina is tested with real objects. Prefer a real database in Docker over a faked one for the application.
+- **Short design docs:** tables and diagrams over prose; cite requirement IDs instead of restating them.
+- **Who codes and reviews (when subagents are used):** Opus writes big or risky slices; Sonnet only small, well-bounded
+  fixes. An Opus reviewer approves each PR, checking conventions, the design rules below and over-complication; at most
+  3 review rounds, then stop and summarize for the owner.
+- Review comments may arrive as a pending review: read them with GraphQL
+  `pullRequest(number: N) { reviewThreads { … } }`, as the REST endpoints don't return them.
+
+## Design rules that code must keep
+
+- **One primitive:** a run of one agent. Everything else composes runs.
+- **Structured signals decide:** stop reasons, tool calls, validated output. Never parse free text to decide.
+- **Append-only conversation:** the core never edits, reorders or drops a message. Compaction and clearing old tool
+  results run on the provider's side only.
+- **Stable prefix:** tools (deterministic order), instructions (frozen) and model settings are fixed per conversation,
+  enforced by a fingerprint. Per-run context is appended after the prefix as an operator message, never put into the
+  instructions. Memory is a tool, never part of the instructions.
+- **Every run ends in a result:** completed, stopped (with a reason) or failed. Tool errors go back to the model.
+- **A write tool never runs unaudited:** its attempt is recorded before it runs.
+- **Purpose-neutral core:** no domain concepts, UI, storage technology or transport in the core; everything except
+  model and instructions is optional.
+- **Dependencies:** no Microsoft Agent Framework or `Microsoft.Extensions.AI`. The Anthropic C# SDK is used only in the
+  Claude package; a dependency check test enforces it.
+
+## Claude API notes
+
+Current models and features move fast; check the `claude-api` skill before writing provider code. Key points for
+Opus 5.5 (the default model): thinking can't be disabled (set effort explicitly, its default is `medium`); forced
+`tool_choice` is rejected; reasoning blocks are bound to the exact prefix that produced them, so history must stay
+append-only; use the beta message types only (agentic-core spike S00b).
