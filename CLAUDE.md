@@ -28,14 +28,19 @@ provider, MCP client, test kit and spike findings (`docs/spikes/` there) are reu
 
 ## How we work
 
-- **Every change goes through a branch and a pull request** to `main`, docs included. Never push to `main`, and never
-  merge without the owner's go-ahead. Branches: `slice/<id>-<slug>`, `docs/<topic>`, `fix/<slug>`.
+- **Every change goes through a branch and a pull request** to `main`, docs included. Never push to `main`. Merge
+  only when the Opus reviewer has approved and the required checks pass (`ubuntu-latest`, `windows-latest`,
+  `quality`, branch up to date); the owner has delegated that go-ahead. Branches: `slice/<id>-<slug>`,
+  `docs/<topic>`, `fix/<slug>`. Retarget a stacked PR before deleting the branch it is based on (deleting a base
+  closes the PR).
 - **The simplest thing that works.** Build only what the slice's acceptance criteria need: no abstraction without a
   current user, no setting without a known case (until then, a constant), no optimization without a measured target.
   Prefer a framework feature over custom code. Simplicity never at the cost of separation of concerns or clear design.
 - **Tests replace only system boundaries:** the model provider (scripted model), network and MCP servers, the clock,
   environment and secrets, the human (scripted approver), storage back ends where a real one is impractical. Everything
   inside Officina is tested with real objects. Prefer a real database in Docker over a faked one for the application.
+- **Tests are the agent's check on its own work.** Example tests say what should happen; property tests say what
+  must never happen. Tests are fast and deterministic: a flaky or slow test is a bug to fix, never something to retry.
 - **Short design docs:** tables and diagrams over prose; cite requirement IDs instead of restating them.
 - **Who codes and reviews (when subagents are used):** Opus writes big or risky slices; Sonnet only small, well-bounded
   fixes. An Opus reviewer approves each PR, checking conventions, the design rules below and over-complication; at most
