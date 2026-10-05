@@ -5,7 +5,8 @@ services:
     image: postgres:17
     environment:
       POSTGRES_USER: bookshop
-      POSTGRES_PASSWORD: bookshop
+      # Distinct from the user and database names, so redacting it (EVT-03) leaves those readable.
+      POSTGRES_PASSWORD: shelf-demo-41
       POSTGRES_DB: bookshop
     ports:
       # Another port if 5432 is taken: BOOKSHOP_DB_PORT=5433 docker compose up -d --wait

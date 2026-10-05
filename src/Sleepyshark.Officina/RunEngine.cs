@@ -107,12 +107,28 @@ internal static class RunEngine
             }
 
             // A reply's calls all get results, in one message, even when the run is cancelled meanwhile (CTX-06, AGT-05).
-            // The pipeline's events stream while it runs.
+            // The pipeline's events stream while it runs. A host that stops reading them abandons the run: the tools are
+            // cancelled, and the run waits for them, so none runs on after it, nor on a conversation another run may take.
             var events = Channel.CreateUnbounded<RunEvent>(new UnboundedChannelOptions { SingleReader = true });
-            var running = RunToolsAsync(new ToolPipeline(agent, audit, events.Writer), toolCalls, events.Writer, cancellationToken);
-            await foreach (var runEvent in events.Reader.ReadAllAsync(CancellationToken.None).ConfigureAwait(false))
+            using var tools = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            var running = RunToolsAsync(new ToolPipeline(agent, audit, events.Writer), toolCalls, events.Writer, tools.Token);
+            var relayed = false;
+            try
             {
-                yield return runEvent;
+                await foreach (var runEvent in events.Reader.ReadAllAsync(CancellationToken.None).ConfigureAwait(false))
+                {
+                    yield return runEvent;
+                }
+
+                relayed = true;
+            }
+            finally
+            {
+                if (!relayed)
+                {
+                    await tools.CancelAsync().ConfigureAwait(false);
+                    await running.ConfigureAwait(false);
+                }
             }
 
             var results = await running.ConfigureAwait(false);

@@ -12,7 +12,7 @@ PostgreSQL in Docker.
 
 - [`docs/plan/phase-1.md`](docs/plan/phase-1.md): the phase 1 slices.
 
-Status: phase 1, skeleton (slice S01).
+Status: phase 1, slice S06 (Bookshop console).
 
 ## Build and test
 
@@ -42,7 +42,7 @@ Needs Docker and `ANTHROPIC_API_KEY`.
 ```sh
 cd apps/BookshopAssistant
 docker compose up -d --wait        # BOOKSHOP_DB_PORT=5433 if port 5432 is taken
-export BOOKSHOP_CONNECTION_STRING="Host=localhost;Port=5432;Username=bookshop;Password=bookshop;Database=bookshop"
+export BOOKSHOP_CONNECTION_STRING="Host=localhost;Port=5432;Username=bookshop;Password=shelf-demo-41;Database=bookshop"
 dotnet run
 ```
 

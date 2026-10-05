@@ -8,7 +8,7 @@ var connectionString = Environment.GetEnvironmentVariable("BOOKSHOP_CONNECTION_S
 if (string.IsNullOrWhiteSpace(connectionString))
 {
     await Console.Error.WriteLineAsync(
-        "Set BOOKSHOP_CONNECTION_STRING, for the compose database: Host=localhost;Port=5432;Username=bookshop;Password=bookshop;Database=bookshop");
+        "Set BOOKSHOP_CONNECTION_STRING, for the compose database: Host=localhost;Port=5432;Username=bookshop;Password=shelf-demo-41;Database=bookshop");
     return 1;
 }
 
@@ -23,7 +23,20 @@ using var model = new ClaudeModel
 var console = new BookshopConsole(Console.In, Console.Out, TimeProvider.System, echoInput: Console.IsInputRedirected);
 
 // Ctrl+C stops the reply in progress and the session goes on (APP-03); with no reply in progress, it quits.
-Console.CancelKeyPress += (_, press) => press.Cancel = console.CancelReply();
+// An exception here would end the process, so none escapes.
+Console.CancelKeyPress += (_, press) =>
+{
+    try
+    {
+        press.Cancel = console.CancelReply();
+    }
+#pragma warning disable CA1031 // A failed cancel must not end the application (APP-03).
+    catch (Exception)
+#pragma warning restore CA1031
+    {
+        press.Cancel = true;
+    }
+};
 
 var password = new NpgsqlConnectionStringBuilder(connectionString).Password;
 var agent = BookshopAgent.Create(model, new BookshopTools(database), console, password is null ? [] : [password]);

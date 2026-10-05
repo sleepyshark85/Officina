@@ -311,6 +311,15 @@ public sealed class BookshopTools(NpgsqlDataSource database)
 
     private const string LockOrderSql = "select status from orders where id = @id for update";
 
+    private const string LockOrderStockSql = """
+        select s.book_id
+        from stock s
+        join order_lines l on l.book_id = s.book_id
+        where l.order_id = @id
+        order by s.book_id
+        for update of s
+        """;
+
     private const string ReturnStockSql = """
         update stock s set quantity = s.quantity + l.quantity
         from order_lines l
@@ -333,6 +342,13 @@ public sealed class BookshopTools(NpgsqlDataSource database)
                 case "cancelled":
                     return Error($"Order {orderId} is already cancelled.");
             }
+        }
+
+        // Locks the order's stock rows in book id order, as place_order does, so the two cannot deadlock.
+        await using (var command = new NpgsqlCommand(LockOrderStockSql, connection, transaction))
+        {
+            command.Parameters.AddWithValue("id", orderId);
+            await command.ExecuteNonQueryAsync(cancellationToken);
         }
 
         await using (var command = new NpgsqlCommand(ReturnStockSql, connection, transaction))

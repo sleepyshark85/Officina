@@ -20,6 +20,7 @@ public sealed class BookshopConsole(TextReader input, TextWriter output, TimePro
 
     private readonly ConcurrentDictionary<string, TaskCompletionSource<Approval>> approvals = new();
     private CancellationTokenSource? reply;
+    private Task<string?>? pendingRead;
     private bool atLineStart = true;
 
     /// <summary>Cancels the reply in progress (APP-03); false when there is none.</summary>
@@ -31,8 +32,16 @@ public sealed class BookshopConsole(TextReader input, TextWriter output, TimePro
             return false;
         }
 
-        current.Cancel();
-        return true;
+        try
+        {
+            current.Cancel();
+            return true;
+        }
+        catch (ObjectDisposedException)
+        {
+            // The reply ended between the read and the cancel.
+            return false;
+        }
     }
 
     /// <summary>Runs the session until <c>/quit</c> or the end of input. <paramref name="agent"/> must have this console as its approver.</summary>
@@ -161,28 +170,54 @@ public sealed class BookshopConsole(TextReader input, TextWriter output, TimePro
     }
 
     /// <summary>Shows the call's exact input and asks the staff member (APP-06); the waiting run gets the answer.</summary>
+    /// <remarks>
+    /// Cancelling the reply at the prompt takes effect at once: the run stops waiting for the answer, and the line being
+    /// typed becomes the next message. A cancelled prompt leaves no answer behind.
+    /// </remarks>
     private async Task AskApprovalAsync(ToolCall call, CancellationToken cancellationToken)
     {
-        if (cancellationToken.IsCancellationRequested)
+        if (!cancellationToken.IsCancellationRequested)
         {
-            return;
+            await WriteLineAsync($"  ? {call.Name} needs your approval. Its exact input:");
+            await WriteLineAsync($"    {call.Input}");
+            var answer = await ReadAsync("    Approve? [y/N] ", cancellationToken);
+            var approval = answer?.Trim().ToUpperInvariant() is "Y" or "YES"
+                ? Approval.Granted
+                : Approval.Denied("the staff member declined");
+            if (!cancellationToken.IsCancellationRequested)
+            {
+                approvals.GetOrAdd(call.Id, _ => new(TaskCreationOptions.RunContinuationsAsynchronously)).TrySetResult(approval);
+            }
         }
 
-        await WriteLineAsync($"  ? {call.Name} needs your approval. Its exact input:");
-        await WriteLineAsync($"    {call.Input}");
-        var answer = await ReadAsync("    Approve? [y/N] ");
-        var approval = answer?.Trim().ToUpperInvariant() is "Y" or "YES"
-            ? Approval.Granted
-            : Approval.Denied("the staff member declined");
-        approvals.GetOrAdd(call.Id, _ => new(TaskCreationOptions.RunContinuationsAsynchronously)).TrySetResult(approval);
+        // A cancelled run no longer waits for the answer: drop any entry its wait or this answer left.
+        if (cancellationToken.IsCancellationRequested)
+        {
+            approvals.TryRemove(call.Id, out _);
+        }
     }
 
-    private async Task<string?> ReadAsync(string prompt)
+    /// <summary>Reads a line: null at the end of input, or when <paramref name="cancellationToken"/> is cancelled first.</summary>
+    private async Task<string?> ReadAsync(string prompt, CancellationToken cancellationToken = default)
     {
         await EndLineAsync();
         await output.WriteAsync(prompt);
-        await output.FlushAsync();
-        var line = await input.ReadLineAsync();
+        await output.FlushAsync(CancellationToken.None);
+
+        // The console's reader blocks, so the read runs aside; a read that a cancel abandons serves the next prompt.
+        pendingRead ??= Task.Run(async () => await input.ReadLineAsync(), CancellationToken.None);
+        string? line;
+        try
+        {
+            line = await pendingRead.WaitAsync(cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            atLineStart = false;
+            return null;
+        }
+
+        pendingRead = null;
         if (echoInput)
         {
             await output.WriteLineAsync(line ?? "");

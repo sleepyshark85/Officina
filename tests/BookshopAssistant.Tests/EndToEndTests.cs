@@ -54,6 +54,21 @@ public class EndToEndTests(BookshopDatabase database) : IClassFixture<BookshopDa
     }
 
     [DatabaseFact]
+    public async Task APP_03_cancelling_at_the_approval_prompt_stops_the_reply_at_once_and_the_change_is_not_made()
+    {
+        var stock = await StockAsync(320);
+        var model = new ScriptedModel()
+            .Reply(SayThenCall("I'll add two copies.", Call("c1", "restock_book", new { bookId = 320, quantity = 2 })))
+            .Reply("Hello again.");
+
+        var transcript = await RunAsync(database, model, ["Sam", "Restock book 320 with 2.", "Hello?", "/quit"], cancelOn: "Approve? [y/N] ");
+
+        // The line typed after the cancel is the next message, not an answer to the cancelled prompt.
+        InOrder(transcript, "    Approve? [y/N] ", "  < restock_book: error: The call was cancelled while waiting for approval.", "[Cancelled.]", "you> Hello?", "Hello again.");
+        Assert.Equal(stock, await StockAsync(320));
+    }
+
+    [DatabaseFact]
     public async Task APP_05_the_read_tools_of_one_reply_all_answer_from_the_database()
     {
         var model = new ScriptedModel()
@@ -143,12 +158,11 @@ public class EndToEndTests(BookshopDatabase database) : IClassFixture<BookshopDa
         var transcript = await RunAsync(
             database, model, ["Sam", "Order the two cheapest fantasy books in stock for Alice Martin and tell me the total", "y", "/quit"]);
 
+        // The two reads run in parallel, so only each one's own lines are ordered, all before the write.
+        InOrder(transcript, $"  > find_customer {Alice}", "  < find_customer: ok", "  > place_order");
+        InOrder(transcript, "  > search_books", "  < search_books: ok", "  > place_order");
         InOrder(
             transcript,
-            $"  > find_customer {Alice}",
-            "  > search_books",
-            "  < find_customer: ok",
-            "  < search_books: ok",
             "  > place_order",
             """    {"customerId":1,"lines":[{"bookId":144,"quantity":1},{"bookId":216,"quantity":1}]}""",
             "    Approve? [y/N] y",

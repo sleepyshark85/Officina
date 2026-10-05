@@ -18,9 +18,18 @@ public sealed class BookshopDatabase : IAsyncLifetime
 
     private string name = "";
 
-    /// <summary>Whether the database tests can run here.</summary>
+    /// <summary>The compose file's password: distinct from the user and database names.</summary>
+    public const string Password = "shelf-demo-41";
+
+    /// <summary>
+    /// Whether the database tests run here: on Linux, always in CI, where a missing Docker fails them rather than skipping
+    /// them silently; elsewhere on Linux, when Docker is found.
+    /// </summary>
     public static bool Available =>
-        OperatingSystem.IsLinux() && (File.Exists("/var/run/docker.sock") || Environment.GetEnvironmentVariable("DOCKER_HOST") is not null);
+        OperatingSystem.IsLinux()
+        && (Environment.GetEnvironmentVariable("CI") is not null
+            || File.Exists("/var/run/docker.sock")
+            || Environment.GetEnvironmentVariable("DOCKER_HOST") is not null);
 
     public NpgsqlDataSource DataSource { get; private set; } = null!;
 
@@ -102,7 +111,7 @@ public sealed class BookshopDatabase : IAsyncLifetime
         var started = new PostgreSqlBuilder("postgres:17")
             .WithDatabase(Seeded)
             .WithUsername("bookshop")
-            .WithPassword("bookshop")
+            .WithPassword(Password)
             .WithResourceMapping(new DirectoryInfo(Path.Combine(AppContext.BaseDirectory, "database")), "/docker-entrypoint-initdb.d/")
             .Build();
         await started.StartAsync();

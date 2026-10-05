@@ -95,6 +95,51 @@ public class ToolLoopTests
     }
 
     [Fact]
+    public async Task A_host_that_stops_reading_while_tools_run_cancels_them_and_the_run_waits_for_them()
+    {
+        var ran = false;
+        var approver = new WaitingApprover();
+        var model = new ScriptedModel().CallTools(new ToolCall("c1", "order", "{}")).Reply("Ordered.");
+        var order = Agents.Tool("order", kind: ToolKind.Write, needsApproval: true, handler: (_, _) => Task.FromResult(new ToolOutput($"done {ran = true}")));
+        var agent = Agents.With(model, tools: order) with { Approver = approver };
+        var conversation = new Conversation();
+
+        await foreach (var runEvent in agent.StreamAsync(conversation, "Order it.", cancellationToken: Ct))
+        {
+            if (runEvent is ApprovalAsked)
+            {
+                break;
+            }
+        }
+
+        // The approver saw its wait cancelled and approved anyway; the call still never ran, and the conversation is free.
+        Assert.True(approver.Cancelled);
+        Assert.False(ran);
+        Assert.Single(model.Requests);
+        Assert.NotNull(await agent.RunAsync(conversation, "Order it again.", cancellationToken: Ct));
+    }
+
+    /// <summary>An approver that waits until its call is cancelled, then approves.</summary>
+    private sealed class WaitingApprover : IApprover
+    {
+        public bool Cancelled { get; private set; }
+
+        public async Task<Approval> ApproveAsync(Tool tool, ToolCall toolCall, CancellationToken cancellationToken)
+        {
+            try
+            {
+                await Task.Delay(Timeout.Infinite, cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                Cancelled = true;
+            }
+
+            return Approval.Granted;
+        }
+    }
+
+    [Fact]
     public async Task An_approved_call_runs()
     {
         var ran = false;

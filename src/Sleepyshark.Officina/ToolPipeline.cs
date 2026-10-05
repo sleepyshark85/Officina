@@ -26,12 +26,13 @@ internal sealed class ToolPipeline(AgentDefinition agent, AuditRecorder audit, C
         {
             var (call, at) = (calls[index], index);
             var tool = agent.Tools.FirstOrDefault(tool => tool.Name == call.Name);
-            events.TryWrite(new ToolCallStarted(call));
             if (tool?.Kind == ToolKind.Write)
             {
                 await Task.WhenAll(reads).ConfigureAwait(false);
                 reads.Clear();
             }
+
+            events.TryWrite(new ToolCallStarted(call));
 
             var (input, rejected) = await PrepareAsync(tool, call, cancellationToken).ConfigureAwait(false);
             if (rejected is not null)

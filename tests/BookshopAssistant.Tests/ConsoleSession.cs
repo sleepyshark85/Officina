@@ -28,7 +28,7 @@ internal static class ConsoleSession
         var output = new Transcript(cancelOn);
         var console = new BookshopConsole(new ScriptedInput(script), output, time ?? new FakeTimeProvider(Start), echoInput: true);
         output.Console = console;
-        await console.RunAsync(BookshopAgent.Create(model, database.Tools, console, ["bookshop"]));
+        await console.RunAsync(BookshopAgent.Create(model, database.Tools, console, [BookshopDatabase.Password]));
         return output.ToString();
     }
 
