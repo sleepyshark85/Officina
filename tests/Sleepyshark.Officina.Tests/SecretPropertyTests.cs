@@ -68,6 +68,7 @@ public class SecretPropertyTests
             {
                 ConversationAppended { Message.Role: Role.Assistant } => "",
                 ConversationAppended appended => JsonSerializer.Serialize(appended.Message),
+                RunEnded ended => JsonSerializer.Serialize(ended.Result, ended.Result.GetType()),
                 _ => JsonSerializer.Serialize(runEvent, runEvent.GetType()),
             }));
             var forms = new[]

@@ -102,6 +102,7 @@ public class TelemetryTests
                 ["officina.tool.outcome"] = "ok",
                 ["officina.tool.ran"] = 0.0,
                 ["officina.tool.truncated"] = false,
+                ["officina.tool.result_length"] = 2,
             },
             Tags(order));
         Assert.Equal(TimeSpan.FromSeconds(3), order.Duration);
@@ -141,8 +142,11 @@ public class TelemetryTests
         var measured = telemetry.Measurements(agent.Name);
         Assert.All(measured, each => Assert.Equal(("scripted", "scripted"), (each.Tags["gen_ai.provider.name"], each.Tags["gen_ai.request.model"])));
         Assert.Equal(
-            [("input", 400.0), ("output", 20), ("cache_read", 300), ("cache_creation", 0), ("input", 400), ("output", 5), ("cache_read", 400), ("cache_creation", 0)],
+            [("input", 400.0), ("output", 20), ("input", 400), ("output", 5)],
             measured.Where(each => each.Instrument == "gen_ai.client.token.usage").Select(each => ((string)each.Tags["gen_ai.token.type"]!, each.Value)));
+        Assert.Equal(
+            [("read", 300.0), ("write", 0), ("read", 400), ("write", 0)],
+            measured.Where(each => each.Instrument == "officina.model.cache_tokens").Select(each => ((string)each.Tags["officina.cache.type"]!, each.Value)));
         Assert.Equal([0.75, 1.0], measured.Where(each => each.Instrument == "officina.model.cache_hit_ratio").Select(each => each.Value));
         Assert.Equal(2, measured.Count(each => each.Instrument == "gen_ai.client.operation.duration" && each.Tags["error.type"] is null));
         Assert.Equal(("save", "error"), Single(measured, "officina.tool.calls", "gen_ai.tool.name", "officina.tool.outcome"));
@@ -167,6 +171,43 @@ public class TelemetryTests
         var call = telemetry.Spans(agent.Name).Single(span => span.OperationName == "chat scripted");
         Assert.Equal((1, 20L, 4L), ((int)call.GetTagItem("officina.model.retries")!, (long)call.GetTagItem("gen_ai.usage.input_tokens")!, (long)call.GetTagItem("gen_ai.usage.output_tokens")!));
         Assert.Equal(1, telemetry.Measurements(agent.Name).Single(each => each.Instrument == "officina.model.retries").Value);
+    }
+
+    [Fact]
+    public async Task Time_to_first_token_is_measured_on_the_attempt_that_succeeded()
+    {
+        using var telemetry = new TelemetryCollector();
+        var time = new FakeTimeProvider(Start);
+        var model = new ScriptedModel().Reply(new TextDelta("Hel"), new ModelRetried(), new TextDelta("Hello."), new BlockReceived(ScriptedModel.TextBlock("Hello.")), new ModelStopped(ModelStopReason.End));
+        var agent = Agents.With(model) with { Name = Unique(), Time = time };
+
+        await foreach (var runEvent in agent.StreamAsync(new Conversation(), "Hi", cancellationToken: Ct))
+        {
+            if (runEvent is ReplyRestarted)
+            {
+                time.Advance(TimeSpan.FromSeconds(2));
+            }
+        }
+
+        Assert.Equal(2.0, telemetry.Spans(agent.Name).Single(span => span.OperationName == "chat scripted").GetTagItem("officina.model.time_to_first_token"));
+    }
+
+    [Fact]
+    public async Task A_run_the_host_abandons_is_counted_and_its_span_ended_on_the_agent_s_clock()
+    {
+        using var telemetry = new TelemetryCollector();
+        var time = new FakeTimeProvider(Start);
+        var agent = Agents.With(new ScriptedModel().Reply("Hello.")) with { Name = Unique(), Time = time };
+
+        await foreach (var runEvent in agent.StreamAsync(new Conversation(), "Hi", cancellationToken: Ct))
+        {
+            time.Advance(TimeSpan.FromSeconds(1));
+            break;
+        }
+
+        var run = telemetry.Spans(agent.Name).Single(span => span.OperationName.StartsWith("invoke_agent", StringComparison.Ordinal));
+        Assert.Equal(("abandoned", TimeSpan.FromSeconds(1)), ((string)run.GetTagItem("officina.run.result")!, run.Duration));
+        Assert.Equal("abandoned", telemetry.Measurements(agent.Name).Single(each => each.Instrument == "officina.runs").Tags["officina.run.result"]);
     }
 
     [Fact]

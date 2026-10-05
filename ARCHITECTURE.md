@@ -119,7 +119,7 @@ Each contract is the only way the core reaches what is behind it; the test kit r
 | | |
 |---|---|
 | **Input** | Tools, instructions, conversation, output schema, run context, and the cache and context-management settings |
-| **Output** | A stream of: text deltas, complete content blocks, usage, compaction notices, a restart notice (after a mid-stream retry), and finally a stop reason |
+| **Output** | A stream of: text deltas, complete content blocks, usage, compaction notices, a retry notice on every retry (text the failed attempt streamed is discarded; its usage stays counted), and finally a stop reason |
 | **Capabilities** | What the provider supports: server-side compaction, context editing, native memory tool, structured output, operator messages mid-conversation |
 | **Stop reasons** | `end` · `tool_use` · `max_tokens` · `refusal` (with a category) · `context_full` · unknown |
 | **Errors** | Transient failures are retried inside the adapter, each retry reported (for telemetry); what remains is reported as a classified failure |

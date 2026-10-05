@@ -22,7 +22,10 @@ public static class Telemetry
     private static readonly Meter Meter = new(SourceName);
 
     private static readonly Histogram<long> Tokens = Meter.CreateHistogram<long>(
-        "gen_ai.client.token.usage", "{token}", "Tokens per model call, by type: input (all of it, cached or not), output, cache_read, cache_creation.");
+        "gen_ai.client.token.usage", "{token}", "Tokens per model call, by type: input (all of it, cached or not) and output.");
+
+    private static readonly Histogram<long> CacheTokens = Meter.CreateHistogram<long>(
+        "officina.model.cache_tokens", "{token}", "Input tokens per model call read from or written to the cache, by officina.cache.type: read or write. Part of the input tokens.");
 
     private static readonly Histogram<double> ModelDuration = Meter.CreateHistogram<double>(
         "gen_ai.client.operation.duration", "s", "Duration of a model call, retries included.");
@@ -54,13 +57,15 @@ public static class Telemetry
             .. Content(agent, "gen_ai.input.messages", () => Messages("user", message)),
         ]);
 
-    internal static void EndRun(Activity? activity, AgentDefinition agent, RunResult result)
+    /// <summary>Ends a run's span and counts it; <paramref name="result"/> is null for a run the host abandoned.</summary>
+    internal static void EndRun(Activity? activity, AgentDefinition agent, RunResult? result)
     {
         var (kind, reason, error) = result switch
         {
+            null => ("abandoned", null, null),
             Stopped stopped => ("stopped", stopped.Reason.ToString(), null),
             Failed failed => ("failed", failed.Reason.ToString(), failed.Error),
-            _ => ("completed", null, null),
+            _ => ("completed", (string?)null, (string?)null),
         };
         Runs.Add(1, [.. Dimensions(agent), new("officina.run.result", kind), new("officina.run.reason", reason)]);
         if (activity is null)
@@ -70,7 +75,11 @@ public static class Telemetry
 
         activity.SetTag("officina.run.result", kind);
         activity.SetTag("officina.run.reason", reason);
-        SetUsage(activity, result.Usage);
+        if (result is not null)
+        {
+            SetUsage(activity, result.Usage);
+        }
+
         if (result is Completed completed)
         {
             SetContent(activity, agent, "gen_ai.output.messages", () => Messages("assistant", completed.Text));
@@ -92,13 +101,19 @@ public static class Telemetry
     /// <paramref name="error"/> says why) or was cancelled.
     /// </summary>
     internal static void EndModelCall(
-        Activity? activity, AgentDefinition agent, long started, Usage usage, ModelStopped? stop, string? error, int retries, TimeSpan? firstText, string text)
+        Activity? activity, AgentDefinition agent, long started, Usage usage, ModelStopped? stop, string? error, int retries, TimeSpan? firstText,
+        Func<string> text)
     {
         var dimensions = Dimensions(agent);
         var input = usage.Input + usage.CacheRead + usage.CacheWrite;
-        foreach (var (type, count) in new[] { ("input", input), ("output", usage.Output), ("cache_read", usage.CacheRead), ("cache_creation", usage.CacheWrite) })
+
+        // A call that reported no tokens, such as one that failed before its reply started, records none.
+        if (usage != default)
         {
-            Tokens.Record(count, [.. dimensions, new("gen_ai.operation.name", "chat"), new("gen_ai.token.type", type)]);
+            Tokens.Record(input, [.. dimensions, new("gen_ai.operation.name", "chat"), new("gen_ai.token.type", "input")]);
+            Tokens.Record(usage.Output, [.. dimensions, new("gen_ai.operation.name", "chat"), new("gen_ai.token.type", "output")]);
+            CacheTokens.Record(usage.CacheRead, [.. dimensions, new("officina.cache.type", "read")]);
+            CacheTokens.Record(usage.CacheWrite, [.. dimensions, new("officina.cache.type", "write")]);
         }
 
         if (input > 0)
@@ -125,7 +140,7 @@ public static class Telemetry
             activity.SetTag("officina.model.time_to_first_token", first.TotalSeconds);
         }
 
-        SetContent(activity, agent, "gen_ai.output.messages", () => Messages("assistant", text));
+        SetContent(activity, agent, "gen_ai.output.messages", () => Messages("assistant", text()));
         Stop(activity, agent, error is null ? null : ("model_error", error));
     }
 
@@ -156,11 +171,11 @@ public static class Telemetry
 
     /// <summary>
     /// Ends a tool call's span and records its metrics. <paramref name="outcome"/> is <c>ok</c>, <c>error</c>, or
-    /// <c>blocked</c> for a write whose attempt could not be audited (AUD-06); <paramref name="truncatedFrom"/> is the
-    /// result's length before truncation, if it was truncated.
+    /// <c>blocked</c> for a write whose attempt could not be audited (AUD-06); <paramref name="length"/> is the result's
+    /// length before truncation.
     /// </summary>
     internal static void EndToolCall(
-        Activity? activity, AgentDefinition agent, ToolCall call, long started, string outcome, TimeSpan? ran, int? truncatedFrom, string result)
+        Activity? activity, AgentDefinition agent, ToolCall call, long started, string outcome, TimeSpan? ran, int length, bool truncated, string result)
     {
         KeyValuePair<string, object?>[] dimensions = [.. Dimensions(agent), new("gen_ai.tool.name", call.Name), new("officina.tool.outcome", outcome)];
         ToolCalls.Add(1, dimensions);
@@ -172,8 +187,8 @@ public static class Telemetry
 
         activity.SetTag("officina.tool.outcome", outcome);
         activity.SetTag("officina.tool.ran", ran?.TotalSeconds);
-        activity.SetTag("officina.tool.truncated", truncatedFrom is not null);
-        activity.SetTag("officina.tool.result_length", truncatedFrom);
+        activity.SetTag("officina.tool.truncated", truncated);
+        activity.SetTag("officina.tool.result_length", length);
         SetContent(activity, agent, "gen_ai.tool.call.result", () => result);
         Stop(activity, agent, outcome == "ok" ? null : (outcome == "blocked" ? "audit_unavailable" : "tool_error", null));
     }

@@ -160,8 +160,6 @@ internal sealed class ToolPipeline(AgentDefinition agent, AuditRecorder audit, A
         ToolOutput output;
         try
         {
-            // The tool's own spans, such as its database queries', belong to the call.
-            Activity.Current = step.Span ?? Activity.Current;
             output = await tool.Handler(input, cancellationToken).ConfigureAwait(false)
                 ?? throw new InvalidOperationException("The tool returned no output.");
         }
@@ -199,7 +197,7 @@ internal sealed class ToolPipeline(AgentDefinition agent, AuditRecorder audit, A
         {
             Telemetry.EndToolCall(
                 started.Span, agent, call, started.Started, blocked ? "blocked" : output.IsError ? "error" : "ok", duration,
-                length > MaxResultLength ? length : null, content);
+                length, length > MaxResultLength, content);
         }
 
         var result = new ToolResult(call.Id, content, output.IsError);

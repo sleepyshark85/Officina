@@ -17,6 +17,7 @@ internal static class RunEngine
     {
         conversation.StartRun();
         var span = Telemetry.StartRun(agent, conversation, message);
+        var ended = false;
         try
         {
             using var audit = new AuditRecorder(agent, conversation, span);
@@ -36,12 +37,17 @@ internal static class RunEngine
             };
             await audit.RecordAsync(AuditKind.RunEnded, outcome: outcome, detail: detail, usage: result.Value!.Usage).ConfigureAwait(false);
             Telemetry.EndRun(span, agent, result.Value);
+            ended = true;
             yield return new RunEnded(result.Value);
         }
         finally
         {
-            // A run the host abandoned still ends its span.
-            span?.Dispose();
+            // A run the host abandoned still ends its span, and is counted.
+            if (!ended)
+            {
+                Telemetry.EndRun(span, agent, null);
+            }
+
             conversation.EndRun();
         }
     }
@@ -217,6 +223,7 @@ internal static class RunEngine
                         break;
                     case ModelRetried:
                         reply.Blocks.Clear();
+                        reply.FirstText = null;
                         reply.Retries++;
                         Telemetry.Retried(agent);
                         if (streamed)
@@ -258,7 +265,7 @@ internal static class RunEngine
             }
 
             Telemetry.EndModelCall(
-                span, agent, started, reply.Usage, reply.Stop, reply.Error, reply.Retries, reply.FirstText, string.Concat(reply.Blocks.Select(block => block.Text)));
+                span, agent, started, reply.Usage, reply.Stop, reply.Error, reply.Retries, reply.FirstText, () => string.Concat(reply.Blocks.Select(block => block.Text)));
         }
     }
 
