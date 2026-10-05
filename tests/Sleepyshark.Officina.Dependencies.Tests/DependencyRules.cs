@@ -12,9 +12,9 @@ internal static partial class DependencyRules
     {
         var isClaude = Is(project.Name, Claude);
 
-        // The Claude package's graph is walked up to the Anthropic SDK, which brings Microsoft.Extensions.AI with it;
-        // everyone else's up to the Claude package.
-        var reached = project.Reachable(id => isClaude ? IsAnthropicSdk(id) : Is(id, Claude));
+        // Every graph is walked up to the Anthropic SDK, which brings Microsoft.Extensions.AI with it, so a project
+        // that references the SDK is reported once, for that. Other projects are also not walked past the Claude package.
+        var reached = project.Reachable(id => IsAnthropicSdk(id) || (!isClaude && Is(id, Claude)));
 
         foreach (var id in reached.Order(StringComparer.OrdinalIgnoreCase))
         {
@@ -49,6 +49,7 @@ internal static partial class DependencyRules
     /// <summary>Finds code that uses Microsoft.Extensions.AI types, which no project may do, even where the SDK brings them in.</summary>
     public static IEnumerable<string> CheckSource(string path, string text)
     {
+        // Deliberately strict: comments and strings match too, so the namespace cannot be mentioned at all.
         var lines = text.Split('\n');
         for (var index = 0; index < lines.Length; index++)
         {
