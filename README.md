@@ -44,7 +44,7 @@ cd apps/BookshopAssistant
 docker compose up -d --wait        # BOOKSHOP_DB_PORT=5433 if port 5432 is taken
 docker compose --profile mcp pull  # the export server's image, which the application starts itself
 export BOOKSHOP_CONNECTION_STRING="Host=localhost;Port=5432;Username=bookshop;Password=shelf-demo-41;Database=bookshop"
-dotnet run
+dotnet run                         # add -- --demo (or BOOKSHOP_DEMO=1) to compact and clear early (APP-17)
 ```
 
 Try: *Order the two cheapest fantasy books in stock for Alice Martin and tell me the total.*

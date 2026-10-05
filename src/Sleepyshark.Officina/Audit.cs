@@ -32,6 +32,12 @@ public enum AuditKind
 
     /// <summary>A tool source connected, failed to connect, or lost its connection; the entry's tool names the source (AUD-01).</summary>
     ToolSource,
+
+    /// <summary>The provider compacted the conversation during a model call (HIST-04): the detail says how much.</summary>
+    Compacted,
+
+    /// <summary>The provider cleared old tool results for a model call (HIST-04): the detail says how many.</summary>
+    Cleared,
 }
 
 /// <summary>

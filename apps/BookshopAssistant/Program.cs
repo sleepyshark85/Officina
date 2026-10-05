@@ -2,7 +2,8 @@
 // staff over the PostgreSQL database in compose.yaml. Needs BOOKSHOP_CONNECTION_STRING and ANTHROPIC_API_KEY. Traces,
 // metrics and logs go over OTLP to the dashboard in compose.yaml (APP-20): OTEL_EXPORTER_OTLP_ENDPOINT, by default
 // http://localhost:4317; BOOKSHOP_DASHBOARD_URL is where /audit links to, by default http://localhost:18888. Exports go to
-// the exports folder, through the filesystem MCP server the compose file runs in Docker (APP-12).
+// the exports folder, through the filesystem MCP server the compose file runs in Docker (APP-12). Demo mode (APP-17), with
+// --demo or BOOKSHOP_DEMO=1, compacts and clears old tool results early enough to see in a short session.
 using BookshopAssistant;
 using Microsoft.Extensions.Logging;
 using Npgsql;
@@ -41,13 +42,16 @@ using var logging = LoggerFactory.Create(builder => builder.AddOpenTelemetry(opt
     options.AddOtlpExporter();
 }));
 
+var demo = args.Contains("--demo") || Environment.GetEnvironmentVariable("BOOKSHOP_DEMO") == "1";
 await using var database = NpgsqlDataSource.Create(connectionString);
 using var model = new ClaudeModel
 {
     Model = "claude-opus-5-5",
     Effort = ClaudeEffort.Medium,
     MaxOutputTokens = 16_000,
-    CacheLifetime = CacheLifetime.OneHour,
+
+    // A demo is one sitting, and its large searches would cost 60% more to cache for an hour.
+    CacheLifetime = demo ? CacheLifetime.FiveMinutes : CacheLifetime.OneHour,
 };
 using var summaryModel = new ClaudeModel { Model = "claude-opus-5-5", Effort = ClaudeEffort.Low, MaxOutputTokens = 4_000 };
 var audit = new AuditTable(database);
@@ -91,6 +95,11 @@ await using var stopExports = exports;
 
 var password = new NpgsqlConnectionStringBuilder(connectionString).Password;
 var agent = BookshopAgent.Create(
-    model, new BookshopTools(database), console, audit, password is null ? [] : [password], TimeProvider.System, exports.Tools);
+    model, new BookshopTools(database), console, audit, password is null ? [] : [password], TimeProvider.System, exports.Tools, demo);
+if (demo)
+{
+    await Console.Out.WriteLineAsync("Demo mode: compaction from 50,000 input tokens, and old tool results cleared after 4 tool calls.");
+}
+
 await console.RunAsync(agent, SessionSummarizer.Create(summaryModel, TimeProvider.System));
 return 0;

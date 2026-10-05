@@ -381,6 +381,14 @@ public sealed partial class BookshopConsole(
                     case ApprovalAsked asked:
                         await AskApprovalAsync(asked.Call, cancellation.Token);
                         break;
+                    case ConversationCompacted compacted:
+                        await WriteLineAsync(string.Create(
+                            CultureInfo.InvariantCulture, $"  ~ Conversation compacted: {compacted.Tokens:N0} tokens summarized into {compacted.SummaryTokens:N0}."));
+                        break;
+                    case ToolResultsCleared cleared:
+                        await WriteLineAsync(string.Create(
+                            CultureInfo.InvariantCulture, $"  ~ Old tool results cleared: {cleared.ToolCalls} tool calls, {cleared.Tokens:N0} tokens."));
+                        break;
                     case ToolCallFinished { Result: var result } finished:
                         await WriteLineAsync(result.IsError
                             ? $"  < {finished.Call.Name}: error: {FirstLine(result.Content)}"

@@ -1,4 +1,6 @@
 using System.Text.Json;
+using Anthropic.Core;
+using Anthropic.Models.Beta;
 using Anthropic.Models.Beta.Messages;
 
 namespace Sleepyshark.Officina.Claude;
@@ -29,8 +31,46 @@ internal static class ClaudeRequest
             System = new List<BetaTextBlockParam> { new() { Text = request.Instructions, CacheControl = cache } },
             Messages = [],
         };
+        // An empty setting asks for nothing, so the request has no context management.
+        if (request.ContextManagement is { } context && Edits(context) is { Count: > 0 } edits)
+        {
+            typed = typed with { Betas = Betas(context), ContextManagement = new BetaContextManagementConfig { Edits = edits } };
+        }
+
         var body = new Dictionary<string, JsonElement>(typed.RawBodyData) { ["messages"] = Messages(request.Messages) };
         return MessageCreateParams.FromRawUnchecked(typed.RawHeaderData, typed.RawQueryData, body);
+    }
+
+    /// <summary>The beta features <paramref name="context"/> uses.</summary>
+    private static List<ApiEnum<string, AnthropicBeta>> Betas(ContextManagement context) =>
+    [
+        .. context.ClearToolResults is null ? [] : new ApiEnum<string, AnthropicBeta>[] { "context-management-2025-06-27" },
+        .. context.CompactAt is null ? [] : new ApiEnum<string, AnthropicBeta>[] { "compact-2026-01-12" },
+    ];
+
+    /// <summary>
+    /// Server-side context management (HIST-01, HIST-02): tool-result clearing, then threshold compaction (D12), whose
+    /// trigger must be at least 50,000 input tokens.
+    /// </summary>
+    private static List<Edit> Edits(ContextManagement context)
+    {
+        var edits = new List<Edit>();
+        if (context.ClearToolResults is { } clearing)
+        {
+            edits.Add(new BetaClearToolUses20250919Edit
+            {
+                Trigger = new BetaToolUsesTrigger { Value = clearing.After },
+                Keep = new BetaToolUsesKeep { Value = clearing.Keep },
+                ClearAtLeast = clearing.AtLeastTokens > 0 ? new BetaInputTokensClearAtLeast { Value = clearing.AtLeastTokens } : null,
+            });
+        }
+
+        if (context.CompactAt is { } tokens)
+        {
+            edits.Add(new BetaCompact20260112Edit { Trigger = new BetaInputTokensTrigger { ValueValue = tokens } });
+        }
+
+        return edits;
     }
 
     /// <summary>The effort as the API names it.</summary>

@@ -21,8 +21,9 @@ internal static class ConsoleSession
     /// <summary>Opus 5.5's price, which the scripted model charges, as the console's budgets need a price.</summary>
     public static readonly ModelPrice Price = ClaudePrices.Table["claude-opus-5-5"];
 
-    /// <summary>A scripted model with <see cref="Price"/>.</summary>
-    public static ScriptedModel Model(string settings = "scripted") => new() { Price = Price, Settings = settings };
+    /// <summary>A scripted model with <see cref="Price"/>, which declares Claude's compaction and clearing as the agent uses them.</summary>
+    public static ScriptedModel Model(string settings = "scripted") =>
+        new() { Price = Price, Settings = settings, Capabilities = ModelCapabilities.Compaction | ModelCapabilities.ContextEditing };
 
     /// <summary>Runs a session and returns its transcript.</summary>
     /// <param name="database">The database the tools use.</param>
@@ -35,9 +36,10 @@ internal static class ConsoleSession
     /// <param name="budgets">The console's budgets; by default, its own.</param>
     /// <param name="summaries">The summarizer's scripted model; without one, sessions are not summarized.</param>
     /// <param name="exportTools">The export server's tools (APP-12); none by default.</param>
+    /// <param name="demo">Whether the agent runs in demo mode (APP-17).</param>
     public static async Task<string> RunAsync(
         BookshopDatabase database, ScriptedModel model, IEnumerable<object> script, TimeProvider? time = null, string? cancelOn = null,
-        Budgets? budgets = null, ScriptedModel? summaries = null, IEnumerable<Tool>? exportTools = null)
+        Budgets? budgets = null, ScriptedModel? summaries = null, IEnumerable<Tool>? exportTools = null, bool demo = false)
     {
         var output = new Transcript(cancelOn);
         var audit = new AuditTable(database.DataSource);
@@ -47,7 +49,7 @@ internal static class ConsoleSession
             new SessionStore(database.DataSource), Dashboard, budgets: budgets);
         output.Console = console;
         await console.RunAsync(
-            BookshopAgent.Create(model, database.Tools, console, audit, [BookshopDatabase.Password], clock, exportTools),
+            BookshopAgent.Create(model, database.Tools, console, audit, [BookshopDatabase.Password], clock, exportTools, demo),
             summaries is null ? null : SessionSummarizer.Create(summaries, clock));
         return output.ToString();
     }
