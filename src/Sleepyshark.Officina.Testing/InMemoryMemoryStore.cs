@@ -10,7 +10,7 @@ public sealed class InMemoryMemoryStore : IMemoryStore
 
     public Task<IReadOnlyList<MemoryFile>> ListAsync(string scope, CancellationToken cancellationToken)
     {
-        MemoryPath.CheckScope(scope);
+        MemoryPath.Check(scope);
         lock (gate)
         {
             return Task.FromResult<IReadOnlyList<MemoryFile>>(

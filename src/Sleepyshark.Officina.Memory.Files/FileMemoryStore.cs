@@ -3,14 +3,15 @@ using System.Text;
 namespace Sleepyshark.Officina.Memory.Files;
 
 /// <summary>
-/// Keeps memory files on disk (MEM-02): each scope is a directory under <paramref name="root"/>, and each file a UTF-8
-/// text file under it. Besides <see cref="MemoryPath"/>'s checks, a path must resolve inside its scope's directory, and
+/// Keeps memory files on disk (MEM-02): each scope is a directory under <paramref name="root"/>, named by the lower-case
+/// hex of the scope's UTF-8 bytes so that scopes differing only in case stay apart on a case-insensitive file system,
+/// and each file a UTF-8 text file under it. Besides <see cref="MemoryPath"/>'s checks, a path must resolve inside its scope's directory, and
 /// no part of it, nor the scope's directory, may be a link (a symbolic link or junction), so no file outside the scope
 /// is reached through one; files reached only through a link are not listed. Directories left empty are removed.
 /// </summary>
 /// <remarks>
 /// It guards against the model's paths, not against other processes changing the directory while it runs. On a
-/// case-insensitive file system, scopes or paths that differ only in case name the same directory or file.
+/// case-insensitive file system, paths within one scope that differ only in case name the same file.
 /// </remarks>
 public sealed class FileMemoryStore(string root) : IMemoryStore
 {
@@ -82,8 +83,8 @@ public sealed class FileMemoryStore(string root) : IMemoryStore
     /// <summary>The scope's directory, which must not be a link.</summary>
     private string Directory(string scope)
     {
-        MemoryPath.CheckScope(scope);
-        var directory = Path.Combine(root, scope);
+        MemoryPath.Check(scope);
+        var directory = Path.Combine(root, Convert.ToHexStringLower(Encoding.UTF8.GetBytes(scope)));
         RefuseLink(directory, scope);
         return directory;
     }

@@ -156,7 +156,7 @@ public sealed record AgentDefinition
 
         if (memoryScope is not null)
         {
-            MemoryPath.CheckScope(memoryScope);
+            MemoryPath.Check(memoryScope);
         }
         else if (Tools.Any(tool => tool.IsMemory))
         {

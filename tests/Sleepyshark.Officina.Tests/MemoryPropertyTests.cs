@@ -15,6 +15,9 @@ public class MemoryPropertyTests
 {
     private const string Secret = "TOP-SECRET";
 
+    /// <summary>The file store's directory of the scope <c>sam</c>: the hex of its UTF-8 bytes.</summary>
+    private const string Sam = "73616d";
+
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     private static readonly string[] Pieces =
@@ -30,7 +33,7 @@ public class MemoryPropertyTests
         "x\0/..", "... ", "..\\..",
     ];
 
-    private static readonly string[] Targets = ["secret.txt", "outside/secret.txt", "other/o.md", "o.md", "memory/other/o.md", "etc/passwd"];
+    private static readonly string[] Targets = ["secret.txt", "outside/secret.txt", "other/o.md", "o.md", "memory/other/o.md", "6f74686572/o.md", "memory/6f74686572/o.md", "etc/passwd"];
 
     private static readonly string[] Commands = ["view", "create", "str_replace", "insert", "delete", "rename", "rename back"];
 
@@ -94,7 +97,7 @@ public class MemoryPropertyTests
             Assert.Equal(Secret, await File.ReadAllTextAsync(outside, Ct));
 
             // On disk, nothing changed outside the scope's directory.
-            var scope = System.IO.Path.Combine(temp.FullName, "memory", "sam") + System.IO.Path.DirectorySeparatorChar;
+            var scope = System.IO.Path.Combine(temp.FullName, "memory", Sam) + System.IO.Path.DirectorySeparatorChar;
             Assert.Equal(
                 before.Where(file => !file.Key.StartsWith(scope, StringComparison.Ordinal)),
                 Snapshot(temp.FullName).Where(file => !file.Key.StartsWith(scope, StringComparison.Ordinal)));
@@ -119,7 +122,7 @@ public class MemoryPropertyTests
         {
             try
             {
-                Directory.CreateSymbolicLink(System.IO.Path.Combine(memory, "sam", "link"), System.IO.Path.GetDirectoryName(outside)!);
+                Directory.CreateSymbolicLink(System.IO.Path.Combine(memory, Sam, "link"), System.IO.Path.GetDirectoryName(outside)!);
             }
             catch (Exception exception) when (exception is UnauthorizedAccessException or IOException)
             {

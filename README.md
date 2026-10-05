@@ -55,4 +55,5 @@ with `docker compose run`. Try: *Export Alice Martin's order history as CSV.* Th
 so on Linux the exported files are owned by root: readable, and deletable from the folder, but not editable in place.
 
 The assistant remembers each staff member's preferences across sessions, under `data/memory` (or `$BOOKSHOP_DATA/memory`);
-`/memory` shows them. Try *I prefer prices with tax*, then ask for a price in a new session.
+`/memory` shows them. Memory follows the staff member at the counter: a session resumed by someone else uses their
+memory, not the memory of the member who started it. Try *I prefer prices with tax*, then ask for a price in a new session.

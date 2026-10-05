@@ -183,7 +183,7 @@ public sealed partial class BookshopConsole(
         {
             if (!string.IsNullOrWhiteSpace(name) && !MemoryPath.IsValidScope(MemoryScope(name)))
             {
-                await output.WriteLineAsync("Please give a name without any of \\ / : * ? \" < > | %.");
+                await output.WriteLineAsync("That name cannot be used. Please give another name.");
             }
             else if (!string.IsNullOrWhiteSpace(name))
             {
@@ -337,7 +337,10 @@ public sealed partial class BookshopConsole(
         return summary;
     }
 
-    /// <summary>A staff member's memory scope: their name, so it is the same whatever case they type it in.</summary>
+    /// <summary>
+    /// A staff member's memory scope: their name, so it is the same whatever case they type it in. Memory follows the staff
+    /// member at the counter, not a session's owner: a session resumed by another member runs in that member's scope.
+    /// </summary>
     private static string MemoryScope(string staffMember) => staffMember.Trim().ToLowerInvariant();
 
     /// <summary>Shows every file of the staff member's memory, with its text (APP-11).</summary>

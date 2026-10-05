@@ -67,7 +67,7 @@ public sealed class MemoryTests : IDisposable
             [
                 "Here're the files and directories up to 2 levels deep in /memories, excluding hidden items and node_modules:\n0B\t/memories",
                 "File created successfully at: /memories/prefs.md",
-                "The memory file has been edited.",
+                "The memory file has been edited. A snippet of /memories/prefs.md with line numbers:\n     1\tPrices: with tax.\n     2\tTone: brief.\n     3\t",
                 "The file /memories/prefs.md has been edited.",
                 "Here's the content of /memories/prefs.md with line numbers:\n     1\t# Sam\n     2\tPrices: with tax.\n     3\tTone: brief.",
                 "Here's the content of /memories/prefs.md with line numbers:\n     2\tPrices: with tax.\n     3\tTone: brief.",
@@ -76,7 +76,7 @@ public sealed class MemoryTests : IDisposable
                 "Here're the files and directories up to 2 levels deep in /memories, excluding hidden items and node_modules:\n" +
                 "49B\t/memories\n12B\t/memories/people\n12B\t/memories/people/ana\n37B\t/memories/prefs.md",
                 "Successfully deleted /memories/people",
-                "Error: The path /memories/people/ana/notes.md does not exist. Please provide a valid path.",
+                "The path /memories/people/ana/notes.md does not exist. Please provide a valid path.",
             ],
             results.Select(result => result.Content));
         Assert.Equal([.. Enumerable.Repeat(false, 10), true], results.Select(result => result.IsError));
@@ -126,8 +126,55 @@ public sealed class MemoryTests : IDisposable
 
         var results = await RunAsync(store, "sam", new { command = "create", path, file_text = "x" }, new { command = "rename", old_path = "/memories/a", new_path = path });
 
-        Assert.All(results, result => Assert.StartsWith($"Error: The path {path} is outside the memory directory", result.Content, StringComparison.Ordinal));
+        Assert.All(results, result => Assert.Equal($"Error: The path {path} is not a valid path under /memories.", result.Content));
         Assert.Empty(await store.ListAsync("sam", Ct));
+    }
+
+    [Theory]
+    [MemberData(nameof(Stores))]
+    public async Task MEM_03_scopes_that_differ_only_in_case_stay_apart(string kind)
+    {
+        var store = Store(kind);
+
+        await store.WriteAsync("Sam", "a.md", "upper", Ct);
+        await store.WriteAsync("sam", "a.md", "lower", Ct);
+
+        Assert.Equal("upper", await store.ReadAsync("Sam", "a.md", Ct));
+        Assert.Equal("lower", await store.ReadAsync("sam", "a.md", Ct));
+        Assert.Single(await store.ListAsync("Sam", Ct));
+    }
+
+    [Fact]
+    public async Task MEM_01_a_long_file_s_view_is_cut_at_16_000_characters_and_a_file_holds_at_most_its_limit()
+    {
+        var store = new InMemoryMemoryStore();
+        await store.WriteAsync("sam", "long.md", string.Join('\n', Enumerable.Repeat(new string('x', 99), 400)), Ct);
+
+        var results = await RunAsync(
+            store,
+            "sam",
+            new { command = "view", path = "/memories/long.md" },
+            new { command = "view", path = "/memories/long.md", view_range = ToEnd },
+            new { command = "create", path = "/memories/big.md", file_text = new string('x', MemoryTool.MaxFileLength + 1) });
+
+        Assert.EndsWith("\n[Truncated at 16000 characters: view the rest with view_range.]", results[0].Content, StringComparison.Ordinal);
+        Assert.InRange(results[0].Content.Length, 15_000, 16_200);
+        Assert.False(results[1].IsError);
+        Assert.True(results[2].IsError);
+        Assert.Null(await store.ReadAsync("sam", "big.md", Ct));
+    }
+
+    [Theory]
+    [InlineData("CON")]
+    [InlineData("com\u00b9.md")]
+    [InlineData("LPT\u00b3")]
+    [InlineData("CONIN$")]
+    [InlineData("conout$.txt")]
+    [InlineData("nul.tar.gz")]
+    public void MEM_03_windows_device_names_are_not_memory_paths(string path)
+    {
+        Assert.False(MemoryPath.IsValid(path));
+        Assert.False(MemoryPath.IsValid($"a/{path}"));
     }
 
     [Fact]

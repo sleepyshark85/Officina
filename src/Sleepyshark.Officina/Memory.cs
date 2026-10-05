@@ -32,7 +32,7 @@ public interface IMemoryStore
 /// <summary>
 /// The scopes and paths a memory store accepts (MEM-03): a scope is one path part, and a path is parts separated by
 /// <c>/</c>. A part is never empty, <c>.</c> or <c>..</c>, never ends with a dot or a space, holds no control character
-/// and none of <c>\ / : * ? " &lt; &gt; | %</c>, and is no device name Windows reserves. So a path is relative, has one
+/// and none of <c>\ / : * ? " &lt; &gt; | %</c>, and is no device name Windows reserves (<c>CON</c>, <c>COM1</c>, <c>CONIN$</c>…). So a path is relative, has one
 /// separator on every system, cannot climb out, and has no encoded form: it names the same file in every store.
 /// </summary>
 public static class MemoryPath
@@ -43,29 +43,19 @@ public static class MemoryPath
     private const string Forbidden = "\\/:*?\"<>|%";
 
     private static readonly HashSet<string> Devices = new(
-        ["CON", "PRN", "AUX", "NUL", .. Enumerable.Range(0, 10).SelectMany(digit => new[] { $"COM{digit}", $"LPT{digit}" })],
+        ["CON", "PRN", "AUX", "NUL", "CONIN$", "CONOUT$", .. "0123456789\u00b9\u00b2\u00b3".SelectMany(digit => new[] { $"COM{digit}", $"LPT{digit}" })],
         StringComparer.OrdinalIgnoreCase);
 
     public static bool IsValid(string? path) => path is { Length: > 0 and <= MaxLength } && path.Split('/').All(IsPart);
 
     public static bool IsValidScope(string? scope) => scope is not null && IsPart(scope);
 
-    /// <summary>Throws <see cref="ArgumentException"/> unless <paramref name="scope"/> and <paramref name="path"/> are valid.</summary>
-    public static void Check(string scope, string path)
+    /// <summary>Throws <see cref="ArgumentException"/> unless <paramref name="scope"/>, and <paramref name="path"/> if given, are valid.</summary>
+    public static void Check(string scope, string? path = null)
     {
-        CheckScope(scope);
-        if (!IsValid(path))
+        if (!IsValidScope(scope) || (path is not null && !IsValid(path)))
         {
-            throw new ArgumentException($"'{path}' is not a valid memory path.", nameof(path));
-        }
-    }
-
-    /// <summary>Throws <see cref="ArgumentException"/> unless <paramref name="scope"/> is valid.</summary>
-    public static void CheckScope(string scope)
-    {
-        if (!IsValidScope(scope))
-        {
-            throw new ArgumentException($"'{scope}' is not a valid memory scope.", nameof(scope));
+            throw new ArgumentException(IsValidScope(scope) ? $"'{path}' is not a valid memory path." : $"'{scope}' is not a valid memory scope.");
         }
     }
 
@@ -86,6 +76,12 @@ public static class MemoryTool
 
     /// <summary>The memory directory as the model sees it.</summary>
     public const string Root = "/memories";
+
+    /// <summary>The most characters a memory file may hold; a command that would make it longer is refused.</summary>
+    public const int MaxFileLength = 50_000;
+
+    /// <summary>The most characters a file's <c>view</c> shows, as the model's tool description says; ranges show the rest.</summary>
+    internal const int MaxViewLength = 16_000;
 
     /// <summary>The memory tool over <paramref name="store"/>; each run that has it must give a memory scope.</summary>
     public static Tool Create(IMemoryStore store, bool needsApproval = false)
@@ -119,7 +115,7 @@ public static class MemoryTool
         var paths = command == "rename" ? new[] { Text(input, "old_path"), Text(input, "new_path") } : [Text(input, "path")];
         foreach (var outside in paths.Where(path => Within(path) is null))
         {
-            return Error($"Error: The path {outside ?? "(none)"} is outside the memory directory: memory paths are under {Root}, their parts separated by '/', with no '.' or '..' part and none of \\ : * ? \" < > | %.");
+            return Error($"Error: The path {outside ?? "(none)"} is not a valid path under {Root}.");
         }
 
         var memory = new Scope(store, scope, await store.ListAsync(scope, cancellationToken).ConfigureAwait(false), cancellationToken);
@@ -153,9 +149,13 @@ public static class MemoryTool
 
     private static ToolOutput Error(string message) => new(message, IsError: true);
 
-    private static string Missing(string path) => $"Error: The path {path} does not exist. Please provide a valid path.";
+    private static string Missing(string path) => $"The path {path} does not exist. Please provide a valid path.";
 
     private static string[] Lines(string content) => content.Split('\n');
+
+    /// <summary>Lines <paramref name="from"/> to <paramref name="to"/>, numbered from 1, six wide.</summary>
+    private static string Numbered(string[] lines, int from, int to) => string.Join(
+        '\n', Enumerable.Range(from, to - from + 1).Select(line => string.Create(CultureInfo.InvariantCulture, $"{line,6}\t{lines[line - 1]}")));
 
     /// <summary>The scope's files as they were when the command started; commands run one at a time.</summary>
     private sealed class Scope(IMemoryStore store, string scope, IReadOnlyList<MemoryFile> files, CancellationToken cancellationToken)
@@ -192,8 +192,9 @@ public static class MemoryTool
                     to = to == -1 ? lines.Length : to;
                 }
 
-                var numbered = Enumerable.Range(from, to - from + 1).Select(line => string.Create(CultureInfo.InvariantCulture, $"{line,6}\t{lines[line - 1]}"));
-                return new($"Here's the content of {path} with line numbers:\n{string.Join('\n', numbered)}");
+                var numbered = Numbered(lines, from, to);
+                return new($"Here's the content of {path} with line numbers:\n{(numbered.Length <= MaxViewLength ? numbered
+                    : $"{numbered[..Math.Max(numbered.LastIndexOf('\n', MaxViewLength), MaxViewLength / 2)]}\n[Truncated at {MaxViewLength} characters: view the rest with view_range.]")}");
             }
 
             if (!IsDirectory(at))
@@ -230,8 +231,7 @@ public static class MemoryTool
                 return Error($"Error: Cannot create {path}: {(IsDirectory(at) ? "it is a directory" : $"{Root}/{FileAbove(at)} is a file")}.");
             }
 
-            await store.WriteAsync(scope, at, text, cancellationToken).ConfigureAwait(false);
-            return new($"File created successfully at: {path}");
+            return await WriteAsync(path, at, text).ConfigureAwait(false) ?? new($"File created successfully at: {path}");
         }
 
         public async Task<ToolOutput> ReplaceAsync(string path, string at, string? old, string replacement)
@@ -243,7 +243,7 @@ public static class MemoryTool
 
             if (!IsFile(at) || await store.ReadAsync(scope, at, cancellationToken).ConfigureAwait(false) is not { } content)
             {
-                return Error(Missing(path));
+                return Error($"Error: {Missing(path)}");
             }
 
             var found = new List<int>();
@@ -259,9 +259,16 @@ public static class MemoryTool
                     : $"No replacement was performed. Multiple occurrences of old_str `{old}` in lines: {string.Join(", ", found.Select(index => content[..index].Count(c => c == '\n') + 1).Distinct())}. Please ensure it is unique");
             }
 
-            await store.WriteAsync(scope, at, string.Concat(content.AsSpan(0, found[0]), replacement, content.AsSpan(found[0] + old.Length)), cancellationToken)
-                .ConfigureAwait(false);
-            return new("The memory file has been edited.");
+            var edited = string.Concat(content.AsSpan(0, found[0]), replacement, content.AsSpan(found[0] + old.Length));
+            if (await WriteAsync(path, at, edited).ConfigureAwait(false) is { } refused)
+            {
+                return refused;
+            }
+
+            // A snippet of the edited lines, with four lines of context on either side.
+            var (lines, first) = (Lines(edited), content[..found[0]].Count(c => c == '\n') + 1);
+            var last = Math.Min(lines.Length, first + replacement.Count(c => c == '\n') + 4);
+            return new($"The memory file has been edited. A snippet of {path} with line numbers:\n{Numbered(lines, Math.Max(1, first - 4), last)}");
         }
 
         public async Task<ToolOutput> InsertAsync(string path, string at, int? line, string? text)
@@ -283,8 +290,7 @@ public static class MemoryTool
             }
 
             lines.Insert(line.Value, text.EndsWith('\n') ? text[..^1] : text);
-            await store.WriteAsync(scope, at, string.Join('\n', lines), cancellationToken).ConfigureAwait(false);
-            return new($"The file {path} has been edited.");
+            return await WriteAsync(path, at, string.Join('\n', lines)).ConfigureAwait(false) ?? new($"The file {path} has been edited.");
         }
 
         public async Task<ToolOutput> DeleteAsync(string path, string at)
@@ -326,6 +332,18 @@ public static class MemoryTool
             }
 
             return new($"Successfully renamed {path} to {newPath}");
+        }
+
+        /// <summary>Writes the file; returns the refusal when its text is longer than <see cref="MaxFileLength"/>.</summary>
+        private async Task<ToolOutput?> WriteAsync(string path, string at, string text)
+        {
+            if (text.Length > MaxFileLength)
+            {
+                return Error($"Error: {path} would hold {text.Length} characters; a memory file holds at most {MaxFileLength}. Keep it shorter, or split it.");
+            }
+
+            await store.WriteAsync(scope, at, text, cancellationToken).ConfigureAwait(false);
+            return null;
         }
 
         private static string Size(long bytes) => bytes switch
