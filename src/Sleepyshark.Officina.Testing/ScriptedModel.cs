@@ -6,8 +6,8 @@ namespace Sleepyshark.Officina.Testing;
 /// <summary>
 /// A model that answers with replies scripted in advance, in order, and records every request (TEST-01). It needs no
 /// network or API key, and is safe to call from concurrent runs. Like the Claude API, it rejects a request whose
-/// messages do not start with a user message, repeat a role back to back, or have an operator message that is neither
-/// last nor followed by an assistant message.
+/// messages do not start with a user message, repeat a role back to back, or have an operator message that does not
+/// follow a user message or is neither last nor followed by an assistant message.
 /// </summary>
 public sealed class ScriptedModel : IModel
 {
@@ -63,10 +63,15 @@ public sealed class ScriptedModel : IModel
         lock (gate)
         {
             requests.Add(request);
+        }
+
+        // An invalid request gets no reply, so the reply stays scripted for the next one, as the Claude API rejects it unanswered.
+        CheckRoles(request);
+        lock (gate)
+        {
             replies.TryDequeue(out reply);
         }
 
-        CheckRoles(request);
         if (reply is null)
         {
             throw new InvalidOperationException($"The scripted model received request {Requests.Count} but has no reply left.");
@@ -88,6 +93,7 @@ public sealed class ScriptedModel : IModel
             var problem =
                 index == 0 && roles[0] != Role.User ? "does not start with a user message"
                 : index > 0 && roles[index] == roles[index - 1] ? $"has two {roles[index]} messages in a row"
+                : roles[index] == Role.Operator && roles[index - 1] != Role.User ? "has an operator message that does not follow a user message"
                 : roles[index] == Role.Operator && index + 1 < roles.Count && roles[index + 1] != Role.Assistant
                     ? "has an operator message that is neither last nor followed by an assistant message"
                 : null;

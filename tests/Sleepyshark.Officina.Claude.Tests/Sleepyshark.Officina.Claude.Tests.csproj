@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Sleepyshark.Officina\Sleepyshark.Officina.csproj" />
+    <ProjectReference Include="..\..\src\Sleepyshark.Officina.Claude\Sleepyshark.Officina.Claude.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="Recordings\**" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

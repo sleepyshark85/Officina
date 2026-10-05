@@ -211,7 +211,11 @@ public class RunTests
         ModelRequest Request(params Role[] roles) => new([], "A", [.. roles.Select(role => Message.Of(role, "x"))]);
         var model = new ScriptedModel();
 
-        foreach (var request in new[] { Request(Role.Assistant), Request(Role.User, Role.User), Request(Role.User, Role.Operator, Role.User) })
+        foreach (var request in new[]
+        {
+            Request(Role.Assistant), Request(Role.User, Role.User), Request(Role.User, Role.Operator, Role.User),
+            Request(Role.User, Role.Assistant, Role.Operator),
+        })
         {
             await Assert.ThrowsAsync<InvalidOperationException>(async () =>
             {
@@ -219,6 +223,73 @@ public class RunTests
                 {
                 }
             });
+        }
+    }
+
+    [Fact]
+    public async Task A_rejected_request_leaves_its_scripted_reply_for_the_next_one()
+    {
+        var model = new ScriptedModel().Reply("Hello.");
+        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+        {
+            await foreach (var _ in model.StreamAsync(new([], "A", [Message.Of(Role.Assistant, "x")]), Ct))
+            {
+            }
+        });
+
+        var result = await Agents.With(model).RunAsync(new Conversation(), "Hi", cancellationToken: Ct);
+
+        Assert.Equal("Hello.", Assert.IsType<Completed>(result).Text);
+    }
+
+    [Fact]
+    public async Task A_restarted_reply_discards_what_came_before_the_restart()
+    {
+        var model = new ScriptedModel().Reply(
+            new TextDelta("Hel"), new BlockReceived(ScriptedModel.TextBlock("Hel")), new ModelRestarted(),
+            new TextDelta("Hello."), new BlockReceived(ScriptedModel.TextBlock("Hello.")), new ModelStopped(ModelStopReason.End));
+        var conversation = new Conversation();
+
+        var events = await Agents.CollectAsync(Agents.With(model).StreamAsync(conversation, "Hi", cancellationToken: Ct));
+
+        Assert.Equal(
+            [new TextStreamed("Hel"), new ReplyRestarted(), new TextStreamed("Hello.")],
+            events.Where(runEvent => runEvent is TextStreamed or ReplyRestarted));
+        Assert.Equal(new Completed("Hello.", default), Assert.IsType<RunEnded>(events[^1]).Result);
+        Assert.Equal([ScriptedModel.TextBlock("Hello.")], conversation.Messages[^1].Blocks);
+    }
+
+    [Fact]
+    public async Task A_reply_is_kept_when_closing_the_call_fails_after_the_stop_reason()
+    {
+        var agent = new AgentDefinition { Model = new FailingDisposeModel(), Instructions = Agents.Instructions };
+        var conversation = new Conversation();
+
+        var result = await agent.RunAsync(conversation, "Hi", cancellationToken: Ct);
+
+        Assert.Equal(new Completed("Hello.", default), result);
+        Assert.Equal([Role.User, Role.Assistant], conversation.Messages.Select(message => message.Role));
+    }
+
+    /// <summary>A model whose reply completes, and whose call then fails to close.</summary>
+    private sealed class FailingDisposeModel : IModel
+    {
+        public string Settings => "failing-dispose";
+
+        public IAsyncEnumerable<ModelEvent> StreamAsync(ModelRequest request, CancellationToken cancellationToken) => new Reply();
+
+        private sealed class Reply : IAsyncEnumerable<ModelEvent>, IAsyncEnumerator<ModelEvent>
+        {
+            private readonly Queue<ModelEvent> events = new([new BlockReceived(ScriptedModel.TextBlock("Hello.")), new ModelStopped(ModelStopReason.End)]);
+
+            public ModelEvent Current { get; private set; } = null!;
+
+            public IAsyncEnumerator<ModelEvent> GetAsyncEnumerator(CancellationToken cancellationToken = default) => this;
+
+            public ValueTask<bool> MoveNextAsync() =>
+                ValueTask.FromResult(events.TryDequeue(out var next) && (Current = next) is not null);
+
+            public ValueTask DisposeAsync() => ValueTask.FromException(new IOException("The connection reset while closing."));
         }
     }
 

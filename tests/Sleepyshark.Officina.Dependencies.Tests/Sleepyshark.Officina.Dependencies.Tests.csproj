@@ -7,6 +7,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\**\*.csproj" ReferenceOutputAssembly="false" />
     <ProjectReference Include="..\..\apps\**\*.csproj" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\samples\**\*.csproj" ReferenceOutputAssembly="false" />
   </ItemGroup>
 
 </Project>
