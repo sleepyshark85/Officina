@@ -21,6 +21,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
     env:
       DOTNET_NOLOGO: true
       DOTNET_CLI_TELEMETRY_OPTOUT: true
@@ -38,4 +39,34 @@ jobs:
         run: dotnet build --no-restore --configuration Release
 
       - name: Test
-        run: dotnet test --no-build --configuration Release
+        # A hanging test fails the run with a dump instead of stalling CI.
+        run: dotnet test --no-build --configuration Release --blame-hang-timeout 2m
+
+  # Checks that need one OS only: formatting and known-vulnerable packages.
+  quality:
+    name: quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      DOTNET_NOLOGO: true
+      DOTNET_CLI_TELEMETRY_OPTOUT: true
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Format
+        run: dotnet format --no-restore --verify-no-changes
+
+      - name: Vulnerable packages
+        # bash here runs with pipefail, so a failing list command fails the step. The negated grep must stay last:
+        # set -e ignores a negated command's status, so only the step's final status counts.
+        shell: bash
+        run: |
+          dotnet list package --vulnerable --include-transitive | tee vulnerable.txt
+          ! grep -q "has the following vulnerable packages" vulnerable.txt
