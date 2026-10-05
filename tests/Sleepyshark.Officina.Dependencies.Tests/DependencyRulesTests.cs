@@ -23,6 +23,14 @@ public sealed class DependencyRulesTests : IDisposable
     }
 
     [Fact]
+    public void A_package_other_than_Claude_referencing_the_Anthropic_SDK_is_reported_once()
+    {
+        repository.AddProject(Mcp, [Core, "Anthropic"], new() { ["Anthropic"] = [ExtensionsAi] });
+
+        Assert.Equal([$"{Mcp} references the Anthropic SDK (Anthropic). Only {Claude} may."], repository.Check());
+    }
+
+    [Fact]
     public void The_core_referencing_the_Anthropic_SDK_fails()
     {
         repository.AddProject(Core, ["Anthropic"]);
