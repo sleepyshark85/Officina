@@ -69,7 +69,10 @@ public class RetryTests
             return CollectAsync(model, new([], "Answer briefly.", [Message.Of(Role.User, $"Call {name}")]));
         }, Ct);
 
-        await Task.WhenAll(Call("A"), Call("B"));
+        var callA = Call("A");
+        await api.FirstRequest.Task.WaitAsync(Ct);
+        var callB = Call("B");
+        await Task.WhenAll(callA, callB);
 
         var waits = time.WaitsByCaller.ToDictionary(wait => wait.Caller!, wait => wait.Wait);
         Assert.Equal(TimeSpan.FromSeconds(7), waits["A"]);

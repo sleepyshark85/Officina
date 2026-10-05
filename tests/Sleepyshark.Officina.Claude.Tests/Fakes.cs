@@ -28,6 +28,9 @@ internal sealed class FakeApi : HttpMessageHandler
 
     private readonly TaskCompletionSource arrived = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
+    /// <summary>Completes when the first request has reached the fake API, so a test can start a second call after it.</summary>
+    public TaskCompletionSource FirstRequest { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
     public List<string> Requests { get; } = [];
 
     /// <summary>Answers with an event stream from <c>Fixtures/</c>, hand-written in the API's documented SSE format.</summary>
@@ -69,6 +72,7 @@ internal sealed class FakeApi : HttpMessageHandler
         lock (Requests)
         {
             Requests.Add(body);
+            FirstRequest.TrySetResult();
             routed = routes.FirstOrDefault(route => body.Contains(route.Marker, StringComparison.Ordinal)).Responses;
             if (Requests.Count == Together)
             {
