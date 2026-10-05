@@ -69,6 +69,12 @@ internal static class RunEngine
             yield break;
         }
 
+        if (await ToolSources.ConnectAsync(agent, audit, cancellationToken).ConfigureAwait(false) is { } unavailable)
+        {
+            result.Value = new Failed(FailureReason.ToolSourceUnavailable, unavailable, default);
+            yield break;
+        }
+
         // A conversation saved after its model asked for tools, and before their results came, gets error results first,
         // as the application stopped mid-reply: it may be resumed, and the provider rejects calls without results.
         if (conversation.Messages is [.., { Role: Role.Assistant } last] && last.Blocks.Select(block => block.ToolCall).OfType<ToolCall>().ToList() is { Count: > 0 } unanswered)

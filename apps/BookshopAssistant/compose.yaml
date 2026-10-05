@@ -1,4 +1,4 @@
-# Bookshop Assistant's database (APP-04) and telemetry dashboard (APP-20, D11). Run `docker compose up -d --wait` in
+# Bookshop Assistant's database (APP-04), telemetry dashboard (APP-20, D11) and export server (APP-12). Run `docker compose up -d --wait` in
 # this folder; the schema, seed, audit and sessions tables in database/ are created on the database's first start only.
 # `docker compose down -v` deletes the data, so the next start seeds afresh.
 services:
@@ -32,6 +32,16 @@ services:
     ports:
       - "${BOOKSHOP_DASHBOARD_PORT:-18888}:18888"
       - "${BOOKSHOP_OTLP_PORT:-4317}:18889"
+
+  # The reference filesystem MCP server (APP-12), which sees only the exports folder. The application starts it itself,
+  # over stdio, with `docker compose run --rm --no-TTY filesystem`; the profile keeps `docker compose up` from starting it.
+  filesystem:
+    image: mcp/filesystem@sha256:35fcf0217ca0d5bf7b0a5bd68fb3b89e08174676c0e0b4f431604512cf7b3f67
+    profiles: [mcp]
+    stdin_open: true
+    volumes:
+      - ./exports:/projects/exports
+    command: ["/projects/exports"]
 
 volumes:
   bookshop-data:

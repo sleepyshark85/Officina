@@ -77,6 +77,9 @@ public sealed class Tool
 
     public bool NeedsApproval { get; }
 
+    /// <summary>The source the tool comes from, such as an MCP server; null for the application's own tools.</summary>
+    public IToolSource? Source { get; init; }
+
     internal JsonElement Schema { get; }
 
     internal Func<JsonElement, CancellationToken, Task<ToolOutput>> Handler { get; }

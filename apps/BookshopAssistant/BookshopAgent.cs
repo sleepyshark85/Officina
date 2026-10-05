@@ -2,16 +2,20 @@ using Sleepyshark.Officina;
 
 namespace BookshopAssistant;
 
-/// <summary>The chat agent (ARCHITECTURE §12.1): frozen instructions and the bookshop tools. Who and when come as run context.</summary>
+/// <summary>
+/// The chat agent (ARCHITECTURE §12.1): frozen instructions, the bookshop tools and, when given, the export tools of the
+/// filesystem MCP server (APP-12). Who and when come as run context.
+/// </summary>
 public static class BookshopAgent
 {
     public static AgentDefinition Create(
-        IModel model, BookshopTools tools, IApprover approver, IAuditSink audit, IEnumerable<string> secrets, TimeProvider time) => new()
+        IModel model, BookshopTools tools, IApprover approver, IAuditSink audit, IEnumerable<string> secrets, TimeProvider time,
+        IEnumerable<Tool>? exportTools = null) => new()
         {
             Name = "bookshop",
             Model = model,
             Instructions = Instructions,
-            Tools = tools.All,
+            Tools = [.. tools.All, .. exportTools ?? []],
             Approver = approver,
             AuditSink = audit,
             Time = time,
@@ -38,6 +42,9 @@ public static class BookshopAgent
           changed: explain and offer a way forward, such as fewer copies or another book. If the database cannot be
           reached, say so plainly and suggest trying again shortly; do not pretend the change was made.
         - Prices are in pounds sterling. Give totals to the penny.
+        - Asked to export a report, such as a customer's order history, look up the data, then write it as a CSV file
+          with a header row into the exports folder, /projects/exports, named for its content (for example
+          order-history-alice-martin.csv). Writing a file needs the staff member's approval. Tell them the file's name.
 
         How to answer:
         - Be brief and concrete: a few sentences, or a short list when there are several items. Name books by title and

@@ -159,9 +159,7 @@ public static class Telemetry
             new("gen_ai.tool.name", call.Name),
             new("gen_ai.tool.call.id", call.Id),
             new("gen_ai.tool.type", "function"),
-
-            // Only the application's own tools exist yet; MCP and memory tools come with their own sources.
-            new("officina.tool.source", "application"),
+            new("officina.tool.source", tool?.Source?.Name ?? "application"),
             new("officina.tool.kind", tool is null ? null : Word(tool.Kind)),
             .. Content(agent, "gen_ai.tool.call.arguments", () => agent.Redact(call.Input)),
         ]);

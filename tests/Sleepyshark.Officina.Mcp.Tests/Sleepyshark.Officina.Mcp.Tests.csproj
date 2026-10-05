@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Sleepyshark.Officina.Mcp\Sleepyshark.Officina.Mcp.csproj" />
+    <ProjectReference Include="..\..\src\Sleepyshark.Officina.Testing\Sleepyshark.Officina.Testing.csproj" />
+    <!-- Built next to the tests, which start it as a stdio server. -->
+    <ProjectReference Include="..\Sleepyshark.Officina.Mcp.FakeServer\Sleepyshark.Officina.Mcp.FakeServer.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\Sleepyshark.Officina.Tests\RecordingSink.cs" Link="RecordingSink.cs" />
+  </ItemGroup>
+
+</Project>

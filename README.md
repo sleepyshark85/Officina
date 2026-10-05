@@ -28,7 +28,7 @@ dotnet test
 |---|---|
 | `src/Sleepyshark.Officina` | The core; depends on the .NET base library only |
 | `src/Sleepyshark.Officina.Claude` | The Claude adapter; the only project that may reference the Anthropic SDK |
-| `src/Sleepyshark.Officina.Mcp` | The MCP tool source |
+| `src/Sleepyshark.Officina.Mcp` | The MCP tool source: our own client, over stdio and Streamable HTTP |
 | `src/Sleepyshark.Officina.Testing` | The test kit |
 | `apps/BookshopAssistant` | The reference application |
 | `samples/hello` | A live chat with Claude (needs `ANTHROPIC_API_KEY`); not part of `dotnet test` |
@@ -47,3 +47,6 @@ dotnet run
 ```
 
 Try: *Order the two cheapest fantasy books in stock for Alice Martin and tell me the total.*
+
+Exports (APP-12) go to `exports/`, through the reference filesystem MCP server, which the application starts in Docker
+with `docker compose run`. Try: *Export Alice Martin's order history as CSV.*

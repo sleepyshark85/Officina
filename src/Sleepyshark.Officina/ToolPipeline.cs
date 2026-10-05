@@ -63,6 +63,7 @@ internal sealed class ToolPipeline(AgentDefinition agent, AuditRecorder audit, A
         }
 
         await Task.WhenAll(reads).ConfigureAwait(false);
+        await ToolSources.RecordChangesAsync(agent, audit).ConfigureAwait(false);
 
         // Calls that never started, because the run was cancelled (AGT-05).
         for (var index = 0; index < calls.Count; index++)
