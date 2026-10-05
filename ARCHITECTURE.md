@@ -331,10 +331,10 @@ How the Claude adapter realizes the model contract. These are design choices, no
 |---|---|
 | Cache points | An explicit breakpoint on the last instructions block; automatic caching for the tail |
 | Run context | A mid-conversation `system` message |
-| Compaction, clearing | Server-side context management: compaction and tool-result clearing |
+| Compaction, clearing | Server-side context management: threshold compaction (D12) and tool-result clearing. Usage and cost include the compaction step, which the provider reports apart from the main call |
 | Native memory | The memory tool, mapped to the core's memory service |
 | Structured output | The output format setting; forced tool choice is never used |
-| Reasoning | Adaptive thinking; effort set explicitly; blocks replayed unchanged; display chosen per agent (progress updates for interactive agents) |
+| Reasoning | Adaptive thinking; effort set explicitly; blocks replayed unchanged, their text possibly empty. Progress shown to users is the text between tool calls, not reasoning |
 | Refusal | `refusal` stop reason with its category; no fallback in phase 1 (D10) |
 | Transport | Streamed requests; eager tool-input streaming, validated by the pipeline; retries including mid-stream errors; output token limit lowered to the remaining budget |
 | SDK | The official Anthropic SDK, used only inside this adapter, through its beta surface |
@@ -447,7 +447,7 @@ flowchart LR
 | Budgets and cost | Status line and `/cost`; a small budget stops a reply | APP-14, BUD |
 | Persistent sessions | Quit, restart, `/resume`: the conversation continues | APP-10, AGT-06 |
 | Memory across sessions | A preference stated in one session is applied in a new one; `/memory` shows it | APP-11, MEM |
-| Long conversations | Demo mode compacts a short session and reports it | APP-17, HIST |
+| Long conversations | Demo mode reaches compaction with large catalogue searches, clears old tool results after a few calls, and reports both | APP-17, HIST |
 | MCP | Export an order history as CSV into `exports` | APP-12, MCP |
 | Run context | The assistant knows today's date and who it is talking to | APP-13, CTX-02 |
 | Typed output, stateless runs | Session titles and summaries in `/sessions` | APP-15, OUT, GEN-03 |
