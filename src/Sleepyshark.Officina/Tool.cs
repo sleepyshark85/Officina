@@ -87,6 +87,10 @@ public sealed class Tool
     /// value is optional, and a <see cref="CancellationToken"/> gets the run's. The function may be async; a
     /// <see cref="ToolOutput"/> or string it returns is the result as is, anything else is sent as JSON.
     /// </summary>
+    /// <remarks>
+    /// Known limit: it uses reflection, for the schema and for JSON, so it is neither trim nor AOT safe, and it fails
+    /// where reflection-based JSON is disabled. The constructor works everywhere.
+    /// </remarks>
     public static Tool FromFunction(string name, string description, ToolKind kind, Delegate function, bool needsApproval = false)
     {
         ArgumentNullException.ThrowIfNull(function);

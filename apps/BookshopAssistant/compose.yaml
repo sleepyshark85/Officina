@@ -1,0 +1,24 @@
+# Bookshop Assistant's database (APP-04). Run `docker compose up -d --wait` in this folder; the schema and seed in
+# database/ run on the first start only. `docker compose down -v` deletes the data, so the next start seeds afresh.
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: bookshop
+      # Distinct from the user and database names, so redacting it (EVT-03) leaves those readable.
+      POSTGRES_PASSWORD: shelf-demo-41
+      POSTGRES_DB: bookshop
+    ports:
+      # Another port if 5432 is taken: BOOKSHOP_DB_PORT=5433 docker compose up -d --wait
+      - "${BOOKSHOP_DB_PORT:-5432}:5432"
+    volumes:
+      - ./database:/docker-entrypoint-initdb.d:ro
+      - bookshop-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "bookshop", "-d", "bookshop"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
+
+volumes:
+  bookshop-data:

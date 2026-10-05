@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\apps\BookshopAssistant\BookshopAssistant.csproj" />
+    <ProjectReference Include="..\..\src\Sleepyshark.Officina.Testing\Sleepyshark.Officina.Testing.csproj" />
+  </ItemGroup>
+
+  <!-- Test only: the database in Docker (TEST-09) and a fake clock. -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
+    <PackageReference Include="Testcontainers.PostgreSql" />
+  </ItemGroup>
+
+  <!-- The application's own schema and seed, so the tests run against the database the compose file creates. -->
+  <ItemGroup>
+    <None Include="..\..\apps\BookshopAssistant\database\*.sql" LinkBase="database" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>
