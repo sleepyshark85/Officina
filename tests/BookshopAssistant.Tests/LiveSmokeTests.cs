@@ -9,7 +9,7 @@ namespace BookshopAssistant.Tests;
 /// The live smoke test (TEST-04): the real console, Claude in demo mode and the database in Docker, with only the staff
 /// member scripted. One test drives APP-09 with its approval; the other reaches a compaction (APP-17) with the demo
 /// script's catalogue searches (<c>docs/demo.md</c>). Both check that every model call after the first reads the cache.
-/// Together they cost about $0.35, so they run only on demand: see the README.
+/// Together they cost about $0.40, so they run only on demand: see the README.
 /// </summary>
 [Trait("Category", "Live")]
 public class LiveSmokeTests(BookshopDatabase database) : IClassFixture<BookshopDatabase>
@@ -67,8 +67,10 @@ public class LiveSmokeTests(BookshopDatabase database) : IClassFixture<BookshopD
         var cacheReads = calls.Where(measured => measured.Instrument == "officina.model.cache_tokens" && (string?)measured.Tags["officina.cache.type"] == "read").Select(measured => measured.Value).ToList();
         TestContext.Current.TestOutputHelper?.WriteLine(transcript);
         TestContext.Current.TestOutputHelper?.WriteLine(string.Join(
-            "\n", inputs.Select((input, call) => string.Create(CultureInfo.InvariantCulture, $"call {call + 1}: {input:N0} input tokens, {cacheReads[call]:N0} read from the cache"))));
+            "\n", inputs.Zip(cacheReads, (input, read) => (input, read)).Select((call, index) => string.Create(
+                CultureInfo.InvariantCulture, $"call {index + 1}: {call.input:N0} input tokens, {call.read:N0} read from the cache"))));
         Assert.DoesNotContain("[Failed", transcript, StringComparison.Ordinal);
+        Assert.Equal(inputs.Count, cacheReads.Count);
         return (transcript, cacheReads);
     }
 

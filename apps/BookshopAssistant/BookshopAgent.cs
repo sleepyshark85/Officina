@@ -38,9 +38,9 @@ public static class BookshopAgent
 
     /// <summary>
     /// Demo mode (APP-17): compaction at Claude's minimum, which the demo script's four catalogue searches of 10–15k tokens
-    /// reach, one a turn, and clearing once a conversation holds more than twelve tool calls. Clearing comes first and
-    /// counts every tool call, the memory tool's too, which the model calls once or twice a turn: at four, it cleared the
-    /// searches before they could compact.
+    /// reach, and clearing when a request holds more than 12 tool calls (the API clears above <c>After</c>, not at it).
+    /// Clearing comes first and counts every tool call, the memory tool's too, which the model calls once or twice a
+    /// turn: at 4, it cleared the searches before they could compact.
     /// </summary>
     public static readonly ContextManagement Demo = new()
     {

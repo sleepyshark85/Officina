@@ -4,7 +4,7 @@ A walkthrough of every Bookshop Assistant capability (APP-01…20), in one sitti
 what to type and what to expect. The model's wording varies from run to run; the tool lines (`>` a call, `<` its
 outcome, `?` an approval, `~` a context event) and the bracketed lines come from the console and do not.
 
-**Cost.** Steps 1–12 cost about $0.30 together, and step 13 (demo mode) about $0.40. The status line after each reply
+**Cost.** Steps 1–12 cost about $0.30 together, and step 13 (demo mode) about $0.35. The status line after each reply
 shows what was spent.
 
 **Live check (S13b).** Steps marked ✓ were run live with Opus 5.5 on 6 October 2026, and the others only through their
@@ -28,6 +28,7 @@ If a port is taken, set `BOOKSHOP_DB_PORT` (and the connection string), `BOOKSHO
 | Type | Expect |
 |---|---|
 | `Sam` | `Hello, Sam.` and `Session <id>.` Note the id. |
+| `/help` | The commands (APP-02): `/help`, `/new`, `/sessions`, `/resume <id>`, `/cost`, `/audit [<id>]`, `/memory`, `/quit`, and that Ctrl+C stops a reply. |
 | `What is today's date, and who am I?` | `> memory {"command":"view",…}` (the model checks Sam's memory first), then today's date and "you're Sam". Neither is in the instructions: they come as run context, sent at the start of the session and again only on a new day. |
 
 ## 2. Streaming, tool activity and parallel reads (APP-01, APP-05)
@@ -100,7 +101,7 @@ If a port is taken, set `BOOKSHOP_DB_PORT` (and the connection string), `BOOKSHO
 | Open the trace link of step 3's run | One trace: `reply` → `invoke_agent bookshop` → its `chat` model calls and `execute_tool` spans, with tokens, cache reads, cost and the approval wait on each. Structured logs for the trace show the console's log of the reply. |
 | Back from the trace | The `invoke_agent` span's `gen_ai.conversation.id` is the session id: `/audit <that id>` lists the same run. Under Metrics, `bookshop-assistant` charts `officina.model.cost`, `officina.model.cache_hit_ratio`, `gen_ai.client.operation.duration`, `officina.tool.calls` and `officina.tool.approvals` over the session. |
 
-## 12. Sessions, summaries, resume and a budget stop ✓ (APP-10, APP-15, APP-14)
+## 12. Sessions, summaries, resume, a cancellation and a budget stop (APP-02, APP-06, APP-10, APP-14, APP-15)
 
 | Do | Expect |
 |---|---|
@@ -109,23 +110,23 @@ If a port is taken, set `BOOKSHOP_DB_PORT` (and the connection string), `BOOKSHO
 | `How much is The Winter Archive?` | The price with tax, from Sam's memory (step 9), in a new session. |
 | `/resume <id of the first session>` | `Resumed session <id>: N messages, $… so far.` |
 | `What was the total of the order you placed for Alice?` | £13.20, from the conversation; the status line shows most of the input read from the cache (94% when checked live). |
-| `/quit`, then `BOOKSHOP_REPLY_BUDGET=0.01 dotnet run`, `Sam` | Each reply may now spend one cent. |
+| `Cancel order 81.` then `y` | `? cancel_order needs your approval.` with `{"orderId":81}`, then `< cancel_order: ok`: the order is cancelled and its copies go back to stock, which undoes step 3. |
+| `/new` | `Session <id> summarized: …` for the session left, then `New session <id>.` |
+| `/quit`, then `BOOKSHOP_REPLY_BUDGET=0.01 dotnet run`, `Sam` | `Reply budget: $0.01.` Each reply may now spend one cent. An invalid value stops the start with a message. |
 | `Compare the average price of fantasy and mystery books in stock.` | A step or two, then `[Stopped: this reply has reached its budget of $0.01.]` and the status line. The session goes on; `/quit`. |
 
-## 13. Long conversations in demo mode (APP-17, HIST-01…04)
+## 13. Long conversations in demo mode (APP-17, HIST-01…04, APP-10)
 
-Demo mode compacts from 50,000 input tokens and clears old tool results once a conversation holds more than 12 tool
-calls. Its sessions do not resume in normal mode, nor the other way round.
+Demo mode compacts from 50,000 input tokens and clears old tool results when a request holds more than 12 tool calls.
+Its sessions do not resume in normal mode, nor the other way round.
 
 | Type | Expect |
 |---|---|
-| `dotnet run -- --demo`, `Sam` | `Demo mode: compaction from 50,000 input tokens, and old tool results cleared after 12 tool calls.` |
-| `Show me every book priced at most £18, up to 300 of them. Just tell me how many there are and the cheapest one.` | `> search_books {"maxPrice":18,"limit":300}`: 245 books. No `~` line yet. |
-| `Now the 250 cheapest books in the catalogue, in stock or not. How many of them are fantasy?` | `> search_books {"limit":250}`. No `~` line yet. |
-| `Every book in stock priced at most £18, up to 300 of them. Just tell me how many.` | `> search_books {"maxPrice":18,"inStock":true,"limit":300}`: 224. No `~` line yet. |
-| `Last one: every book priced at most £16, up to 300 of them. Just tell me how many are out of stock.` | `> search_books {"maxPrice":16,"limit":300}`, then `~ Conversation compacted: about 55,000 tokens summarized into about 3,000.` The compacting reply may come without text: `[The conversation was compacted and the reply has no text. Please ask again.]`; ask again. |
-| `Look up books 1, 2, 3 and 4 with get_book, one at a time, then list their titles.` | Once the session holds more than 12 tool calls: `~ Old tool results cleared: N tool calls, … tokens.` If it does not show yet, ask for a few more books. |
+| `dotnet run -- --demo`, `Sam` | `Demo mode: compaction from 50,000 input tokens, and old tool results cleared after 12 tool calls.` Note the session id. |
+| `Run these four catalogue searches together, then just give me the four counts: every book priced at most £18 (up to 300 of them), the 250 cheapest books in stock or not, every book in stock priced at most £18 (up to 300), and every book priced at most £16 (up to 300).` ✓ | Four `> search_books` lines together (`{"maxPrice":18,"limit":300}`, `{"limit":250}`, `{"maxPrice":18,"inStock":true,"limit":300}`, `{"maxPrice":16,"limit":300}`), then `~ Conversation compacted: 52,255 tokens summarized into 3,068.` (as checked live; the numbers vary a little) and the counts 245, 250, 224 and 208. About $0.33. The compacting reply may come without text: `[The conversation was compacted and the reply has no text. Please ask again.]`; ask again. |
+| `Look up books 1 to 14 with get_book, then list their titles.` | Fourteen `> get_book` calls in parallel, then `~ Old tool results cleared: … tool calls, … tokens.`: the next request holds more than 12 tool calls. |
 | `/audit` | `Compacted` and `Cleared` entries with their numbers. |
+| `/quit`, then `dotnet run` (normal mode), `Sam`, `/resume <demo session id>` | `Session <id> was started with another version of the assistant, so it cannot go on. Type /new to start a new session.` (APP-10): its context management differs, so its prefix would not match. |
 
 The four searches return 10–15k tokens each (measured with the token-counting endpoint, on the seed data):
 
@@ -136,9 +137,9 @@ The four searches return 10–15k tokens each (measured with the token-counting 
 | `maxPrice` 18, `inStock`, `limit` 300 | 224 | 24,227 | 11,561 |
 | `maxPrice` 16, `limit` 300 | 208 | 22,462 | 10,715 |
 
-With the agent's tools and instructions (about 4,200 tokens) and the replies, the conversation crosses 50,000 tokens on
-the fourth search, so compaction lands just over the threshold. The live smoke test asks for the same four searches in
-one turn: compaction summarized 52,255 tokens into 3,068 and the reply cost $0.33.
+With the agent's tools and instructions (about 4,200 tokens), the four results take the conversation just over 50,000
+tokens, so compaction lands just over the threshold. They come in one turn, as the live smoke test asks for them: one
+search a turn adds the model's memory calls, and was not checked live with the current clearing threshold.
 
 ## What was checked live
 
@@ -148,9 +149,11 @@ one turn: compaction summarized 52,255 tokens into 3,068 and the reply cost $0.3
 | 3 APP-09 | ✓ | In the smoke test: order of books 144 and 216, £13.20, find and search in parallel. |
 | 8 Status line, `/cost` | ✓ | |
 | 11 `/audit`, trace | ✓ | The trace link opened and the dashboard held the run's spans. |
-| 12 Summaries, `/sessions`, `/resume`, budget stop | ✓ | Resume read 94% from the cache; `$0.01` stopped the reply after two steps. |
-| 13 Compaction | Partly | The smoke test reached it with the same searches in one turn. One search a turn was run before the fix below, and did not compact. |
-| 2, 4–7, 9, 10 | Offline only | Their console flows are TEST-09 tests against the real database, with the model scripted. |
+| 12 Summaries, `/sessions`, `/resume`, budget stop | ✓ | Resume read 94% from the cache; `$0.01` stopped the reply after two steps. The cancellation, `/new` and the `Reply budget` line are offline only. |
+| 13 Compaction | ✓ | The four-search prompt, in the smoke test. |
+| 13 Clearing, `/resume` refusal | Offline only | |
+| 1 `/help`, 2, 4–7, 9, 10 | Offline only | Their console flows are TEST-09 tests against the real database, with the model scripted. |
 
-The first live run of step 13 found that clearing after 4 tool calls emptied the searches before they could compact:
-the model calls the memory tool once or twice a turn, and those calls count. Demo mode now clears after 12.
+The first live run of step 13, with one search a turn, found that clearing after 4 tool calls emptied the searches
+before they could compact: the model calls the memory tool once or twice a turn, and those calls count. Demo mode now
+clears above 12, and the demo asks for the four searches in one turn, as checked live.

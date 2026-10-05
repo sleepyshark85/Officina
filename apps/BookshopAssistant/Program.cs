@@ -29,6 +29,20 @@ if (string.IsNullOrWhiteSpace(connectionString))
     return 1;
 }
 
+// A lower budget for each reply (APP-14), in US dollars, to show a budget stop.
+decimal? replyBudget = null;
+if (Environment.GetEnvironmentVariable("BOOKSHOP_REPLY_BUDGET") is { Length: > 0 } budgetText)
+{
+    if (!decimal.TryParse(budgetText, NumberStyles.Number, CultureInfo.InvariantCulture, out var budget) || budget <= 0)
+    {
+        await Console.Error.WriteLineAsync($"BOOKSHOP_REPLY_BUDGET must be a positive amount in US dollars, such as 0.01, not \"{budgetText}\".");
+        return 1;
+    }
+
+    replyBudget = budget;
+    await Console.Out.WriteLineAsync(string.Create(CultureInfo.InvariantCulture, $"Reply budget: ${budget}."));
+}
+
 var dashboard = new Uri(Environment.GetEnvironmentVariable("BOOKSHOP_DASHBOARD_URL") is { Length: > 0 } url ? url : "http://localhost:18888");
 var resource = ResourceBuilder.CreateDefault().AddService("bookshop-assistant");
 using var tracing = Sdk.CreateTracerProviderBuilder()
@@ -56,7 +70,7 @@ var data = Environment.GetEnvironmentVariable("BOOKSHOP_DATA") is { Length: > 0 
 var memory = new FileMemoryStore(Path.Combine(data, "memory"));
 var console = new BookshopConsole(
     Console.In, Console.Out, TimeProvider.System, echoInput: Console.IsInputRedirected, audit, new SessionStore(database), dashboard,
-    logging.CreateLogger<BookshopConsole>(), ReplyBudget() is { } reply ? Budgets.Default with { Reply = reply } : null, memory);
+    logging.CreateLogger<BookshopConsole>(), replyBudget is { } reply ? Budgets.Default with { Reply = reply } : null, memory);
 
 // Ctrl+C stops the reply in progress and the session goes on (APP-03); with no reply in progress, it quits.
 // An exception here would end the process, so none escapes.
@@ -107,9 +121,3 @@ if (demo)
 
 await console.RunAsync(agent, SessionSummarizer.Create(summaryModel, TimeProvider.System));
 return 0;
-
-// A lower budget for each reply (APP-14), in US dollars, to show a budget stop: BOOKSHOP_REPLY_BUDGET.
-static decimal? ReplyBudget() =>
-    decimal.TryParse(Environment.GetEnvironmentVariable("BOOKSHOP_REPLY_BUDGET"), NumberStyles.Number, CultureInfo.InvariantCulture, out var budget)
-        ? budget
-        : null;
