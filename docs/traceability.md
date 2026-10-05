@@ -14,8 +14,8 @@ Test files are under `tests/`, shortened as:
 | App | `BookshopAssistant.Tests` (real console and database in Docker, TEST-09) |
 | Samples | `Samples.Tests` (the GEN-06 samples) |
 
-**Summary:** 88 requirements. 85 have tests; 3 are checked by other means only: APP-19 (the demo script), TEST-03 (the
-CI workflow) and TEST-04 (the live smoke test itself), the first and last delivered by S13b. Nine more have a part that
+**Summary:** 88 requirements. 86 have tests, TEST-04's live and on demand only; 2 are checked by other means only:
+APP-19 (the demo script) and TEST-03 (the CI workflow). Nine more have a part that
 only a live run or inspection checks, noted in the last column.
 
 ## Reference application (APP)
@@ -30,7 +30,7 @@ only a live run or inspection checks, noted in the last column.
 | APP-06 | App/EndToEndTests: `APP_06_a_write_shows_its_exact_input_for_approval_and_runs_only_if_approved`; App/ToolTests: `Add_customer_…`, `Place_order_…`, `Cancel_order_returns_the_copies_once`, `Restock_adds_copies`, `Concurrent_orders_never_take_more_copies_than_are_in_stock` | |
 | APP-07 | App/EndToEndTests: `APP_07_not_enough_stock_comes_back_as_an_error_result_and_the_model_recovers_in_the_same_reply`; App/ToolTests: `Business_rule_failures_are_error_results_and_change_nothing`, `Unknown_ids_are_error_results` | |
 | APP-08 | App/NoSqlTextTests: `The_only_text_inputs_are_known_values`, `Every_command_runs_a_constant` | Inspection |
-| APP-09 | App/EndToEndTests: `APP_09_a_multi_step_request_finds_searches_orders_after_approval_and_answers` | Live smoke test (TEST-04) |
+| APP-09 | App/EndToEndTests: `APP_09_a_multi_step_request_finds_searches_orders_after_approval_and_answers` | Live: App/LiveSmokeTests `APP_09_places_the_order_after_approval_and_reads_the_cache_from_the_second_call` (TEST-04) |
 | APP-10 | App/SessionTests: `APP_10_quit_restart_and_resume_continues_the_session_with_its_prefix_byte_identical`, `APP_10_a_crash_mid_reply_loses_at_most_the_step_in_flight_and_the_session_resumes`, `APP_10_a_session_whose_agent_changed_is_refused_and_a_new_one_is_offered`; App/SessionPropertyTests: `TEST_07_the_prefix_stays_byte_identical_…` | Cache reads after `/resume`: demo script |
 | APP-11 | App/MemoryTests: `APP_11_memory_shows_what_is_remembered_for_the_staff_member_at_the_counter`, `APP_11_a_preference_saved_in_one_session_is_applied_in_a_new_one` | |
 | APP-12 | App/ExportTests: `APP_12_the_allow_list_offers_only_writing_a_file_with_approval_and_listing_the_folder`, `APP_12_an_order_history_is_exported_as_csv_after_approval`, `APP_12_a_declined_export_writes_no_file`, `APP_12_APP_03_…` | |
@@ -40,7 +40,7 @@ only a live run or inspection checks, noted in the last column.
 | APP-16 | App/AuditTests: `APP_16_audit_shows_the_session_s_entries_grouped_by_run_…`, `APP_16_audit_with_an_id_shows_an_earlier_session`, `The_table_keeps_every_field_of_an_entry_and_reads_a_session_s_entries_in_order`, `A_write_the_database_refuses_throws` | |
 | APP-17 | App/LongConversationTests: `APP_17_demo_mode_compacts_and_clears_early_and_the_console_and_audit_report_each`, `Outside_demo_mode_compaction_and_clearing_come_later`, `A_compacting_reply_without_text_says_so`, `A_clearing_the_provider_repeats_is_shown_once_and_a_new_one_again`; App/ToolTests: `A_broad_search_returns_10_to_15k_tokens_within_the_result_limit` | Live compaction: smoke test and demo script |
 | APP-18 | App/EndToEndTests: `APP_18_with_the_database_down_tools_return_errors_and_once_it_is_back_the_session_works_again`; App/ToolTests: `With_the_database_down_tools_fail_and_once_it_is_back_they_work_again` | |
-| APP-19 | — | The demo script, `docs/demo.md` (S13b) |
+| APP-19 | — | The demo script, [`docs/demo.md`](demo.md) |
 | APP-20 | Core/TelemetryTests: `A_run_is_one_trace_with_a_span_per_model_call_and_per_tool_call_…`, `Metrics_count_tokens_…`; App/AuditTests: `APP_16_audit_shows_…` (trace links) | The dashboard view: demo script |
 
 ## Generality (GEN)
@@ -169,7 +169,7 @@ only a live run or inspection checks, noted in the last column.
 | TEST-01 | Core/RunTests: `The_scripted_model_rejects_role_sequences_the_API_rejects`, `A_rejected_request_leaves_its_scripted_reply_for_the_next_one`; the scripted approver, in-memory store and fake MCP server in Core/ToolLoopTests, Core/MemoryTests and Mcp | |
 | TEST-02 | Core/PrefixTests: `The_prefix_is_stable_across_turns_and_across_save_restart_and_resume`, `The_stability_check_reports_each_kind_of_change`; App/SessionTests: `APP_10_quit_restart_and_resume_…`; App/SessionPropertyTests; Samples: `TEST_02_…` tests and the prefix checks of Samples/BackgroundAgentTests | |
 | TEST-03 | — | The CI workflow (`.github/workflows/ci.yml`): Linux and Windows, offline; Docker tests skip off Linux |
-| TEST-04 | — | It is the live smoke test (S13b) |
+| TEST-04 | App/LiveSmokeTests: `APP_09_places_the_order_after_approval_and_reads_the_cache_from_the_second_call`, `Demo_mode_compacts_after_the_demo_scripts_searches` | Live, on demand (`OFFICINA_LIVE_TESTS=1`, trait `Category=Live`); skipped by `dotnet test` and CI |
 | TEST-05 | Deps/DependencyRulesTests (all), Deps/RepositoryDependencyTests | |
 | TEST-06 | Core/TelemetryTests (all) | |
 | TEST-07 | Core/ConversationPropertyTests, Core/SecretPropertyTests, Core/MemoryPropertyTests, Core/BudgetTests: `TEST_07_…`, App/SessionPropertyTests | |

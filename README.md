@@ -13,7 +13,7 @@ PostgreSQL in Docker.
 - [`docs/plan/phase-1.md`](docs/plan/phase-1.md): the phase 1 slices.
 - [`docs/traceability.md`](docs/traceability.md): each phase 1 requirement and its tests.
 
-Status: phase 1; S13b (the demo script and the live smoke test) remaining. Requirements map to tests in [`docs/traceability.md`](docs/traceability.md).
+Status: phase 1 complete; see [`docs/demo.md`](docs/demo.md) and [`docs/traceability.md`](docs/traceability.md).
 
 ## Build and test
 
@@ -23,6 +23,13 @@ Docker (Linux only); without Docker they are skipped.
 ```sh
 dotnet build
 dotnet test
+```
+
+The live smoke test (TEST-04) is skipped unless asked for. It drives APP-09 with Claude, checks cache reads and forces a
+compaction, against its own database in Docker; it needs `ANTHROPIC_API_KEY` and costs about $0.40 a run:
+
+```sh
+OFFICINA_LIVE_TESTS=1 dotnet test tests/BookshopAssistant.Tests --filter Category=Live --logger "console;verbosity=detailed"
 ```
 
 | Path | Holds |
@@ -53,7 +60,8 @@ export BOOKSHOP_CONNECTION_STRING="Host=localhost;Port=5432;Username=bookshop;Pa
 dotnet run                         # add -- --demo (or BOOKSHOP_DEMO=1) to compact and clear early (APP-17); sessions of one mode don't resume in the other
 ```
 
-Try: *Order the two cheapest fantasy books in stock for Alice Martin and tell me the total.*
+Try: *Order the two cheapest fantasy books in stock for Alice Martin and tell me the total.* The demo script,
+[`docs/demo.md`](docs/demo.md), walks through every capability.
 
 Exports (APP-12) go to `exports/`, through the reference filesystem MCP server, which the application starts in Docker
 with `docker compose run`. Try: *Export Alice Martin's order history as CSV.* The server runs as root in its container,

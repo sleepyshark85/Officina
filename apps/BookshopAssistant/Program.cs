@@ -6,6 +6,8 @@
 // --demo or BOOKSHOP_DEMO=1, compacts and clears old tool results early enough to see in a short session. What the
 // assistant remembers for each staff member is kept under BOOKSHOP_DATA, by default the data folder of the current one.
 // BOOKSHOP_TELEMETRY_CONTENT=1 puts message text and tool inputs and results in the traces too (EVT-04), for debugging.
+// BOOKSHOP_REPLY_BUDGET, in US dollars, lowers each reply's budget, for the demo script's budget stop.
+using System.Globalization;
 using BookshopAssistant;
 using Microsoft.Extensions.Logging;
 using Npgsql;
@@ -25,6 +27,20 @@ if (string.IsNullOrWhiteSpace(connectionString))
     await Console.Error.WriteLineAsync(
         "Set BOOKSHOP_CONNECTION_STRING, for the compose database: Host=localhost;Port=5432;Username=bookshop;Password=shelf-demo-41;Database=bookshop");
     return 1;
+}
+
+// A lower budget for each reply (APP-14), in US dollars, to show a budget stop.
+decimal? replyBudget = null;
+if (Environment.GetEnvironmentVariable("BOOKSHOP_REPLY_BUDGET") is { Length: > 0 } budgetText)
+{
+    if (!decimal.TryParse(budgetText, NumberStyles.Number, CultureInfo.InvariantCulture, out var budget) || budget <= 0)
+    {
+        await Console.Error.WriteLineAsync($"BOOKSHOP_REPLY_BUDGET must be a positive amount in US dollars, such as 0.01, not \"{budgetText}\".");
+        return 1;
+    }
+
+    replyBudget = budget;
+    await Console.Out.WriteLineAsync(string.Create(CultureInfo.InvariantCulture, $"Reply budget: ${budget}."));
 }
 
 var dashboard = new Uri(Environment.GetEnvironmentVariable("BOOKSHOP_DASHBOARD_URL") is { Length: > 0 } url ? url : "http://localhost:18888");
@@ -47,22 +63,14 @@ using var logging = LoggerFactory.Create(builder => builder.AddOpenTelemetry(opt
 
 var demo = args.Contains("--demo") || Environment.GetEnvironmentVariable("BOOKSHOP_DEMO") == "1";
 await using var database = NpgsqlDataSource.Create(connectionString);
-using var model = new ClaudeModel
-{
-    Model = "claude-opus-5-5",
-    Effort = ClaudeEffort.Medium,
-    MaxOutputTokens = 16_000,
-
-    // A demo is one sitting, and its large searches would cost 60% more to cache for an hour.
-    CacheLifetime = demo ? CacheLifetime.FiveMinutes : CacheLifetime.OneHour,
-};
+using var model = BookshopAgent.Model(demo);
 using var summaryModel = new ClaudeModel { Model = "claude-opus-5-5", Effort = ClaudeEffort.Low, MaxOutputTokens = 4_000 };
 var audit = new AuditTable(database);
 var data = Environment.GetEnvironmentVariable("BOOKSHOP_DATA") is { Length: > 0 } folder ? folder : "data";
 var memory = new FileMemoryStore(Path.Combine(data, "memory"));
 var console = new BookshopConsole(
     Console.In, Console.Out, TimeProvider.System, echoInput: Console.IsInputRedirected, audit, new SessionStore(database), dashboard,
-    logging.CreateLogger<BookshopConsole>(), memory: memory);
+    logging.CreateLogger<BookshopConsole>(), replyBudget is { } reply ? Budgets.Default with { Reply = reply } : null, memory);
 
 // Ctrl+C stops the reply in progress and the session goes on (APP-03); with no reply in progress, it quits.
 // An exception here would end the process, so none escapes.
@@ -108,7 +116,7 @@ if (Environment.GetEnvironmentVariable("BOOKSHOP_TELEMETRY_CONTENT") == "1")
 
 if (demo)
 {
-    await Console.Out.WriteLineAsync("Demo mode: compaction from 50,000 input tokens, and old tool results cleared after 4 tool calls.");
+    await Console.Out.WriteLineAsync("Demo mode: compaction from 50,000 input tokens, and old tool results cleared after 12 tool calls.");
 }
 
 await console.RunAsync(agent, SessionSummarizer.Create(summaryModel, TimeProvider.System));

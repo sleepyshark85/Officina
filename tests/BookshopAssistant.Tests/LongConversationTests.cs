@@ -21,7 +21,7 @@ public class LongConversationTests(BookshopDatabase database) : IClassFixture<Bo
 
         Assert.All(model.Requests, request => Assert.Equal(BookshopAgent.Demo, request.ContextManagement));
         Assert.Equal(50_000, BookshopAgent.Demo.CompactAt);
-        Assert.Equal(4, BookshopAgent.Demo.ClearToolResults!.After);
+        Assert.Equal(12, BookshopAgent.Demo.ClearToolResults!.After);
         InOrder(
             transcript,
             "  < search_books: ok",
