@@ -1,6 +1,6 @@
 # Officina — Requirements
 
-Status: draft 4 · 2026-10-05. Architecture: [`ARCHITECTURE.md`](ARCHITECTURE.md). Namespace: `Sleepyshark.Officina`.
+Status: draft 5 · 2026-10-05. Architecture: [`ARCHITECTURE.md`](ARCHITECTURE.md). Namespace: `Sleepyshark.Officina`.
 
 ## 1. Purpose
 
@@ -24,8 +24,8 @@ every phase 1 capability in one place.
 
 | ID | Requirement |
 |---|---|
-| APP-01 | A console chat: the user types a message, the reply streams as it is generated, and tool activity is shown as it happens (which tool, what for, the outcome). |
-| APP-02 | Commands: `/help`, `/new` (new session), `/sessions` (list, with titles), `/resume <id>`, `/memory` (show what is remembered), `/cost` (session usage and cost), `/audit` (recent audit entries), `/quit`. |
+| APP-01 | A console chat: the user types a message, the reply streams as it is generated, and tool activity is shown as it happens (which tool, what for, the outcome). While the model works, its short progress notes are shown (Claude: thinking display `updates`), so there is no silent pause. |
+| APP-02 | Commands: `/help`, `/new` (new session), `/sessions` (list, with titles), `/resume <id>`, `/memory` (show what is remembered), `/cost` (session usage and cost), `/audit [<session id>]` (audit entries of the current or a given session, APP-16), `/quit`. |
 | APP-03 | Ctrl+C cancels the reply in progress, not the application; the session stays usable. |
 | APP-04 | The database is PostgreSQL in Docker (one compose file), seeded with books, authors, customers, orders and stock. The application only reaches it through its tools. |
 | APP-05 | Read tools: search books (by title, author, genre, price, in stock), get a book, find a customer, list a customer's orders, get an order. Read calls of one reply run in parallel. |
@@ -33,16 +33,17 @@ every phase 1 capability in one place.
 | APP-07 | A business rule failure (not enough stock, unknown customer) comes back to the model as an error result, and the model recovers within the same reply: it explains, or tries another way. |
 | APP-08 | There is no tool that runs arbitrary SQL; every query is fixed and parameterized. |
 | APP-09 | Multi-step requests work as one agentic loop of several turns, for example *"Order the two cheapest fantasy books in stock for Alice Martin and tell me the total"*: find the customer, search, check, place the order after approval, answer. |
-| APP-10 | Sessions (conversations) are stored in the database and survive a restart; `/resume` continues one with its cache intact. A session whose agent definition changed is refused, and a new session is offered. |
+| APP-10 | Sessions (conversations) are stored in the database after every step of a reply (AGT-08) and survive a restart or a crash; `/resume` continues one with its cache intact. A session whose agent definition changed is refused, and a new session is offered. |
 | APP-11 | Memory per staff member (chosen at start): preferences and notes the assistant keeps across sessions, for example *"I prefer prices with tax"*. |
-| APP-12 | An MCP server (the reference filesystem server, in Docker) lets the assistant export reports, for example an order history as CSV, into an `exports` folder. Writing a file needs approval. |
-| APP-13 | Run context gives the date and the staff member's name, appended per message, never in the instructions. |
+| APP-12 | An MCP server (the reference filesystem server, in Docker, over stdio) lets the assistant export reports, for example an order history as CSV, into an `exports` folder. Its allow-list names only the tools the export needs (write a file, list the folder). Writing a file needs approval. |
+| APP-13 | Run context gives the date and the staff member's name, never in the instructions. It is appended at the start of a session and again only when it changes (a new day). |
 | APP-14 | After each reply a status line shows tokens, cache read share, the reply's cost and the session's cost. A per-reply and a per-session budget apply; reaching one stops the reply and says why. |
-| APP-15 | When a session is left, a separate **stateless** agent with **typed output** writes the session's title, a summary and the changes made, which `/sessions` shows. |
-| APP-16 | Audit entries go to a database table through the application's own audit sink; `/audit` shows the latest. |
-| APP-17 | A demo mode lowers the compaction threshold so compaction is visible in a short session, and reports it when it happens. |
+| APP-15 | When a session is left (`/new`, `/resume`, `/quit`), a separate **stateless** agent with **typed output** writes the session's title, a summary and the changes made, which `/sessions` shows. A session left without one (a crash) is summarized the next time `/sessions` lists it. |
+| APP-16 | Audit entries go to a database table through the application's own audit sink. `/audit` shows a session's entries in order, grouped by run: time, kind, tool and outcome, approvals, cost, and a link to the run's trace in the telemetry dashboard (APP-20). |
+| APP-17 | A demo mode lowers the compaction and tool-result clearing thresholds so both are visible in a short session, and reports each when it happens (HIST-01, HIST-02). |
 | APP-18 | If the database stops mid-session, tools return errors, the assistant says so, and the session continues once it is back. |
 | APP-19 | A demo script (`docs/demo.md`) walks through every capability above with the prompts to type and what to expect. |
+| APP-20 | **Observability.** The compose file also runs an OpenTelemetry dashboard (D11). The application exports the core's traces and metrics (EVT-02) and its own logs to it, so a reply can be followed as a trace: run → model calls → tool calls, with tokens, cache reads, cost, approval wait and errors on each step. Metrics show tokens, cost, cache hit ratio, latency, tool outcomes and approvals over time. The demo script shows how to go from an `/audit` entry to its trace and back. |
 
 ## 3. Principles
 
@@ -78,7 +79,7 @@ The core serves any agentic purpose, not only the reference application. These r
 | GEN-03 | A run can be **stateless** (a new conversation discarded afterwards: extraction, classification) or **stateful** (a conversation the host keeps: chat, assistants). |
 | GEN-04 | A run can be **interactive** (an approver answers) or **unattended** (no approver: a tool that needs approval is denied, and the model is told why). |
 | GEN-05 | A run's result can be text, typed output, or only its side effects through tools. |
-| GEN-06 | The phase 1 tests include offline, scripted samples of each purpose in the architecture's §8 table that phase 1 covers, beyond the reference application. |
+| GEN-06 | The phase 1 tests include offline, scripted samples of each purpose in the architecture's §8 table that phase 1 covers, beyond the reference application. The background agent sample is unattended and uses an MCP server over Streamable HTTP and the JSON-lines audit sink. |
 
 ### Agent and turn loop (AGT)
 
@@ -88,9 +89,10 @@ The core serves any agentic purpose, not only the reference application. These r
 | AGT-02 | A run takes a conversation and a new user message, loops model call → tool calls → model call until the model stops, and returns a result. |
 | AGT-03 | A run ends in exactly one result: `Completed` (text or typed output), `Stopped` (budget, refusal, output limit, context full, cancelled, iteration limit) or `Failed` (a provider error left after retries, or invalid output). |
 | AGT-04 | Many runs of one agent can execute concurrently, each on its own conversation. |
-| AGT-05 | The host can cancel a run at any time; it ends as `Stopped(Cancelled)`. A cancelled run leaves the conversation valid: no tool call without its result. |
-| AGT-06 | The conversation is a plain object the host owns: it serializes to JSON and back, so the host keeps it in its own storage. |
-| AGT-07 | A server tool's `pause_turn` stop continues the loop by sending the conversation back as is. |
+| AGT-05 | The host can cancel a run at any time; it ends as `Stopped(Cancelled)`. A cancelled run leaves the conversation valid and true to what happened: a model reply cut off mid-stream is not appended; once a reply with tool calls is appended, calls that finished keep their results, calls that never started get a "cancelled" error result, and no further model call is made. |
+| AGT-06 | The conversation is a plain object the host owns: it serializes to JSON and back, so the host keeps it in its own storage. The round trip keeps every content block byte for byte. |
+| AGT-07 | ~~Server tool `pause_turn`~~ Moved to the north star with server tools (NS-18). |
+| AGT-08 | Each append to the conversation (user message with run context, model reply, tool results) is reported as an event, so the host can persist the conversation after every step. |
 
 ### Models (MDL)
 
@@ -98,10 +100,10 @@ The core serves any agentic purpose, not only the reference application. These r
 |---|---|
 | MDL-01 | The core reaches models only through its own model interface: streamed text, content blocks, usage and stop reason. |
 | MDL-02 | A Claude implementation ships, on the official Anthropic C# SDK, which is used in that package only. Requests are streamed. |
-| MDL-03 | Claude settings (model, effort, thinking display, max output tokens, refusal fallback) are set on the Claude model object and fixed for a conversation. Effort is set explicitly, never left to a model default. |
+| MDL-03 | Claude settings (model, effort, thinking display, max output tokens) are set on the Claude model object and fixed for a conversation. Effort is set explicitly, never left to a model default. |
 | MDL-04 | Transient failures (rate limits, overload, network, including errors mid-stream) are retried with backoff, honouring `Retry-After`. What is left becomes `Failed`. |
 | MDL-05 | Every content block the model returns (text, reasoning, tool use, server tool results, compaction) is kept in the conversation exactly as received, and replayed unchanged. |
-| MDL-06 | A refusal is a `Stopped(Refusal)` result with the provider's category. The Claude model can opt into the server-side refusal fallback. |
+| MDL-06 | A refusal is a `Stopped(Refusal)` result with the provider's category. The refusal fallback to another model is not used in phase 1 (D10). |
 
 ### Context and caching (CTX)
 
@@ -111,7 +113,7 @@ The core serves any agentic purpose, not only the reference application. These r
 | CTX-02 | Context that varies per run or per turn (date, user profile, retrieved passages, reminders) is appended to the conversation as an operator message after the cached prefix, through a run-context hook the host supplies. |
 | CTX-03 | The Claude model places cache breakpoints: one on the last instructions block, with a TTL the agent chooses (5 minutes by default, 1 hour for conversations where users reply slowly), and automatic caching on the conversation's tail. |
 | CTX-04 | Tools and model never change within a conversation. Changing either starts a new conversation. |
-| CTX-05 | Usage reports cache reads and writes per call, and telemetry exposes the cache hit ratio per agent. |
+| CTX-05 | Usage reports cache reads and writes per call, and telemetry exposes the cache hit ratio per agent (APP-20 shows it). |
 | CTX-06 | All tool results of one model reply go back in a single message, in the order of the calls. |
 
 ### History compaction (HIST)
@@ -138,18 +140,18 @@ The core serves any agentic purpose, not only the reference application. These r
 | ID | Requirement |
 |---|---|
 | TOOL-01 | A tool has a name, a description, a JSON input schema and an async handler. A tool can be built from an ordinary typed function of the application, with the schema derived from its parameters. |
-| TOOL-02 | Tool input is validated against its schema before the handler runs (input streams eagerly, so the API does not validate it). Invalid input goes back to the model as an error result. |
+| TOOL-02 | Tool input is validated against its schema before the handler runs (input streams eagerly, so the API does not validate it). Invalid input goes back to the model as an error result. The validator covers the JSON Schema subset that TOOL-01 and OUT-01 produce (Q2). |
 | TOOL-03 | A tool declares whether it is a **read** or a **write** tool. Read tools of one reply run concurrently; write tools run one at a time, in order. |
 | TOOL-04 | A tool can require approval: before it runs, the host's approver is asked, and a denial goes back to the model as the tool's result (APP-06). |
 | TOOL-05 | A tool error (exception or error result) is returned to the model as an error result (`is_error`); it never ends the run. |
 | TOOL-06 | A tool result over a size limit is truncated when it is created, and the model is told it was. |
-| TOOL-07 | Provider server tools (for example web search) can be added to an agent; their calls and results are recorded and counted towards budgets. |
+| TOOL-07 | ~~Provider server tools~~ Moved to the north star (NS-18): no phase 1 application uses one. |
 
 ### MCP (MCP)
 
 | ID | Requirement |
 |---|---|
-| MCP-01 | Tools can come from MCP servers over stdio and Streamable HTTP, through Officina's own MCP client. |
+| MCP-01 | Tools can come from MCP servers over stdio (Bookshop Assistant) and Streamable HTTP (the background agent sample, GEN-06), through Officina's own MCP client. |
 | MCP-02 | MCP tools go through the same tool pipeline as any tool: validation, approval, truncation, events. Each server's tools are marked read or write by the host (MCP annotations as a default). |
 | MCP-03 | An MCP server's tool list is read once and pinned for the conversation (CTX-04), named `<server>__<tool>`, and filtered by an allow-list the host gives. |
 | MCP-04 | A server that is down at the start of a run fails the run with a clear error; one that fails mid-run returns error results for its calls. |
@@ -158,14 +160,14 @@ The core serves any agentic purpose, not only the reference application. These r
 
 | ID | Requirement |
 |---|---|
-| OUT-01 | An agent can require typed output: an application type whose JSON schema is sent as the provider's structured output format, and the reply is deserialized into it. |
-| OUT-02 | Output that fails validation is sent back once for correction; failing again ends the run as `Failed` with the validation errors. |
+| OUT-01 | An agent can require typed output: an application type whose JSON schema is sent as the provider's structured output format (adjusted to the subset the provider accepts), and the reply is deserialized into it. |
+| OUT-02 | Output that fails to deserialize or validate ends the run as `Failed` with the errors. There is no correction round: structured output already holds the reply to the schema, and no phase 1 application checks more than the schema. |
 
 ### Budgets (BUD)
 
 | ID | Requirement |
 |---|---|
-| BUD-01 | A run can be limited by cost (currency), tokens, model calls and wall time. Each limit is checked before every model call. |
+| BUD-01 | A run can be limited by cost (currency), tokens, model calls and wall time. Each limit is checked before every model call, and a call's output token limit is lowered to what the remaining cost and token budget allows, so one call cannot overshoot by more than its input. |
 | BUD-02 | Cost is computed from a price table per model that prices cache reads and writes, and the host can replace it. |
 | BUD-03 | Every result reports usage: tokens (input, output, cache read, cache write), cost, model calls, tool calls and duration. |
 
@@ -173,8 +175,9 @@ The core serves any agentic purpose, not only the reference application. These r
 
 | ID | Requirement |
 |---|---|
-| EVT-01 | A run can be consumed as a stream of events: text deltas, reasoning updates, tool call started and finished, approval asked and answered, compaction, usage, result. |
-| EVT-02 | Runs, model calls and tool calls emit OpenTelemetry traces and metrics. |
+| EVT-01 | A run can be consumed as a stream of events: text deltas, reasoning updates, tool call started and finished, approval asked and answered, compaction, conversation appended (AGT-08), usage, result. |
+| EVT-02 | Runs, model calls and tool calls emit OpenTelemetry traces and metrics through the platform's own tracing and metrics primitives (no exporter in the core; the host chooses one). Names and attributes follow the OpenTelemetry semantic conventions for generative AI where they exist. One trace per run, with a span per model call (tokens by kind, cache reads and writes, cost, stop reason, retries, time to first token) and per tool call (tool, read or write, outcome, duration, approval wait). Metrics: tokens and cost by agent and model, cache hit ratio, model call and tool call duration, tool outcomes, approvals by answer, results by kind, compactions, retries. |
+| EVT-04 | Message text and tool inputs and results are not put in telemetry by default; the host can opt in. Telemetry is for operation, the audit trail (AUD) is for the record. |
 | EVT-03 | Secrets passed to the core (API keys, MCP credentials) never appear in events, traces or exceptions. |
 
 ### Audit (AUD)
@@ -186,19 +189,21 @@ the fact.
 |---|---|
 | AUD-01 | Important events are written to an audit trail: run started and ended (result, usage, cost); every tool call (tool, input, outcome, duration); approvals asked and answered; memory writes; budget stops; refusals; compactions; provider failures; prefix mismatches; MCP servers connected, failed or disconnected. |
 | AUD-02 | A write tool's attempt is recorded **before** it runs and its outcome after. If the attempt cannot be recorded, the tool does not run and the model gets an error result. |
-| AUD-03 | Each entry carries the time, a sequence number, the run, the conversation, the agent and the memory scope, so a run can be reconstructed. Entries are never changed or removed by the core. |
-| AUD-04 | The audit trail is written through an audit sink contract the host chooses; a JSON-lines file sink ships. |
+| AUD-03 | Each entry carries the time, a sequence number, the run, the conversation, the agent, the memory scope and the trace and span of the step it records (EVT-02), so a run can be reconstructed and each entry opened as its trace. Entries are never changed or removed by the core. |
+| AUD-04 | The audit trail is written through an audit sink contract the host chooses; a JSON-lines file sink ships (used by the background agent sample, GEN-06). |
 | AUD-05 | Secrets never reach the audit trail, and large inputs and results are truncated with their size noted. |
+| AUD-06 | Audit sink failures are visible in telemetry: a failed write, and a write tool blocked because its attempt could not be recorded (AUD-02). |
 
 ### Testing (TEST)
 
 | ID | Requirement |
 |---|---|
 | TEST-01 | A test kit ships with a scripted model (replies given in advance, requests recorded), a scripted approver, an in-memory memory store and a fake MCP server, so any agent runs offline and deterministically. |
-| TEST-02 | A **prefix stability** check: across the calls of a scripted multi-turn run, each request's tools, instructions and earlier messages are byte-identical to the previous request's. It runs for the reference application and every GEN-06 sample. |
-| TEST-03 | The test suite needs no API key and no network; CI runs it on Linux and Windows. |
+| TEST-02 | A **prefix stability** check: across the calls of a scripted multi-turn run, each request's tools, instructions and earlier messages are byte-identical to the previous request's. This also holds across a restart: a conversation saved to JSON and resumed with a freshly built definition produces the same prefix. It runs for the reference application and every GEN-06 sample. |
+| TEST-03 | The test suite needs no API key and no network; CI runs it on Linux and Windows. Tests that need the Docker database run on Linux only. |
 | TEST-04 | The reference application has a live smoke test against the Docker database, run on demand with an API key, which drives APP-09, asserts cache reads from the second call on, and forces a compaction. |
 | TEST-05 | A dependency check, run as a test, fails if the Anthropic SDK is referenced outside the Claude package. |
+| TEST-06 | Telemetry is tested by collecting the spans and metrics of scripted runs in memory: span tree, attributes, and that no message text or secret appears by default (EVT-03, EVT-04). |
 
 ### Phase 1 acceptance
 
@@ -230,6 +235,8 @@ the architecture only keeps room for it.
 | NS-15 | **Large tool sets** | Tool search (deferred tool loading) and mid-conversation tool changes, so tools can grow without breaking the cache | An agent has more tools than fit usefully in every request |
 | NS-16 | **Programmatic tool calling** | The model calls tools from code execution, so large intermediate results never enter the context | An agent chains many tool calls over large data |
 | NS-17 | **Subagents** | A run delegates a sub-task to another agent, possibly on a cheaper model, without switching its own model (CTX-04) | An application needs a cheaper model or a clean context for a sub-task |
+| NS-18 | **Provider server tools** | Server tools such as web search, recorded and counted towards budgets; `pause_turn` continues the loop with the conversation as is | An application needs a server tool |
+| NS-19 | **Refusal fallback** | A declined request is re-run on another model (Claude: server-side `fallbacks`), with the model switch and its effect on replayed blocks made explicit in the conversation | An application's requests are declined often enough to matter (D10) |
 
 ## 6. Non-goals
 
@@ -251,4 +258,7 @@ the architecture only keeps room for it.
 | D7 | One reference application for phase 1: Bookshop Assistant, a console chatbot over PostgreSQL in Docker (§2). | Decided (owner) |
 | D8 | Namespace and package prefix: `Sleepyshark.Officina`. It takes over from `agentic-core`, which is archived. | Decided (owner) |
 | D9 | Audit is separate from events: events stream to the host for display; audit is a durable trail through its own sink (AUD). | Decided |
-| Q1 | Which PostgreSQL client library: a plain data provider or an object mapper? Recommended: the plain provider, as the queries are few and fixed. | Proposed |
+| D10 | No refusal fallback in phase 1. **Reason:** a fallback reply comes from another model, the API keeps routing the conversation there for a while, and after a mid-reply fallback the client must leave earlier blocks out when sending history back. That breaks CTX-04 and MDL-05. A refusal is `Stopped(Refusal)`; NS-19 brings the fallback back when needed. | Decided |
+| D11 | Telemetry is viewed in an OpenTelemetry dashboard run from the application's compose file (the standalone .NET Aspire dashboard: one container, receives traces, metrics and logs). The core only emits (EVT-02); exporting is the host's choice. | Decided (owner) |
+| Q1 | PostgreSQL client library: the plain provider (Npgsql), not an object mapper, as the queries are few and fixed. | Decided (owner) |
+| Q2 | JSON Schema validation under the core's no-dependency rule (the platform can export a schema from a type but not validate one): a small validator in the core for the subset the core itself produces (TOOL-01, OUT-01) and MCP servers commonly use; a full validator package only if a real schema needs it. | Decided (owner) |
