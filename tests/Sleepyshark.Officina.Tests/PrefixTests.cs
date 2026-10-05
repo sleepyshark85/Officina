@@ -22,8 +22,8 @@ public class PrefixTests
         {
             "instructions" => Agents.With(model, "You are a terse assistant.", Agents.SearchTool()),
             "tool description" => Agents.With(model, tools: Agents.SearchTool("Finds books.")),
-            "tool schema" => Agents.With(model, tools: new Tool("search", "Searches the catalogue.", """{"type":"object"}""")),
-            "added tool" => Agents.With(model, tools: [Agents.SearchTool(), new Tool("order", "Places an order.", "{}")]),
+            "tool schema" => Agents.With(model, tools: Agents.Tool("search", "Searches the catalogue.")),
+            "added tool" => Agents.With(model, tools: [Agents.SearchTool(), Agents.Tool("order", "Places an order.")]),
             _ => Agents.With(model, tools: Agents.SearchTool()),
         };
 
@@ -37,7 +37,7 @@ public class PrefixTests
     [Fact]
     public async Task Tools_given_in_another_order_are_the_same_prefix()
     {
-        Tool[] tools = [Agents.SearchTool(), new Tool("order", "Places an order.", "{}")];
+        Tool[] tools = [Agents.SearchTool(), Agents.Tool("order", "Places an order.")];
         var model = new ScriptedModel().Reply("One.").Reply("Two.");
         var conversation = new Conversation();
 

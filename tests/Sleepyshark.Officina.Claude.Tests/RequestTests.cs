@@ -17,8 +17,8 @@ public class RequestTests
 
     private static ModelRequest Request => new(
         [
-            new Tool("search", "Searches the catalogue.", """{"type":"object","properties":{"query":{"type":"string"}},"required":["query"]}"""),
-            new Tool("add_to_cart", "Adds a book to the cart.", """{"type":"object","properties":{"isbn":{"type":"string"},"copies":{"type":"integer"}},"required":["isbn"]}"""),
+            new Tool("search", "Searches the catalogue.", """{"type":"object","properties":{"query":{"type":"string"}},"required":["query"]}""", ToolKind.Read, NoHandler),
+            new Tool("add_to_cart", "Adds a book to the cart.", """{"type":"object","properties":{"isbn":{"type":"string"},"copies":{"type":"integer"}},"required":["isbn"]}""", ToolKind.Write, NoHandler),
         ],
         "You are the assistant of a bookshop.",
         [
@@ -69,6 +69,32 @@ public class RequestTests
         Assert.Equal(2, replayed.Length);
         Assert.Contains("[" + string.Join(",", replayed.Select(block => block.Raw)) + "]", api.Requests[1], StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void Tool_results_go_back_as_one_user_message_in_call_order_with_is_error_on_failures()
+    {
+        using var model = new ClaudeModel("test-key") { Model = "claude-opus-5-5", Effort = ClaudeEffort.Medium };
+        var call = new ContentBlock(null, """{"type":"tool_use","id":"toolu_01","name":"search","input":{"query":"x"}}""", new ToolCall("toolu_01", "search", """{"query":"x"}"""));
+        var request = new ModelRequest([], "Help.",
+        [
+            Message.Of(Role.User, "Find x."),
+            new Message(Role.Assistant, [call]),
+            new Message(Role.User, [new ContentBlock(new ToolResult("toolu_01", "Found x.", false)), new ContentBlock(new ToolResult("toolu_02", "No such book.", true)), new ContentBlock(new ToolResult("toolu_03", "", false))]),
+            Message.Of(Role.User, "Thanks."),
+        ]);
+
+        var messages = ClaudeRequest.Build(model, request).RawBodyData["messages"];
+
+        Assert.Equal(
+            """[{"role":"user","content":[{"type":"text","text":"Find x."}]},"""
+            + """{"role":"assistant","content":[{"type":"tool_use","id":"toolu_01","name":"search","input":{"query":"x"}}]},"""
+            + """{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_01","content":"Found x."},"""
+            + """{"type":"tool_result","tool_use_id":"toolu_02","content":"No such book.","is_error":true},{"type":"tool_result","tool_use_id":"toolu_03"}]},"""
+            + """{"role":"user","content":[{"type":"text","text":"Thanks."}]}]""",
+            messages.GetRawText());
+    }
+
+    private static Task<ToolOutput> NoHandler(JsonElement input, CancellationToken cancellationToken) => throw new NotSupportedException();
 
     private static string ReadRaw(string name) =>
         JsonDocument.Parse(Golden("blocks.json")).RootElement.GetProperty(name).GetString()!;

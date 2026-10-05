@@ -39,13 +39,14 @@ public class ConversationJsonTests
     public void The_JSON_form_is_plain_and_readable()
     {
         var conversation = JsonSerializer.Deserialize<Conversation>(
-            """{"fingerprint":"abc","messages":[{"role":"user","blocks":[{"text":"Hi"}]},{"role":"assistant","blocks":[{"raw":"{\"type\":\"x\"}"}]}]}""")!;
+            """{"id":"c1","fingerprint":"abc","messages":[{"role":"user","blocks":[{"text":"Hi"}]},{"role":"assistant","blocks":[{"raw":"{\"type\":\"x\"}"}]}]}""")!;
 
+        Assert.Equal("c1", conversation.Id);
         Assert.Equal("abc", conversation.Fingerprint);
         Assert.Equal("Hi", conversation.Messages[0].Text);
         Assert.Equal("""{"type":"x"}""", conversation.Messages[1].Blocks[0].Raw);
         Assert.Equal(
-            """{"fingerprint":"abc","messages":[{"role":"user","blocks":[{"text":"Hi"}]},{"role":"assistant","blocks":[{"raw":"{\"type\":\"x\"}"}]}]}""",
+            """{"id":"c1","fingerprint":"abc","messages":[{"role":"user","blocks":[{"text":"Hi"}]},{"role":"assistant","blocks":[{"raw":"{\"type\":\"x\"}"}]}]}""",
             JsonSerializer.Serialize(conversation, Relaxed));
     }
 

@@ -16,9 +16,12 @@ internal static class ClaudeReply
         var read = new List<ModelEvent>();
         foreach (var block in message.Content)
         {
-            var raw = block.Json.GetRawText();
-            var text = block.Json.GetProperty("type").GetString() == "text" ? block.Json.GetProperty("text").GetString() : null;
-            read.Add(new BlockReceived(new ContentBlock(text, raw)));
+            var (json, type) = (block.Json, block.Json.GetProperty("type").GetString());
+            var text = type == "text" ? json.GetProperty("text").GetString() : null;
+            var call = type == "tool_use"
+                ? new ToolCall(json.GetProperty("id").GetString()!, json.GetProperty("name").GetString()!, json.GetProperty("input").GetRawText())
+                : null;
+            read.Add(new BlockReceived(new ContentBlock(text, json.GetRawText(), call)));
         }
 
         read.Add(new UsageReceived(Usage(message.Usage)));

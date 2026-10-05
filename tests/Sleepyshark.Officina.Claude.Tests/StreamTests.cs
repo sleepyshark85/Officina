@@ -35,7 +35,10 @@ public class StreamTests
                 new TextDelta("Looking up "), new TextDelta("«Café Libro»."),
                 new BlockReceived(new ContentBlock(null, """{"type":"thinking","signature":"EqQBCkYIBRgCKkB\u002Bsig/a==","thinking":""}""")),
                 new BlockReceived(new ContentBlock("Looking up «Café Libro».", """{"type":"text","text":"Looking up \u00ABCaf\u00E9 Libro\u00BB."}""")),
-                new BlockReceived(new ContentBlock(null, """{"type":"tool_use","id":"toolu_01","name":"search","input":{"query":"Gaudy Night"}}""")),
+                new BlockReceived(new ContentBlock(
+                    null,
+                    """{"type":"tool_use","id":"toolu_01","name":"search","input":{"query":"Gaudy Night"}}""",
+                    new ToolCall("toolu_01", "search", """{"query":"Gaudy Night"}"""))),
                 new UsageReceived(new Usage(12, 42, 2048, 300)),
                 new ModelStopped(ModelStopReason.ToolUse),
             ],

@@ -2,4 +2,9 @@
 
   <!-- The core depends on the .NET base library only: no packages and no other projects (TEST-05). -->
 
+  <ItemGroup>
+    <!-- TEST-08 compares the schema validator with an established one directly. -->
+    <InternalsVisibleTo Include="Sleepyshark.Officina.Tests" />
+  </ItemGroup>
+
 </Project>

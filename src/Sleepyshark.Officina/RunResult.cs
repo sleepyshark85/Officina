@@ -22,11 +22,17 @@ public enum StopReason
     /// <summary>The model declined the request (MDL-06).</summary>
     Refusal,
 
-    /// <summary>The reply reached the output token limit.</summary>
+    /// <summary>
+    /// The reply reached the output token limit. A reply that also requested tools is not appended, nor are the user message
+    /// and run context it answers, and its tools do not run: its last tool input may be cut short.
+    /// </summary>
     OutputLimit,
 
     /// <summary>The conversation no longer fits the model's context window.</summary>
     ContextFull,
+
+    /// <summary>The run made as many model calls as one run may, and the model still asked for tools; their results are kept.</summary>
+    IterationLimit,
 }
 
 /// <summary>Why a run failed.</summary>
