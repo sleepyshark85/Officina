@@ -171,14 +171,14 @@ sequenceDiagram
     participant P as Tool pipeline
     H->>E: start(definition, conversation, input)
     E->>C: check prefix fingerprint
-    E->>E: append user message, then run context
+    E->>E: hold user message, then run context, as pending
     loop until a stop that ends the run
         E->>E: budget check
         E->>C: compose request
         E->>M: send
         M-->>E: deltas, blocks, usage, stop reason
         E-->>H: events
-        E->>E: append reply exactly as received
+        E->>E: append pending messages, then reply exactly as received
         E-->>H: conversation appended (host may persist)
         opt tool_use
             E->>P: run tool calls (a write is audited before it runs)
@@ -197,12 +197,13 @@ sequenceDiagram
 | `end` | Validate output if a contract exists, then `Completed` (or `Failed` if it does not validate) |
 | `max_tokens`, `refusal`, `context_full` | `Stopped` with that reason |
 | Budget exceeded before a call | `Stopped(Budget)` |
-| Host cancels | `Stopped(Cancelled)`. A reply cut off mid-stream is not appended. Once a reply with tool calls is appended, finished calls keep their results and calls not yet started get a "cancelled" error result; no further model call |
-| Unknown, or failure after retries | `Failed` |
+| Host cancels | `Stopped(Cancelled)`. A reply cut off mid-stream is not appended, nor are the user message and run context it answers. Once a reply with tool calls is appended, finished calls keep their results and calls not yet started get a "cancelled" error result; no further model call |
+| Unknown, or failure after retries | `Failed`; with no reply, the pending user message and run context are not appended |
 
 Audit entries are written at each step that AUD-01 names; the run's start and end bracket them.
 
-After every step the conversation is valid to resume: a reply is followed by the results of all its tool calls before
+After every step the conversation is valid to resume: the user message and run context enter it only together with
+the reply that answers them, and a reply is followed by the results of all its tool calls before
 the next request, even when cancelled. Each append is an event, so the host can persist after every step and a crash
 loses at most the step in flight. The audit trail still holds a write that ran in that step (AUD-02).
 

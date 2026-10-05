@@ -5,7 +5,9 @@ namespace Sleepyshark.Officina.Testing;
 
 /// <summary>
 /// A model that answers with replies scripted in advance, in order, and records every request (TEST-01). It needs no
-/// network or API key, and is safe to call from concurrent runs.
+/// network or API key, and is safe to call from concurrent runs. Like the Claude API, it rejects a request whose
+/// messages do not start with a user message, repeat a role back to back, or have an operator message that is neither
+/// last nor followed by an assistant message.
 /// </summary>
 public sealed class ScriptedModel : IModel
 {
@@ -64,6 +66,7 @@ public sealed class ScriptedModel : IModel
             replies.TryDequeue(out reply);
         }
 
+        CheckRoles(request);
         if (reply is null)
         {
             throw new InvalidOperationException($"The scripted model received request {Requests.Count} but has no reply left.");
@@ -74,6 +77,24 @@ public sealed class ScriptedModel : IModel
             await Task.Yield();
             cancellationToken.ThrowIfCancellationRequested();
             yield return modelEvent;
+        }
+    }
+
+    private static void CheckRoles(ModelRequest request)
+    {
+        var roles = request.Messages.Select(message => message.Role).ToList();
+        for (var index = 0; index < roles.Count; index++)
+        {
+            var problem =
+                index == 0 && roles[0] != Role.User ? "does not start with a user message"
+                : index > 0 && roles[index] == roles[index - 1] ? $"has two {roles[index]} messages in a row"
+                : roles[index] == Role.Operator && index + 1 < roles.Count && roles[index + 1] != Role.Assistant
+                    ? "has an operator message that is neither last nor followed by an assistant message"
+                : null;
+            if (problem is not null)
+            {
+                throw new InvalidOperationException($"The request {problem} (message {index + 1} of {string.Join(", ", roles)}).");
+            }
         }
     }
 

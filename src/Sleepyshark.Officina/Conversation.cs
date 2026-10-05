@@ -10,6 +10,8 @@ namespace Sleepyshark.Officina;
 /// </summary>
 public sealed class Conversation
 {
+    private int running;
+
     /// <summary>
     /// The prefix fingerprint of the agent definition the conversation was started with; null before its first run. A run
     /// of a definition with another fingerprint fails without calling the model (CTX-04).
@@ -22,6 +24,16 @@ public sealed class Conversation
     [JsonInclude]
     [JsonPropertyName("messages")]
     public ImmutableArray<Message> Messages { get; private set; } = [];
+
+    internal void StartRun()
+    {
+        if (Interlocked.Exchange(ref running, 1) == 1)
+        {
+            throw new InvalidOperationException("Another run is using this conversation; one run at a time may use it.");
+        }
+    }
+
+    internal void EndRun() => Volatile.Write(ref running, 0);
 
     internal void Bind(string fingerprint) => Fingerprint = fingerprint;
 
@@ -72,6 +84,7 @@ public sealed record Message
 
     public bool Equals(Message? other) => other is not null && Role == other.Role && Blocks.SequenceEqual(other.Blocks);
 
+    // Equal messages have equal roles and block counts; hashing the blocks too would cost more than it saves.
     public override int GetHashCode() => HashCode.Combine(Role, Blocks.Length);
 }
 
@@ -106,7 +119,10 @@ public sealed record ContentBlock
     public string? Raw { get; }
 }
 
-/// <summary>Writes a block's raw JSON verbatim and reads it back as the exact text it was written as (AGT-06).</summary>
+/// <summary>
+/// Stores a block's raw JSON as a JSON string, so it reads back as the exact text it was, even after a store that
+/// normalizes JSON (such as PostgreSQL <c>jsonb</c>) has rewritten the conversation's own JSON (AGT-06).
+/// </summary>
 internal sealed class ContentBlockConverter : JsonConverter<ContentBlock>
 {
     public override ContentBlock Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
@@ -114,7 +130,7 @@ internal sealed class ContentBlockConverter : JsonConverter<ContentBlock>
         using var document = JsonDocument.ParseValue(ref reader);
         var root = document.RootElement;
         var text = root.TryGetProperty("text", out var textElement) ? textElement.GetString() : null;
-        var raw = root.TryGetProperty("raw", out var rawElement) ? rawElement.GetRawText() : null;
+        var raw = root.TryGetProperty("raw", out var rawElement) ? rawElement.GetString() : null;
         return new ContentBlock(text, raw);
     }
 
@@ -128,8 +144,7 @@ internal sealed class ContentBlockConverter : JsonConverter<ContentBlock>
 
         if (value.Raw is not null)
         {
-            writer.WritePropertyName("raw");
-            writer.WriteRawValue(value.Raw);
+            writer.WriteString("raw", value.Raw);
         }
 
         writer.WriteEndObject();

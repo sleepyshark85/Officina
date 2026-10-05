@@ -63,13 +63,20 @@ public sealed record AgentDefinition
     /// Runs the agent on <paramref name="conversation"/> (a new one, or one this definition's runs used before) with a new
     /// user <paramref name="message"/>, and streams what happens, ending with <see cref="RunEnded"/>.
     /// <paramref name="context"/>, if given, is appended after the message as an operator message (CTX-02). Cancelling ends
-    /// the run as <see cref="StopReason.Cancelled"/> (AGT-05).
+    /// the run as <see cref="StopReason.Cancelled"/> (AGT-05). The message and context are appended only together with the
+    /// model's reply, so a run that gets none leaves the conversation unchanged. A host that stops reading the events
+    /// abandons the run: the model call is disposed and no <see cref="RunEnded"/> comes. One run at a time may use a
+    /// conversation; starting another throws <see cref="InvalidOperationException"/>.
     /// </summary>
     public IAsyncEnumerable<RunEvent> StreamAsync(
         Conversation conversation, string message, string? context = null, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(conversation);
-        ArgumentException.ThrowIfNullOrEmpty(message);
+        ArgumentException.ThrowIfNullOrWhiteSpace(message);
+        if (context is not null)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(context);
+        }
         return RunEngine.StreamAsync(this, conversation, message, context, cancellationToken);
     }
 

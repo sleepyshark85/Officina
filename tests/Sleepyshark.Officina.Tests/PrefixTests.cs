@@ -54,7 +54,7 @@ public class PrefixTests
         // Before the restart: two turns, with run context, and a reasoning block kept as raw JSON.
         var before = new ScriptedModel()
             .Reply(
-                new BlockReceived(new ContentBlock(null, """{ "type": "thinking", "thinking": "café", "signature": "c2ln" }""")),
+                new BlockReceived(new ContentBlock(null, """{ "type": "thinking", "thinking": "caf\u00e9", "signature": "c2ln" }""")),
                 new BlockReceived(ScriptedModel.TextBlock("Hello.")),
                 new ModelStopped(ModelStopReason.End))
             .Reply("Paris.");

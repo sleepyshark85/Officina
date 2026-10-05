@@ -43,7 +43,7 @@ public class RunTests
     }
 
     [Fact]
-    public async Task Events_stream_text_usage_each_append_and_the_result_last()
+    public async Task Events_stream_text_and_usage_then_each_append_with_the_reply_and_the_result_last()
     {
         var model = new ScriptedModel().Reply(
             new TextDelta("Hel"),
@@ -58,12 +58,12 @@ public class RunTests
 
         Assert.Collection(
             events,
-            e => Assert.Equal(Role.User, Assert.IsType<ConversationAppended>(e).Message.Role),
-            e => Assert.Equal(Role.Operator, Assert.IsType<ConversationAppended>(e).Message.Role),
             e => Assert.Equal("Hel", Assert.IsType<TextStreamed>(e).Text),
             e => Assert.Equal("lo", Assert.IsType<TextStreamed>(e).Text),
             e => Assert.Equal(new Usage(100, 5, 0, 900), Assert.IsType<UsageReported>(e).Usage),
             e => Assert.Equal(new Usage(0, 7, 0, 0), Assert.IsType<UsageReported>(e).Usage),
+            e => Assert.Equal(Role.User, Assert.IsType<ConversationAppended>(e).Message.Role),
+            e => Assert.Equal(Role.Operator, Assert.IsType<ConversationAppended>(e).Message.Role),
             e => Assert.Equal(Role.Assistant, Assert.IsType<ConversationAppended>(e).Message.Role),
             e => Assert.Equal(new Usage(100, 12, 0, 900), Assert.IsType<Completed>(Assert.IsType<RunEnded>(e).Result).Usage));
         Assert.All(events.OfType<ConversationAppended>(), e => Assert.Same(conversation, e.Conversation));
@@ -126,7 +126,7 @@ public class RunTests
     }
 
     [Fact]
-    public async Task A_model_failure_ends_the_run_as_failed_and_appends_no_reply()
+    public async Task A_model_failure_ends_the_run_as_failed_and_appends_nothing()
     {
         var model = new ScriptedModel().Fail(new InvalidOperationException("Overloaded after retries."), new TextDelta("Par"));
         var conversation = new Conversation();
@@ -134,7 +134,7 @@ public class RunTests
         var result = await Agents.With(model).RunAsync(conversation, "Hi", cancellationToken: Ct);
 
         Assert.Equal(new Failed(FailureReason.ModelError, "Overloaded after retries.", default), result);
-        Assert.Equal([Role.User], conversation.Messages.Select(message => message.Role));
+        Assert.Empty(conversation.Messages);
     }
 
     [Fact]
@@ -146,7 +146,7 @@ public class RunTests
         var result = await Agents.With(model).RunAsync(conversation, "Hi", cancellationToken: Ct);
 
         Assert.Equal(FailureReason.ModelError, Assert.IsType<Failed>(result).Reason);
-        Assert.Single(conversation.Messages);
+        Assert.Empty(conversation.Messages);
     }
 
     [Fact]
@@ -155,5 +155,79 @@ public class RunTests
         var result = await Agents.With(new ScriptedModel()).RunAsync(new Conversation(), "Hi", cancellationToken: Ct);
 
         Assert.Contains("no reply left", Assert.IsType<Failed>(result).Error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task A_model_that_throws_before_streaming_fails_the_run_instead_of_throwing()
+    {
+        var agent = new AgentDefinition { Model = new ThrowingModel(), Instructions = Agents.Instructions };
+        var conversation = new Conversation();
+
+        var result = await agent.RunAsync(conversation, "Hi", cancellationToken: Ct);
+
+        Assert.Equal(new Failed(FailureReason.ModelError, "Bad settings.", default), result);
+        Assert.Empty(conversation.Messages);
+    }
+
+    [Fact]
+    public async Task An_end_with_no_content_appends_nothing()
+    {
+        var model = new ScriptedModel().Reply(new ModelStopped(ModelStopReason.End));
+        var conversation = new Conversation();
+
+        var result = await Agents.With(model).RunAsync(conversation, "Hi", "Date: 2026-10-05.", Ct);
+
+        Assert.Equal(new Completed("", default), result);
+        Assert.Empty(conversation.Messages);
+    }
+
+    [Fact]
+    public async Task After_a_failed_run_with_context_the_next_request_is_valid()
+    {
+        var model = new ScriptedModel().Fail(new InvalidOperationException("Overloaded.")).Reply("Hello.");
+        var agent = Agents.With(model);
+        var conversation = new Conversation();
+
+        Assert.IsType<Failed>(await agent.RunAsync(conversation, "Hi", "Date: 2026-10-05.", Ct));
+        var result = await agent.RunAsync(conversation, "Hi again", "Date: 2026-10-05.", Ct);
+
+        Assert.Equal("Hello.", Assert.IsType<Completed>(result).Text);
+        Assert.Equal([Role.User, Role.Operator], model.Requests[1].Messages.Select(message => message.Role));
+        Assert.Equal([Role.User, Role.Operator, Role.Assistant], conversation.Messages.Select(message => message.Role));
+    }
+
+    [Fact]
+    public async Task Whitespace_only_messages_and_context_are_rejected()
+    {
+        var agent = Agents.With(new ScriptedModel());
+
+        await Assert.ThrowsAsync<ArgumentException>(() => agent.RunAsync(new Conversation(), " ", cancellationToken: Ct));
+        await Assert.ThrowsAsync<ArgumentException>(() => agent.RunAsync(new Conversation(), "Hi", "\n", Ct));
+    }
+
+    [Fact]
+    public async Task The_scripted_model_rejects_role_sequences_the_API_rejects()
+    {
+        ModelRequest Request(params Role[] roles) => new([], "A", [.. roles.Select(role => Message.Of(role, "x"))]);
+        var model = new ScriptedModel();
+
+        foreach (var request in new[] { Request(Role.Assistant), Request(Role.User, Role.User), Request(Role.User, Role.Operator, Role.User) })
+        {
+            await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            {
+                await foreach (var _ in model.StreamAsync(request, Ct))
+                {
+                }
+            });
+        }
+    }
+
+    /// <summary>A model that fails before it returns a stream, as one that checks its request eagerly may.</summary>
+    private sealed class ThrowingModel : IModel
+    {
+        public string Settings => "throwing";
+
+        public IAsyncEnumerable<ModelEvent> StreamAsync(ModelRequest request, CancellationToken cancellationToken) =>
+            throw new ArgumentException("Bad settings.");
     }
 }

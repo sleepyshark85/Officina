@@ -33,7 +33,7 @@ public sealed record TextDelta(string Text) : ModelEvent;
 /// <summary>A complete content block of the reply, in reply order.</summary>
 public sealed record BlockReceived(ContentBlock Block) : ModelEvent;
 
-/// <summary>Tokens the call used. A call may report several times; the reports add up.</summary>
+/// <summary>Tokens the call used since its previous report: reports are increments, and the run adds them up.</summary>
 public sealed record UsageReceived(Usage Usage) : ModelEvent;
 
 /// <summary>Why the model stopped: the reply's last event.</summary>
