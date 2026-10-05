@@ -36,6 +36,43 @@ public class LongConversationTests(BookshopDatabase database) : IClassFixture<Bo
     }
 
     [DatabaseFact]
+    public async Task A_compacting_reply_without_text_says_so()
+    {
+        var model = Model()
+            .Reply(
+                new BlockReceived(new ContentBlock(null, """{"type":"compaction","content":"Sam searched the catalogue."}""")),
+                new BlockReceived(new ContentBlock(null, """{"type":"thinking","thinking":"","signature":"c2ln"}""")),
+                new CompactionReported(85_836, 2_756), new ModelStopped(ModelStopReason.End))
+            .Reply(new BlockReceived(new ContentBlock(null, """{"type":"thinking","thinking":"","signature":"c2ln"}""")), new ModelStopped(ModelStopReason.End));
+
+        var transcript = await RunAsync(database, model, ["Sam", "How many books?", "And now?", "/quit"], demo: true);
+
+        InOrder(
+            transcript,
+            "  ~ Conversation compacted: 85,836 tokens summarized into 2,756.",
+            "[The conversation was compacted and the reply has no text. Please ask again.]",
+            "you> And now?",
+            "[The reply has no text. Please ask again.]");
+    }
+
+    [DatabaseFact]
+    public async Task A_clearing_the_provider_repeats_is_shown_once_and_a_new_one_again()
+    {
+        var model = Model()
+            .Reply([.. SayThenCall("One.", Call("c1", "get_book", new { bookId = 1 }))[..^1], new ClearingReported(42_452, 3), new ModelStopped(ModelStopReason.ToolUse)])
+            .Reply([.. SayThenCall("Two.", Call("c2", "get_book", new { bookId = 2 }))[..^1], new ClearingReported(42_359, 3), new ModelStopped(ModelStopReason.ToolUse)])
+            .Reply(new TextDelta("Done."), new BlockReceived(ScriptedModel.TextBlock("Done.")), new ClearingReported(56_912, 6), new ModelStopped(ModelStopReason.End));
+
+        var transcript = await RunAsync(database, model, ["Sam", "Look up books 1 and 2.", "/audit", "/quit"], demo: true);
+
+        InOrder(transcript, "  ~ Old tool results cleared: 3 tool calls, 42,452 tokens.", "Two.", "  ~ Old tool results cleared: 6 tool calls, 56,912 tokens.");
+        Assert.DoesNotContain("42,359 tokens.", transcript.Split("you> /audit")[0], StringComparison.Ordinal);
+
+        // The audit trail keeps every report, as the provider made it.
+        Assert.Equal(3, transcript.Split("you> /audit")[1].Split("Results of ").Length - 1);
+    }
+
+    [DatabaseFact]
     public async Task Outside_demo_mode_compaction_and_clearing_come_later()
     {
         var model = Model().Reply("Hello.");

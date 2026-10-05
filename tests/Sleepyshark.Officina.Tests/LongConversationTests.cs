@@ -85,6 +85,14 @@ public class LongConversationTests
     }
 
     [Fact]
+    public void An_empty_setting_leaves_the_prefix_as_no_setting_does()
+    {
+        var model = Capable();
+
+        Assert.Equal(Agents.With(model).Fingerprint(), (Agents.With(model) with { ContextManagement = new ContextManagement() }).Fingerprint());
+    }
+
+    [Fact]
     public void Thresholds_must_be_positive()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => new ContextManagement { CompactAt = 0 });

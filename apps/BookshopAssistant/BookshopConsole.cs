@@ -352,7 +352,7 @@ public sealed partial class BookshopConsole(
         var conversation = session.Conversation;
         var left = budgets.Session - session.Cost;
         var budgeted = agent with { Budget = new Budget { Cost = Math.Max(0, Math.Min(budgets.Reply, left)) } };
-        var (saveFailed, labelled) = (false, false);
+        var (saveFailed, labelled, compacted) = (false, false, false);
 
         // What the reply has spent so far, from each model call's usage, so every save stores the session's whole spend.
         var (spent, spentCost) = (default(Usage), 0m);
@@ -381,11 +381,15 @@ public sealed partial class BookshopConsole(
                     case ApprovalAsked asked:
                         await AskApprovalAsync(asked.Call, cancellation.Token);
                         break;
-                    case ConversationCompacted compacted:
+                    case ConversationCompacted compaction:
+                        compacted = true;
                         await WriteLineAsync(string.Create(
-                            CultureInfo.InvariantCulture, $"  ~ Conversation compacted: {compacted.Tokens:N0} tokens summarized into {compacted.SummaryTokens:N0}."));
+                            CultureInfo.InvariantCulture, $"  ~ Conversation compacted: {compaction.Tokens:N0} tokens summarized into {compaction.SummaryTokens:N0}."));
                         break;
-                    case ToolResultsCleared cleared:
+
+                    // The provider clears again on every call, as each resends the whole conversation: the line shows only a change.
+                    case ToolResultsCleared cleared when cleared.ToolCalls != session.ClearedToolCalls:
+                        session.ClearedToolCalls = cleared.ToolCalls;
                         await WriteLineAsync(string.Create(
                             CultureInfo.InvariantCulture, $"  ~ Old tool results cleared: {cleared.ToolCalls} tool calls, {cleared.Tokens:N0} tokens."));
                         break;
@@ -413,6 +417,9 @@ public sealed partial class BookshopConsole(
 
                         await WriteLineAsync(result switch
                         {
+                            Completed { Text: var text } when string.IsNullOrWhiteSpace(text) => compacted
+                                ? "[The conversation was compacted and the reply has no text. Please ask again.]"
+                                : "[The reply has no text. Please ask again.]",
                             Completed => "",
                             Stopped { Reason: StopReason.Cancelled } => "[Cancelled.]",
                             Stopped { Reason: StopReason.Budget } when left <= budgets.Reply => string.Create(
@@ -599,6 +606,9 @@ public sealed partial class BookshopConsole(
         public decimal Cost { get; set; }
 
         public string? Context { get; set; }
+
+        /// <summary>How many tool calls the last clearing line named, so a clearing the provider repeats is shown once.</summary>
+        public int? ClearedToolCalls { get; set; }
 
         /// <summary>Whether the session has a row in the store yet.</summary>
         public bool Stored { get; set; }

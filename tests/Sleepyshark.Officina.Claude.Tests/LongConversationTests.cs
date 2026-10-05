@@ -39,10 +39,11 @@ public class LongConversationTests
 
         var built = ClaudeRequest.Build(model, Hi with { ContextManagement = new ContextManagement { CompactAt = 60_000 } });
         var plain = ClaudeRequest.Build(model, Hi);
+        var empty = ClaudeRequest.Build(model, Hi with { ContextManagement = new ContextManagement() });
 
         Assert.Equal(["compact-2026-01-12"], built.Betas!.Select(beta => beta.Raw()));
-        Assert.DoesNotContain("context_management", plain.RawBodyData.Keys);
-        Assert.Null(plain.Betas);
+        Assert.All([plain, empty], request => Assert.DoesNotContain("context_management", request.RawBodyData.Keys));
+        Assert.All([plain, empty], request => Assert.Null(request.Betas));
     }
 
     [Fact]
