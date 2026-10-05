@@ -200,7 +200,7 @@ public class ToolLoopTests
     {
         { new ModelStopped(ModelStopReason.ContextFull), new Stopped(StopReason.ContextFull, null, default) },
         { new ModelStopped(ModelStopReason.Refusal, "cyber"), new Stopped(StopReason.Refusal, "cyber", default) },
-        { new ModelStopped(ModelStopReason.End), new Completed("Let me look.", default) },
+        { new ModelStopped(ModelStopReason.End), new Failed(FailureReason.UnexpectedStop, "The model's reply asked for tools but did not stop for them.", default) },
         { new ModelStopped(ModelStopReason.Unknown, "pause_turn"), new Failed(FailureReason.UnexpectedStop, "The model stopped for a reason the run cannot act on: pause_turn.", default) },
     };
 

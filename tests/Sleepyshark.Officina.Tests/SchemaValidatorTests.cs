@@ -88,8 +88,11 @@ public class SchemaValidatorTests
             pair => $"schema {pair.Item1} value {pair.Item2}",
             cases: 2_000);
 
-        // The cases test both answers, not mostly one.
-        Assert.InRange(accepted, 400, 1_600);
+        // The cases test both answers, not mostly one (a replayed single seed is one case, so the range cannot hold).
+        if (Environment.GetEnvironmentVariable("OFFICINA_SEED") is not { Length: > 0 })
+        {
+            Assert.InRange(accepted, 400, 1_600);
+        }
     }
 
     [Fact]

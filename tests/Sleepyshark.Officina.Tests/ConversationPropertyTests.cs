@@ -147,7 +147,7 @@ public class ConversationPropertyTests
 
             var result = Assert.IsType<RunEnded>(events[^1]).Result;
             Assert.Single(events.OfType<RunEnded>());
-            Assert.True(result is not Failed failed || failed.Error == "boom", $"The run failed: {result}");
+            Assert.True(result is not Failed failed || failed.Error == "boom" || (run.Ending == Ending.EndWithTools && failed.Reason == FailureReason.UnexpectedStop), $"The run failed: {result}");
             Assert.Null(RoleSequence.Problem(conversation.Messages));
             var calls = conversation.Messages.SelectMany(message => message.Blocks).Select(block => block.ToolCall?.Id).OfType<string>().ToList();
             var results = conversation.Messages.SelectMany(message => message.Blocks).Select(block => block.ToolResult?.CallId).OfType<string>().ToList();

@@ -80,11 +80,13 @@ internal static class RunEngine
             // A reply cut off before its stop reason is not appended (AGT-05), nor is one without content. Nor is one that
             // requested tools but stopped for another reason (output limit, context full, refusal, end, unknown): its calls
             // do not run, as its last tool input may be cut short (the SDK keeps an empty one), and appending it would leave
-            // calls without results, which the provider rejects. The run ends with the result its stop reason maps to.
+            // calls without results, which the provider rejects. The run ends with the result its stop reason maps to; an end with calls fails, as a completed
+            // run would report an answer the history does not hold.
             if (reply.Error is not null || reply.Stop is null || reply.Blocks.Count == 0 || (toolCalls.Count > 0 && reply.Stop.Reason != ModelStopReason.ToolUse))
             {
                 result.Value = reply.Error is not null ? new Failed(FailureReason.ModelError, reply.Error, usage)
                     : reply.Stop is null ? new Stopped(StopReason.Cancelled, null, usage)
+                    : toolCalls.Count > 0 && reply.Stop.Reason == ModelStopReason.End ? new Failed(FailureReason.UnexpectedStop, "The model's reply asked for tools but did not stop for them.", usage)
                     : Result(reply.Stop, reply.Blocks, usage);
                 yield break;
             }
