@@ -192,9 +192,13 @@ public static class MemoryTool
                     to = to == -1 ? lines.Length : to;
                 }
 
+                // A long view ends at a line break in its second half, or else at the limit.
                 var numbered = Numbered(lines, from, to);
-                return new($"Here's the content of {path} with line numbers:\n{(numbered.Length <= MaxViewLength ? numbered
-                    : $"{numbered[..Math.Max(numbered.LastIndexOf('\n', MaxViewLength), MaxViewLength / 2)]}\n[Truncated at {MaxViewLength} characters: view the rest with view_range.]")}");
+                var view = numbered.Length <= MaxViewLength ? numbered
+                    : numbered.LastIndexOf('\n', MaxViewLength) is var end and >= MaxViewLength / 2 ? numbered[..end]
+                    : AgentDefinition.Cut(numbered, MaxViewLength);
+                return new($"Here's the content of {path} with line numbers:\n{(view.Length == numbered.Length ? view
+                    : $"{view}\n[Truncated at {MaxViewLength} characters: view the rest with view_range.]")}");
             }
 
             if (!IsDirectory(at))

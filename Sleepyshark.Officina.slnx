@@ -1,5 +1,8 @@
 <Solution>
   <Folder Name="/samples/">
+    <Project Path="samples/background-agent/BackgroundAgent.csproj" />
+    <Project Path="samples/chat-assistant/ChatAssistant.csproj" />
+    <Project Path="samples/extraction/Extraction.csproj" />
     <Project Path="samples/hello/Hello.csproj" />
   </Folder>
   <Folder Name="/src/">
@@ -15,6 +18,7 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/BookshopAssistant.Tests/BookshopAssistant.Tests.csproj" />
+    <Project Path="tests/Samples.Tests/Samples.Tests.csproj" />
     <Project Path="tests/Sleepyshark.Officina.Claude.Tests/Sleepyshark.Officina.Claude.Tests.csproj" />
     <Project Path="tests/Sleepyshark.Officina.Dependencies.Tests/Sleepyshark.Officina.Dependencies.Tests.csproj" />
     <Project Path="tests/Sleepyshark.Officina.Mcp.FakeServer/Sleepyshark.Officina.Mcp.FakeServer.csproj" />

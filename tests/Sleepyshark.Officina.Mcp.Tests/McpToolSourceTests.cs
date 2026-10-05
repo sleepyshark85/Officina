@@ -322,7 +322,7 @@ public sealed class McpToolSourceTests
         var connecting = McpToolSource.ConnectAsync(silent, [], cancellation.Token);
 
         // The server has started, and will never answer: the connect is cancelled while it waits for the answer.
-        while (!File.Exists(processIdFile) || new FileInfo(processIdFile).Length == 0)
+        while (!File.Exists(processIdFile))
         {
             await Task.Delay(20, TestContext.Current.CancellationToken);
         }

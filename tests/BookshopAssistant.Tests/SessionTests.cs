@@ -109,6 +109,20 @@ public class SessionTests(BookshopDatabase database) : IClassFixture<BookshopDat
     }
 
     [DatabaseFact]
+    public async Task APP_02_help_lists_every_command_and_calls_no_model()
+    {
+        var model = Model();
+
+        var transcript = await RunAsync(database, model, ["Sam", "/help", "/quit"]);
+
+        InOrder(
+            transcript,
+            "you> /help", "/help ", "/new ", "/sessions ", "/resume <id> ", "/cost ", "/audit [<id>] ", "/memory ", "/quit ",
+            "Ctrl+C stops a reply in progress.");
+        Assert.Empty(model.Requests);
+    }
+
+    [DatabaseFact]
     public async Task APP_14_the_status_line_and_cost_show_the_tokens_cache_share_and_cost_of_the_reply_and_the_session()
     {
         // At Opus 5.5's price: 100 × $4 + 50 × $20 + 900 × $0.20 + 200 × $5 per million = $0.00258; then $0.00046.

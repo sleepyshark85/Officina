@@ -7,7 +7,9 @@ using Sleepyshark.Officina.Testing;
 // With "silent <file>", it writes its process id to the file and never answers, until its input ends.
 if (args is ["silent", var processIdFile])
 {
-    await File.WriteAllTextAsync(processIdFile, Environment.ProcessId.ToString(CultureInfo.InvariantCulture));
+    // Written aside and then moved, so the test never reads the file while it is still open (Windows refuses that).
+    await File.WriteAllTextAsync(processIdFile + ".tmp", Environment.ProcessId.ToString(CultureInfo.InvariantCulture));
+    File.Move(processIdFile + ".tmp", processIdFile);
     await Console.In.ReadToEndAsync();
     return;
 }

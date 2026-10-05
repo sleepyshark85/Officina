@@ -5,6 +5,7 @@
 // the exports folder, through the filesystem MCP server the compose file runs in Docker (APP-12). Demo mode (APP-17), with
 // --demo or BOOKSHOP_DEMO=1, compacts and clears old tool results early enough to see in a short session. What the
 // assistant remembers for each staff member is kept under BOOKSHOP_DATA, by default the data folder of the current one.
+// BOOKSHOP_TELEMETRY_CONTENT=1 puts message text and tool inputs and results in the traces too (EVT-04), for debugging.
 using BookshopAssistant;
 using Microsoft.Extensions.Logging;
 using Npgsql;
@@ -100,6 +101,11 @@ await using var stopExports = exports;
 var password = new NpgsqlConnectionStringBuilder(connectionString).Password;
 var agent = BookshopAgent.Create(
     model, new BookshopTools(database), memory, console, audit, password is null ? [] : [password], TimeProvider.System, exports.Tools, demo);
+if (Environment.GetEnvironmentVariable("BOOKSHOP_TELEMETRY_CONTENT") == "1")
+{
+    agent = agent with { TelemetryContent = true };
+}
+
 if (demo)
 {
     await Console.Out.WriteLineAsync("Demo mode: compaction from 50,000 input tokens, and old tool results cleared after 4 tool calls.");
