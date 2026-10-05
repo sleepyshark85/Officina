@@ -10,7 +10,7 @@ solution. How it holds the conversation: messages are raw JSON, and each assista
 The request is rebuilt with `MessageCreateParams.FromRawUnchecked`. An HTTP handler captures each request body so the
 replay can be checked byte for byte.
 
-**Verdict:** all seven features work on Opus 5.5 with the beta types. Four have caveats that change phase 1 details:
+**Verdict:** all seven features work on Opus 5.5 with the beta types. Five have caveats; these change phase 1 details:
 the compaction trigger minimum, how compaction is reported, the structured-output schema subset, and progress notes.
 
 ## Findings
