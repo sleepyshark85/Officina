@@ -24,7 +24,7 @@ every phase 1 capability in one place.
 
 | ID | Requirement |
 |---|---|
-| APP-01 | A console chat: the user types a message, the reply streams as it is generated, and tool activity is shown as it happens (which tool, what for, the outcome). While the model works, its short progress notes are shown (Claude: thinking display `updates`), so there is no silent pause. |
+| APP-01 | A console chat: the user types a message, the reply streams as it is generated, and tool activity is shown as it happens (which tool, what for, the outcome). Text the model writes between tool calls is shown as it streams, so there is no silent pause; reasoning is not shown (its text may be empty, spike S02). |
 | APP-02 | Commands: `/help`, `/new` (new session), `/sessions` (list, with titles), `/resume <id>`, `/memory` (show what is remembered), `/cost` (session usage and cost), `/audit [<session id>]` (audit entries of the current or a given session, APP-16), `/quit`. |
 | APP-03 | Ctrl+C cancels the reply in progress, not the application; the session stays usable. |
 | APP-04 | The database is PostgreSQL in Docker (one compose file), seeded with books, authors, customers, orders and stock. The application only reaches it through its tools. |
@@ -40,7 +40,7 @@ every phase 1 capability in one place.
 | APP-14 | After each reply a status line shows tokens, cache read share, the reply's cost and the session's cost. A per-reply and a per-session budget apply; reaching one stops the reply and says why. |
 | APP-15 | When a session is left (`/new`, `/resume`, `/quit`), a separate **stateless** agent with **typed output** writes the session's title, a summary and the changes made, which `/sessions` shows. A session left without one (a crash) is summarized the next time `/sessions` lists it. |
 | APP-16 | Audit entries go to a database table through the application's own audit sink. `/audit` shows a session's entries in order, grouped by run: time, kind, tool and outcome, approvals, cost, and a link to the run's trace in the telemetry dashboard (APP-20). |
-| APP-17 | A demo mode lowers the compaction and tool-result clearing thresholds so both are visible in a short session, and reports each when it happens (HIST-01, HIST-02). |
+| APP-17 | A demo mode lowers the compaction and tool-result clearing thresholds to the provider's minimum (Claude: compaction at 50,000 input tokens) and reports each when it happens (HIST-01, HIST-02). Clearing shows after a few tool calls; the demo script reaches compaction with a few large catalogue searches, about $0.25 per compaction. |
 | APP-18 | If the database stops mid-session, tools return errors, the assistant says so, and the session continues once it is back. |
 | APP-19 | A demo script (`docs/demo.md`) walks through every capability above with the prompts to type and what to expect. |
 | APP-20 | **Observability.** The compose file also runs an OpenTelemetry dashboard (D11). The application exports the core's traces and metrics (EVT-02) and its own logs to it, so a reply can be followed as a trace: run → model calls → tool calls, with tokens, cache reads, cost, approval wait and errors on each step. Metrics show tokens, cost, cache hit ratio, latency, tool outcomes and approvals over time. The demo script shows how to go from an `/audit` entry to its trace and back. |
@@ -123,7 +123,7 @@ The core serves any agentic purpose, not only the reference application. These r
 | HIST-01 | A conversation that nears the context window is compacted by the provider's server-side compaction (Claude: `compact` edit), at a token threshold the agent sets. The compaction block is kept in the conversation (MDL-05). |
 | HIST-02 | Old tool results can be cleared by the provider's server-side context editing (Claude: `clear_tool_uses`), with a threshold and a number of recent results to keep. |
 | HIST-03 | The core never edits or drops earlier messages itself (principle 5). A provider without server-side compaction reports it, and the run ends as `Stopped(ContextFull)` when the window is reached. |
-| HIST-04 | Compaction and clearing are reported as events with the tokens they removed. |
+| HIST-04 | Compaction and clearing are reported as events with what the provider reports about them (Claude: tokens summarized for compaction, tokens and tool uses cleared for clearing). |
 
 ### Memory (MEM)
 
@@ -260,5 +260,6 @@ the architecture only keeps room for it.
 | D9 | Audit is separate from events: events stream to the host for display; audit is a durable trail through its own sink (AUD). | Decided |
 | D10 | No refusal fallback in phase 1. **Reason:** a fallback reply comes from another model, the API keeps routing the conversation there for a while, and after a mid-reply fallback the client must leave earlier blocks out when sending history back. That breaks CTX-04 and MDL-05. A refusal is `Stopped(Refusal)`; NS-19 brings the fallback back when needed. | Decided |
 | D11 | Telemetry is viewed in an OpenTelemetry dashboard run from the application's compose file (the standalone .NET Aspire dashboard: one container, receives traces, metrics and logs). The core only emits (EVT-02); exporting is the host's choice. | Decided (owner) |
+| D12 | Compaction is the provider's threshold compaction (HIST-01). The newer on-demand compaction (Claude: `compact-2026-09-04`) is not used: it has the client drop the compacted messages from the front of the history, which principle 5 forbids. | Proposed |
 | Q1 | PostgreSQL client library: the plain provider (Npgsql), not an object mapper, as the queries are few and fixed. | Decided (owner) |
 | Q2 | JSON Schema validation under the core's no-dependency rule (the platform can export a schema from a type but not validate one): a small validator in the core for the subset the core itself produces (TOOL-01, OUT-01) and MCP servers commonly use; a full validator package only if a real schema needs it. | Decided (owner) |

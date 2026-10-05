@@ -331,10 +331,10 @@ How the Claude adapter realizes the model contract. These are design choices, no
 |---|---|
 | Cache points | An explicit breakpoint on the last instructions block; automatic caching for the tail |
 | Run context | A mid-conversation `system` message |
-| Compaction, clearing | Server-side context management: compaction and tool-result clearing |
+| Compaction, clearing | Server-side context management: threshold compaction (D12) and tool-result clearing. Usage and cost include the compaction step, which the provider reports apart from the main call |
 | Native memory | The memory tool, mapped to the core's memory service |
 | Structured output | The output format setting; forced tool choice is never used |
-| Reasoning | Adaptive thinking; effort set explicitly; blocks replayed unchanged; display chosen per agent (progress updates for interactive agents) |
+| Reasoning | Adaptive thinking; effort set explicitly; blocks replayed unchanged, their text possibly empty. Progress shown to users is the text between tool calls, not reasoning |
 | Refusal | `refusal` stop reason with its category; no fallback in phase 1 (D10) |
 | Transport | Streamed requests; eager tool-input streaming, validated by the pipeline; retries including mid-stream errors; output token limit lowered to the remaining budget |
 | SDK | The official Anthropic SDK, used only inside this adapter, through its beta surface |
