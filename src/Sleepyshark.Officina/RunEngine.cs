@@ -100,7 +100,7 @@ internal static class RunEngine
                 result.Value = reply.Error is not null ? new Failed(FailureReason.ModelError, agent.Redact(reply.Error), usage)
                     : reply.Stop is null ? new Stopped(StopReason.Cancelled, null, usage)
                     : toolCalls.Count > 0 && reply.Stop.Reason == ModelStopReason.End ? new Failed(FailureReason.UnexpectedStop, "The model's reply asked for tools but did not stop for them.", usage)
-                    : Result(reply.Stop, reply.Blocks, usage);
+                    : Result(agent, reply.Stop, reply.Blocks, usage);
                 yield break;
             }
 
@@ -114,7 +114,7 @@ internal static class RunEngine
             pending = [];
             if (reply.Stop.Reason != ModelStopReason.ToolUse || toolCalls.Count == 0)
             {
-                result.Value = Result(reply.Stop, reply.Blocks, usage);
+                result.Value = Result(agent, reply.Stop, reply.Blocks, usage);
                 yield break;
             }
 
@@ -269,9 +269,9 @@ internal static class RunEngine
         }
     }
 
-    private static RunResult Result(ModelStopped stop, IEnumerable<ContentBlock> blocks, Usage usage) => stop.Reason switch
+    private static RunResult Result(AgentDefinition agent, ModelStopped stop, IEnumerable<ContentBlock> blocks, Usage usage) => stop.Reason switch
     {
-        ModelStopReason.End => new Completed(string.Concat(blocks.Select(block => block.Text)), usage),
+        ModelStopReason.End => new Completed(agent.Redact(string.Concat(blocks.Select(block => block.Text))), usage),
         ModelStopReason.MaxTokens => new Stopped(StopReason.OutputLimit, null, usage),
         ModelStopReason.Refusal => new Stopped(StopReason.Refusal, stop.Detail, usage),
         ModelStopReason.ContextFull => new Stopped(StopReason.ContextFull, null, usage),

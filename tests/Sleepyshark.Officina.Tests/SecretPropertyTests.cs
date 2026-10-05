@@ -6,10 +6,10 @@ using Sleepyshark.Officina.Testing;
 namespace Sleepyshark.Officina.Tests;
 
 /// <summary>
-/// TEST-07, EVT-03: a generated secret, put in tool inputs, tool results, tool errors, a denial's reason and a model
-/// failure, never reaches the events, the telemetry (with or without content, EVT-04) or the audit trail. The model's
-/// own reply is the exception: the conversation keeps the blocks it sent as they are (append-only), so an assistant
-/// message that holds a tool input is checked through every other view of that input instead.
+/// TEST-07, EVT-03: a generated secret, put in tool inputs, tool results, tool errors, a denial's reason, a model
+/// failure and the model's final reply, never reaches the events, the telemetry (with or without content, EVT-04) or the
+/// audit trail. Only the two exceptions of D13 are skipped: the assistant's messages as appended to the conversation,
+/// byte-exact, and the streamed text deltas.
 /// </summary>
 public class SecretPropertyTests
 {
@@ -38,7 +38,7 @@ public class SecretPropertyTests
             var sink = new RecordingSink();
             var query = JsonSerializer.Serialize(new { query = test.InInput ? $"find {test.Secret}" : "find" });
             var model = new ScriptedModel().CallTools(new ToolCall("c1", "search", query), new ToolCall("c2", "save", query), new ToolCall("c3", "fail", query));
-            _ = test.ModelFails ? model.Fail(new IOException($"Rejected key {test.Secret}."), new TextDelta("Do")) : model.Reply("Done.");
+            _ = test.ModelFails ? model.Fail(new IOException($"Rejected key {test.Secret}."), new TextDelta("Do")) : model.Reply($"Done {test.Secret}");
             var agent = new AgentDefinition
             {
                 Name = name,
@@ -66,7 +66,8 @@ public class SecretPropertyTests
             };
             seen.AddRange(events.Select(runEvent => runEvent switch
             {
-                ConversationAppended { Message.Role: Role.Assistant } => "",
+                // The two exceptions of D13: the assistant's messages as appended, byte-exact, and streamed text deltas.
+                ConversationAppended { Message.Role: Role.Assistant } or TextStreamed => "",
                 ConversationAppended appended => JsonSerializer.Serialize(appended.Message),
                 RunEnded ended => JsonSerializer.Serialize(ended.Result, ended.Result.GetType()),
                 _ => JsonSerializer.Serialize(runEvent, runEvent.GetType()),
