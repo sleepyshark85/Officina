@@ -27,7 +27,7 @@ internal static class ConsoleSession
 
     /// <summary>Runs a session and returns its transcript.</summary>
     /// <param name="database">The database the tools use.</param>
-    /// <param name="model">The scripted model.</param>
+    /// <param name="model">The model: a scripted one, or Claude in the live smoke test (TEST-04).</param>
     /// <param name="script">
     /// The staff member's input: each string is a line they type, and each <see cref="Func{Task}"/> runs before the next line is read.
     /// </param>
@@ -39,7 +39,7 @@ internal static class ConsoleSession
     /// <param name="demo">Whether the agent runs in demo mode (APP-17).</param>
     /// <param name="memory">The memory store; by default an empty one in memory.</param>
     public static async Task<string> RunAsync(
-        BookshopDatabase database, ScriptedModel model, IEnumerable<object> script, TimeProvider? time = null, string? cancelOn = null,
+        BookshopDatabase database, IModel model, IEnumerable<object> script, TimeProvider? time = null, string? cancelOn = null,
         Budgets? budgets = null, ScriptedModel? summaries = null, IEnumerable<Tool>? exportTools = null, bool demo = false,
         IMemoryStore? memory = null)
     {

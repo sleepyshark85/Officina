@@ -1,4 +1,5 @@
 using Sleepyshark.Officina;
+using Sleepyshark.Officina.Claude;
 
 namespace BookshopAssistant;
 
@@ -36,13 +37,26 @@ public static class BookshopAgent
     };
 
     /// <summary>
-    /// Demo mode (APP-17): compaction at Claude's minimum, which four broad catalogue searches reach, and clearing once a
-    /// conversation holds more than four tool calls, so it does not clear those searches before they compact.
+    /// Demo mode (APP-17): compaction at Claude's minimum, which the demo script's four catalogue searches of 10–15k tokens
+    /// reach, one a turn, and clearing once a conversation holds more than twelve tool calls. Clearing comes first and
+    /// counts every tool call, the memory tool's too, which the model calls once or twice a turn: at four, it cleared the
+    /// searches before they could compact.
     /// </summary>
     public static readonly ContextManagement Demo = new()
     {
         CompactAt = 50_000,
-        ClearToolResults = new ToolResultClearing(After: 4, Keep: 2),
+        ClearToolResults = new ToolResultClearing(After: 12, Keep: 2),
+    };
+
+    /// <summary>The chat agent's model, which the application and the live smoke test (TEST-04) share.</summary>
+    public static ClaudeModel Model(bool demo) => new()
+    {
+        Model = "claude-opus-5-5",
+        Effort = ClaudeEffort.Medium,
+        MaxOutputTokens = 16_000,
+
+        // A demo is one sitting, and its large searches would cost 60% more to cache for an hour.
+        CacheLifetime = demo ? CacheLifetime.FiveMinutes : CacheLifetime.OneHour,
     };
 
     /// <summary>The run context (APP-13, CTX-02): today's date and who is at the counter.</summary>

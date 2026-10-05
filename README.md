@@ -25,6 +25,13 @@ dotnet build
 dotnet test
 ```
 
+The live smoke test (TEST-04) is skipped unless asked for. It drives APP-09 with Claude, checks cache reads and forces a
+compaction, against its own database in Docker; it needs `ANTHROPIC_API_KEY` and costs about $0.40 a run:
+
+```sh
+OFFICINA_LIVE_TESTS=1 dotnet test tests/BookshopAssistant.Tests --filter Category=Live --logger "console;verbosity=detailed"
+```
+
 | Path | Holds |
 |---|---|
 | `src/Sleepyshark.Officina` | The core; depends on the .NET base library only |
@@ -53,7 +60,8 @@ export BOOKSHOP_CONNECTION_STRING="Host=localhost;Port=5432;Username=bookshop;Pa
 dotnet run                         # add -- --demo (or BOOKSHOP_DEMO=1) to compact and clear early (APP-17); sessions of one mode don't resume in the other
 ```
 
-Try: *Order the two cheapest fantasy books in stock for Alice Martin and tell me the total.*
+Try: *Order the two cheapest fantasy books in stock for Alice Martin and tell me the total.* The demo script,
+[`docs/demo.md`](docs/demo.md), walks through every capability.
 
 Exports (APP-12) go to `exports/`, through the reference filesystem MCP server, which the application starts in Docker
 with `docker compose run`. Try: *Export Alice Martin's order history as CSV.* The server runs as root in its container,
