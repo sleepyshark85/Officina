@@ -217,7 +217,7 @@ internal static class RunEngine
     private static async IAsyncEnumerable<RunEvent> CallModelAsync(
         AgentDefinition agent, ImmutableArray<Message> messages, int? limit, Activity? run, Reply reply, [EnumeratorCancellation] CancellationToken cancellationToken)
     {
-        var request = new ModelRequest(agent.Tools, agent.Instructions, messages, limit);
+        var request = new ModelRequest(agent.Tools, agent.Instructions, messages, limit, agent.Output?.Schema);
         var (started, span) = (agent.Time.GetTimestamp(), Telemetry.StartModelCall(agent, run));
         var streamed = false;
         IAsyncEnumerator<ModelEvent>? stream = null;
@@ -300,13 +300,21 @@ internal static class RunEngine
 
     private static RunResult Result(AgentDefinition agent, ModelStopped stop, IEnumerable<ContentBlock> blocks, Usage usage, string? budgetCut) => stop.Reason switch
     {
-        ModelStopReason.End => new Completed(agent.Redact(string.Concat(blocks.Select(block => block.Text))), usage),
+        ModelStopReason.End => Completed(agent, agent.Redact(string.Concat(blocks.Select(block => block.Text))), usage),
         ModelStopReason.MaxTokens when budgetCut is not null => new Stopped(StopReason.Budget, budgetCut, usage),
         ModelStopReason.MaxTokens => new Stopped(StopReason.OutputLimit, null, usage),
         ModelStopReason.Refusal => new Stopped(StopReason.Refusal, stop.Detail, usage),
         ModelStopReason.ContextFull => new Stopped(StopReason.ContextFull, null, usage),
         ModelStopReason.ToolUse => new Failed(FailureReason.UnexpectedStop, "The model stopped to use tools but called none.", usage),
         _ => new Failed(FailureReason.UnexpectedStop, $"The model stopped for a reason the run cannot act on: {stop.Detail ?? stop.Reason.ToString()}.", usage),
+    };
+
+    /// <summary>A completed run's result; with typed output, a reply that fails to read fails the run, with no correction round (OUT-02).</summary>
+    private static RunResult Completed(AgentDefinition agent, string text, Usage usage) => agent.Output?.Read(text) switch
+    {
+        null => new Completed(text, usage),
+        (_, { } error) => new Failed(FailureReason.InvalidOutput, error, usage),
+        var (value, _) => new Completed(text, usage) { Output = value },
     };
 
     /// <summary>Runs a step of the model call; returns the failure's message, or null when it succeeded or the run was cancelled.</summary>

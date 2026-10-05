@@ -47,6 +47,7 @@ using var model = new ClaudeModel
     MaxOutputTokens = 16_000,
     CacheLifetime = CacheLifetime.OneHour,
 };
+using var summaryModel = new ClaudeModel { Model = "claude-opus-5-5", Effort = ClaudeEffort.Low, MaxOutputTokens = 4_000 };
 var audit = new AuditTable(database);
 var console = new BookshopConsole(
     Console.In, Console.Out, TimeProvider.System, echoInput: Console.IsInputRedirected, audit, new SessionStore(database), dashboard,
@@ -70,5 +71,5 @@ Console.CancelKeyPress += (_, press) =>
 
 var password = new NpgsqlConnectionStringBuilder(connectionString).Password;
 var agent = BookshopAgent.Create(model, new BookshopTools(database), console, audit, password is null ? [] : [password], TimeProvider.System);
-await console.RunAsync(agent);
+await console.RunAsync(agent, SessionSummarizer.Create(summaryModel, TimeProvider.System));
 return 0;

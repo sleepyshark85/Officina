@@ -33,9 +33,10 @@ internal static class ConsoleSession
     /// <param name="time">The console's clock; by default a fake one stopped at <see cref="Start"/>, which the agent always uses for its audit times.</param>
     /// <param name="cancelOn">When the transcript first contains this text, the console is asked to cancel the reply, as Ctrl+C does.</param>
     /// <param name="budgets">The console's budgets; by default, its own.</param>
+    /// <param name="summaries">The summarizer's scripted model; without one, sessions are not summarized.</param>
     public static async Task<string> RunAsync(
         BookshopDatabase database, ScriptedModel model, IEnumerable<object> script, TimeProvider? time = null, string? cancelOn = null,
-        Budgets? budgets = null)
+        Budgets? budgets = null, ScriptedModel? summaries = null)
     {
         var output = new Transcript(cancelOn);
         var audit = new AuditTable(database.DataSource);
@@ -44,7 +45,9 @@ internal static class ConsoleSession
             new ScriptedInput(script), output, time ?? clock, echoInput: true, audit,
             new SessionStore(database.DataSource), Dashboard, budgets: budgets);
         output.Console = console;
-        await console.RunAsync(BookshopAgent.Create(model, database.Tools, console, audit, [BookshopDatabase.Password], clock));
+        await console.RunAsync(
+            BookshopAgent.Create(model, database.Tools, console, audit, [BookshopDatabase.Password], clock),
+            summaries is null ? null : SessionSummarizer.Create(summaries, clock));
         return output.ToString();
     }
 
