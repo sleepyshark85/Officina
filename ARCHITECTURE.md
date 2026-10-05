@@ -1,6 +1,6 @@
 # Officina — Architecture
 
-Status: draft 4 · 2026-10-05. Packages are named under `Sleepyshark.Officina`. Implements [`REQUIREMENTS.md`](REQUIREMENTS.md). It describes concepts, components,
+Status: draft 5 · 2026-10-05. Packages are named under `Sleepyshark.Officina`. Implements [`REQUIREMENTS.md`](REQUIREMENTS.md). It describes concepts, components,
 contracts and flows only; how they are coded is left to the implementation.
 
 ## 1. Design goals
@@ -13,6 +13,7 @@ contracts and flows only; how they are coded is left to the implementation.
 | **Structured control** | Stop reasons, tool calls and validated output decide what happens next, never free text. | AGT-03 |
 | **Host owns state and policy** | The core persists nothing and decides no policy on its own; the host supplies storage, approval and limits. | AGT-06, GEN-01 |
 | **Accountable** | Every important action leaves a durable audit entry; a write never happens unrecorded. | AUD |
+| **Observable** | Every run is a trace, every model and tool call a span, with tokens, cache use, cost and outcome; audit entries point to their trace. | EVT, AUD-03 |
 | **Opt-in parts** | Tools, memory, MCP, typed output, approval and budgets are each optional and cost nothing when absent. | GEN-02 |
 
 ## 2. Concepts
@@ -96,17 +97,17 @@ flowchart TB
 | **Request composer** | Builds each request in the fixed layout (§6) from the definition and the conversation; checks the prefix fingerprint | Edit or drop earlier messages |
 | **Tool pipeline** | For each tool call: validate input → ask approval if needed → invoke → truncate → result. Reads in parallel, writes in order | Throw into the loop; let a tool see other agents, budgets or configuration |
 | **Memory service** | Exposes memory to the model as a tool with view, create, edit, delete and rename commands, confined to the run's scope | Put memory into the instructions |
-| **Output validator** | Validates the final answer against the output contract; allows one correction | Accept unvalidated output |
+| **Output validator** | Validates the final answer against the output contract; a failure ends the run as `Failed` | Accept unvalidated output |
 | **Budget guard** | Tracks usage and cost; checked before every model call | Stop a call already in flight |
-| **Event stream, telemetry** | Streams events to the host; emits traces and metrics, including the cache hit ratio | Carry secrets |
-| **Audit recorder** | Turns important events into audit entries with run, conversation, agent, scope and sequence; records a write tool's attempt before it runs and blocks the tool if that fails | Change or remove an entry; record secrets |
+| **Event stream, telemetry** | Streams events to the host; emits traces and metrics (§7) through the platform's own primitives, including the cache hit ratio | Carry secrets or, unless the host opts in, message text; export telemetry itself |
+| **Audit recorder** | Turns important events into audit entries with run, conversation, agent, scope, sequence and the current trace and span; records a write tool's attempt before it runs and blocks the tool if that fails | Change or remove an entry; record secrets |
 | **Model provider adapter** | Maps the model contract to one provider; uses the provider's native caching, compaction, memory tool and retries | Leak provider types into the core |
 | **MCP tool source** | Connects to an MCP server, pins and filters its tool list, presents each tool through the tool contract | Run tools outside the pipeline |
 | **Memory stores** | Persist memory files for a scope | Decide what is remembered |
 | **Audit sinks** | Persist audit entries durably, in order | Drop an entry silently |
 | **Test kit** | Scripted model, scripted approver, fake MCP server, in-memory store, prefix stability check | Replace anything inside the core |
 
-**Dependency rule:** the core depends on nothing outside the platform's base library. Adapters depend on the core; the
+**Dependency rule:** the core depends on nothing outside the platform's base library (its tracing and metrics primitives included). Adapters depend on the core; the
 core never depends on an adapter. Only the Claude adapter uses the provider's SDK.
 
 ## 4. Contracts at the boundaries
@@ -120,8 +121,8 @@ Each contract is the only way the core reaches what is behind it; the test kit r
 | **Input** | Tools, instructions, conversation, output schema, run context, and the cache and context-management settings |
 | **Output** | A stream of: text deltas, complete content blocks, usage, compaction notices, a restart notice (after a mid-stream retry), and finally a stop reason |
 | **Capabilities** | What the provider supports: server-side compaction, context editing, native memory tool, structured output, operator messages mid-conversation |
-| **Stop reasons** | `end` · `tool_use` · `pause` · `max_tokens` · `refusal` (with a category) · `context_full` · unknown |
-| **Errors** | Transient failures are retried inside the adapter; what remains is reported as a classified failure |
+| **Stop reasons** | `end` · `tool_use` · `max_tokens` · `refusal` (with a category) · `context_full` · unknown |
+| **Errors** | Transient failures are retried inside the adapter, each retry reported (for telemetry); what remains is reported as a classified failure |
 
 ### 4.2 Tool
 
@@ -178,30 +179,32 @@ sequenceDiagram
         M-->>E: deltas, blocks, usage, stop reason
         E-->>H: events
         E->>E: append reply exactly as received
+        E-->>H: conversation appended (host may persist)
         opt tool_use
             E->>P: run tool calls (a write is audited before it runs)
             P-->>E: results, errors included
             E->>E: append all results as one message
+            E-->>H: conversation appended
         end
     end
-    E->>E: validate output (one correction)
+    E->>E: validate output
     E-->>H: result
 ```
 
 | Stop reason | Engine does |
 |---|---|
 | `tool_use` | Run the tools, append the results, continue |
-| `pause` | Continue with the conversation as is (a server tool is mid-work) |
-| `end` | Validate output if a contract exists, then `Completed` |
+| `end` | Validate output if a contract exists, then `Completed` (or `Failed` if it does not validate) |
 | `max_tokens`, `refusal`, `context_full` | `Stopped` with that reason |
 | Budget exceeded before a call | `Stopped(Budget)` |
-| Host cancels | `Stopped(Cancelled)`; nothing half-appended |
+| Host cancels | `Stopped(Cancelled)`. A reply cut off mid-stream is not appended. Once a reply with tool calls is appended, finished calls keep their results and calls not yet started get a "cancelled" error result; no further model call |
 | Unknown, or failure after retries | `Failed` |
 
 Audit entries are written at each step that AUD-01 names; the run's start and end bracket them.
 
-Appends are atomic per iteration: a reply and its tool results go in together, so the conversation is always valid to
-resume.
+After every step the conversation is valid to resume: a reply is followed by the results of all its tool calls before
+the next request, even when cancelled. Each append is an event, so the host can persist after every step and a crash
+loses at most the step in flight. The audit trail still holds a write that ran in that step (AUD-02).
 
 ## 6. Context and caching
 
@@ -221,9 +224,9 @@ resume.
 | Run context is appended as an operator message after the user message, and kept | It carries operator authority, cannot be forged by user or tool text, and leaves the prefix intact |
 | Tools, instructions, model and its settings are fixed per conversation, enforced by a fingerprint | A change silently loses the cache and invalidates reasoning blocks; failing fast makes it visible |
 | History is append-only; the core never edits, reorders or drops a message | Edits break the cache and the provider's binding of reasoning to its prefix |
-| Cache hits are measured on every call and the prefix is checked byte for byte in tests | Caching failures are silent: only cost shows them |
+| Cache hits are measured on every call and the prefix is checked byte for byte in tests, across a save, restart and resume too | Caching failures are silent: only cost shows them. Re-deriving tools or instructions on resume is the most common cause |
 
-## 7. Long conversations, memory and MCP
+## 7. Long conversations, memory, MCP and observability
 
 **Long conversations.** The provider shortens history on its side: it clears old tool results past a threshold, and
 compacts the conversation into a summary block when it nears the window. The summary block is appended like any block,
@@ -239,6 +242,32 @@ model is trained on, the adapter presents memory as that tool.
 each tool by server and tool, and marks it read or write. MCP tools then go through the same pipeline as any tool. A
 server that fails mid-run returns error results; one that is down at the start fails the run.
 
+**Observability.** Two views of the same run, for two purposes, joined by the trace:
+
+| | Events and telemetry | Audit trail |
+|---|---|---|
+| For | Watching and operating: live display, latency, cost, cache, errors | Review after the fact: who did what, approved by whom |
+| Holds | Spans, metrics; no message text unless the host opts in | Entries with inputs and outcomes (truncated), never secrets |
+| Kept | As long as the host's telemetry back end keeps it | Durably, by the audit sink; never changed by the core |
+| Leaves the core through | The platform's tracing and metrics primitives; the host picks the exporter | The audit sink contract |
+
+```mermaid
+flowchart LR
+    Run[run span] --> M1[model call span] & T1[tool call span] & M2[model call span]
+    T1 -.->|trace and span id| A1[audit entry: tool attempted / finished]
+    Run -.-> A0[audit entry: run started / ended]
+```
+
+| Span | Carries |
+|---|---|
+| Run | Agent, conversation, memory scope, result kind and stop reason, total usage and cost |
+| Model call | Model, tokens by kind (input, output, cache read, cache write), cost, stop reason, time to first token, retries, compaction or clearing |
+| Tool call | Tool, source (application, MCP server, memory), read or write, approval asked and the wait, outcome, duration, truncation |
+
+Metrics, by agent and model: tokens, cost, cache hit ratio, model and tool call duration, tool outcomes, approvals by
+answer, results by kind, compactions, retries, audit sink failures. Names follow the OpenTelemetry semantic
+conventions for generative AI where one exists.
+
 ## 8. Serving different purposes
 
 The same core serves each purpose; only what the host plugs in differs.
@@ -249,7 +278,7 @@ The same core serves each purpose; only what the host plugs in differs.
 | **Chat assistant** | Stateful | Optional | Text | Optional | Per user | `end` each turn | 1 |
 | **Interactive assistant over business data** (the reference application, §12) | Stateful, resumable | App tools (read and write) + MCP | Text | Human | Per user | `end` | 1 |
 | **Session summarizer** (inside the reference application) | Stateless | None | Typed | None | None | `end` after one call | 1 |
-| **Background agent** (triggered by an event, a schedule or a queue) | Stateless or per job | App + MCP | Typed or side effects | None (unattended) or a policy | Per job or tenant | `end` or budget | 1 |
+| **Background agent** (triggered by an event, a schedule or a queue; the GEN-06 sample uses MCP over HTTP and the JSON-lines audit sink) | Stateless or per job | App + MCP | Typed or side effects | None (unattended) or a policy | Per job or tenant | `end` or budget | 1 |
 | **Workflow** (sequence, routing, fan-out, evaluate-and-retry) | One per step | Per step | Typed between steps | Per step | Shared scope | Pattern decides | NS-01 |
 | **Delegating agent** | Parent plus fresh child | Child exposed as a tool | Typed from child | Inherited | Inherited | `end` | NS-17 |
 | **Team** (lead plans, members work, checks decide) | One per member | Per role | Typed tasks | Human sign-off | Per project | Task board decides | NS-02 |
@@ -289,7 +318,7 @@ From Anthropic's guidance on building agents with the Claude API, as of 2026-10.
 | Return all parallel tool results together; failures as error results, never dropped | §5 |
 | Validate streamed tool input before running a tool; check `max_tokens` and `refusal` first | §3 tool pipeline, §5 |
 | Dedicated tools where actions need gating; reads in parallel, writes in order | §3 tool pipeline |
-| Handle `pause` and `refusal`; use the provider's refusal fallback | §5, §10 |
+| Check `refusal` before reading content (fallback deferred: NS-19) | §5, §10 |
 | Adaptive reasoning with an explicit effort, fixed per conversation | §6, §10 |
 | Stream every request | §10 |
 | Dedicated, parameterized data tools instead of a raw query tool | §12 |
@@ -305,9 +334,9 @@ How the Claude adapter realizes the model contract. These are design choices, no
 | Compaction, clearing | Server-side context management: compaction and tool-result clearing |
 | Native memory | The memory tool, mapped to the core's memory service |
 | Structured output | The output format setting; forced tool choice is never used |
-| Reasoning | Adaptive thinking; effort set explicitly; blocks replayed unchanged |
-| Refusal | `refusal` stop reason with its category; server-side fallback on by default |
-| Transport | Streamed requests; eager tool-input streaming, validated by the pipeline; retries including mid-stream errors |
+| Reasoning | Adaptive thinking; effort set explicitly; blocks replayed unchanged; display chosen per agent (progress updates for interactive agents) |
+| Refusal | `refusal` stop reason with its category; no fallback in phase 1 (D10) |
+| Transport | Streamed requests; eager tool-input streaming, validated by the pipeline; retries including mid-stream errors; output token limit lowered to the remaining budget |
 | SDK | The official Anthropic SDK, used only inside this adapter, through its beta surface |
 
 ## 11. North star
@@ -319,8 +348,8 @@ flowchart TB
     Patterns[Patterns: workflows NS-01 · delegation NS-17 · teams NS-02]
     Durable[Durable runs NS-03]
     Core[Core: run engine · request composer · tool pipeline · memory · output · budgets · events]
-    Caps[Capabilities: MCP · sandbox and workspace NS-07 · policies NS-09 · knowledge NS-11 · tool search NS-15 · programmatic tools NS-16]
-    Providers[Providers: Claude · others NS-08 · batch NS-14]
+    Caps[Capabilities: MCP · sandbox and workspace NS-07 · policies NS-09 · knowledge NS-11 · tool search NS-15 · programmatic tools NS-16 · server tools NS-18]
+    Providers[Providers: Claude · others NS-08 · batch NS-14 · refusal fallback NS-19]
     Eval[Evaluation NS-12]
     Apps --> Host --> Patterns --> Durable --> Core
     Core --> Caps
@@ -347,6 +376,8 @@ run engine.
 | NS-15 Tool search | Deferred tools, added or removed by appended messages | Tools are declared once per conversation | Tools are appended, never swapped |
 | NS-16 Programmatic tools | Code execution calling chosen tools | The pipeline still runs each call | — |
 | NS-17 Delegation | A tool that runs another agent in a fresh conversation | Runs compose; budgets nest | A child that shares the parent's cache copies its tools, instructions and model exactly |
+| NS-18 Server tools | Provider tools declared on the agent; `pause` continues the loop | Unknown stop reasons fail cleanly; usage counts server tool use | Results kept exactly as received |
+| NS-19 Refusal fallback | A provider adapter option | Refusal is already a structured stop | The model switch is recorded in the conversation, and any block the provider asks to leave out is a documented exception to append-only |
 
 **Rule for growth.** An application needs a capability: build it inside that application. A second application needs
 it: move it into a package, shaped by both. Then add its requirements and update this table.
@@ -368,6 +399,7 @@ flowchart LR
         Tools[Bookshop tools: 5 read, 4 write]
         Sessions[Session store]
         AuditDb[Audit sink]
+        Otel[Telemetry exporter]
     end
     Console --> Chat & Summ
     Chat --> Core[Officina core]
@@ -379,11 +411,14 @@ flowchart LR
     subgraph Docker
         Pg[(PostgreSQL: bookshop schema, sessions, audit)]
         Fs[MCP filesystem server]
+        Dash[Telemetry dashboard]
     end
     Tools --> Pg
     Sessions --> Pg
     AuditDb --> Pg
     Mcp --> Fs --> Exports[(exports folder)]
+    Core -.->|traces, metrics| Otel
+    Otel -->|traces, metrics, logs| Dash
 ```
 
 | Part | Role | Core contract used |
@@ -393,7 +428,9 @@ flowchart LR
 | Bookshop tools | Fixed, parameterized queries; order placement and cancellation in one transaction each; business rule failures as error results | Tool |
 | Summarizer agent | On leaving a session: title, summary and changes made, as typed output | Agent definition, output contract (stateless run) |
 | Session store | Saves the conversation after every reply; lists and resumes sessions | Host persistence |
-| Audit sink | Writes audit entries to a database table; `/audit` reads it | Audit sink |
+| Audit sink | Writes audit entries to a database table; `/audit` reads a session's entries, grouped by run, each with a link to its trace | Audit sink |
+| Telemetry exporter | Exports the core's traces and metrics and the application's logs to the dashboard | Host (telemetry) |
+| Telemetry dashboard | One container in the compose file; shows traces, metrics and logs | None: outside the application |
 | File memory store | One scope per staff member | Memory store |
 | MCP filesystem server | Exports reports to a mounted folder; its write tool needs approval | MCP tool source |
 
@@ -414,7 +451,8 @@ flowchart LR
 | MCP | Export an order history as CSV into `exports` | APP-12, MCP |
 | Run context | The assistant knows today's date and who it is talking to | APP-13, CTX-02 |
 | Typed output, stateless runs | Session titles and summaries in `/sessions` | APP-15, OUT, GEN-03 |
-| Audit | `/audit` lists tool calls, approvals, writes and the session's runs | APP-16, AUD |
+| Audit | `/audit` lists tool calls, approvals, writes and the session's runs; each entry opens as its trace | APP-16, AUD |
+| Observability | A multi-step reply viewed as one trace with its model and tool spans; cost, cache hit ratio and latency charts over the session | APP-20, EVT-02 |
 
 ### 12.3 Data
 
@@ -424,7 +462,7 @@ flowchart LR
 | Customers | Name, email |
 | Orders, order lines | Who ordered what, status, total |
 | Sessions | Conversation, staff member, title, summary, updated time |
-| Audit | Audit entries, in sequence |
+| Audit | Audit entries, in sequence, with their trace and span |
 
 The schema and seed data are created by the compose file when the database container first starts.
 
