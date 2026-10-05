@@ -30,7 +30,7 @@ provider, MCP client, test kit and spike findings (`docs/spikes/` there) are reu
 
 - **Every change goes through a branch and a pull request** to `main`, docs included. Never push to `main`. Merge
   only when the Opus reviewer has approved and the required checks pass (`ubuntu-latest`, `windows-latest`,
-  `quality`, branch up to date); the owner has delegated that go-ahead. Branches: `slice/<id>-<slug>`,
+  `quality`, branch up to date, review threads resolved); the owner has delegated that go-ahead. Branches: `slice/<id>-<slug>`,
   `docs/<topic>`, `fix/<slug>`. Retarget a stacked PR before deleting the branch it is based on (deleting a base
   closes the PR).
 - **The simplest thing that works.** Build only what the slice's acceptance criteria need: no abstraction without a
@@ -40,7 +40,7 @@ provider, MCP client, test kit and spike findings (`docs/spikes/` there) are reu
   environment and secrets, the human (scripted approver), storage back ends where a real one is impractical. Everything
   inside Officina is tested with real objects. Prefer a real database in Docker over a faked one for the application.
 - **Tests are the agent's check on its own work.** Example tests say what should happen; property tests say what
-  must never happen. Tests are fast and deterministic: a flaky or slow test is a bug to fix, never something to retry.
+  must never happen. Tests are fast and deterministic: a flaky test, or one slow enough to notice (over a second offline), is a bug to fix, never something to retry.
 - **Short design docs:** tables and diagrams over prose; cite requirement IDs instead of restating them.
 - **Who codes and reviews (when subagents are used):** Opus writes big or risky slices; Sonnet only small, well-bounded
   fixes. An Opus reviewer approves each PR, checking conventions, the design rules below and over-complication; at most
