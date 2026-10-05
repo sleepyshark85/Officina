@@ -50,7 +50,7 @@ internal static class ConsoleSession
 
     /// <summary>The id of the session the console names last in <paramref name="transcript"/>.</summary>
     public static string SessionId(string transcript) =>
-        System.Text.RegularExpressions.Regex.Matches(transcript, @"(?:^|\n)(?:New )?[Ss]ession ([0-9a-f]{8})\.").Last().Groups[1].Value;
+        System.Text.RegularExpressions.Regex.Matches(transcript, @"(?:^|\n)(?:New )?[Ss]ession ([0-9a-f]{12})\.").Last().Groups[1].Value;
 
     /// <summary>A reply that streams <paramref name="text"/>, then requests <paramref name="calls"/>.</summary>
     public static ModelEvent[] SayThenCall(string text, params ToolCall[] calls) =>

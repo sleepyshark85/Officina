@@ -40,7 +40,8 @@ public class SessionTests(BookshopDatabase database) : IClassFixture<BookshopDat
     public async Task APP_10_a_crash_mid_reply_loses_at_most_the_step_in_flight_and_the_session_resumes()
     {
         var stock = await database.ScalarAsync<int>("select quantity from stock where book_id = 320");
-        var before = Model().Reply(SayThenCall("I'll add two copies.", Call("c1", "restock_book", new { bookId = 320, quantity = 2 })));
+        var before = Model().Reply([.. SayThenCall("I'll add two copies.", Call("c1", "restock_book", new { bookId = 320, quantity = 2 }))[..^1],
+            new UsageReceived(new Usage(100, 50, 900, 200)), new ModelStopped(ModelStopReason.ToolUse)]);
         static Task Crash() => throw new InvalidOperationException("The power went out.");
 
         // The application stops at the approval prompt, after the model's reply was appended and before its tool ran.
@@ -51,14 +52,32 @@ public class SessionTests(BookshopDatabase database) : IClassFixture<BookshopDat
         Assert.Equal("restock_book", saved.Messages[^1].Blocks[^1].ToolCall!.Name);
 
         var after = Model().Reply("The restock did not finish; shall I try again?");
-        var transcript = await RunAsync(database, after, ["Sam", $"/resume {id}", "Did it work?", "/quit"]);
+        var transcript = await RunAsync(database, after, ["Sam", $"/resume {id}", "Did it work?", "/cost", "/quit"]);
 
-        InOrder(transcript, $"Resumed session {id}: 3 messages", "The restock did not finish");
+        // The crashed reply's model call ($0.00258) is in the session's totals, though the reply never ended.
+        InOrder(
+            transcript,
+            $"Resumed session {id}: 3 messages, $0.0026 so far.",
+            "The restock did not finish",
+            $"Session {id}: tokens: 1,200 in (75% from cache), 50 out; cost $0.0026 of its $5.00 budget.");
         var results = after.Requests[0].Messages[3].Blocks.Select(block => block.ToolResult!).ToList();
         Assert.True(Assert.Single(results).IsError);
         Assert.Contains("interrupted", results[0].Content, StringComparison.Ordinal);
         Assert.Null(RoleSequence.Problem(after.Requests[0].Messages));
         Assert.Equal(stock, await database.ScalarAsync<int>("select quantity from stock where book_id = 320"));
+    }
+
+    [DatabaseFact]
+    public async Task A_new_session_whose_id_is_taken_fails_to_save_instead_of_overwriting_the_other()
+    {
+        var store = new SessionStore(database.DataSource);
+        var conversation = new Conversation { Id = "taken-id-001" };
+        await store.SaveAsync(conversation, "Sam", default, 0.5m, created: false, TestContext.Current.CancellationToken);
+
+        await Assert.ThrowsAsync<Npgsql.PostgresException>(() => store.SaveAsync(conversation, "Kim", default, 0, created: false, TestContext.Current.CancellationToken));
+
+        var kept = await store.LoadAsync(conversation.Id, TestContext.Current.CancellationToken);
+        Assert.Equal(("Sam", 0.5m), (kept!.StaffMember, kept.Cost));
     }
 
     [DatabaseFact]

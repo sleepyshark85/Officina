@@ -36,6 +36,7 @@ public class SessionPropertyTests(BookshopDatabase database) : IClassFixture<Boo
         var store = new SessionStore(database.DataSource);
         var id = Guid.NewGuid().ToString("N")[..12];
         var requests = new List<ModelRequest>();
+        var created = false;
         foreach (var step in steps)
         {
             // A new start of the application: only the stored text is left, and the agent is built afresh.
@@ -59,7 +60,8 @@ public class SessionPropertyTests(BookshopDatabase database) : IClassFixture<Boo
             {
                 if (runEvent is ConversationAppended)
                 {
-                    await store.SaveAsync(conversation, "Sam", default, 0, TestContext.Current.CancellationToken);
+                    await store.SaveAsync(conversation, "Sam", default, 0, created, TestContext.Current.CancellationToken);
+                    created = true;
                 }
 
                 if (runEvent is RunEnded { Result: var result })

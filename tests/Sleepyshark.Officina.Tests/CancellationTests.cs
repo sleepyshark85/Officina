@@ -79,7 +79,8 @@ public class CancellationTests
     {
         // The host saved the conversation on each append; the application then stopped while the tools ran.
         var model = new ScriptedModel().CallTools(new ToolCall("c1", "search", """{"query":"x"}"""), new ToolCall("c2", "search", """{"query":"y"}""")).Reply("Resumed.");
-        var agent = Agents.With(model, tools: Agents.SearchTool());
+        var sink = new RecordingSink();
+        var agent = Agents.With(model, tools: Agents.SearchTool()) with { AuditSink = sink };
         var conversation = new Conversation();
         string? saved = null;
         await foreach (var runEvent in agent.StreamAsync(conversation, "Search.", cancellationToken: Ct))
@@ -103,5 +104,8 @@ public class CancellationTests
         Assert.Equal([new ToolResult("c1", RunEngine.Interrupted, true), new ToolResult("c2", RunEngine.Interrupted, true)], results);
         Assert.Null(RoleSequence.Problem(model.Requests[^1].Messages));
         Assert.Empty(PrefixStability.Problems(model.Requests));
+        Assert.Equal(
+            [("c1", "interrupted"), ("c2", "interrupted")],
+            sink.Entries.Where(entry => entry.Kind == AuditKind.ToolEnded && entry.Outcome == "interrupted").Select(entry => (entry.CallId, entry.Outcome)));
     }
 }

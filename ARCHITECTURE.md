@@ -197,6 +197,7 @@ sequenceDiagram
 | `end` | Validate output if a contract exists, then `Completed` (or `Failed` if it does not validate) |
 | `max_tokens`, `refusal`, `context_full` | `Stopped` with that reason |
 | Budget exceeded before a call | `Stopped(Budget)` |
+| `max_tokens` under an output limit the budget lowered, with the budget now used up | `Stopped(Budget)` rather than stopped for the output limit: the budget cut the reply short |
 | Host cancels | `Stopped(Cancelled)`. A reply cut off mid-stream is not appended, nor are the user message and run context it answers. Once a reply with tool calls is appended, finished calls keep their results and calls not yet started get a "cancelled" error result; no further model call |
 | Unknown, or failure after retries | `Failed`; with no reply, the pending user message and run context are not appended |
 
@@ -206,6 +207,16 @@ After every step the conversation is valid to resume: the user message and run c
 the reply that answers them, and a reply is followed by the results of all its tool calls before
 the next request, even when cancelled. Each append is an event, so the host can persist after every step and a crash
 loses at most the step in flight. The audit trail still holds a write that ran in that step (AUD-02).
+
+One step leaves the conversation incomplete: a crash while tools run, after the reply that asked for them was saved
+and before their results were. When the next run starts on such a conversation, it first appends an error result for
+each of those calls, saying the call was interrupted and may or may not have taken effect, and audits each one. The
+history stays append-only, every call still gets exactly one result, and the model learns to check before it repeats a
+write.
+
+Before each model call the budget guard lowers the call's output limit to what the remaining cost and tokens allow. A
+reply that this lowered limit cuts short, once the budget is used up, ends the run as stopped for the budget rather
+than for the output limit, as the budget is what cut it.
 
 ## 6. Context and caching
 

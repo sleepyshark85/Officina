@@ -73,6 +73,11 @@ internal static class RunEngine
         // as the application stopped mid-reply: it may be resumed, and the provider rejects calls without results.
         if (conversation.Messages is [.., { Role: Role.Assistant } last] && last.Blocks.Select(block => block.ToolCall).OfType<ToolCall>().ToList() is { Count: > 0 } unanswered)
         {
+            foreach (var call in unanswered)
+            {
+                await audit.RecordAsync(AuditKind.ToolEnded, tool: call.Name, callId: call.Id, input: call.Input, outcome: "interrupted", detail: Interrupted).ConfigureAwait(false);
+            }
+
             var interrupted = new Message(Role.User, [.. unanswered.Select(call => new ContentBlock(new ToolResult(call.Id, Interrupted, IsError: true)))]);
             conversation.Append(interrupted);
             yield return new ConversationAppended(conversation, interrupted);

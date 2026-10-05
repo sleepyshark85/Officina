@@ -17,17 +17,15 @@ public sealed record SessionListing(string Id, string StaffMember, string? Title
 /// </summary>
 public sealed class SessionStore(NpgsqlDataSource database)
 {
-    private const string SaveSql = """
+    private const string CreateSql = """
         insert into sessions (id, staff_member, conversation, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, cost, updated)
         values ($1, $2, $3, $4, $5, $6, $7, $8, now())
-        on conflict (id) do update set
-            conversation = excluded.conversation,
-            input_tokens = sessions.input_tokens + excluded.input_tokens,
-            output_tokens = sessions.output_tokens + excluded.output_tokens,
-            cache_read_tokens = sessions.cache_read_tokens + excluded.cache_read_tokens,
-            cache_write_tokens = sessions.cache_write_tokens + excluded.cache_write_tokens,
-            cost = sessions.cost + excluded.cost,
-            updated = excluded.updated
+        """;
+
+    private const string SaveSql = """
+        update sessions
+        set conversation = $3, input_tokens = $4, output_tokens = $5, cache_read_tokens = $6, cache_write_tokens = $7, cost = $8, updated = now()
+        where id = $1 and staff_member = $2
         """;
 
     private const string LoadSql = """
@@ -44,15 +42,16 @@ public sealed class SessionStore(NpgsqlDataSource database)
         """;
 
     /// <summary>
-    /// Saves the conversation as it is now, and adds <paramref name="usage"/> and <paramref name="cost"/> to the session's
-    /// totals; a session not yet stored is created for <paramref name="staffMember"/>. The database
-    /// stamps the time.
+    /// Saves the session as it is now: its conversation, and its totals, <paramref name="usage"/> and
+    /// <paramref name="cost"/>, which replace the stored ones, so a save that failed or never came loses nothing for good.
+    /// A <paramref name="created"/> session is stored already; a new one is inserted, and an id that another session has
+    /// throws rather than overwriting it. The database stamps the time.
     /// </summary>
     public async Task SaveAsync(
-        Conversation conversation, string staffMember, Usage usage, decimal cost, CancellationToken cancellationToken)
+        Conversation conversation, string staffMember, Usage usage, decimal cost, bool created, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(conversation);
-        await using var command = database.CreateCommand(SaveSql);
+        await using var command = database.CreateCommand(created ? SaveSql : CreateSql);
         object[] values =
         [
             conversation.Id, staffMember, JsonSerializer.Serialize(conversation), usage.Input, usage.Output, usage.CacheRead, usage.CacheWrite, cost,
@@ -62,7 +61,10 @@ public sealed class SessionStore(NpgsqlDataSource database)
             command.Parameters.Add(new NpgsqlParameter { Value = value });
         }
 
-        await command.ExecuteNonQueryAsync(cancellationToken);
+        if (await command.ExecuteNonQueryAsync(cancellationToken) == 0)
+        {
+            throw new InvalidOperationException($"Session {conversation.Id} of {staffMember} is not stored.");
+        }
     }
 
     /// <summary>The session with <paramref name="id"/>, or null when there is none.</summary>

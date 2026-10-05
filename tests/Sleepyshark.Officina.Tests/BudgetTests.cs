@@ -121,6 +121,18 @@ public class BudgetTests
     }
 
     [Fact]
+    public async Task BUD_01_a_cost_budget_is_used_up_when_what_is_left_buys_less_than_one_output_token()
+    {
+        // The first call costs $0.0014; the $0.00001 left would buy half an output token at $20 per million.
+        var model = new ScriptedModel { Price = Price }.Reply(CallTool("c1", new Usage(100, 50, 0, 0))).Reply("Unused.");
+
+        var result = await Agent(model, new Budget { Cost = 0.00141m }).RunAsync(new Conversation(), "Go.", cancellationToken: Ct);
+
+        Assert.Equal((StopReason.Budget, "The cost budget is used up: $0.0014 of $0.00141."), (Assert.IsType<Stopped>(result).Reason, ((Stopped)result).Detail));
+        Assert.Single(model.Requests);
+    }
+
+    [Fact]
     public void A_cost_budget_needs_a_model_with_a_price()
     {
         var agent = Agent(new ScriptedModel(), new Budget { Cost = 1m });
@@ -135,9 +147,9 @@ public class BudgetTests
     public sealed record BudgetCase(decimal? Cost, long? Tokens, int? ModelCalls, PlannedCall[] Calls);
 
     private static readonly Gen<BudgetCase> Cases = Gen.Select(
-        Gen.Select(Gen.Int[0, 500], cents => cents == 0 ? null : (decimal?)(cents / 10_000m)),
-        Gen.Select(Gen.Long[0, 60_000], tokens => tokens == 0 ? null : (long?)tokens),
-        Gen.Select(Gen.Int[0, 8], calls => calls == 0 ? null : (int?)calls),
+        Gen.Select(Gen.Bool, Gen.Int[1, 500], (limited, cents) => limited ? cents / 10_000m : (decimal?)null),
+        Gen.Select(Gen.Bool, Gen.Long[1, 60_000], (limited, tokens) => limited ? tokens : (long?)null),
+        Gen.Select(Gen.Bool, Gen.Int[1, 8], (limited, calls) => limited ? calls : (int?)null),
         Gen.Select(Gen.Int[0, 3_000], Gen.Int[0, 20_000], Gen.Int[0, 5_000], Gen.Int[0, 8_000], Gen.Bool, (input, read, write, output, compacts) => new PlannedCall(input, read, write, output, compacts)).Array[1, 10],
         (cost, tokens, calls, plan) => new BudgetCase(cost, tokens, calls, plan));
 
@@ -156,10 +168,11 @@ public class BudgetTests
         var result = await agent.RunAsync(new Conversation(), "Go.", cancellationToken: Ct);
 
         Assert.True(result is Completed or Stopped { Reason: StopReason.Budget }, $"The run ended {result}.");
-        var made = @case.Calls[..model.Made];
-        var factors = made.Select(call => call.Compacts ? 2 : 1).ToList();
-        var tokenOvershoot = made.Select((call, index) => (long)(call.Input + call.CacheRead + call.CacheWrite) * factors[index]).DefaultIfEmpty().Max();
-        var costOvershoot = made.Select((call, index) => Price.Cost(new Usage(call.Input, 0, call.CacheRead, call.CacheWrite)) * factors[index]).DefaultIfEmpty().Max();
+        // Only the last call can cross a limit, as each call starts below all of them; it overshoots by its input at most.
+        var last = model.Made == 0 ? new PlannedCall(0, 0, 0, 0, false) : @case.Calls[model.Made - 1];
+        var factor = last.Compacts ? 2 : 1;
+        var tokenOvershoot = (long)(last.Input + last.CacheRead + last.CacheWrite) * factor;
+        var costOvershoot = Price.Cost(new Usage(last.Input, 0, last.CacheRead, last.CacheWrite)) * factor;
         Assert.True(result.Usage.Total <= @case.Tokens + tokenOvershoot || @case.Tokens is null, $"{result.Usage.Total} tokens used of {@case.Tokens}.");
         Assert.True(result.Cost <= @case.Cost + costOvershoot || @case.Cost is null, $"${result.Cost} spent of ${@case.Cost}.");
         Assert.True(result.ModelCalls <= @case.ModelCalls || @case.ModelCalls is null);

@@ -219,6 +219,7 @@ public sealed partial class BookshopConsole(
             CultureInfo.InvariantCulture, $"Resumed session {id}: {stored.Conversation.Messages.Length} messages, ${stored.Cost:0.0000} so far."));
         return new Session(stored.Conversation, stored.StaffMember)
         {
+            Stored = true,
             Usage = stored.Usage,
             Cost = stored.Cost,
             Context = stored.Conversation.Messages.LastOrDefault(message => message.Role == Role.Operator)?.Text,
@@ -250,8 +251,10 @@ public sealed partial class BookshopConsole(
         var conversation = session.Conversation;
         var left = budgets.Session - session.Cost;
         var budgeted = agent with { Budget = new Budget { Cost = Math.Max(0, Math.Min(budgets.Reply, left)) } };
-        var saveFailed = false;
-        var labelled = false;
+        var (saveFailed, labelled) = (false, false);
+
+        // What the reply has spent so far, from each model call's usage, so every save stores the session's whole spend.
+        var (spent, spentCost) = (default(Usage), 0m);
         try
         {
             await foreach (var runEvent in budgeted.StreamAsync(conversation, message, context, cancellation.Token))
@@ -282,13 +285,16 @@ public sealed partial class BookshopConsole(
                             ? $"  < {finished.Call.Name}: error: {FirstLine(result.Content)}"
                             : $"  < {finished.Call.Name}: ok");
                         break;
+                    case UsageReported reported:
+                        (spent, spentCost) = (spent + reported.Usage, spentCost + reported.Cost);
+                        break;
                     case ConversationAppended { Message: var appended }:
                         session.Context = appended.Role == Role.Operator ? appended.Text : session.Context;
-                        saveFailed |= !await SaveAsync(session, default, 0, saveFailed);
+                        saveFailed |= !await SaveAsync(session, session.Usage + spent, session.Cost + spentCost, saveFailed);
                         break;
                     case RunEnded { Result: var result }:
                         (session.Usage, session.Cost) = (session.Usage + result.Usage, session.Cost + result.Cost);
-                        await SaveAsync(session, result.Usage, result.Cost, saveFailed);
+                        await SaveAsync(session, session.Usage, session.Cost, saveFailed);
                         LogReplyEnded(logger, conversation.Id, result.GetType().Name, result.Usage.Input + result.Usage.CacheRead + result.Usage.CacheWrite, result.Usage.Output);
                         if (result is Failed failure)
                         {
@@ -336,17 +342,18 @@ public sealed partial class BookshopConsole(
     }
 
     /// <summary>
-    /// Saves the session and adds a reply's usage to its totals; returns whether it was saved. A failure is told once a
-    /// reply (<paramref name="told"/>), and the reply goes on: the next save stores the whole conversation.
+    /// Saves the session with its totals so far; returns whether it was saved. A failure is told once a reply
+    /// (<paramref name="told"/>), and the reply goes on: the next save stores the whole conversation and totals.
     /// </summary>
     private async Task<bool> SaveAsync(Session session, Usage usage, decimal cost, bool told)
     {
         try
         {
-            await sessions.SaveAsync(session.Conversation, session.StaffMember, usage, cost, CancellationToken.None);
+            await sessions.SaveAsync(session.Conversation, session.StaffMember, usage, cost, session.Stored, CancellationToken.None);
+            session.Stored = true;
             return true;
         }
-        catch (Exception exception) when (exception is Npgsql.NpgsqlException or TimeoutException)
+        catch (Exception exception) when (exception is Npgsql.NpgsqlException or TimeoutException or InvalidOperationException)
         {
             LogSaveFailed(logger, session.Id, exception.Message);
             if (!told)
@@ -480,7 +487,10 @@ public sealed partial class BookshopConsole(
 
         public string? Context { get; set; }
 
-        /// <summary>A new session, with an id short enough to type in <c>/resume</c>.</summary>
-        public static Session New(string staffMember) => new(new Conversation { Id = Guid.NewGuid().ToString("N")[..8] }, staffMember);
+        /// <summary>Whether the session has a row in the store yet.</summary>
+        public bool Stored { get; set; }
+
+        /// <summary>A new session, with an id short enough to type in <c>/resume</c>; one that collides fails its first save.</summary>
+        public static Session New(string staffMember) => new(new Conversation { Id = Guid.NewGuid().ToString("N")[..12] }, staffMember);
     }
 }
