@@ -15,8 +15,7 @@ provider, MCP client, test kit and spike findings (`docs/spikes/` there) are reu
 
 ## Start here (not done yet)
 
-1. Done: `git init`, README, first commit of the docs. Still open: a GitHub repository if the owner approves (ask:
-   private or public).
+1. Done: `git init`, README, first commit of the docs; GitHub repository `sleepyshark85/officina` (public).
 2. A phase 1 plan in `docs/plan/`: small vertical slices, each ending in something that runs, with offline tests.
    Suggested order: skeleton and dependency check → live check of the Claude features not yet proven by spike S00b
    (server-side compaction, tool-result clearing, the memory tool, thinking display `updates`, on the beta types) →
@@ -24,8 +23,8 @@ provider, MCP client, test kit and spike findings (`docs/spikes/` there) are reu
    approval and audit → bookshop database in Docker and the console → telemetry and the dashboard (APP-20) → sessions,
    budgets, status line → memory → compaction → MCP → session summarizer → GEN-06 samples, demo script, live smoke test.
 3. Check prerequisites: Docker, the .NET 10 SDK, an Anthropic API key or `ant auth login` for live tests.
-4. Open questions (REQUIREMENTS §7): Q1 plain PostgreSQL driver (recommended) or an object mapper; Q2 how JSON Schema
-   is validated without a core dependency; D11 the telemetry dashboard.
+4. Decided (REQUIREMENTS §7): Q1 Npgsql, no object mapper; Q2 a small JSON Schema validator in the core; D11 the
+   standalone Aspire dashboard.
 
 ## How we work
 
