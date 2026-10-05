@@ -64,6 +64,9 @@ jobs:
         run: dotnet format --no-restore --verify-no-changes
 
       - name: Vulnerable packages
+        # bash here runs with pipefail, so a failing list command fails the step. The negated grep must stay last:
+        # set -e ignores a negated command's status, so only the step's final status counts.
+        shell: bash
         run: |
           dotnet list package --vulnerable --include-transitive | tee vulnerable.txt
           ! grep -q "has the following vulnerable packages" vulnerable.txt
