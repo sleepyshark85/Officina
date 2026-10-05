@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Globalization;
 
 namespace Sleepyshark.Officina;
@@ -31,8 +32,8 @@ public enum AuditKind
 }
 
 /// <summary>
-/// One durable record of a run (AUD-03): when, in which order, of which run, conversation, agent and memory scope, and
-/// what. Text is truncated with its size noted, and the agent's secrets are redacted (AUD-05).
+/// One durable record of a run (AUD-03): when, in which order, of which run, conversation, agent and memory scope, in
+/// which trace and span, and what. Text is truncated with its size noted, and the agent's secrets are redacted (AUD-05).
 /// </summary>
 public sealed record AuditEntry
 {
@@ -49,6 +50,12 @@ public sealed record AuditEntry
 
     /// <summary>Whose memory the run sees; none until runs have memory.</summary>
     public string? MemoryScope { get; init; }
+
+    /// <summary>The run's trace (EVT-02), in W3C hex form; null when nothing listens to the core's telemetry.</summary>
+    public string? TraceId { get; init; }
+
+    /// <summary>The span of the step recorded: the run's for its start and end, the tool call's for the others.</summary>
+    public string? SpanId { get; init; }
 
     public required AuditKind Kind { get; init; }
 
@@ -74,21 +81,23 @@ public sealed record AuditEntry
 /// Turns a run's important events into audit entries (ARCHITECTURE §3), numbered and written one at a time. Without a
 /// sink it records nothing and every record succeeds (GEN-02).
 /// </summary>
-internal sealed class AuditRecorder(AgentDefinition agent, Conversation conversation) : IDisposable
+internal sealed class AuditRecorder(AgentDefinition agent, Conversation conversation, Activity? runSpan) : IDisposable
 {
     /// <summary>The longest text an entry keeps per field, in characters.</summary>
     internal const int MaxTextLength = 4_000;
 
     private readonly SemaphoreSlim gate = new(1, 1);
-    private readonly string run = Guid.NewGuid().ToString("N");
     private long sequence;
 
+    /// <summary>Identifies the run in the audit trail and its telemetry.</summary>
+    public string Run { get; } = Guid.NewGuid().ToString("N");
+
     /// <summary>
-    /// Records an entry; returns whether it was recorded. A failed write is reported only by the return value until runs
-    /// have telemetry (AUD-06); only a write tool's attempt depends on it.
+    /// Records an entry of the step whose span is <paramref name="step"/>, or else of the run; returns whether it was
+    /// recorded. A failed write shows in telemetry (AUD-06); only a write tool's attempt depends on it.
     /// </summary>
     public async Task<bool> RecordAsync(
-        AuditKind kind, string? tool = null, string? callId = null, string? input = null, string? outcome = null,
+        AuditKind kind, Activity? step = null, string? tool = null, string? callId = null, string? input = null, string? outcome = null,
         string? detail = null, TimeSpan? duration = null, Usage? usage = null)
     {
         if (agent.AuditSink is not { } sink)
@@ -105,9 +114,11 @@ internal sealed class AuditRecorder(AgentDefinition agent, Conversation conversa
                 {
                     Time = agent.Time.GetUtcNow(),
                     Sequence = ++sequence,
-                    Run = run,
+                    Run = Run,
                     Conversation = conversation.Id,
                     Agent = agent.Name,
+                    TraceId = (step ?? runSpan)?.TraceId.ToHexString(),
+                    SpanId = (step ?? runSpan)?.SpanId.ToHexString(),
                     Kind = kind,
                     Tool = tool,
                     CallId = callId,
@@ -124,6 +135,7 @@ internal sealed class AuditRecorder(AgentDefinition agent, Conversation conversa
         catch (Exception)
 #pragma warning restore CA1031
         {
+            Telemetry.AuditFailed(step ?? runSpan, agent, kind);
             return false;
         }
         finally

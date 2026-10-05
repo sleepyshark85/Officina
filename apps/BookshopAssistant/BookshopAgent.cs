@@ -5,15 +5,18 @@ namespace BookshopAssistant;
 /// <summary>The chat agent (ARCHITECTURE §12.1): frozen instructions and the bookshop tools. Who and when come as run context.</summary>
 public static class BookshopAgent
 {
-    public static AgentDefinition Create(IModel model, BookshopTools tools, IApprover approver, IEnumerable<string> secrets) => new()
-    {
-        Name = "bookshop",
-        Model = model,
-        Instructions = Instructions,
-        Tools = tools.All,
-        Approver = approver,
-        Secrets = [.. secrets],
-    };
+    public static AgentDefinition Create(
+        IModel model, BookshopTools tools, IApprover approver, IAuditSink audit, IEnumerable<string> secrets, TimeProvider time) => new()
+        {
+            Name = "bookshop",
+            Model = model,
+            Instructions = Instructions,
+            Tools = tools.All,
+            Approver = approver,
+            AuditSink = audit,
+            Time = time,
+            Secrets = [.. secrets],
+        };
 
     /// <summary>The run context (APP-13, CTX-02): today's date and who is at the counter.</summary>
     public static string Context(DateTimeOffset now, string staffMember) =>

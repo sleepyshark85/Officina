@@ -14,9 +14,15 @@ public interface IModel
     /// </summary>
     string Settings { get; }
 
+    /// <summary>The provider, as telemetry names it (<c>gen_ai.provider.name</c>), such as <c>anthropic</c>.</summary>
+    string Provider { get; }
+
+    /// <summary>The model's identifier, as telemetry names it (<c>gen_ai.request.model</c>).</summary>
+    string Name { get; }
+
     /// <summary>
     /// Sends one request and streams the reply: text deltas and complete blocks as they arrive, usage, and last a
-    /// <see cref="ModelStopped"/>. A retry after the reply has started is announced by a <see cref="ModelRestarted"/>.
+    /// <see cref="ModelStopped"/>. Each retry is announced by a <see cref="ModelRetried"/>.
     /// </summary>
     IAsyncEnumerable<ModelEvent> StreamAsync(ModelRequest request, CancellationToken cancellationToken);
 }
@@ -34,10 +40,10 @@ public sealed record TextDelta(string Text) : ModelEvent;
 public sealed record BlockReceived(ContentBlock Block) : ModelEvent;
 
 /// <summary>
-/// The call was retried after its reply had started (MDL-04): everything streamed before this belongs to a reply that
-/// will not come, and the reply starts again.
+/// The call failed and is made again (MDL-04), whether or not its reply had started: everything streamed before this
+/// belongs to a reply that will not come, and the reply starts again. Usage the failed attempt reported stays counted.
 /// </summary>
-public sealed record ModelRestarted : ModelEvent;
+public sealed record ModelRetried : ModelEvent;
 
 /// <summary>Tokens the call used since its previous report: reports are increments, and the run adds them up.</summary>
 public sealed record UsageReceived(Usage Usage) : ModelEvent;

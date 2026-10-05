@@ -167,6 +167,7 @@ public class AuditTests
         var path = Path.Combine(Path.GetTempPath(), $"officina-audit-{Guid.NewGuid():N}.jsonl");
         try
         {
+            using var telemetry = new TelemetryCollector(); // so the entries carry their trace and span, whatever other tests do
             using var sink = new JsonLinesAuditSink(path);
             var model = new ScriptedModel().CallTools(new ToolCall("c1", "save", "{}")).Reply("Saved.");
             var agent = Agents.With(model, tools: Agents.Tool("save", kind: ToolKind.Write)) with { AuditSink = sink, Time = new FakeTimeProvider(Start) };
@@ -176,8 +177,8 @@ public class AuditTests
             var lines = await File.ReadAllLinesAsync(path, Ct);
             Assert.Equal(4, lines.Length);
             Assert.Equal(
-                """{"time":"2026-10-05T09:00:00+00:00","sequence":2,"run":"RUN","conversation":"s1","agent":"agent","kind":"ToolStarted","tool":"save","callId":"c1","input":"{}"}""",
-                System.Text.RegularExpressions.Regex.Replace(lines[1], "\"run\":\"[0-9a-f]+\"", "\"run\":\"RUN\""));
+                """{"time":"2026-10-05T09:00:00+00:00","sequence":2,"run":"ID","conversation":"s1","agent":"agent","traceId":"ID","spanId":"ID","kind":"ToolStarted","tool":"save","callId":"c1","input":"{}"}""",
+                System.Text.RegularExpressions.Regex.Replace(lines[1], "\"(run|traceId|spanId)\":\"[0-9a-f]+\"", "\"$1\":\"ID\""));
         }
         finally
         {

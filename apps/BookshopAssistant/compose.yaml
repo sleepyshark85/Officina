@@ -1,5 +1,6 @@
-# Bookshop Assistant's database (APP-04). Run `docker compose up -d --wait` in this folder; the schema and seed in
-# database/ run on the first start only. `docker compose down -v` deletes the data, so the next start seeds afresh.
+# Bookshop Assistant's database (APP-04) and telemetry dashboard (APP-20, D11). Run `docker compose up -d --wait` in
+# this folder; the schema, seed and audit table in database/ are created on the database's first start only.
+# `docker compose down -v` deletes the data, so the next start seeds afresh.
 services:
   postgres:
     image: postgres:17
@@ -19,6 +20,18 @@ services:
       interval: 2s
       timeout: 2s
       retries: 15
+
+  # The standalone .NET Aspire dashboard: traces, metrics and logs, kept in memory while it runs. Open
+  # http://localhost:18888; the application sends OTLP to localhost:4317. Other ports if these are taken:
+  # BOOKSHOP_DASHBOARD_PORT, BOOKSHOP_OTLP_PORT, and then BOOKSHOP_DASHBOARD_URL and OTEL_EXPORTER_OTLP_ENDPOINT for the app.
+  dashboard:
+    image: mcr.microsoft.com/dotnet/aspire-dashboard:13.6
+    environment:
+      # A local demo: no sign-in to the dashboard.
+      ASPIRE_DASHBOARD_UNSECURED_ALLOW_ANONYMOUS: "true"
+    ports:
+      - "${BOOKSHOP_DASHBOARD_PORT:-18888}:18888"
+      - "${BOOKSHOP_OTLP_PORT:-4317}:18889"
 
 volumes:
   bookshop-data:

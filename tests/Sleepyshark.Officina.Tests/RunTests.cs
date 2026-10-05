@@ -246,7 +246,7 @@ public class RunTests
     public async Task A_restarted_reply_discards_what_came_before_the_restart()
     {
         var model = new ScriptedModel().Reply(
-            new TextDelta("Hel"), new BlockReceived(ScriptedModel.TextBlock("Hel")), new ModelRestarted(),
+            new TextDelta("Hel"), new BlockReceived(ScriptedModel.TextBlock("Hel")), new ModelRetried(),
             new TextDelta("Hello."), new BlockReceived(ScriptedModel.TextBlock("Hello.")), new ModelStopped(ModelStopReason.End));
         var conversation = new Conversation();
 
@@ -276,6 +276,10 @@ public class RunTests
     {
         public string Settings => "failing-dispose";
 
+        public string Provider => "test";
+
+        public string Name => "failing-dispose";
+
         public IAsyncEnumerable<ModelEvent> StreamAsync(ModelRequest request, CancellationToken cancellationToken) => new Reply();
 
         private sealed class Reply : IAsyncEnumerable<ModelEvent>, IAsyncEnumerator<ModelEvent>
@@ -297,6 +301,10 @@ public class RunTests
     private sealed class ThrowingModel : IModel
     {
         public string Settings => "throwing";
+
+        public string Provider => "test";
+
+        public string Name => "throwing";
 
         public IAsyncEnumerable<ModelEvent> StreamAsync(ModelRequest request, CancellationToken cancellationToken) =>
             throw new ArgumentException("Bad settings.");

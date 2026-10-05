@@ -54,6 +54,10 @@ public sealed class ClaudeModel : IModel, IDisposable
     /// <summary>The lifetime of both cache points: the instructions' and the conversation tail's.</summary>
     public CacheLifetime CacheLifetime { get; init; } = CacheLifetime.FiveMinutes;
 
+    public string Provider => "anthropic";
+
+    public string Name => Model;
+
     public string Settings =>
         $"claude model={Model} effort={ClaudeRequest.EffortWord(Effort)} max_tokens={MaxOutputTokens} cache={(CacheLifetime == CacheLifetime.OneHour ? "1h" : "5m")} thinking=adaptive";
 
@@ -65,7 +69,8 @@ public sealed class ClaudeModel : IModel, IDisposable
         {
             var events = new List<BetaRawMessageStreamEvent>();
             var asked = new StrongBox<TimeSpan?>();
-            var (streamed, retry, tooLong) = (false, false, false);
+            var (retry, tooLong) = (false, false);
+            ClaudeException? failed = null;
             var stream = client.Beta.Messages.CreateStreaming(parameters, cancellationToken).GetAsyncEnumerator(cancellationToken);
             await using (stream.ConfigureAwait(false))
             {
@@ -90,13 +95,13 @@ public sealed class ClaudeModel : IModel, IDisposable
                     }
                     catch (Exception exception) when (ClaudeErrors.Classify(exception, cancellationToken) is { } classified)
                     {
-                        throw classified;
+                        failed = classified;
+                        break;
                     }
 
                     events.Add(stream.Current);
                     if (stream.Current.TryPickContentBlockDelta(out var delta) && delta.Delta.TryPickText(out var text))
                     {
-                        streamed = true;
                         yield return new TextDelta(text.Text);
                     }
                 }
@@ -106,6 +111,17 @@ public sealed class ClaudeModel : IModel, IDisposable
             {
                 yield return new ModelStopped(ModelStopReason.ContextFull);
                 yield break;
+            }
+
+            // The tokens of an attempt that failed mid-stream are counted too.
+            if ((retry || failed is not null) && ClaudeReply.Partial(events) is var partial && partial != default)
+            {
+                yield return new UsageReceived(partial);
+            }
+
+            if (failed is not null)
+            {
+                throw failed;
             }
 
             if (!retry)
@@ -118,10 +134,7 @@ public sealed class ClaudeModel : IModel, IDisposable
                 yield break;
             }
 
-            if (streamed)
-            {
-                yield return new ModelRestarted();
-            }
+            yield return new ModelRetried();
 
             await Task.Delay(ClaudeErrors.Backoff(attempt, asked.Value), time, cancellationToken).ConfigureAwait(false);
         }
