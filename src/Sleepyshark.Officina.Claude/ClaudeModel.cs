@@ -54,7 +54,8 @@ public sealed class ClaudeModel : IModel, IDisposable
     /// <summary>The lifetime of both cache points: the instructions' and the conversation tail's.</summary>
     public CacheLifetime CacheLifetime { get; init; } = CacheLifetime.FiveMinutes;
 
-    public string Settings => $"claude model={Model} effort={Effort} max_tokens={MaxOutputTokens} cache={CacheLifetime} thinking=adaptive";
+    public string Settings =>
+        $"claude model={Model} effort={ClaudeRequest.EffortWord(Effort)} max_tokens={MaxOutputTokens} cache={(CacheLifetime == CacheLifetime.OneHour ? "1h" : "5m")} thinking=adaptive";
 
     public async IAsyncEnumerable<ModelEvent> StreamAsync(ModelRequest request, [EnumeratorCancellation] CancellationToken cancellationToken)
     {

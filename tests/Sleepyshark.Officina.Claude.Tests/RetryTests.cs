@@ -23,6 +23,74 @@ public class RetryTests
     }
 
     [Fact]
+    public async Task A_long_Retry_After_is_capped()
+    {
+        var api = new FakeApi().Error(429, "rate_limit_error", retryAfter: TimeSpan.FromHours(1)).Stream(Sse.Text());
+        var time = new InstantTime();
+        using var model = Model(api, time);
+
+        await CollectAsync(model, Hi);
+
+        Assert.Equal([TimeSpan.FromSeconds(30)], time.Waits);
+    }
+
+    [Fact]
+    public async Task Cancelling_during_a_retry_wait_ends_the_call_at_once()
+    {
+        var api = new FakeApi().Error(429, "rate_limit_error", retryAfter: TimeSpan.FromSeconds(20));
+        var time = new InstantTime(held: true);
+        using var model = Model(api, time);
+        using var cancel = CancellationTokenSource.CreateLinkedTokenSource(Ct);
+        var call = Task.Run(async () =>
+        {
+            await foreach (var _ in model.StreamAsync(Hi, cancel.Token))
+            {
+            }
+        }, Ct);
+
+        await time.Waiting.Task.WaitAsync(Ct);
+        await cancel.CancelAsync();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => call.WaitAsync(TimeSpan.FromSeconds(5), Ct));
+        Assert.Single(api.Requests);
+    }
+
+    [Fact]
+    public async Task Concurrent_calls_keep_their_Retry_After_apart()
+    {
+        var api = new FakeApi { Together = 2 }
+            .Route("Call A", own => own.Error(429, "rate_limit_error", retryAfter: TimeSpan.FromSeconds(7)).Stream(Sse.Text()))
+            .Route("Call B", own => own.Error(529, "overloaded_error").Stream(Sse.Text()));
+        var time = new InstantTime();
+        using var model = Model(api, time);
+        Task<List<ModelEvent>> Call(string name) => Task.Run(() =>
+        {
+            InstantTime.Caller.Value = name;
+            return CollectAsync(model, new([], "Answer briefly.", [Message.Of(Role.User, $"Call {name}")]));
+        }, Ct);
+
+        await Task.WhenAll(Call("A"), Call("B"));
+
+        var waits = time.WaitsByCaller.ToDictionary(wait => wait.Caller!, wait => wait.Wait);
+        Assert.Equal(TimeSpan.FromSeconds(7), waits["A"]);
+        Assert.InRange(waits["B"], TimeSpan.FromSeconds(0.5), TimeSpan.FromSeconds(1));
+    }
+
+    [Theory]
+    [InlineData(408, "timeout_error")]
+    [InlineData(409, "conflict_error")]
+    public async Task A_request_timeout_or_conflict_is_retried(int status, string type)
+    {
+        var api = new FakeApi().Error(status, type).Stream(Sse.Text());
+        using var model = Model(api, new InstantTime());
+
+        var events = await CollectAsync(model, Hi);
+
+        Assert.Equal(new ModelStopped(ModelStopReason.End), events[^1]);
+        Assert.Equal(2, api.Requests.Count);
+    }
+
+    [Fact]
     public async Task An_overload_backs_off_exponentially_then_succeeds()
     {
         var api = new FakeApi().Error(529, "overloaded_error").Error(500, "api_error").Stream(Sse.Text());

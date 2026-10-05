@@ -26,7 +26,7 @@ public class StreamTests
     [Fact]
     public async Task Text_streams_as_it_arrives_and_every_block_comes_complete_with_its_raw_JSON()
     {
-        using var model = Model(new FakeApi().Recorded("thinking-text-tool.sse"));
+        using var model = Model(new FakeApi().Fixture("thinking-text-tool.sse"));
 
         var events = await CollectAsync(model, Hi);
 
@@ -45,7 +45,7 @@ public class StreamTests
     [Fact]
     public async Task A_refusal_carries_its_category()
     {
-        using var model = Model(new FakeApi().Recorded("refusal.sse"));
+        using var model = Model(new FakeApi().Fixture("refusal.sse"));
 
         var events = await CollectAsync(model, Hi);
 
@@ -55,7 +55,7 @@ public class StreamTests
     [Fact]
     public async Task Usage_adds_up_every_iteration_of_the_call_and_a_compaction_block_is_kept_raw()
     {
-        using var model = Model(new FakeApi().Recorded("compaction-iterations.sse"));
+        using var model = Model(new FakeApi().Fixture("compaction-iterations.sse"));
 
         var events = await CollectAsync(model, Hi);
 
@@ -87,7 +87,7 @@ public class StreamTests
         using var five = Model(new FakeApi());
         using var hour = new ClaudeModel("k") { Model = "claude-opus-5-5", Effort = ClaudeEffort.Medium, CacheLifetime = CacheLifetime.OneHour };
 
-        Assert.Equal("claude model=claude-opus-5-5 effort=Medium max_tokens=64000 cache=FiveMinutes thinking=adaptive", five.Settings);
+        Assert.Equal("claude model=claude-opus-5-5 effort=medium max_tokens=64000 cache=5m thinking=adaptive", five.Settings);
         Assert.NotEqual(five.Settings, hour.Settings);
     }
 }

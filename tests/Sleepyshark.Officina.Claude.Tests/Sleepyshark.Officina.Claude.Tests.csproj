@@ -6,7 +6,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <None Include="Recordings\**" CopyToOutputDirectory="PreserveNewest" />
+    <!-- Hand-written in the Claude API's documented SSE format, with the shapes spikes S00b and S02 observed. -->
+    <None Include="Fixtures\**" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

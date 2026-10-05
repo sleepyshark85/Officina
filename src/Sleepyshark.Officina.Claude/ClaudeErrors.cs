@@ -1,3 +1,4 @@
+using System.Net;
 using Anthropic.Exceptions;
 using Anthropic.Models;
 
@@ -40,6 +41,7 @@ internal static class ClaudeErrors
     {
         _ when cancellationToken.IsCancellationRequested => false,
         AnthropicRateLimitException or Anthropic5xxException or AnthropicIOException or HttpRequestException or IOException => true,
+        AnthropicApiException { StatusCode: HttpStatusCode.RequestTimeout or HttpStatusCode.Conflict } => true, // as the SDK retries by default
         AnthropicSseException sse => sse.ErrorType is ErrorType.OverloadedError or ErrorType.ApiError or ErrorType.RateLimitError or ErrorType.TimeoutError,
         OperationCanceledException => true, // a timeout of the SDK or the HTTP client, not the caller's cancellation
         _ => false,
@@ -71,12 +73,15 @@ internal static class ClaudeErrors
         return failure is { } known ? new ClaudeException(known, $"Claude call failed ({known}): {exception.Message}", exception) : null;
     }
 
-    /// <summary>The wait before attempt <paramref name="attempt"/> + 1: what the API asked for, or an exponential backoff with jitter.</summary>
+    /// <summary>
+    /// The wait before attempt <paramref name="attempt"/> + 1: what the API asked for, up to the longest backoff so a
+    /// server cannot hold a call for ever, or else an exponential backoff with jitter.
+    /// </summary>
     public static TimeSpan Backoff(int attempt, TimeSpan? asked)
     {
         if (asked is { } wait && wait > TimeSpan.Zero)
         {
-            return wait;
+            return wait < LongestBackoff ? wait : LongestBackoff;
         }
 
         var exponential = Math.Min(LongestBackoff.TotalMilliseconds, FirstBackoff.TotalMilliseconds * Math.Pow(2, attempt - 1));

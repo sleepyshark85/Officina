@@ -29,6 +29,9 @@ internal static class ClaudeRequest
         return MessageCreateParams.FromRawUnchecked(typed.RawHeaderData, typed.RawQueryData, body);
     }
 
+    /// <summary>The effort as the API names it.</summary>
+    public static string EffortWord(ClaudeEffort effort) => Effort(effort).ToString().ToLowerInvariant();
+
     private static Effort Effort(ClaudeEffort effort) => effort switch
     {
         ClaudeEffort.Low => Anthropic.Models.Beta.Messages.Effort.Low,

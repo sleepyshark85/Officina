@@ -56,7 +56,7 @@ public class RequestTests
     [Fact]
     public async Task A_reply_is_stored_and_replayed_unchanged_on_the_next_request()
     {
-        var api = new FakeApi().Recorded("thinking-text.sse").Stream(Sse.Text());
+        var api = new FakeApi().Fixture("thinking-text.sse").Stream(Sse.Text());
         using var model = Model(api);
         var agent = new AgentDefinition { Model = model, Instructions = "Answer briefly." };
         var conversation = new Conversation();
@@ -74,5 +74,5 @@ public class RequestTests
         JsonDocument.Parse(Golden("blocks.json")).RootElement.GetProperty(name).GetString()!;
 
     private static string Golden(string name) =>
-        File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Recordings", name)).ReplaceLineEndings("\n");
+        File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Fixtures", name)).ReplaceLineEndings("\n");
 }

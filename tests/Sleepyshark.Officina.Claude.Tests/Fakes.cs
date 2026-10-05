@@ -12,11 +12,26 @@ namespace Sleepyshark.Officina.Claude.Tests;
 internal sealed class FakeApi : HttpMessageHandler
 {
     private readonly ConcurrentQueue<Func<HttpResponseMessage>> responses = new();
+    private readonly List<(string Marker, Queue<Func<HttpResponseMessage>> Responses)> routes = [];
+
+    /// <summary>From now on, answers requests whose body contains <paramref name="marker"/> with their own responses.</summary>
+    public FakeApi Route(string marker, Action<FakeApi> responses)
+    {
+        var own = new FakeApi();
+        responses(own);
+        routes.Add((marker, new Queue<Func<HttpResponseMessage>>(own.responses)));
+        return this;
+    }
+
+    /// <summary>Holds each response until this many requests have arrived, so calls are in flight together.</summary>
+    public int Together { get; init; } = 1;
+
+    private readonly TaskCompletionSource arrived = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
     public List<string> Requests { get; } = [];
 
-    /// <summary>Answers with a recorded event stream, read from <c>Recordings/</c>.</summary>
-    public FakeApi Recorded(string name) => Stream(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Recordings", name)));
+    /// <summary>Answers with an event stream from <c>Fixtures/</c>, hand-written in the API's documented SSE format.</summary>
+    public FakeApi Fixture(string name) => Stream(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Fixtures", name)));
 
     /// <summary>Answers 200 with this server-sent event stream.</summary>
     public FakeApi Stream(string sse) => Enqueue(() => new HttpResponseMessage(HttpStatusCode.OK)
@@ -50,9 +65,24 @@ internal sealed class FakeApi : HttpMessageHandler
     protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
         var body = request.Content is null ? "" : await request.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+        Queue<Func<HttpResponseMessage>>? routed;
         lock (Requests)
         {
             Requests.Add(body);
+            routed = routes.FirstOrDefault(route => body.Contains(route.Marker, StringComparison.Ordinal)).Responses;
+            if (Requests.Count == Together)
+            {
+                arrived.TrySetResult();
+            }
+        }
+
+        await arrived.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+        if (routed is not null)
+        {
+            lock (routed)
+            {
+                return routed.TryDequeue(out var own) ? own() : throw new InvalidOperationException($"The fake API has no response left for this route.");
+            }
         }
 
         return responses.TryDequeue(out var next) ? next() : throw new InvalidOperationException("The fake API has no response left.");
@@ -78,15 +108,27 @@ internal sealed class DroppingStream(byte[] bytes) : MemoryStream(bytes)
         ReadAsync(buffer.AsMemory(offset, count), cancellationToken).AsTask();
 }
 
-/// <summary>A clock whose waits end at once, keeping what each wait asked for, so retry tests never sleep.</summary>
-internal sealed class InstantTime : TimeProvider
+/// <summary>
+/// A clock whose waits end at once, keeping what each wait asked for, so retry tests never sleep. A held clock's waits
+/// never end. Each wait is kept with the <see cref="Caller"/> of the code that started it.
+/// </summary>
+internal sealed class InstantTime(bool held = false) : TimeProvider
 {
+    public static readonly AsyncLocal<string?> Caller = new();
+
     public ConcurrentQueue<TimeSpan> Waits { get; } = new();
+
+    public ConcurrentQueue<(string? Caller, TimeSpan Wait)> WaitsByCaller { get; } = new();
+
+    /// <summary>Completes when the first wait starts.</summary>
+    public TaskCompletionSource Waiting { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
     public override ITimer CreateTimer(TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period)
     {
         Waits.Enqueue(dueTime);
-        return System.CreateTimer(callback, state, TimeSpan.Zero, period);
+        WaitsByCaller.Enqueue((Caller.Value, dueTime));
+        Waiting.TrySetResult();
+        return System.CreateTimer(callback, state, held ? Timeout.InfiniteTimeSpan : TimeSpan.Zero, period);
     }
 }
 
