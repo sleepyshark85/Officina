@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.Extensions.Time.Testing;
 using Sleepyshark.Officina;
+using Sleepyshark.Officina.Claude;
 using Sleepyshark.Officina.Testing;
 
 namespace BookshopAssistant.Tests;
@@ -17,6 +18,12 @@ internal static class ConsoleSession
     /// <summary>Where the console links runs to their traces.</summary>
     public static readonly Uri Dashboard = new("http://dashboard.test/");
 
+    /// <summary>Opus 5.5's price, which the scripted model charges, as the console's budgets need a price.</summary>
+    public static readonly ModelPrice Price = ClaudePrices.Table["claude-opus-5-5"];
+
+    /// <summary>A scripted model with <see cref="Price"/>.</summary>
+    public static ScriptedModel Model(string settings = "scripted") => new() { Price = Price, Settings = settings };
+
     /// <summary>Runs a session and returns its transcript.</summary>
     /// <param name="database">The database the tools use.</param>
     /// <param name="model">The scripted model.</param>
@@ -25,17 +32,25 @@ internal static class ConsoleSession
     /// </param>
     /// <param name="time">The console's clock; by default a fake one stopped at <see cref="Start"/>, which the agent always uses for its audit times.</param>
     /// <param name="cancelOn">When the transcript first contains this text, the console is asked to cancel the reply, as Ctrl+C does.</param>
+    /// <param name="budgets">The console's budgets; by default, its own.</param>
     public static async Task<string> RunAsync(
-        BookshopDatabase database, ScriptedModel model, IEnumerable<object> script, TimeProvider? time = null, string? cancelOn = null)
+        BookshopDatabase database, ScriptedModel model, IEnumerable<object> script, TimeProvider? time = null, string? cancelOn = null,
+        Budgets? budgets = null)
     {
         var output = new Transcript(cancelOn);
         var audit = new AuditTable(database.DataSource);
         var clock = new FakeTimeProvider(Start);
-        var console = new BookshopConsole(new ScriptedInput(script), output, time ?? clock, echoInput: true, audit, Dashboard);
+        var console = new BookshopConsole(
+            new ScriptedInput(script), output, time ?? clock, echoInput: true, audit,
+            new SessionStore(database.DataSource), Dashboard, budgets: budgets);
         output.Console = console;
         await console.RunAsync(BookshopAgent.Create(model, database.Tools, console, audit, [BookshopDatabase.Password], clock));
         return output.ToString();
     }
+
+    /// <summary>The id of the session the console names last in <paramref name="transcript"/>.</summary>
+    public static string SessionId(string transcript) =>
+        System.Text.RegularExpressions.Regex.Matches(transcript, @"(?:^|\n)(?:New )?[Ss]ession ([0-9a-f]{12})\.").Last().Groups[1].Value;
 
     /// <summary>A reply that streams <paramref name="text"/>, then requests <paramref name="calls"/>.</summary>
     public static ModelEvent[] SayThenCall(string text, params ToolCall[] calls) =>

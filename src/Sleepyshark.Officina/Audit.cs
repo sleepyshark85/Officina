@@ -75,6 +75,9 @@ public sealed record AuditEntry
     public TimeSpan? Duration { get; init; }
 
     public Usage? Usage { get; init; }
+
+    /// <summary>What the run's tokens cost, in US dollars, for its end.</summary>
+    public decimal? Cost { get; init; }
 }
 
 /// <summary>
@@ -98,7 +101,7 @@ internal sealed class AuditRecorder(AgentDefinition agent, Conversation conversa
     /// </summary>
     public async Task<bool> RecordAsync(
         AuditKind kind, Activity? step = null, string? tool = null, string? callId = null, string? input = null, string? outcome = null,
-        string? detail = null, TimeSpan? duration = null, Usage? usage = null)
+        string? detail = null, TimeSpan? duration = null, Usage? usage = null, decimal? cost = null)
     {
         if (agent.AuditSink is not { } sink)
         {
@@ -127,6 +130,7 @@ internal sealed class AuditRecorder(AgentDefinition agent, Conversation conversa
                     Detail = Clean(detail),
                     Duration = duration,
                     Usage = usage,
+                    Cost = cost,
                 },
                 CancellationToken.None).ConfigureAwait(false);
             return true;

@@ -46,6 +46,49 @@ public class StreamTests
     }
 
     [Fact]
+    public async Task Cache_writes_kept_for_an_hour_are_counted_apart_as_they_cost_more()
+    {
+        var start = Sse.Start.Replace(
+            """{"input_tokens":10,"output_tokens":1}""",
+            """{"input_tokens":10,"cache_creation_input_tokens":300,"cache_creation":{"ephemeral_5m_input_tokens":100,"ephemeral_1h_input_tokens":200},"output_tokens":1}""",
+            StringComparison.Ordinal);
+        using var model = Model(new FakeApi().Stream(Sse.Text().Replace(Sse.Start, start, StringComparison.Ordinal)));
+
+        var events = await CollectAsync(model, Hi);
+
+        var usage = Assert.Single(events.OfType<UsageReceived>()).Usage;
+        Assert.Equal(new Usage(10, 5, 0, 300, CacheWriteHour: 200), usage);
+        Assert.Equal(0.00004m + 0.0001m + 0.0005m + 0.0016m, model.Price!.Cost(usage));
+    }
+
+    [Fact]
+    public async Task Cache_writes_kept_for_an_hour_are_counted_apart_in_every_iteration_of_a_compacting_call()
+    {
+        var delta = """{"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"input_tokens":2,"cache_creation_input_tokens":500,"output_tokens":5,"iterations":["""
+            + """{"type":"compaction","input_tokens":40,"cache_creation_input_tokens":1000,"cache_creation":{"ephemeral_5m_input_tokens":200,"ephemeral_1h_input_tokens":800},"output_tokens":300},"""
+            + """{"type":"message","input_tokens":2,"cache_creation_input_tokens":500,"cache_creation":{"ephemeral_5m_input_tokens":0,"ephemeral_1h_input_tokens":500},"output_tokens":5}]}}""";
+        var sse = Sse.Text().Replace(
+            """{"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"output_tokens":5}}""", delta, StringComparison.Ordinal);
+        using var model = Model(new FakeApi().Stream(sse));
+
+        var events = await CollectAsync(model, Hi);
+
+        Assert.Equal(new Usage(42, 305, 0, 1_500, CacheWriteHour: 1_300), Assert.Single(events.OfType<UsageReceived>()).Usage);
+    }
+
+    [Fact]
+    public void Opus_5_5_is_priced_by_default_and_a_host_may_give_another_price()
+    {
+        using var listed = new ClaudeModel("test-key") { Model = "claude-opus-5-5", Effort = ClaudeEffort.Medium };
+        using var negotiated = new ClaudeModel("test-key") { Model = "claude-opus-5-5", Effort = ClaudeEffort.Medium, Price = new ModelPrice(3m, 15m, 0.15m, 3.75m, 6m) };
+        using var unknown = new ClaudeModel("test-key") { Model = "claude-unknown", Effort = ClaudeEffort.Medium };
+
+        Assert.Equal(new ModelPrice(4m, 20m, 0.20m, 5m, 8m), listed.Price);
+        Assert.Equal(3m, negotiated.Price!.Input);
+        Assert.Null(unknown.Price);
+    }
+
+    [Fact]
     public async Task A_refusal_carries_its_category()
     {
         using var model = Model(new FakeApi().Fixture("refusal.sse"));

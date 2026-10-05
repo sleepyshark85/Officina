@@ -47,7 +47,7 @@ internal static class ClaudeReply
     private static string? Category(BetaMessage message) => message.StopDetails?.Category?.Raw();
 
     /// <summary>
-    /// The call's tokens. When the call ran several iterations (such as a compaction before the reply), the totals count
+    /// The call's tokens, with the cache writes kept for an hour apart, as they cost more. When the call ran several iterations (such as a compaction before the reply), the totals count
     /// only the last one, so the iterations are added up instead (spike S02, recommendation 2).
     /// </summary>
     private static Usage Usage(BetaUsage usage)
@@ -56,10 +56,13 @@ internal static class ClaudeReply
         {
             return iterations.EnumerateArray().Aggregate(default(Usage), (sum, iteration) => sum + new Usage(
                 Tokens(iteration, "input_tokens"), Tokens(iteration, "output_tokens"),
-                Tokens(iteration, "cache_read_input_tokens"), Tokens(iteration, "cache_creation_input_tokens")));
+                Tokens(iteration, "cache_read_input_tokens"), Tokens(iteration, "cache_creation_input_tokens"),
+                iteration.TryGetProperty("cache_creation", out var written) && written.ValueKind == JsonValueKind.Object ? Tokens(written, "ephemeral_1h_input_tokens") : 0));
         }
 
-        return new Usage(usage.InputTokens, usage.OutputTokens, usage.CacheReadInputTokens ?? 0, usage.CacheCreationInputTokens ?? 0);
+        return new Usage(
+            usage.InputTokens, usage.OutputTokens, usage.CacheReadInputTokens ?? 0, usage.CacheCreationInputTokens ?? 0,
+            usage.CacheCreation?.Ephemeral1hInputTokens ?? 0);
     }
 
     /// <summary>
@@ -80,7 +83,7 @@ internal static class ClaudeReply
                 var counts = delta.Usage;
                 usage = new Usage(
                     counts.InputTokens ?? usage.Input, counts.OutputTokens, counts.CacheReadInputTokens ?? usage.CacheRead,
-                    counts.CacheCreationInputTokens ?? usage.CacheWrite);
+                    counts.CacheCreationInputTokens ?? usage.CacheWrite, usage.CacheWriteHour);
             }
         }
 

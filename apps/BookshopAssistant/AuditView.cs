@@ -5,21 +5,21 @@ using Sleepyshark.Officina;
 namespace BookshopAssistant;
 
 /// <summary>
-/// What <c>/audit</c> shows (APP-16): a conversation's entries in order, grouped by run, each run with a link to its trace
-/// in the telemetry dashboard (APP-20). Cost comes with the price table (S08); until then a run shows its tokens.
+/// What <c>/audit</c> shows (APP-16): a session's entries in order, grouped by run, each run with a link to its trace in
+/// the telemetry dashboard (APP-20), and each run's end with its tokens and cost.
 /// </summary>
 public static class AuditView
 {
-    public static string Format(string conversation, IReadOnlyList<AuditEntry> entries, Uri dashboard, TimeZoneInfo zone)
+    public static string Format(string session, IReadOnlyList<AuditEntry> entries, Uri dashboard, TimeZoneInfo zone)
     {
         ArgumentNullException.ThrowIfNull(entries);
         ArgumentNullException.ThrowIfNull(dashboard);
         if (entries.Count == 0)
         {
-            return $"No audit entries for conversation {conversation}.";
+            return $"No audit entries for session {session}.";
         }
 
-        var text = new StringBuilder($"Audit of conversation {conversation}:\n");
+        var text = new StringBuilder($"Audit of session {session}:\n");
         var runs = entries.GroupBy(entry => entry.Run).ToList();
         for (var index = 0; index < runs.Count; index++)
         {
@@ -40,7 +40,7 @@ public static class AuditView
     {
         { Kind: AuditKind.RunEnded, Usage: { } usage } => string.Create(
             CultureInfo.InvariantCulture,
-            $"{entry.Outcome}  tokens: {usage.Input + usage.CacheRead + usage.CacheWrite:N0} in ({usage.CacheRead:N0} cached), {usage.Output:N0} out"),
+            $"{entry.Outcome}  tokens: {usage.Input + usage.CacheRead + usage.CacheWrite:N0} in ({usage.CacheRead:N0} cached), {usage.Output:N0} out, ${entry.Cost ?? 0:0.0000}"),
         { Kind: AuditKind.ApprovalAnswered, Detail: { } reason } => $"{entry.Outcome}: {reason}",
         { Kind: AuditKind.ToolEnded, Duration: { } duration } => string.Create(CultureInfo.InvariantCulture, $"{entry.Outcome}  {duration.TotalMilliseconds:N0} ms"),
         _ => entry.Outcome ?? "",

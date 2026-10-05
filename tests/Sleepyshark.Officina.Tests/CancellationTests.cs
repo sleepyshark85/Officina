@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Sleepyshark.Officina.Testing;
 
 namespace Sleepyshark.Officina.Tests;
@@ -27,7 +28,7 @@ public class CancellationTests
             }
         }
 
-        Assert.Equal(new Stopped(StopReason.Cancelled, null, default), Assert.IsType<RunEnded>(events[^1]).Result);
+        Assert.Equal(new Stopped(StopReason.Cancelled, null, default), Agents.Outcome(Assert.IsType<RunEnded>(events[^1]).Result));
         Assert.Empty(events.OfType<ConversationAppended>());
         Assert.Empty(conversation.Messages);
 
@@ -46,7 +47,7 @@ public class CancellationTests
 
         var result = await Agents.With(model).RunAsync(conversation, "Hi", cancellationToken: new CancellationToken(canceled: true));
 
-        Assert.Equal(new Stopped(StopReason.Cancelled, null, default), result);
+        Assert.Equal(new Stopped(StopReason.Cancelled, null, default), Agents.Outcome(result));
         Assert.Empty(conversation.Messages);
         Assert.Empty(model.Requests);
     }
@@ -71,5 +72,40 @@ public class CancellationTests
 
         Assert.Equal("Paris", Assert.IsType<Completed>(Assert.IsType<RunEnded>(last).Result).Text);
         Assert.IsType<Completed>(await agent.RunAsync(conversation, "Thanks", cancellationToken: Ct));
+    }
+
+    [Fact]
+    public async Task A_conversation_saved_while_its_tools_ran_gets_error_results_for_them_when_resumed()
+    {
+        // The host saved the conversation on each append; the application then stopped while the tools ran.
+        var model = new ScriptedModel().CallTools(new ToolCall("c1", "search", """{"query":"x"}"""), new ToolCall("c2", "search", """{"query":"y"}""")).Reply("Resumed.");
+        var sink = new RecordingSink();
+        var agent = Agents.With(model, tools: Agents.SearchTool()) with { AuditSink = sink };
+        var conversation = new Conversation();
+        string? saved = null;
+        await foreach (var runEvent in agent.StreamAsync(conversation, "Search.", cancellationToken: Ct))
+        {
+            if (runEvent is ConversationAppended appended)
+            {
+                saved = JsonSerializer.Serialize(appended.Conversation);
+            }
+
+            if (runEvent is ToolCallStarted)
+            {
+                break;
+            }
+        }
+
+        var resumed = JsonSerializer.Deserialize<Conversation>(saved!)!;
+        var events = await Agents.CollectAsync(agent.StreamAsync(resumed, "Go on.", cancellationToken: Ct));
+
+        Assert.Equal("Resumed.", Assert.IsType<Completed>(Assert.IsType<RunEnded>(events[^1]).Result).Text);
+        var results = Assert.IsType<ConversationAppended>(events[0]).Message.Blocks.Select(block => block.ToolResult).ToList();
+        Assert.Equal([new ToolResult("c1", RunEngine.Interrupted, true), new ToolResult("c2", RunEngine.Interrupted, true)], results);
+        Assert.Null(RoleSequence.Problem(model.Requests[^1].Messages));
+        Assert.Empty(PrefixStability.Problems(model.Requests));
+        Assert.Equal(
+            [("c1", "interrupted"), ("c2", "interrupted")],
+            sink.Entries.Where(entry => entry.Kind == AuditKind.ToolEnded && entry.Outcome == "interrupted").Select(entry => (entry.CallId, entry.Outcome)));
     }
 }

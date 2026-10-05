@@ -54,6 +54,13 @@ public sealed class ClaudeModel : IModel, IDisposable
     /// <summary>The lifetime of both cache points: the instructions' and the conversation tail's.</summary>
     public CacheLifetime CacheLifetime { get; init; } = CacheLifetime.FiveMinutes;
 
+    /// <summary>What the model's tokens cost; by default its row of <see cref="ClaudePrices.Table"/>, if it has one.</summary>
+    public ModelPrice? Price
+    {
+        get => field ?? ClaudePrices.Table.GetValueOrDefault(Model);
+        init;
+    }
+
     public string Provider => "anthropic";
 
     public string Name => Model;

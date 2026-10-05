@@ -72,6 +72,12 @@ public sealed record AgentDefinition
     /// </summary>
     public bool TelemetryContent { get; init; }
 
+    /// <summary>
+    /// Limits on each run (BUD-01); none by default. It is not part of the prefix, so a host may give each run its own,
+    /// such as what is left of a session's budget, with <c>agent with { Budget = … }</c>.
+    /// </summary>
+    public Budget? Budget { get; init; }
+
     /// <summary>The clock for audit times, durations and span times; tests give a fake one.</summary>
     public TimeProvider Time
     {
@@ -111,7 +117,23 @@ public sealed record AgentDefinition
         {
             ArgumentException.ThrowIfNullOrWhiteSpace(context);
         }
+
+        if (Budget?.Cost is not null && Model.Price is null)
+        {
+            throw new InvalidOperationException("The budget limits cost, but the model has no price.");
+        }
+
         return RunEngine.StreamAsync(this, conversation, message, context, cancellationToken);
+    }
+
+    /// <summary>
+    /// Whether this definition can run on <paramref name="conversation"/>: true for a new conversation or one started with
+    /// the same tools, instructions and model settings; a run on any other fails with a prefix mismatch (CTX-04).
+    /// </summary>
+    public bool CanContinue(Conversation conversation)
+    {
+        ArgumentNullException.ThrowIfNull(conversation);
+        return conversation.Fingerprint is null || conversation.Fingerprint == Fingerprint();
     }
 
     /// <summary>
