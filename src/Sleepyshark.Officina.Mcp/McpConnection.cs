@@ -103,7 +103,7 @@ internal abstract class McpConnection(McpServer server, Action<string> lost) : I
     }
 
     /// <summary><paramref name="text"/> without the server's credentials, for messages that quote what the server or transport said.</summary>
-    protected string Redact(string text) =>
+    public string Redact(string text) =>
         server.Secrets.Where(secret => secret.Length > 0).Aggregate(text, (redacted, secret) => redacted.Replace(secret, "[redacted]", StringComparison.Ordinal));
 
     private async Task<JsonElement> RequestAsync(string method, JsonObject? parameters, CancellationToken cancellationToken)

@@ -65,6 +65,7 @@ public sealed class McpServer
 /// <summary>
 /// A tool of an MCP server that the host allows the agent (MCP-03), and how it runs (MCP-02): read or write, by default
 /// as the server's <c>readOnlyHint</c> annotation says (a write when it says nothing), and whether each call needs approval.
+/// Annotations are hints the server gives, not guarantees: for a server it does not trust, the host sets the kind itself.
 /// </summary>
 /// <param name="Name">The tool's name on the server.</param>
 /// <param name="Kind">Read or write; null to follow the server's annotation.</param>

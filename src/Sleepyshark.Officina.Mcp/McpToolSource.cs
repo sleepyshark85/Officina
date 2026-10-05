@@ -98,11 +98,17 @@ public sealed class McpToolSource : IToolSource, IAsyncDisposable
 
                 await opened.InitializeAsync(timeout.Token).ConfigureAwait(false);
             }
-            catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
+            catch (Exception exception)
             {
+                // Closed on any failure, cancellation included, so no server process outlives a connect.
                 if (opened is not null)
                 {
                     await opened.DisposeAsync().ConfigureAwait(false);
+                }
+
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    throw;
                 }
 
                 var reason = exception is OperationCanceledException ? $"The MCP server '{Name}' did not answer within {ConnectTimeout.TotalSeconds:0} s." : exception.Message;
@@ -182,10 +188,11 @@ public sealed class McpToolSource : IToolSource, IAsyncDisposable
             throw new IOException($"The MCP server '{Name}' is not connected{(current?.Lost is { } reason ? $": {reason}" : ".")}");
         }
 
+        // The server's output is redacted of its own credentials here, whether or not the host added them to the agent's secrets (EVT-03).
         var result = await current.CallToolAsync(name, input, cancellationToken).ConfigureAwait(false);
         var content = result.TryGetProperty("content", out var items) && items.ValueKind == JsonValueKind.Array
             ? string.Join("\n", items.EnumerateArray().Select(item => item.TryGetProperty("text", out var text) ? text.GetString() : $"[{item.GetProperty("type").GetString()} content]"))
             : "";
-        return new ToolOutput(content, result.TryGetProperty("isError", out var isError) && isError.ValueKind == JsonValueKind.True);
+        return new ToolOutput(current.Redact(content), result.TryGetProperty("isError", out var isError) && isError.ValueKind == JsonValueKind.True);
     }
 }

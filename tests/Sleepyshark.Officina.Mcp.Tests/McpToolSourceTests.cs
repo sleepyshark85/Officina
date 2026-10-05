@@ -299,4 +299,52 @@ public sealed class McpToolSourceTests
         Assert.Contains("401", refused.Message, StringComparison.Ordinal);
         Assert.DoesNotContain("wrong-token-19", refused.ToString(), StringComparison.Ordinal);
     }
+
+    [Fact]
+    public async Task EVT_03_a_server_s_credential_is_redacted_from_its_results_even_when_the_host_did_not_add_it_to_the_secrets()
+    {
+        var server = StdioServer(Token);
+        await using var source = await McpToolSource.ConnectAsync(server, [new("token")], TestContext.Current.CancellationToken);
+        var model = new ScriptedModel().CallTools(Call("c1", "fake__token", new { })).Reply("Done.");
+        var agent = Agent(model, source, server) with { Secrets = [] };
+
+        await agent.RunAsync(new Conversation(), "Go.", cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.Equal(new ToolResult("c1", "my token is [redacted]", false), LastResults(model)[0]);
+    }
+
+    [Fact]
+    public async Task MCP_04_a_connect_cancelled_while_the_server_starts_leaves_no_server_running()
+    {
+        var processIdFile = Path.Combine(Path.GetTempPath(), $"s11-fake-mcp-{Guid.NewGuid():N}.pid");
+        var silent = McpServer.Stdio("fake", "dotnet", [FakeServerProgram, "silent", processIdFile]);
+        using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+        var connecting = McpToolSource.ConnectAsync(silent, [], cancellation.Token);
+
+        // The server has started, and will never answer: the connect is cancelled while it waits for the answer.
+        while (!File.Exists(processIdFile) || new FileInfo(processIdFile).Length == 0)
+        {
+            await Task.Delay(20, TestContext.Current.CancellationToken);
+        }
+
+        var processId = int.Parse(await File.ReadAllTextAsync(processIdFile, TestContext.Current.CancellationToken), System.Globalization.CultureInfo.InvariantCulture);
+        await cancellation.CancelAsync();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => connecting);
+        File.Delete(processIdFile);
+        Assert.True(HasExited(processId), "The server process outlived the cancelled connect.");
+    }
+
+    private static bool HasExited(int processId)
+    {
+        try
+        {
+            using var process = System.Diagnostics.Process.GetProcessById(processId);
+            return process.HasExited;
+        }
+        catch (ArgumentException)
+        {
+            return true;
+        }
+    }
 }

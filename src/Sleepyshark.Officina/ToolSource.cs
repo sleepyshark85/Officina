@@ -51,6 +51,7 @@ internal static class ToolSources
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
+                // The run then stops as cancelled, before its first model call.
                 break;
             }
 #pragma warning disable CA1031 // A source that cannot connect fails the run, with its reason (MCP-04).

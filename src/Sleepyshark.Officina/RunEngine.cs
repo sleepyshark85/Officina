@@ -69,9 +69,10 @@ internal static class RunEngine
             yield break;
         }
 
-        if (await ToolSources.ConnectAsync(agent, audit, cancellationToken).ConfigureAwait(false) is { } unavailable)
+        var unavailable = await ToolSources.ConnectAsync(agent, audit, cancellationToken).ConfigureAwait(false);
+        if (unavailable is not null || cancellationToken.IsCancellationRequested)
         {
-            result.Value = new Failed(FailureReason.ToolSourceUnavailable, unavailable, default);
+            result.Value = unavailable is null ? new Stopped(StopReason.Cancelled, null, default) : new Failed(FailureReason.ToolSourceUnavailable, unavailable, default);
             yield break;
         }
 

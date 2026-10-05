@@ -80,7 +80,10 @@ try
 }
 catch (Exception exception) when (exception is IOException or InvalidOperationException)
 {
-    await Console.Error.WriteLineAsync($"The export server could not be started; is Docker running? {exception.Message}");
+    await Console.Error.WriteLineAsync(
+        $"The export server (the filesystem service of {composeFile}) could not be started: {exception.Message}\n"
+        + "It runs in Docker: check that Docker is running, that its image is pulled (docker compose --profile mcp pull), "
+        + "and that this is the folder of compose.yaml, or set BOOKSHOP_COMPOSE_FILE.");
     return 1;
 }
 
