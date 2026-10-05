@@ -26,7 +26,7 @@ public class OutputTests
           "maximum":{"type":"number"},
           "tags":{"type":"array","items":{"type":"string","pattern":"^[a-z]+$","minLength":1},"minItems":1,"maxItems":3},
           "pairs":{"type":"array","items":{"type":"object","properties":{"a":{"type":"string"}}},"minItems":2},
-          "note":{"anyOf":[{"type":"null"},{"type":["object","null"],"properties":{"text":{"type":"string"}},"additionalProperties":true}]}},
+          "note":{"anyOf":[{"type":"null"},{"type":["object","null"],"properties":{"text":{"type":"string"}}}]}},
          "required":["count"]}
         """;
 
@@ -42,6 +42,15 @@ public class OutputTests
         var config = ClaudeRequest.Build(model, Typed(Written)).RawBodyData["output_config"];
 
         Assert.Equal(Golden("output-written.json"), JsonSerializer.Serialize(config, Indented).ReplaceLineEndings("\n"));
+    }
+
+    [Fact]
+    public void An_open_object_is_refused_rather_than_closed()
+    {
+        using var model = Offline();
+        const string dictionary = """{"type":"object","properties":{"counts":{"type":"object","additionalProperties":{"type":"integer"}}},"additionalProperties":false}""";
+
+        Assert.Throws<ArgumentException>(() => ClaudeRequest.Build(model, Typed(dictionary)));
     }
 
     [Fact]

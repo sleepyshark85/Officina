@@ -14,6 +14,15 @@ public class OutputTests
 
     public sealed record Other(string Name);
 
+    public sealed record Counts(Dictionary<string, int> PerBook);
+
+    public sealed record Titled
+    {
+        public Titled(string title) => Title = title.Length > 0 ? title : throw new ArgumentException("The title is empty.", nameof(title));
+
+        public string Title { get; }
+    }
+
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     private static AgentDefinition Typed(ScriptedModel model) => With(model) with { Output = OutputContract.For<Summary>() };
@@ -52,6 +61,18 @@ public class OutputTests
     }
 
     [Fact]
+    public async Task An_exception_from_the_output_type_s_constructor_ends_the_run_as_failed()
+    {
+        var model = new ScriptedModel().Reply("""{"title":""}""");
+
+        var result = await (With(model) with { Output = OutputContract.For<Titled>() }).RunAsync("Summarize.", cancellationToken: Ct);
+
+        var failed = Assert.IsType<Failed>(result);
+        Assert.Equal(FailureReason.InvalidOutput, failed.Reason);
+        Assert.Contains("The title is empty.", failed.Error, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task A_refusal_with_typed_output_stops_rather_than_failing()
     {
         var model = new ScriptedModel().Reply(new ModelStopped(ModelStopReason.Refusal, "cyber"));
@@ -67,6 +88,8 @@ public class OutputTests
         var refused = Assert.Throws<ArgumentException>(OutputContract.For<Node>);
 
         Assert.Contains("outside the supported subset", refused.Message, StringComparison.Ordinal);
+        var open = Assert.Throws<ArgumentException>(OutputContract.For<Counts>);
+        Assert.Contains("'/properties/perBook' is an open object", open.Message, StringComparison.Ordinal);
     }
 
     [Fact]

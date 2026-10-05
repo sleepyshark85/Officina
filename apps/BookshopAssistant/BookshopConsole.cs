@@ -56,6 +56,9 @@ public sealed partial class BookshopConsole(
     private CancellationTokenSource? reply;
     private Task<string?>? pendingRead;
     private AgentDefinition? summarizer;
+
+    /// <summary>The sessions whose summary failed in this console, which <c>/sessions</c> does not try again.</summary>
+    private readonly HashSet<string> unsummarized = [];
     private bool atLineStart = true;
 
     /// <summary>Cancels the reply in progress (APP-03); false when there is none.</summary>
@@ -124,7 +127,16 @@ public sealed partial class BookshopConsole(
                 case { } command when Argument(command, "/resume") is { } id:
                     if (await ResumeAsync(agent, id) is { } resumed)
                     {
-                        await LeaveAsync(session, resumed.Id);
+                        // Resuming the session in use does not leave it, nor forget that it changed.
+                        if (resumed.Id == session.Id)
+                        {
+                            resumed.Changed = session.Changed;
+                        }
+                        else
+                        {
+                            await LeaveAsync(session);
+                        }
+
                         session = resumed;
                     }
 
@@ -183,7 +195,13 @@ public sealed partial class BookshopConsole(
         {
             var listed = await sessions.ListAsync(Listed, CancellationToken.None);
             var summaries = new Dictionary<string, SessionSummary>();
-            foreach (var left in listed.Where(each => each.Stale && each.Id != current.Id && summarizer is not null))
+            var stale = listed.Where(each => each.Stale && each.Id != current.Id && summarizer is not null && !unsummarized.Contains(each.Id)).ToList();
+            if (stale.Count > 0)
+            {
+                await output.WriteLineAsync($"Summarizing {stale.Count} session{(stale.Count == 1 ? "" : "s")} left without a summary…");
+            }
+
+            foreach (var left in stale)
             {
                 if (await sessions.LoadAsync(left.Id, CancellationToken.None) is { } stored && await SummarizeAsync(left.Id, stored.Conversation) is { } summary)
                 {
@@ -265,11 +283,11 @@ public sealed partial class BookshopConsole(
 
     /// <summary>
     /// Summarizes <paramref name="session"/> as it is left (APP-15), unless nothing was said in it since this console took
-    /// it up, or <paramref name="next"/> is the same session.
+    /// it up.
     /// </summary>
-    private async Task LeaveAsync(Session session, string? next = null)
+    private async Task LeaveAsync(Session session)
     {
-        if (summarizer is not null && session.Changed && session.Id != next && await SummarizeAsync(session.Id, session.Conversation) is { } summary)
+        if (summarizer is not null && session.Changed && await SummarizeAsync(session.Id, session.Conversation) is { } summary)
         {
             await WriteLineAsync($"Session {session.Id} summarized: {summary.Title}");
         }
@@ -290,6 +308,7 @@ public sealed partial class BookshopConsole(
                 Stopped stopped => $"stopped: {stopped.Reason}",
                 _ => "no summary",
             };
+            unsummarized.Add(id);
             LogSummaryFailed(logger, id, reason);
             await WriteLineAsync($"[Session {id} could not be summarized: {reason}]");
             return null;

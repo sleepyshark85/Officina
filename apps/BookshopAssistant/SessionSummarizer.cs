@@ -14,7 +14,7 @@ public sealed record SessionSummary(
 /// <summary>
 /// The session summarizer (APP-15, ARCHITECTURE §12.1): a stateless agent with typed output and no tools. It reads a
 /// session's transcript as plain text in one user message: the staff member's messages, the assistant's replies, and
-/// each tool call with its input and outcome, so it can tell which changes were made.
+/// each tool call with its input and outcome, so it can tell which changes were made. Each run may spend up to $0.05.
 /// </summary>
 public static class SessionSummarizer
 {
@@ -27,6 +27,7 @@ public static class SessionSummarizer
         Model = model,
         Instructions = Instructions,
         Output = OutputContract.For<SessionSummary>(),
+        Budget = new Budget { Cost = 0.05m },
         Time = time,
     };
 

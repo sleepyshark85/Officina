@@ -28,7 +28,8 @@ public sealed class SessionStore(NpgsqlDataSource database)
 
     private const string SaveSql = """
         update sessions
-        set conversation = $3, input_tokens = $4, output_tokens = $5, cache_read_tokens = $6, cache_write_tokens = $7, cost = $8, updated = now()
+        set conversation = $3, input_tokens = $4, output_tokens = $5, cache_read_tokens = $6, cache_write_tokens = $7, cost = $8,
+            updated = case when conversation is distinct from $3 then now() else updated end
         where id = $1 and staff_member = $2
         """;
 
@@ -54,7 +55,8 @@ public sealed class SessionStore(NpgsqlDataSource database)
     /// Saves the session as it is now: its conversation, and its totals, <paramref name="usage"/> and
     /// <paramref name="cost"/>, which replace the stored ones, so a save that failed or never came loses nothing for good.
     /// A <paramref name="created"/> session is stored already; a new one is inserted, and an id that another session has
-    /// throws rather than overwriting it. The database stamps the time.
+    /// throws rather than overwriting it. The database stamps the time, and moves it only when the conversation changed, so a
+    /// summary stays current through a save of the totals alone (APP-15).
     /// </summary>
     public async Task SaveAsync(
         Conversation conversation, string staffMember, Usage usage, decimal cost, bool created, CancellationToken cancellationToken)
