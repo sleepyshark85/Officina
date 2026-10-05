@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using System.Runtime.CompilerServices;
+using System.Threading.Channels;
 
 namespace Sleepyshark.Officina;
 
@@ -106,7 +107,15 @@ internal static class RunEngine
             }
 
             // A reply's calls all get results, in one message, even when the run is cancelled meanwhile (CTX-06, AGT-05).
-            var results = await new ToolPipeline(agent, audit).RunAsync(toolCalls, cancellationToken).ConfigureAwait(false);
+            // The pipeline's events stream while it runs.
+            var events = Channel.CreateUnbounded<RunEvent>(new UnboundedChannelOptions { SingleReader = true });
+            var running = RunToolsAsync(new ToolPipeline(agent, audit, events.Writer), toolCalls, events.Writer, cancellationToken);
+            await foreach (var runEvent in events.Reader.ReadAllAsync(CancellationToken.None).ConfigureAwait(false))
+            {
+                yield return runEvent;
+            }
+
+            var results = await running.ConfigureAwait(false);
             var answer = new Message(Role.User, [.. results.Select(toolResult => new ContentBlock(toolResult))]);
             conversation.Append(answer);
             yield return new ConversationAppended(conversation, answer);
@@ -115,6 +124,19 @@ internal static class RunEngine
                 result.Value = new Stopped(StopReason.Cancelled, null, usage);
                 yield break;
             }
+        }
+    }
+
+    private static async Task<ImmutableArray<ToolResult>> RunToolsAsync(
+        ToolPipeline pipeline, List<ToolCall> calls, ChannelWriter<RunEvent> events, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await pipeline.RunAsync(calls, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            events.Complete();
         }
     }
 

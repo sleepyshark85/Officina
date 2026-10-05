@@ -13,6 +13,7 @@
     <Project Path="apps/BookshopAssistant/BookshopAssistant.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/BookshopAssistant.Tests/BookshopAssistant.Tests.csproj" />
     <Project Path="tests/Sleepyshark.Officina.Claude.Tests/Sleepyshark.Officina.Claude.Tests.csproj" />
     <Project Path="tests/Sleepyshark.Officina.Dependencies.Tests/Sleepyshark.Officina.Dependencies.Tests.csproj" />
     <Project Path="tests/Sleepyshark.Officina.Tests/Sleepyshark.Officina.Tests.csproj" />

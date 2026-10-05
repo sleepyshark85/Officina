@@ -2,6 +2,7 @@ using System.Collections.Immutable;
 using System.Globalization;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using System.Threading.Channels;
 
 namespace Sleepyshark.Officina;
 
@@ -9,9 +10,10 @@ namespace Sleepyshark.Officina;
 /// Runs the tool calls of one reply (ARCHITECTURE §3): for each, find the tool → validate the input → ask approval if
 /// needed → record the attempt → invoke → truncate. Read calls run concurrently, a write call waits for the calls before
 /// it and runs alone (TOOL-03); approvals are asked one at a time, in call order. Every call gets exactly one result,
-/// in call order (CTX-06), and every failure is an error result, never an exception (TOOL-05).
+/// in call order (CTX-06), and every failure is an error result, never an exception (TOOL-05). What happens is written
+/// to <paramref name="events"/> as it happens (EVT-01).
 /// </summary>
-internal sealed class ToolPipeline(AgentDefinition agent, AuditRecorder audit)
+internal sealed class ToolPipeline(AgentDefinition agent, AuditRecorder audit, ChannelWriter<RunEvent> events)
 {
     /// <summary>The longest result the model gets, in characters (TOOL-06): about 16k tokens.</summary>
     internal const int MaxResultLength = 64_000;
@@ -24,6 +26,7 @@ internal sealed class ToolPipeline(AgentDefinition agent, AuditRecorder audit)
         {
             var (call, at) = (calls[index], index);
             var tool = agent.Tools.FirstOrDefault(tool => tool.Name == call.Name);
+            events.TryWrite(new ToolCallStarted(call));
             if (tool?.Kind == ToolKind.Write)
             {
                 await Task.WhenAll(reads).ConfigureAwait(false);
@@ -110,6 +113,7 @@ internal sealed class ToolPipeline(AgentDefinition agent, AuditRecorder audit)
         }
 
         await audit.RecordAsync(AuditKind.ApprovalAsked, tool.Name, call.Id, call.Input).ConfigureAwait(false);
+        events.TryWrite(new ApprovalAsked(call));
         Approval approval;
         try
         {
@@ -129,6 +133,7 @@ internal sealed class ToolPipeline(AgentDefinition agent, AuditRecorder audit)
 
         await audit.RecordAsync(AuditKind.ApprovalAnswered, tool.Name, call.Id, outcome: approval.Approved ? "approved" : "denied", detail: approval.Reason)
             .ConfigureAwait(false);
+        events.TryWrite(new ApprovalAnswered(call, approval.Approved));
         return approval.Approved
             ? (input, null)
             : (default, new ToolOutput($"The call was denied{(approval.Reason is null ? "." : $": {approval.Reason}")}", true));
@@ -173,6 +178,8 @@ internal sealed class ToolPipeline(AgentDefinition agent, AuditRecorder audit)
                 CultureInfo.InvariantCulture,
                 $"{AgentDefinition.Cut(content, MaxResultLength)}\n[Truncated: the result had {content.Length} characters; only the first {MaxResultLength} are shown.]");
         await audit.RecordAsync(AuditKind.ToolEnded, call.Name, call.Id, call.Input, output.IsError ? "error" : "ok", content, duration).ConfigureAwait(false);
-        return new ToolResult(call.Id, content, output.IsError);
+        var result = new ToolResult(call.Id, content, output.IsError);
+        events.TryWrite(new ToolCallFinished(call, result));
+        return result;
     }
 }

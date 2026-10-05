@@ -61,6 +61,40 @@ public class ToolLoopTests
     }
 
     [Fact]
+    public async Task Tool_calls_and_approvals_stream_as_events_between_the_reply_and_the_tool_results()
+    {
+        var model = new ScriptedModel()
+            .CallTools(new ToolCall("c1", "order", "{}"), new ToolCall("c2", "order", "{}"), new ToolCall("c3", "missing", "{}"))
+            .Reply("Done.");
+        var agent = Agents.With(model, tools: Agents.Tool("order", kind: ToolKind.Write, needsApproval: true)) with
+        {
+            Approver = new ScriptedApprover().Answer(Approval.Granted, Approval.Denied("no")),
+        };
+
+        var events = await Agents.CollectAsync(agent.StreamAsync(new Conversation(), "Order twice.", cancellationToken: Ct));
+
+        var tools = events
+            .SkipWhile(runEvent => runEvent is not ConversationAppended { Message.Role: Role.Assistant })
+            .Skip(1)
+            .TakeWhile(runEvent => runEvent is not ConversationAppended)
+            .Select(runEvent => runEvent switch
+            {
+                ToolCallStarted started => $"started {started.Call.Id}",
+                ApprovalAsked asked => $"asked {asked.Call.Id}",
+                ApprovalAnswered answered => $"answered {answered.Call.Id} {answered.Approved}",
+                ToolCallFinished finished => $"finished {finished.Call.Id} {(finished.Result.IsError ? "error" : "ok")}",
+                _ => runEvent.ToString(),
+            });
+        Assert.Equal(
+            [
+                "started c1", "asked c1", "answered c1 True", "finished c1 ok",
+                "started c2", "asked c2", "answered c2 False", "finished c2 error",
+                "started c3", "finished c3 error",
+            ],
+            tools);
+    }
+
+    [Fact]
     public async Task An_approved_call_runs()
     {
         var ran = false;

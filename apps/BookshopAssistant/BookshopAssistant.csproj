@@ -10,4 +10,8 @@
     <ProjectReference Include="..\..\src\Sleepyshark.Officina.Claude\Sleepyshark.Officina.Claude.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <PackageReference Include="Npgsql" />
+  </ItemGroup>
+
 </Project>
