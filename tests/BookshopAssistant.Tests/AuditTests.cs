@@ -67,8 +67,13 @@ public class AuditTests(BookshopDatabase database) : IClassFixture<BookshopDatab
 
         var transcript = await RunAsync(database, model, ["Sam", "Restock book 300 with 5.", "y", "Hi.", "/audit", "/audit nobody", "/quit"]);
 
-        var traces = telemetry.Spans("bookshop").Where(span => span.OperationName == "invoke_agent bookshop").Select(span => span.TraceId.ToHexString()).ToList();
         var conversation = await database.ScalarAsync<string>("select conversation from audit where tool = 'restock_book' limit 1");
+
+        // Other test classes run the bookshop agent at the same time, so this session's runs are picked by their conversation.
+        var traces = telemetry.Spans("bookshop")
+            .Where(span => span.OperationName == "invoke_agent bookshop" && (string?)span.GetTagItem("gen_ai.conversation.id") == conversation)
+            .Select(span => span.TraceId.ToHexString())
+            .ToList();
         InOrder(
             transcript,
             "you> /audit\n",
