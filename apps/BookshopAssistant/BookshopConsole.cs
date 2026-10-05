@@ -217,6 +217,14 @@ public sealed class BookshopConsole(TextReader input, TextWriter output, TimePro
             return null;
         }
 
+        // The line can finish just as the cancel arrives, and WaitAsync then returns it instead of throwing. Keep it
+        // pending so it serves the next prompt rather than being lost.
+        if (cancellationToken.IsCancellationRequested)
+        {
+            atLineStart = false;
+            return null;
+        }
+
         pendingRead = null;
         if (echoInput)
         {
