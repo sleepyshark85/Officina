@@ -1,7 +1,8 @@
 // Bookshop Assistant, the reference application (REQUIREMENTS §2, ARCHITECTURE §12): a console chatbot for bookshop
 // staff over the PostgreSQL database in compose.yaml. Needs BOOKSHOP_CONNECTION_STRING and ANTHROPIC_API_KEY. Traces,
 // metrics and logs go over OTLP to the dashboard in compose.yaml (APP-20): OTEL_EXPORTER_OTLP_ENDPOINT, by default
-// http://localhost:4317; BOOKSHOP_DASHBOARD_URL is where /audit links to, by default http://localhost:18888.
+// http://localhost:4317; BOOKSHOP_DASHBOARD_URL is where /audit links to, by default http://localhost:18888. Exports go to
+// the exports folder, through the filesystem MCP server the compose file runs in Docker (APP-12).
 using BookshopAssistant;
 using Microsoft.Extensions.Logging;
 using Npgsql;
@@ -12,6 +13,7 @@ using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using Sleepyshark.Officina;
 using Sleepyshark.Officina.Claude;
+using Sleepyshark.Officina.Mcp;
 
 var connectionString = Environment.GetEnvironmentVariable("BOOKSHOP_CONNECTION_STRING");
 if (string.IsNullOrWhiteSpace(connectionString))
@@ -69,7 +71,26 @@ Console.CancelKeyPress += (_, press) =>
     }
 };
 
+// The export server (APP-12), from the compose file in the current folder, or BOOKSHOP_COMPOSE_FILE.
+var composeFile = Environment.GetEnvironmentVariable("BOOKSHOP_COMPOSE_FILE") is { Length: > 0 } file ? file : "compose.yaml";
+McpToolSource exports;
+try
+{
+    exports = await Exports.ConnectAsync(Exports.Server(composeFile), CancellationToken.None);
+}
+catch (Exception exception) when (exception is IOException or InvalidOperationException)
+{
+    await Console.Error.WriteLineAsync(
+        $"The export server (the filesystem service of {composeFile}) could not be started: {exception.Message}\n"
+        + "It runs in Docker: check that Docker is running, that its image is pulled (docker compose --profile mcp pull), "
+        + "and that this is the folder of compose.yaml, or set BOOKSHOP_COMPOSE_FILE.");
+    return 1;
+}
+
+await using var stopExports = exports;
+
 var password = new NpgsqlConnectionStringBuilder(connectionString).Password;
-var agent = BookshopAgent.Create(model, new BookshopTools(database), console, audit, password is null ? [] : [password], TimeProvider.System);
+var agent = BookshopAgent.Create(
+    model, new BookshopTools(database), console, audit, password is null ? [] : [password], TimeProvider.System, exports.Tools);
 await console.RunAsync(agent, SessionSummarizer.Create(summaryModel, TimeProvider.System));
 return 0;

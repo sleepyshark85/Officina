@@ -132,6 +132,9 @@ Each contract is the only way the core reaches what is behind it; the test kit r
 | **Receives** | Validated input and the run's identity (memory scope, cancellation) |
 | **Returns** | A result or an error result; size-limited by the pipeline |
 
+A tool may come from a source that holds a connection, such as an MCP server. The run connects each source of its
+tools before its first model call, and fails if one cannot connect; connection changes are audited.
+
 ### 4.3 Approver
 
 | | |

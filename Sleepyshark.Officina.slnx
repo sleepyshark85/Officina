@@ -16,6 +16,8 @@
     <Project Path="tests/BookshopAssistant.Tests/BookshopAssistant.Tests.csproj" />
     <Project Path="tests/Sleepyshark.Officina.Claude.Tests/Sleepyshark.Officina.Claude.Tests.csproj" />
     <Project Path="tests/Sleepyshark.Officina.Dependencies.Tests/Sleepyshark.Officina.Dependencies.Tests.csproj" />
+    <Project Path="tests/Sleepyshark.Officina.Mcp.FakeServer/Sleepyshark.Officina.Mcp.FakeServer.csproj" />
+    <Project Path="tests/Sleepyshark.Officina.Mcp.Tests/Sleepyshark.Officina.Mcp.Tests.csproj" />
     <Project Path="tests/Sleepyshark.Officina.Tests/Sleepyshark.Officina.Tests.csproj" />
   </Folder>
 </Solution>

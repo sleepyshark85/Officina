@@ -1,0 +1,6 @@
+<Project>
+
+  <!-- A program the MCP tests start, not a test project, so it skips tests/Directory.Build.props. -->
+  <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../../'))" />
+
+</Project>

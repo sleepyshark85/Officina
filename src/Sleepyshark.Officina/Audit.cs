@@ -29,6 +29,9 @@ public enum AuditKind
     ApprovalAsked,
 
     ApprovalAnswered,
+
+    /// <summary>A tool source connected, failed to connect, or lost its connection; the entry's tool names the source (AUD-01).</summary>
+    ToolSource,
 }
 
 /// <summary>

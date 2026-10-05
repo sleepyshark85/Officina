@@ -68,4 +68,7 @@ public enum FailureReason
 
     /// <summary>The reply does not deserialize into the agent's output type, or does not match its schema (OUT-02).</summary>
     InvalidOutput,
+
+    /// <summary>A source of the agent's tools, such as an MCP server, could not be connected at the start of the run (MCP-04).</summary>
+    ToolSourceUnavailable,
 }
