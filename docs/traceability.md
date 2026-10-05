@@ -15,7 +15,7 @@ Test files are under `tests/`, shortened as:
 | Samples | `Samples.Tests` (the GEN-06 samples) |
 
 **Summary:** 88 requirements. 85 have tests; 3 are checked by other means only: APP-19 (the demo script), TEST-03 (the
-CI workflow) and TEST-04 (the live smoke test itself), the first and last delivered by S13b. Six more have a part that
+CI workflow) and TEST-04 (the live smoke test itself), the first and last delivered by S13b. Nine more have a part that
 only a live run or inspection checks, noted in the last column.
 
 ## Reference application (APP)
