@@ -20,6 +20,9 @@ public sealed class ScriptedModel : IModel
 
     public string Name { get; init; } = "scripted";
 
+    /// <summary>What its tokens cost; none by default.</summary>
+    public ModelPrice? Price { get; init; }
+
     /// <summary>The requests received so far, in order.</summary>
     public IReadOnlyList<ModelRequest> Requests
     {

@@ -23,11 +23,13 @@ internal static class RunEngine
             using var audit = new AuditRecorder(agent, conversation, span);
             span?.SetTag("officina.run.id", audit.Run);
             await audit.RecordAsync(AuditKind.RunStarted).ConfigureAwait(false);
-            var result = new StrongBox<RunResult>();
-            await foreach (var runEvent in LoopAsync(agent, conversation, message, context, audit, span, result, cancellationToken).ConfigureAwait(false))
+            var (result, spending) = (new StrongBox<RunResult>(), new Spending(agent));
+            await foreach (var runEvent in LoopAsync(agent, conversation, message, context, audit, span, spending, result, cancellationToken).ConfigureAwait(false))
             {
                 yield return runEvent;
             }
+
+            result.Value = spending.Report(result.Value!);
 
             var (outcome, detail) = result.Value switch
             {
@@ -35,7 +37,7 @@ internal static class RunEngine
                 Failed failed => ($"Failed: {failed.Reason}", failed.Error),
                 _ => ("Completed", null),
             };
-            await audit.RecordAsync(AuditKind.RunEnded, outcome: outcome, detail: detail, usage: result.Value!.Usage).ConfigureAwait(false);
+            await audit.RecordAsync(AuditKind.RunEnded, outcome: outcome, detail: detail, usage: result.Value.Usage, cost: result.Value.Cost).ConfigureAwait(false);
             Telemetry.EndRun(span, agent, result.Value);
             ended = true;
             yield return new RunEnded(result.Value);
@@ -55,7 +57,7 @@ internal static class RunEngine
     /// <summary>Calls the model and runs the tools it asks for, until a stop that ends the run; leaves the run's result in <paramref name="result"/>.</summary>
     private static async IAsyncEnumerable<RunEvent> LoopAsync(
         AgentDefinition agent, Conversation conversation, string message, string? context, AuditRecorder audit, Activity? span,
-        StrongBox<RunResult> result, [EnumeratorCancellation] CancellationToken cancellationToken)
+        Spending spending, StrongBox<RunResult> result, [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         var fingerprint = agent.Fingerprint();
         if (conversation.Fingerprint is { } bound && bound != fingerprint)
@@ -67,27 +69,43 @@ internal static class RunEngine
             yield break;
         }
 
+        // A conversation saved after its model asked for tools, and before their results came, gets error results first,
+        // as the application stopped mid-reply: it may be resumed, and the provider rejects calls without results.
+        if (conversation.Messages is [.., { Role: Role.Assistant } last] && last.Blocks.Select(block => block.ToolCall).OfType<ToolCall>().ToList() is { Count: > 0 } unanswered)
+        {
+            var interrupted = new Message(Role.User, [.. unanswered.Select(call => new ContentBlock(new ToolResult(call.Id, Interrupted, IsError: true)))]);
+            conversation.Append(interrupted);
+            yield return new ConversationAppended(conversation, interrupted);
+        }
+
         // The user message and run context enter the conversation only with the reply that answers them, so a run that
         // gets no reply leaves the conversation as it was, and valid for the next request.
         ImmutableArray<Message> pending = context is null
             ? [Message.Of(Role.User, message)]
             : [Message.Of(Role.User, message), Message.Of(Role.Operator, context)];
-        var usage = default(Usage);
         for (var calls = 1; ; calls++)
         {
-            if (calls > MaxModelCalls)
+            var reached = spending.Reached();
+            if (calls > MaxModelCalls || reached is not null)
             {
-                result.Value = new Stopped(StopReason.IterationLimit, null, usage);
+                result.Value = calls > MaxModelCalls
+                    ? new Stopped(StopReason.IterationLimit, null, spending.Usage)
+                    : new Stopped(StopReason.Budget, reached, spending.Usage);
                 yield break;
             }
 
             var reply = new Reply();
-            await foreach (var runEvent in CallModelAsync(agent, conversation.Messages.AddRange(pending), span, reply, cancellationToken).ConfigureAwait(false))
+            var limit = spending.OutputLimit();
+            await foreach (var runEvent in CallModelAsync(agent, conversation.Messages.AddRange(pending), limit, span, reply, cancellationToken).ConfigureAwait(false))
             {
                 yield return runEvent;
             }
 
-            usage += reply.Usage;
+            spending.AddCall(reply.Usage);
+            var usage = spending.Usage;
+
+            // A reply the lowered output limit cut short stopped for the budget, once the budget allows no more.
+            var budgetCut = limit is not null && reply.Stop?.Reason == ModelStopReason.MaxTokens ? spending.Reached() : null;
             var toolCalls = reply.Blocks.Select(block => block.ToolCall).OfType<ToolCall>().ToList();
 
             // A reply cut off before its stop reason is not appended (AGT-05), nor is one without content. Nor is one that
@@ -100,7 +118,7 @@ internal static class RunEngine
                 result.Value = reply.Error is not null ? new Failed(FailureReason.ModelError, agent.Redact(reply.Error), usage)
                     : reply.Stop is null ? new Stopped(StopReason.Cancelled, null, usage)
                     : toolCalls.Count > 0 && reply.Stop.Reason == ModelStopReason.End ? new Failed(FailureReason.UnexpectedStop, "The model's reply asked for tools but did not stop for them.", usage)
-                    : Result(agent, reply.Stop, reply.Blocks, usage);
+                    : Result(agent, reply.Stop, reply.Blocks, usage, budgetCut);
                 yield break;
             }
 
@@ -114,9 +132,11 @@ internal static class RunEngine
             pending = [];
             if (reply.Stop.Reason != ModelStopReason.ToolUse || toolCalls.Count == 0)
             {
-                result.Value = Result(agent, reply.Stop, reply.Blocks, usage);
+                result.Value = Result(agent, reply.Stop, reply.Blocks, usage, budgetCut);
                 yield break;
             }
+
+            spending.ToolCalls += toolCalls.Count;
 
             // A reply's calls all get results, in one message, even when the run is cancelled meanwhile (CTX-06, AGT-05).
             // The pipeline's events stream while it runs. A host that stops reading them abandons the run: the tools are
@@ -155,6 +175,9 @@ internal static class RunEngine
         }
     }
 
+    /// <summary>The result of a call whose reply the application never received, as it stopped mid-reply.</summary>
+    internal const string Interrupted = "The call was interrupted: the application stopped before its result was recorded, so it may or may not have taken effect.";
+
     private static async Task<ImmutableArray<ToolResult>> RunToolsAsync(
         ToolPipeline pipeline, List<ToolCall> calls, ChannelWriter<RunEvent> events, CancellationToken cancellationToken)
     {
@@ -187,9 +210,9 @@ internal static class RunEngine
 
     /// <summary>Makes one model call, streaming its events, and leaves what it returned in <paramref name="reply"/>.</summary>
     private static async IAsyncEnumerable<RunEvent> CallModelAsync(
-        AgentDefinition agent, ImmutableArray<Message> messages, Activity? run, Reply reply, [EnumeratorCancellation] CancellationToken cancellationToken)
+        AgentDefinition agent, ImmutableArray<Message> messages, int? limit, Activity? run, Reply reply, [EnumeratorCancellation] CancellationToken cancellationToken)
     {
-        var request = new ModelRequest(agent.Tools, agent.Instructions, messages);
+        var request = new ModelRequest(agent.Tools, agent.Instructions, messages, limit);
         var (started, span) = (agent.Time.GetTimestamp(), Telemetry.StartModelCall(agent, run));
         var streamed = false;
         IAsyncEnumerator<ModelEvent>? stream = null;
@@ -238,7 +261,7 @@ internal static class RunEngine
                         break;
                     case UsageReceived received:
                         reply.Usage += received.Usage;
-                        yield return new UsageReported(received.Usage);
+                        yield return new UsageReported(received.Usage, agent.Model.Price?.Cost(received.Usage) ?? 0);
                         break;
                     case ModelStopped stopped:
                         reply.Stop = stopped;
@@ -265,13 +288,15 @@ internal static class RunEngine
             }
 
             Telemetry.EndModelCall(
-                span, agent, started, reply.Usage, reply.Stop, reply.Error, reply.Retries, reply.FirstText, () => string.Concat(reply.Blocks.Select(block => block.Text)));
+                span, agent, started, reply.Usage, agent.Model.Price?.Cost(reply.Usage) ?? 0, reply.Stop, reply.Error, reply.Retries, reply.FirstText,
+                () => string.Concat(reply.Blocks.Select(block => block.Text)));
         }
     }
 
-    private static RunResult Result(AgentDefinition agent, ModelStopped stop, IEnumerable<ContentBlock> blocks, Usage usage) => stop.Reason switch
+    private static RunResult Result(AgentDefinition agent, ModelStopped stop, IEnumerable<ContentBlock> blocks, Usage usage, string? budgetCut) => stop.Reason switch
     {
         ModelStopReason.End => new Completed(agent.Redact(string.Concat(blocks.Select(block => block.Text))), usage),
+        ModelStopReason.MaxTokens when budgetCut is not null => new Stopped(StopReason.Budget, budgetCut, usage),
         ModelStopReason.MaxTokens => new Stopped(StopReason.OutputLimit, null, usage),
         ModelStopReason.Refusal => new Stopped(StopReason.Refusal, stop.Detail, usage),
         ModelStopReason.ContextFull => new Stopped(StopReason.ContextFull, null, usage),

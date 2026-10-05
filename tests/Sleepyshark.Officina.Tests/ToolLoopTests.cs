@@ -268,7 +268,7 @@ public class ToolLoopTests
 
         var result = await agent.RunAsync(conversation, "Find it.", "Date: 2026-10-05.", Ct);
 
-        Assert.Equal(new Stopped(StopReason.OutputLimit, null, default), result);
+        Assert.Equal(new Stopped(StopReason.OutputLimit, null, default), Agents.Outcome(result));
         Assert.False(ran);
         Assert.Empty(conversation.Messages);
         Assert.IsType<Completed>(await agent.RunAsync(conversation, "Hi.", cancellationToken: Ct));
@@ -297,7 +297,7 @@ public class ToolLoopTests
 
         var result = await agent.RunAsync(conversation, "Find it.", "Date: 2026-10-05.", Ct);
 
-        Assert.Equal(expected, result);
+        Assert.Equal(expected, Agents.Outcome(result));
         Assert.False(ran);
         Assert.Empty(conversation.Messages);
         Assert.IsType<Completed>(await agent.RunAsync(conversation, "Hi.", cancellationToken: Ct));

@@ -1,10 +1,17 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Globalization;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Sleepyshark.Officina;
 
 namespace BookshopAssistant;
+
+/// <summary>The cost limits of the console (APP-14), in US dollars: each reply's, and each session's over all its replies.</summary>
+public sealed record Budgets(decimal Reply, decimal Session)
+{
+    public static Budgets Default { get; } = new(Reply: 0.50m, Session: 5m);
+}
 
 /// <summary>
 /// The console (ARCHITECTURE §12.1): asks who is using it, then reads messages and commands, streams each reply with its
@@ -12,10 +19,13 @@ namespace BookshopAssistant;
 /// the agent's approver: the run announces each approval in its event stream, the console asks the staff member there,
 /// in order with everything shown before it, and hands the answer to the waiting run. Each reply is a span of its own, the
 /// parent of the run's trace, so the console's logs join that trace (APP-20); <c>/audit</c> reads <paramref name="audit"/>
-/// and links each run to its trace on <paramref name="dashboard"/> (APP-16).
+/// and links each run to its trace on <paramref name="dashboard"/> (APP-16). Each conversation is a session, saved in
+/// <paramref name="sessions"/> after every step of a reply (APP-10); each reply ends with a status line of its tokens and
+/// cost, and stops when it reaches its own or its session's budget (APP-14).
 /// </summary>
 public sealed partial class BookshopConsole(
-    TextReader input, TextWriter output, TimeProvider time, bool echoInput, AuditTable audit, Uri dashboard, ILogger? logger = null) : IApprover
+    TextReader input, TextWriter output, TimeProvider time, bool echoInput, AuditTable audit, SessionStore sessions, Uri dashboard,
+    ILogger? logger = null, Budgets? budgets = null) : IApprover
 {
     /// <summary>The name of the console's activity source, for the exporter to listen to.</summary>
     public const string SourceName = "BookshopAssistant";
@@ -23,14 +33,22 @@ public sealed partial class BookshopConsole(
     private const string Help = """
         Commands:
           /help           Show this help.
-          /audit [<id>]   Show the audit trail of this conversation, or of the conversation with that id.
+          /new            Start a new session.
+          /sessions       List the latest sessions.
+          /resume <id>    Go on with the session with that id.
+          /cost           Show this session's tokens and cost.
+          /audit [<id>]   Show the audit trail of this session, or of the session with that id.
           /quit           Leave the assistant.
         Anything else is a message to the assistant. Ctrl+C stops a reply in progress.
         """;
 
     private static readonly ActivitySource Source = new(SourceName);
 
+    /// <summary>How many sessions <c>/sessions</c> lists.</summary>
+    private const int Listed = 20;
+
     private readonly ILogger logger = logger ?? NullLogger.Instance;
+    private readonly Budgets budgets = budgets ?? Budgets.Default;
 
     private readonly ConcurrentDictionary<string, TaskCompletionSource<Approval>> approvals = new();
     private CancellationTokenSource? reply;
@@ -69,8 +87,8 @@ public sealed partial class BookshopConsole(
             return;
         }
 
-        var conversation = new Conversation();
-        string? context = null;
+        var session = Session.New(staffMember);
+        await output.WriteLineAsync($"Session {session.Id}.");
         while (await ReadAsync("you> ") is { } line)
         {
             switch (line.Trim())
@@ -82,10 +100,23 @@ public sealed partial class BookshopConsole(
                 case "/help":
                     await output.WriteLineAsync(Help);
                     continue;
-                case { } command when command == "/audit" || command.StartsWith("/audit ", StringComparison.Ordinal):
-                    // Sessions come in S08; until then a conversation is named by its id.
-                    var id = command["/audit".Length..].Trim();
-                    await ShowAuditAsync(id.Length > 0 ? id : conversation.Id);
+                case "/new":
+                    session = Session.New(staffMember);
+                    await output.WriteLineAsync($"New session {session.Id}.");
+                    continue;
+                case "/sessions":
+                    await ListSessionsAsync(session);
+                    continue;
+                case "/cost":
+                    await output.WriteLineAsync(string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"Session {session.Id}: {Tokens(session.Usage)}; cost ${session.Cost:0.0000} of its ${budgets.Session:0.00} budget."));
+                    continue;
+                case { } command when Argument(command, "/resume") is { } id:
+                    session = await ResumeAsync(agent, id) ?? session;
+                    continue;
+                case { } command when Argument(command, "/audit") is { } id:
+                    await ShowAuditAsync(id.Length > 0 ? id : session.Id);
                     continue;
                 case ['/', ..] command:
                     await output.WriteLineAsync($"Unknown command {command}. Type /help for commands.");
@@ -94,7 +125,7 @@ public sealed partial class BookshopConsole(
 
             // The run context is sent at the start of the session and again only when it changes (APP-13).
             var current = BookshopAgent.Context(time.GetLocalNow(), staffMember);
-            context = await ReplyAsync(agent, conversation, line, current == context ? null : current) ?? context;
+            await ReplyAsync(agent, session, line, current == session.Context ? null : current);
         }
     }
 
@@ -126,12 +157,80 @@ public sealed partial class BookshopConsole(
         return null;
     }
 
-    private async Task ShowAuditAsync(string conversation)
+    /// <summary>What follows <paramref name="name"/> in <paramref name="command"/>, trimmed; null when it is another command.</summary>
+    private static string? Argument(string command, string name) =>
+        command == name || command.StartsWith(name + " ", StringComparison.Ordinal) ? command[name.Length..].Trim() : null;
+
+    private async Task ListSessionsAsync(Session current)
     {
         try
         {
-            var entries = await audit.ReadAsync(conversation, CancellationToken.None);
-            await output.WriteLineAsync(AuditView.Format(conversation, entries, dashboard, time.LocalTimeZone));
+            var listed = await sessions.ListAsync(Listed, CancellationToken.None);
+            await output.WriteLineAsync(listed.Count == 0 ? "No sessions yet." : "Sessions, most recent first:");
+            foreach (var each in listed)
+            {
+                await output.WriteLineAsync(string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"{(each.Id == current.Id ? "*" : " ")} {each.Id}  {TimeZoneInfo.ConvertTime(each.Updated, time.LocalTimeZone):ddd d MMM HH:mm}  {each.StaffMember}  {each.Title ?? "(no title yet)"}  ${each.Cost:0.0000}"));
+            }
+        }
+        catch (Exception exception) when (exception is Npgsql.NpgsqlException or TimeoutException)
+        {
+            await output.WriteLineAsync($"The sessions could not be read: {exception.Message}");
+        }
+    }
+
+    /// <summary>
+    /// The stored session <paramref name="id"/>, to go on with; null when there is none, it cannot be read, or the agent
+    /// has changed since it started, which would fail its next reply with a prefix mismatch (APP-10, CTX-04).
+    /// </summary>
+    private async Task<Session?> ResumeAsync(AgentDefinition agent, string id)
+    {
+        if (id.Length == 0)
+        {
+            await output.WriteLineAsync("Which session? Type /resume <id>; /sessions lists them.");
+            return null;
+        }
+
+        StoredSession? stored;
+        try
+        {
+            stored = await sessions.LoadAsync(id, CancellationToken.None);
+        }
+        catch (Exception exception) when (exception is Npgsql.NpgsqlException or TimeoutException)
+        {
+            await output.WriteLineAsync($"The session could not be read: {exception.Message}");
+            return null;
+        }
+
+        if (stored is null)
+        {
+            await output.WriteLineAsync($"There is no session {id}. Type /sessions to list them.");
+            return null;
+        }
+
+        if (!agent.CanContinue(stored.Conversation))
+        {
+            await output.WriteLineAsync($"Session {id} was started with another version of the assistant, so it cannot go on. Type /new to start a new session.");
+            return null;
+        }
+
+        await output.WriteLineAsync(string.Create(
+            CultureInfo.InvariantCulture, $"Resumed session {id}: {stored.Conversation.Messages.Length} messages, ${stored.Cost:0.0000} so far."));
+        return new Session(stored.Conversation, stored.StaffMember)
+        {
+            Usage = stored.Usage,
+            Cost = stored.Cost,
+            Context = stored.Conversation.Messages.LastOrDefault(message => message.Role == Role.Operator)?.Text,
+        };
+    }
+
+    private async Task ShowAuditAsync(string session)
+    {
+        try
+        {
+            var entries = await audit.ReadAsync(session, CancellationToken.None);
+            await output.WriteLineAsync(AuditView.Format(session, entries, dashboard, time.LocalTimeZone));
         }
         catch (Exception exception) when (exception is Npgsql.NpgsqlException or TimeoutException)
         {
@@ -139,17 +238,23 @@ public sealed partial class BookshopConsole(
         }
     }
 
-    /// <summary>Streams one reply; returns the run context the conversation received, if it received one.</summary>
-    private async Task<string?> ReplyAsync(AgentDefinition agent, Conversation conversation, string message, string? context)
+    /// <summary>
+    /// Streams one reply, saving the session after every step of it, within the reply's budget or what is left of the
+    /// session's, whichever is less.
+    /// </summary>
+    private async Task ReplyAsync(AgentDefinition agent, Session session, string message, string? context)
     {
         using var span = Source.StartActivity("reply");
         using var cancellation = new CancellationTokenSource();
         Volatile.Write(ref reply, cancellation);
-        string? appendedContext = null;
+        var conversation = session.Conversation;
+        var left = budgets.Session - session.Cost;
+        var budgeted = agent with { Budget = new Budget { Cost = Math.Max(0, Math.Min(budgets.Reply, left)) } };
+        var saveFailed = false;
         var labelled = false;
         try
         {
-            await foreach (var runEvent in agent.StreamAsync(conversation, message, context, cancellation.Token))
+            await foreach (var runEvent in budgeted.StreamAsync(conversation, message, context, cancellation.Token))
             {
                 switch (runEvent)
                 {
@@ -177,10 +282,13 @@ public sealed partial class BookshopConsole(
                             ? $"  < {finished.Call.Name}: error: {FirstLine(result.Content)}"
                             : $"  < {finished.Call.Name}: ok");
                         break;
-                    case ConversationAppended { Message: { Role: Role.Operator } appended }:
-                        appendedContext = appended.Text;
+                    case ConversationAppended { Message: var appended }:
+                        session.Context = appended.Role == Role.Operator ? appended.Text : session.Context;
+                        saveFailed |= !await SaveAsync(session, default, 0, saveFailed);
                         break;
                     case RunEnded { Result: var result }:
+                        (session.Usage, session.Cost) = (session.Usage + result.Usage, session.Cost + result.Cost);
+                        await SaveAsync(session, result.Usage, result.Cost, saveFailed);
                         LogReplyEnded(logger, conversation.Id, result.GetType().Name, result.Usage.Input + result.Usage.CacheRead + result.Usage.CacheWrite, result.Usage.Output);
                         if (result is Failed failure)
                         {
@@ -191,10 +299,18 @@ public sealed partial class BookshopConsole(
                         {
                             Completed => "",
                             Stopped { Reason: StopReason.Cancelled } => "[Cancelled.]",
+                            Stopped { Reason: StopReason.Budget } when left <= budgets.Reply => string.Create(
+                                CultureInfo.InvariantCulture,
+                                $"[Stopped: this session has reached its budget of ${budgets.Session:0.00##}. Type /new to start a new session.]"),
+                            Stopped { Reason: StopReason.Budget } => string.Create(
+                                CultureInfo.InvariantCulture, $"[Stopped: this reply has reached its budget of ${budgets.Reply:0.00##}.]"),
                             Stopped stopped => $"[Stopped: {stopped.Reason}.]",
+                            Failed { Reason: FailureReason.PrefixMismatch } =>
+                                "[This session was started with another version of the assistant, so it cannot go on. Type /new to start a new session.]",
                             Failed failed => $"[Failed: {failed.Error}]",
                             _ => "",
                         });
+                        await WriteLineAsync(StatusLine(result, session));
                         break;
                 }
             }
@@ -205,7 +321,41 @@ public sealed partial class BookshopConsole(
         }
 
         await EndLineAsync();
-        return appendedContext;
+    }
+
+    /// <summary>The status line after a reply (APP-14): its tokens, the share of input read from the cache, its cost and the session's.</summary>
+    private static string StatusLine(RunResult result, Session session) => string.Create(
+        CultureInfo.InvariantCulture, $"[{Tokens(result.Usage)} · reply ${result.Cost:0.0000} · session ${session.Cost:0.0000}]");
+
+    private static string Tokens(Usage usage)
+    {
+        var input = usage.Input + usage.CacheRead + usage.CacheWrite;
+        return string.Create(
+            CultureInfo.InvariantCulture,
+            $"tokens: {input:N0} in ({(input == 0 ? 0 : (double)usage.CacheRead / input):0%} from cache), {usage.Output:N0} out");
+    }
+
+    /// <summary>
+    /// Saves the session and adds a reply's usage to its totals; returns whether it was saved. A failure is told once a
+    /// reply (<paramref name="told"/>), and the reply goes on: the next save stores the whole conversation.
+    /// </summary>
+    private async Task<bool> SaveAsync(Session session, Usage usage, decimal cost, bool told)
+    {
+        try
+        {
+            await sessions.SaveAsync(session.Conversation, session.StaffMember, usage, cost, CancellationToken.None);
+            return true;
+        }
+        catch (Exception exception) when (exception is Npgsql.NpgsqlException or TimeoutException)
+        {
+            LogSaveFailed(logger, session.Id, exception.Message);
+            if (!told)
+            {
+                await WriteLineAsync($"[The session could not be saved: {exception.Message}]");
+            }
+
+            return false;
+        }
     }
 
     /// <summary>Shows the call's exact input and asks the staff member (APP-06); the waiting run gets the answer.</summary>
@@ -309,6 +459,28 @@ public sealed partial class BookshopConsole(
     [LoggerMessage(Level = LogLevel.Information, Message = "Reply in conversation {Conversation} ended {Result}: {InputTokens} input tokens, {OutputTokens} output tokens")]
     private static partial void LogReplyEnded(ILogger logger, string conversation, string result, long inputTokens, long outputTokens);
 
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Session {Session} could not be saved: {Error}")]
+    private static partial void LogSaveFailed(ILogger logger, string session, string error);
+
     [LoggerMessage(Level = LogLevel.Error, Message = "Reply in conversation {Conversation} failed ({Reason}): {Error}")]
     private static partial void LogReplyFailed(ILogger logger, string conversation, FailureReason reason, string error);
+
+    /// <summary>The session in use: its conversation, who started it, what its replies used, and the run context it last received.</summary>
+    private sealed class Session(Conversation conversation, string staffMember)
+    {
+        public Conversation Conversation { get; } = conversation;
+
+        public string Id => Conversation.Id;
+
+        public string StaffMember { get; } = staffMember;
+
+        public Usage Usage { get; set; }
+
+        public decimal Cost { get; set; }
+
+        public string? Context { get; set; }
+
+        /// <summary>A new session, with an id short enough to type in <c>/resume</c>.</summary>
+        public static Session New(string staffMember) => new(new Conversation { Id = Guid.NewGuid().ToString("N")[..8] }, staffMember);
+    }
 }

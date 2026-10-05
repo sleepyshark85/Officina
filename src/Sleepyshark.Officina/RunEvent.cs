@@ -9,8 +9,8 @@ public sealed record TextStreamed(string Text) : RunEvent;
 /// <summary>The model call was retried after its reply had started: discard the text streamed so far, as the reply starts again.</summary>
 public sealed record ReplyRestarted : RunEvent;
 
-/// <summary>Tokens a model call reported.</summary>
-public sealed record UsageReported(Usage Usage) : RunEvent;
+/// <summary>Tokens a model call reported, and what they cost in US dollars (zero when the model has no price).</summary>
+public sealed record UsageReported(Usage Usage, decimal Cost) : RunEvent;
 
 /// <summary>The run began handling a tool call the model requested: its approval, if needed, and then the tool.</summary>
 public sealed record ToolCallStarted(ToolCall Call) : RunEvent;

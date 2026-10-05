@@ -2,7 +2,18 @@ namespace Sleepyshark.Officina;
 
 /// <summary>How a run ended (AGT-03): exactly one of <see cref="Completed"/>, <see cref="Stopped"/> or <see cref="Failed"/>.</summary>
 /// <param name="Usage">Tokens used by the run's model calls.</param>
-public abstract record RunResult(Usage Usage);
+public abstract record RunResult(Usage Usage)
+{
+    /// <summary>What the run's tokens cost, in US dollars, at the model's price (BUD-03); zero when the model has none.</summary>
+    public decimal Cost { get; init; }
+
+    public int ModelCalls { get; init; }
+
+    /// <summary>The tool calls the run handled, those denied or failed included.</summary>
+    public int ToolCalls { get; init; }
+
+    public TimeSpan Duration { get; init; }
+}
 
 /// <summary>The model finished; <paramref name="Text"/> is its final reply's text, with the agent's secrets redacted (EVT-03).</summary>
 public sealed record Completed(string Text, Usage Usage) : RunResult(Usage);
@@ -31,6 +42,9 @@ public enum StopReason
 
     /// <summary>The conversation no longer fits the model's context window.</summary>
     ContextFull,
+
+    /// <summary>A limit of the agent's budget was reached before a model call (BUD-01), or cut the reply short; the detail says which.</summary>
+    Budget,
 
     /// <summary>The run made as many model calls as one run may, and the model still asked for tools; their results are kept.</summary>
     IterationLimit,

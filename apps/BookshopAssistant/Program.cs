@@ -49,7 +49,8 @@ using var model = new ClaudeModel
 };
 var audit = new AuditTable(database);
 var console = new BookshopConsole(
-    Console.In, Console.Out, TimeProvider.System, echoInput: Console.IsInputRedirected, audit, dashboard, logging.CreateLogger<BookshopConsole>());
+    Console.In, Console.Out, TimeProvider.System, echoInput: Console.IsInputRedirected, audit, new SessionStore(database), dashboard,
+    logging.CreateLogger<BookshopConsole>());
 
 // Ctrl+C stops the reply in progress and the session goes on (APP-03); with no reply in progress, it quits.
 // An exception here would end the process, so none escapes.

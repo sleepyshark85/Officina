@@ -22,6 +22,7 @@ create table audit (
     output_tokens      bigint,
     cache_read_tokens  bigint,
     cache_write_tokens bigint,
+    cost               numeric,
     unique (run, sequence)
 );
 

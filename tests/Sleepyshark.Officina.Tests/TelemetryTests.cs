@@ -20,7 +20,7 @@ public class TelemetryTests
         using var telemetry = new TelemetryCollector();
         var time = new FakeTimeProvider(Start);
         var sink = new RecordingSink();
-        var model = new ScriptedModel { Provider = "acme", Name = "acme-large" }
+        var model = new ScriptedModel { Provider = "acme", Name = "acme-large", Price = new ModelPrice(4m, 20m, 0.2m, 5m, 8m) }
             .Reply(
                 new TextDelta("Looking."), new BlockReceived(ScriptedModel.TextBlock("Looking.")),
                 new BlockReceived(ScriptedModel.ToolCallBlock(new ToolCall("c1", "search", """{"query":"x"}"""))),
@@ -65,6 +65,9 @@ public class TelemetryTests
                 ["gen_ai.usage.output_tokens"] = 25L,
                 ["gen_ai.usage.cache_read.input_tokens"] = 750L,
                 ["gen_ai.usage.cache_creation.input_tokens"] = 50L,
+                ["officina.usage.cost"] = 0.00134,
+                ["officina.run.model_calls"] = 2,
+                ["officina.run.tool_calls"] = 2,
             },
             Tags(run));
 
@@ -81,6 +84,7 @@ public class TelemetryTests
                 ["gen_ai.usage.output_tokens"] = 20L,
                 ["gen_ai.usage.cache_read.input_tokens"] = 300L,
                 ["gen_ai.usage.cache_creation.input_tokens"] = 50L,
+                ["officina.usage.cost"] = 0.00111,
                 ["officina.model.retries"] = 0,
                 ["gen_ai.response.finish_reasons"] = ToolUse,
                 ["officina.model.time_to_first_token"] = 0.0,
@@ -123,10 +127,10 @@ public class TelemetryTests
     }
 
     [Fact]
-    public async Task Metrics_count_tokens_by_type_the_cache_hit_ratio_tool_outcomes_approvals_and_results_by_agent_and_model()
+    public async Task Metrics_count_tokens_by_type_cost_the_cache_hit_ratio_tool_outcomes_approvals_and_results_by_agent_and_model()
     {
         using var telemetry = new TelemetryCollector();
-        var model = new ScriptedModel()
+        var model = new ScriptedModel { Price = new ModelPrice(4m, 20m, 0.2m, 5m, 8m) }
             .Reply(
                 new BlockReceived(ScriptedModel.ToolCallBlock(new ToolCall("c1", "save", "{}"))),
                 new UsageReceived(new Usage(100, 20, 300, 0)), new ModelStopped(ModelStopReason.ToolUse))
@@ -148,6 +152,7 @@ public class TelemetryTests
             [("read", 300.0), ("write", 0), ("read", 400), ("write", 0)],
             measured.Where(each => each.Instrument == "officina.model.cache_tokens").Select(each => ((string)each.Tags["officina.cache.type"]!, each.Value)));
         Assert.Equal([0.75, 1.0], measured.Where(each => each.Instrument == "officina.model.cache_hit_ratio").Select(each => each.Value));
+        Assert.Equal([0.00086, 0.00018], measured.Where(each => each.Instrument == "officina.model.cost").Select(each => each.Value));
         Assert.Equal(2, measured.Count(each => each.Instrument == "gen_ai.client.operation.duration" && each.Tags["error.type"] is null));
         Assert.Equal(("save", "error"), Single(measured, "officina.tool.calls", "gen_ai.tool.name", "officina.tool.outcome"));
         Assert.Equal(("save", "error"), Single(measured, "officina.tool.duration", "gen_ai.tool.name", "officina.tool.outcome"));

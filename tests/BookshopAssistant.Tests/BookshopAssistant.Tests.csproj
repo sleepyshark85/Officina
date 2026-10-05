@@ -5,10 +5,16 @@
     <ProjectReference Include="..\..\src\Sleepyshark.Officina.Testing\Sleepyshark.Officina.Testing.csproj" />
   </ItemGroup>
 
-  <!-- Test only: the database in Docker (TEST-09) and a fake clock. -->
+  <!-- Test only: the database in Docker (TEST-09), property tests (TEST-07) and a fake clock. -->
   <ItemGroup>
+    <PackageReference Include="CsCheck" />
     <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
     <PackageReference Include="Testcontainers.PostgreSql" />
+  </ItemGroup>
+
+  <!-- The core tests' property runner: fixed seeds, shrinking, and replay by OFFICINA_SEED. -->
+  <ItemGroup>
+    <Compile Include="..\Sleepyshark.Officina.Tests\Property.cs" Link="Property.cs" />
   </ItemGroup>
 
   <!-- The application's own schema and seed, so the tests run against the database the compose file creates. -->

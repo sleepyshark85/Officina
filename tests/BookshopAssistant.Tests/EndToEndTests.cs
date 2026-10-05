@@ -18,7 +18,7 @@ public class EndToEndTests(BookshopDatabase database) : IClassFixture<BookshopDa
     [DatabaseFact]
     public async Task APP_01_the_reply_streams_with_the_text_between_tool_calls_and_each_tool_with_its_input_and_outcome()
     {
-        var model = new ScriptedModel()
+        var model = Model()
             .Reply(SayThenCall("Let me look that up.", Call("c1", "search_books", new { title = "Winter Archive" })))
             .Reply(new TextDelta("We have "), new TextDelta("12 copies."), new BlockReceived(ScriptedModel.TextBlock("We have 12 copies.")), new ModelStopped(ModelStopReason.End));
 
@@ -39,7 +39,7 @@ public class EndToEndTests(BookshopDatabase database) : IClassFixture<BookshopDa
     [DatabaseFact]
     public async Task APP_03_cancelling_stops_the_reply_and_the_session_goes_on()
     {
-        var model = new ScriptedModel()
+        var model = Model()
             .Reply(new TextDelta("Let me think about every book "), new TextDelta("we have ever sold..."), new BlockReceived(ScriptedModel.TextBlock("…")), new ModelStopped(ModelStopReason.End))
             .Reply("Hello again.");
 
@@ -57,7 +57,7 @@ public class EndToEndTests(BookshopDatabase database) : IClassFixture<BookshopDa
     public async Task APP_03_cancelling_at_the_approval_prompt_stops_the_reply_at_once_and_the_change_is_not_made()
     {
         var stock = await StockAsync(320);
-        var model = new ScriptedModel()
+        var model = Model()
             .Reply(SayThenCall("I'll add two copies.", Call("c1", "restock_book", new { bookId = 320, quantity = 2 })))
             .Reply("Hello again.");
 
@@ -71,7 +71,7 @@ public class EndToEndTests(BookshopDatabase database) : IClassFixture<BookshopDa
     [DatabaseFact]
     public async Task APP_05_the_read_tools_of_one_reply_all_answer_from_the_database()
     {
-        var model = new ScriptedModel()
+        var model = Model()
             .Reply(SayThenCall(
                 "Looking.",
                 Call("c1", "find_customer", new { nameOrEmail = "Alice Martin" }),
@@ -97,7 +97,7 @@ public class EndToEndTests(BookshopDatabase database) : IClassFixture<BookshopDa
     public async Task APP_06_a_write_shows_its_exact_input_for_approval_and_runs_only_if_approved()
     {
         var (stock300, stock301) = (await StockAsync(300), await StockAsync(301));
-        var model = new ScriptedModel()
+        var model = Model()
             .Reply(SayThenCall("I'll add five copies.", Call("c1", "restock_book", new { bookId = 300, quantity = 5 })))
             .Reply("Done: five more copies.")
             .Reply(SayThenCall("I'll add three copies.", Call("c2", "restock_book", new { bookId = 301, quantity = 3 })))
@@ -126,7 +126,7 @@ public class EndToEndTests(BookshopDatabase database) : IClassFixture<BookshopDa
         var stock = await StockAsync(310);
         var tooMany = Call("c1", "place_order", new { customerId = 1, lines = new[] { new { bookId = 310, quantity = stock + 10 } } });
         var enough = Call("c2", "place_order", new { customerId = 1, lines = new[] { new { bookId = 310, quantity = stock } } });
-        var model = new ScriptedModel()
+        var model = Model()
             .Reply(SayThenCall("Placing the order.", tooMany))
             .Reply(SayThenCall($"Only {stock} are in stock; I'll order those instead.", enough))
             .Reply($"Ordered all {stock} copies.");
@@ -145,7 +145,7 @@ public class EndToEndTests(BookshopDatabase database) : IClassFixture<BookshopDa
     {
         var (stock144, stock216) = (await StockAsync(144), await StockAsync(216));
         var orders = await database.ScalarAsync<long>("select count(*) from orders");
-        var model = new ScriptedModel()
+        var model = Model()
             .Reply(SayThenCall(
                 "Let me find Alice and the cheapest fantasy books in stock.",
                 Call("c1", "find_customer", new { nameOrEmail = "Alice Martin" }),
@@ -178,7 +178,7 @@ public class EndToEndTests(BookshopDatabase database) : IClassFixture<BookshopDa
     {
         // Each reading of the clock moves it on 12 hours: the messages come at 08:00 and 20:00 on Monday, then 08:00 on Tuesday.
         var time = new FakeTimeProvider(Start) { AutoAdvanceAmount = TimeSpan.FromHours(12) };
-        var model = new ScriptedModel().Reply("Good morning.").Reply("Good evening.").Reply("Good morning again.");
+        var model = Model().Reply("Good morning.").Reply("Good evening.").Reply("Good morning again.");
 
         await RunAsync(database, model, ["Sam", "Morning!", "Evening!", "Next morning!", "/quit"], time);
 
@@ -196,7 +196,7 @@ public class EndToEndTests(BookshopDatabase database) : IClassFixture<BookshopDa
     [DatabaseFact]
     public async Task APP_18_with_the_database_down_tools_return_errors_and_once_it_is_back_the_session_works_again()
     {
-        var model = new ScriptedModel()
+        var model = Model()
             .Reply(SayThenCall("Checking.", Call("c1", "get_book", new { bookId = 144 })))
             .Reply("I can't reach the database right now; please try again shortly.")
             .Reply(SayThenCall("Checking again.", Call("c2", "get_book", new { bookId = 144 })))

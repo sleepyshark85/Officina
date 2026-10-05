@@ -21,6 +21,9 @@ internal static class Agents
     public static AgentDefinition With(ScriptedModel model, string instructions = Instructions, params Tool[] tools) =>
         new() { Model = model, Instructions = instructions, Tools = [.. tools] };
 
+    /// <summary>The result without its cost, counts and duration, for tests about how a run ended.</summary>
+    public static RunResult Outcome(RunResult result) => result with { Cost = 0, ModelCalls = 0, ToolCalls = 0, Duration = default };
+
     public static async Task<List<RunEvent>> CollectAsync(IAsyncEnumerable<RunEvent> run)
     {
         var events = new List<RunEvent>();

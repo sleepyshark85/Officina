@@ -18,7 +18,7 @@ internal static class ClaudeRequest
         var typed = new MessageCreateParams
         {
             Model = model.Model,
-            MaxTokens = model.MaxOutputTokens,
+            MaxTokens = Math.Min(model.MaxOutputTokens, request.MaxOutputTokens ?? int.MaxValue),
             Thinking = new BetaThinkingConfigAdaptive(),
             OutputConfig = new BetaOutputConfig { Effort = Effort(model.Effort) },
             CacheControl = cache,

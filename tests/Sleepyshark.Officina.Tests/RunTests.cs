@@ -121,7 +121,7 @@ public class RunTests
 
         var result = await Agents.With(model).RunAsync(conversation, "Hi", cancellationToken: Ct);
 
-        Assert.Equal(expected, result);
+        Assert.Equal(expected, Agents.Outcome(result));
         Assert.Equal([Role.User, Role.Assistant], conversation.Messages.Select(message => message.Role));
     }
 
@@ -133,7 +133,7 @@ public class RunTests
 
         var result = await Agents.With(model).RunAsync(conversation, "Hi", cancellationToken: Ct);
 
-        Assert.Equal(new Failed(FailureReason.ModelError, "Overloaded after retries.", default), result);
+        Assert.Equal(new Failed(FailureReason.ModelError, "Overloaded after retries.", default), Agents.Outcome(result));
         Assert.Empty(conversation.Messages);
     }
 
@@ -165,7 +165,7 @@ public class RunTests
 
         var result = await agent.RunAsync(conversation, "Hi", cancellationToken: Ct);
 
-        Assert.Equal(new Failed(FailureReason.ModelError, "Bad settings.", default), result);
+        Assert.Equal(new Failed(FailureReason.ModelError, "Bad settings.", default), Agents.Outcome(result));
         Assert.Empty(conversation.Messages);
     }
 
@@ -177,7 +177,7 @@ public class RunTests
 
         var result = await Agents.With(model).RunAsync(conversation, "Hi", "Date: 2026-10-05.", Ct);
 
-        Assert.Equal(new Completed("", default), result);
+        Assert.Equal(new Completed("", default), Agents.Outcome(result));
         Assert.Empty(conversation.Messages);
     }
 
@@ -255,7 +255,7 @@ public class RunTests
         Assert.Equal(
             [new TextStreamed("Hel"), new ReplyRestarted(), new TextStreamed("Hello.")],
             events.Where(runEvent => runEvent is TextStreamed or ReplyRestarted));
-        Assert.Equal(new Completed("Hello.", default), Assert.IsType<RunEnded>(events[^1]).Result);
+        Assert.Equal(new Completed("Hello.", default), Agents.Outcome(Assert.IsType<RunEnded>(events[^1]).Result));
         Assert.Equal([ScriptedModel.TextBlock("Hello.")], conversation.Messages[^1].Blocks);
     }
 
@@ -267,7 +267,7 @@ public class RunTests
 
         var result = await agent.RunAsync(conversation, "Hi", cancellationToken: Ct);
 
-        Assert.Equal(new Completed("Hello.", default), result);
+        Assert.Equal(new Completed("Hello.", default), Agents.Outcome(result));
         Assert.Equal([Role.User, Role.Assistant], conversation.Messages.Select(message => message.Role));
     }
 
@@ -279,6 +279,8 @@ public class RunTests
         public string Provider => "test";
 
         public string Name => "failing-dispose";
+
+        public ModelPrice? Price => null;
 
         public IAsyncEnumerable<ModelEvent> StreamAsync(ModelRequest request, CancellationToken cancellationToken) => new Reply();
 
@@ -305,6 +307,8 @@ public class RunTests
         public string Provider => "test";
 
         public string Name => "throwing";
+
+        public ModelPrice? Price => null;
 
         public IAsyncEnumerable<ModelEvent> StreamAsync(ModelRequest request, CancellationToken cancellationToken) =>
             throw new ArgumentException("Bad settings.");

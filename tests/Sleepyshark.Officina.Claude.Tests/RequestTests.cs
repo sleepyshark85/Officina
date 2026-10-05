@@ -39,6 +39,19 @@ public class RequestTests
         Assert.Equal(Golden("request-layout.json"), body.ReplaceLineEndings("\n"));
     }
 
+    [Theory]
+    [InlineData(null, 8000)]
+    [InlineData(500, 500)]
+    [InlineData(20_000, 8000)]
+    public void The_output_limit_is_the_lower_of_the_model_s_and_the_budget_s(int? budget, long expected)
+    {
+        using var model = new ClaudeModel("test-key") { Model = "claude-opus-5-5", Effort = ClaudeEffort.High, MaxOutputTokens = 8000 };
+
+        var body = ClaudeRequest.Build(model, Request with { MaxOutputTokens = budget }).RawBodyData;
+
+        Assert.Equal(expected, body["max_tokens"].GetInt64());
+    }
+
     [Fact]
     public async Task Stored_blocks_reach_the_wire_byte_for_byte_and_the_request_streams()
     {

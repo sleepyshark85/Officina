@@ -33,6 +33,9 @@ public static class Telemetry
     private static readonly Histogram<double> CacheHitRatio = Meter.CreateHistogram<double>(
         "officina.model.cache_hit_ratio", "1", "The share of a model call's input tokens read from the cache (CTX-05).");
 
+    private static readonly Histogram<double> Cost = Meter.CreateHistogram<double>(
+        "officina.model.cost", "{USD}", "What a model call cost, in US dollars, at the model's price (BUD-02).");
+
     private static readonly Counter<long> Retries = Meter.CreateCounter<long>("officina.model.retries", "{retry}", "Model call retries.");
 
     private static readonly Histogram<double> ToolDuration = Meter.CreateHistogram<double>(
@@ -77,7 +80,9 @@ public static class Telemetry
         activity.SetTag("officina.run.reason", reason);
         if (result is not null)
         {
-            SetUsage(activity, result.Usage);
+            SetUsage(activity, result.Usage, result.Cost);
+            activity.SetTag("officina.run.model_calls", result.ModelCalls);
+            activity.SetTag("officina.run.tool_calls", result.ToolCalls);
         }
 
         if (result is Completed completed)
@@ -101,8 +106,8 @@ public static class Telemetry
     /// <paramref name="error"/> says why) or was cancelled.
     /// </summary>
     internal static void EndModelCall(
-        Activity? activity, AgentDefinition agent, long started, Usage usage, ModelStopped? stop, string? error, int retries, TimeSpan? firstText,
-        Func<string> text)
+        Activity? activity, AgentDefinition agent, long started, Usage usage, decimal cost, ModelStopped? stop, string? error, int retries,
+        TimeSpan? firstText, Func<string> text)
     {
         var dimensions = Dimensions(agent);
         var input = usage.Input + usage.CacheRead + usage.CacheWrite;
@@ -114,6 +119,7 @@ public static class Telemetry
             Tokens.Record(usage.Output, [.. dimensions, new("gen_ai.operation.name", "chat"), new("gen_ai.token.type", "output")]);
             CacheTokens.Record(usage.CacheRead, [.. dimensions, new("officina.cache.type", "read")]);
             CacheTokens.Record(usage.CacheWrite, [.. dimensions, new("officina.cache.type", "write")]);
+            Cost.Record((double)cost, dimensions);
         }
 
         if (input > 0)
@@ -128,7 +134,7 @@ public static class Telemetry
             return;
         }
 
-        SetUsage(activity, usage);
+        SetUsage(activity, usage, cost);
         activity.SetTag("officina.model.retries", retries);
         if (stop is not null)
         {
@@ -229,8 +235,9 @@ public static class Telemetry
     private static KeyValuePair<string, object?>[] Dimensions(AgentDefinition agent) =>
         [new("gen_ai.agent.name", agent.Name), new("gen_ai.provider.name", agent.Model.Provider), new("gen_ai.request.model", agent.Model.Name)];
 
-    private static void SetUsage(Activity activity, Usage usage)
+    private static void SetUsage(Activity activity, Usage usage, decimal cost)
     {
+        activity.SetTag("officina.usage.cost", (double)cost);
         activity.SetTag("gen_ai.usage.input_tokens", usage.Input + usage.CacheRead + usage.CacheWrite);
         activity.SetTag("gen_ai.usage.output_tokens", usage.Output);
         activity.SetTag("gen_ai.usage.cache_read.input_tokens", usage.CacheRead);

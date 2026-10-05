@@ -11,7 +11,7 @@ public class AuditTests(BookshopDatabase database) : IClassFixture<BookshopDatab
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     [DatabaseFact]
-    public async Task The_table_keeps_every_field_of_an_entry_and_reads_a_conversation_s_entries_in_order()
+    public async Task The_table_keeps_every_field_of_an_entry_and_reads_a_session_s_entries_in_order()
     {
         var table = new AuditTable(database.DataSource);
         var conversation = $"c-{Guid.NewGuid():N}";
@@ -36,6 +36,7 @@ public class AuditTests(BookshopDatabase database) : IClassFixture<BookshopDatab
             Detail = "Placed order 81.",
             Duration = TimeSpan.FromMilliseconds(12.5),
             Usage = new Usage(1, 2, 3, 4),
+            Cost = 0.0123m,
         };
 
         await table.WriteAsync(Entry(1, AuditKind.RunStarted), Ct);
@@ -56,10 +57,10 @@ public class AuditTests(BookshopDatabase database) : IClassFixture<BookshopDatab
     }
 
     [DatabaseFact]
-    public async Task APP_16_audit_shows_the_conversation_s_entries_grouped_by_run_with_approvals_tokens_and_a_link_to_each_run_s_trace()
+    public async Task APP_16_audit_shows_the_session_s_entries_grouped_by_run_with_approvals_tokens_and_a_link_to_each_run_s_trace()
     {
         using var telemetry = new TelemetryCollector();
-        var model = new ScriptedModel()
+        var model = Model()
             .Reply([.. SayThenCall("I'll add five copies.", Call("c1", "restock_book", new { bookId = 300, quantity = 5 }))[..^1],
                 new UsageReceived(new Usage(100, 20, 1_000, 0)), new ModelStopped(ModelStopReason.ToolUse)])
             .Reply(new TextDelta("Done."), new BlockReceived(ScriptedModel.TextBlock("Done.")), new UsageReceived(new Usage(10, 5, 1_200, 0)), new ModelStopped(ModelStopReason.End))
@@ -77,30 +78,30 @@ public class AuditTests(BookshopDatabase database) : IClassFixture<BookshopDatab
         InOrder(
             transcript,
             "you> /audit\n",
-            $"Audit of conversation {conversation}:\n",
+            $"Audit of session {conversation}:\n",
             $"Run 1, trace: http://dashboard.test/traces/detail/{traces[0]}\n",
             "  08:00:00  RunStarted\n",
             "  08:00:00  ApprovalAsked     restock_book\n",
             "  08:00:00  ApprovalAnswered  restock_book          approved\n",
             "  08:00:00  ToolStarted       restock_book\n",
             "  08:00:00  ToolEnded         restock_book          ok  0 ms\n",
-            "  08:00:00  RunEnded                                Completed  tokens: 2,310 in (2,200 cached), 25 out\n",
+            "  08:00:00  RunEnded                                Completed  tokens: 2,310 in (2,200 cached), 25 out, $0.0014\n",
             $"Run 2, trace: http://dashboard.test/traces/detail/{traces[1]}\n",
             "  08:00:00  RunStarted\n",
-            "  08:00:00  RunEnded                                Completed  tokens: 0 in (0 cached), 0 out\n",
+            "  08:00:00  RunEnded                                Completed  tokens: 0 in (0 cached), 0 out, $0.0000\n",
             "you> /audit nobody\n",
-            "No audit entries for conversation nobody.\n");
+            "No audit entries for session nobody.\n");
     }
 
     [DatabaseFact]
-    public async Task APP_16_audit_with_an_id_shows_an_earlier_conversation()
+    public async Task APP_16_audit_with_an_id_shows_an_earlier_session()
     {
-        var model = new ScriptedModel().Reply("Hello.");
+        var model = Model().Reply("Hello.");
         await RunAsync(database, model, ["Sam", "Hi.", "/quit"]);
         var earlier = await database.ScalarAsync<string>("select conversation from audit where kind = 'RunEnded' order by id desc limit 1");
 
-        var transcript = await RunAsync(database, new ScriptedModel(), ["Sam", $"/audit {earlier}", "/quit"]);
+        var transcript = await RunAsync(database, Model(), ["Sam", $"/audit {earlier}", "/quit"]);
 
-        InOrder(transcript, $"Audit of conversation {earlier}:\n", "Run 1, trace: ", "RunStarted", "RunEnded");
+        InOrder(transcript, $"Audit of session {earlier}:\n", "Run 1, trace: ", "RunStarted", "RunEnded");
     }
 }
