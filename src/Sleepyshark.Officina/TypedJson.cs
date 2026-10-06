@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.Json.Schema;
 using System.Text.Json.Serialization;
 using System.Text.Json.Serialization.Metadata;
@@ -29,8 +30,17 @@ internal static class TypedJson
         TransformSchemaNode = (context, node) =>
         {
             var provider = context.PropertyInfo?.AttributeProvider ?? (context.PropertyInfo is null ? context.TypeInfo.Type : null);
-            Tool.Describe(node, provider?.GetCustomAttributes(typeof(DescriptionAttribute), inherit: false).OfType<DescriptionAttribute>().FirstOrDefault());
+            Describe(node, provider?.GetCustomAttributes(typeof(DescriptionAttribute), inherit: false).OfType<DescriptionAttribute>().FirstOrDefault());
             return node;
         },
     };
+
+    /// <summary>Puts <paramref name="description"/>, if any, first in <paramref name="node"/>'s schema.</summary>
+    internal static void Describe(JsonNode? node, DescriptionAttribute? description)
+    {
+        if (node is JsonObject schema && description is not null)
+        {
+            schema.Insert(0, "description", description.Description);
+        }
+    }
 }

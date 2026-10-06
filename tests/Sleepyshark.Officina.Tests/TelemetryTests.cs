@@ -157,6 +157,7 @@ public class TelemetryTests
         Assert.Equal(("save", "error"), Single(measured, "officina.tool.calls", "gen_ai.tool.name", "officina.tool.outcome"));
         Assert.Equal(("save", "error"), Single(measured, "officina.tool.duration", "gen_ai.tool.name", "officina.tool.outcome"));
         Assert.Equal(("save", "denied"), Single(measured, "officina.tool.approvals", "gen_ai.tool.name", "officina.tool.approval"));
+        Assert.Equal("tool_error", telemetry.Spans(agent.Name).Single(span => span.OperationName == "execute_tool save").GetTagItem("error.type"));
         Assert.Equal(("completed", null), Single(measured, "officina.runs", "officina.run.result", "officina.run.reason"));
     }
 

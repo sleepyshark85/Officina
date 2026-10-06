@@ -125,7 +125,7 @@ public sealed class Tool
         foreach (var parameter in parameters.Where(parameter => parameter.ParameterType != typeof(CancellationToken)))
         {
             properties[parameter.Name!] = TypedJson.Options.GetJsonSchemaAsNode(parameter.ParameterType, TypedJson.Exporter);
-            Describe(properties[parameter.Name!], parameter.GetCustomAttribute<DescriptionAttribute>());
+            TypedJson.Describe(properties[parameter.Name!], parameter.GetCustomAttribute<DescriptionAttribute>());
             if (!parameter.HasDefaultValue)
             {
                 required.Add(parameter.Name);
@@ -172,14 +172,6 @@ public sealed class Tool
     {
         ArgumentNullException.ThrowIfNull(handler);
         return (input, _, cancellationToken) => handler(input, cancellationToken);
-    }
-
-    internal static void Describe(JsonNode? node, DescriptionAttribute? description)
-    {
-        if (node is JsonObject schema && description is not null)
-        {
-            schema.Insert(0, "description", description.Description);
-        }
     }
 }
 
