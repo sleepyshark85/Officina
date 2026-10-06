@@ -5,23 +5,6 @@ using Anthropic.Models.Beta.Messages;
 
 namespace Sleepyshark.Officina.Claude;
 
-/// <summary>How hard Claude thinks and how much it spends; always set, never left to the model's default.</summary>
-public enum ClaudeEffort
-{
-    Low,
-    Medium,
-    High,
-    XHigh,
-    Max,
-}
-
-/// <summary>How long Claude keeps the cached prefix: five minutes, or an hour for users who reply slowly.</summary>
-public enum CacheLifetime
-{
-    FiveMinutes,
-    OneHour,
-}
-
 /// <summary>
 /// Claude through the Anthropic SDK's beta messages API. Every request streams, with adaptive thinking and no refusal
 /// fallback. Settings are fixed once created. Transient failures are retried here; the SDK's own retries are off.

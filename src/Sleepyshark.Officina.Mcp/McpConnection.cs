@@ -139,6 +139,3 @@ internal abstract class McpConnection(McpServer server, Action<string> lost) : I
         return response.GetProperty("result");
     }
 }
-
-/// <summary>The server answered with a JSON-RPC error: it is reachable, but refused or failed the request.</summary>
-internal sealed class McpErrorException(string message) : Exception(message);

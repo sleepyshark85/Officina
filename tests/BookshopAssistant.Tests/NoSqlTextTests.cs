@@ -25,7 +25,7 @@ public partial class NoSqlTextTests
     [Fact]
     public void Every_command_runs_a_constant()
     {
-        var source = File.ReadAllText(Path.Combine(Root(), "apps", "BookshopAssistant", "BookshopTools.cs"));
+        var source = File.ReadAllText(Path.Combine(Root(), "apps", "BookshopAssistant", "Tools", "BookshopTools.cs"));
         var constants = ConstantSql().Matches(source).Select(match => match.Groups[1].Value).ToHashSet();
         var commands = Command().Matches(source).Select(match => match.Groups[1].Value).ToList();
 

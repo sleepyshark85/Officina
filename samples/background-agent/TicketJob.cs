@@ -4,18 +4,6 @@ using Sleepyshark.Officina.Mcp;
 
 namespace Samples.BackgroundAgent;
 
-/// <summary>How a job left its ticket.</summary>
-public enum Resolution
-{
-    Answered,
-    Escalated,
-}
-
-/// <summary>What a job reports about its ticket: its typed output.</summary>
-public sealed record TicketOutcome(
-    [property: Description("Answered when the note answers the customer; escalated when a person must act.")] Resolution Resolution,
-    [property: Description("One sentence for the support team on what was done and why.")] string Report);
-
 /// <summary>
 /// A background agent: one job per support ticket, started by a queue or schedule, with nobody to ask. Without an
 /// approver, calls needing approval are denied and the model is told. Its tools are the helpdesk's MCP server, over

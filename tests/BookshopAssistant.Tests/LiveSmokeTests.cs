@@ -1,5 +1,4 @@
 using System.Globalization;
-using System.Runtime.CompilerServices;
 using Sleepyshark.Officina.Testing;
 using static BookshopAssistant.Tests.ConsoleSession;
 
@@ -79,24 +78,4 @@ public class LiveSmokeTests(BookshopDatabase database) : IClassFixture<BookshopD
         Assert.True(cacheReads.Count >= 3, $"Expected several model calls, got {cacheReads.Count}.");
         Assert.All(cacheReads.Skip(1), read => Assert.True(read > 0, $"A model call read nothing from the cache: {string.Join(", ", cacheReads)}"));
     }
-}
-
-/// <summary>
-/// A live test: skipped unless <c>OFFICINA_LIVE_TESTS=1</c> and <c>ANTHROPIC_API_KEY</c> are set where the database tests
-/// run (<see cref="BookshopDatabase.Available"/>), so neither <c>dotnet test</c> nor CI spends on it.
-/// </summary>
-public sealed class LiveFactAttribute : FactAttribute
-{
-    public LiveFactAttribute([CallerFilePath] string? sourceFilePath = null, [CallerLineNumber] int sourceLineNumber = -1)
-        : base(sourceFilePath, sourceLineNumber)
-    {
-        Skip = "Live: set OFFICINA_LIVE_TESTS=1 and ANTHROPIC_API_KEY, on Linux with Docker.";
-        SkipUnless = nameof(Enabled);
-        SkipType = typeof(LiveFactAttribute);
-    }
-
-    public static bool Enabled =>
-        Environment.GetEnvironmentVariable("OFFICINA_LIVE_TESTS") == "1"
-        && !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY"))
-        && BookshopDatabase.Available;
 }
