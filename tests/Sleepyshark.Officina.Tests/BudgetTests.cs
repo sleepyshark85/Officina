@@ -207,4 +207,47 @@ public class BudgetTests
             yield return new ModelStopped(last ? ModelStopReason.End : ModelStopReason.ToolUse);
         }
     }
+
+    [Fact]
+    public async Task BUD_01_a_call_budget_used_up_on_the_last_allowed_call_stops_for_the_budget_not_the_iteration_limit()
+    {
+        var model = new ScriptedModel { Price = Price };
+        for (var call = 1; call < RunEngine.MaxModelCalls; call++)
+        {
+            model.Reply(CallTool($"c{call}", new Usage(1, 1, 0, 0)));
+        }
+
+        var result = await AgentOf(model).RunAsync(new Conversation(), "Go.", new() { Budget = new Budget { ModelCalls = RunEngine.MaxModelCalls - 1 } }, Ct);
+
+        var stopped = Assert.IsType<Stopped>(result);
+        Assert.Equal((StopReason.Budget, $"The model call budget is used up: {RunEngine.MaxModelCalls - 1} of {RunEngine.MaxModelCalls - 1}."), (stopped.Reason, stopped.Detail));
+    }
+
+    [Fact]
+    public async Task BUD_01_a_reply_cut_by_the_model_s_own_output_limit_stops_for_that_limit_even_when_a_call_budget_is_used_up()
+    {
+        var model = new ScriptedModel { Price = Price }
+            .Reply(new BlockReceived(ScriptedModel.TextBlock("Half an ans")), new UsageReceived(new Usage(10, 10, 0, 0)), new ModelStopped(ModelStopReason.MaxTokens));
+
+        var result = await AgentOf(model).RunAsync(new Conversation(), "Go.", new() { Budget = new Budget { ModelCalls = 1 } }, Ct);
+
+        Assert.Equal(StopReason.OutputLimit, Assert.IsType<Stopped>(result).Reason);
+    }
+
+    [Fact]
+    public async Task BUD_01_a_time_budget_is_used_up_the_moment_it_is_reached()
+    {
+        var time = new FakeTimeProvider();
+        var slow = Agents.Tool("search", schema: Agents.SearchSchema, handler: (_, _) =>
+        {
+            time.Advance(TimeSpan.FromSeconds(2));
+            return Task.FromResult(new ToolOutput("ok"));
+        });
+        var model = new ScriptedModel { Price = Price }.Reply(CallTool("c1", new Usage(1, 1, 0, 0))).Reply("Unused.");
+
+        var result = await AgentOf(model, time, slow).RunAsync(new Conversation(), "Go.", new() { Budget = new Budget { Time = TimeSpan.FromSeconds(2) } }, Ct);
+
+        var stopped = Assert.IsType<Stopped>(result);
+        Assert.Equal((StopReason.Budget, "The time budget is used up: 2 s of 2 s."), (stopped.Reason, stopped.Detail));
+    }
 }

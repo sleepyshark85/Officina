@@ -33,8 +33,8 @@ provider, MCP client, test kit and spike findings (`docs/spikes/` there) are reu
 
 - **Every change goes through a branch and a pull request** to `main`, docs included. Never push to `main`. Merge
   only when the Opus reviewer has approved and the required checks pass (`ubuntu-latest`, `windows-latest`,
-  `quality`, branch up to date, review threads resolved); the owner has delegated that go-ahead. Branches: `slice/<id>-<slug>`,
-  `docs/<topic>`, `fix/<slug>`. Retarget a stacked PR before deleting the branch it is based on (deleting a base
+  `quality`, `mutation`, branch up to date, review threads resolved); the owner has delegated that go-ahead.
+  Branches: `slice/<id>-<slug>`, `docs/<topic>`, `fix/<slug>`. Retarget a stacked PR before deleting the branch it is based on (deleting a base
   closes the PR).
 - **The simplest thing that works.** Build only what the slice's acceptance criteria need: no abstraction without a
   current user, no setting without a known case (until then, a constant), no optimization without a measured target.

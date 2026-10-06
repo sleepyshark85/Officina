@@ -4,6 +4,14 @@
 using System.Globalization;
 using Sleepyshark.Officina.Testing;
 
+// With "complain", it reads the first request, says why it cannot go on on its error output, and exits.
+if (args is ["complain"])
+{
+    await Console.In.ReadLineAsync();
+    await Console.Error.WriteLineAsync("configuration file missing");
+    return;
+}
+
 // With "silent <file>", it writes its process id to the file and never answers, until its input ends.
 if (args is ["silent", var processIdFile])
 {

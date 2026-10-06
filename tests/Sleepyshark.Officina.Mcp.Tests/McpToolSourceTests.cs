@@ -371,4 +371,87 @@ public sealed class McpToolSourceTests
             return true;
         }
     }
+
+    [Fact]
+    public async Task MCP_04_an_http_session_the_server_ends_mid_run_gives_error_results_and_the_next_run_starts_a_new_one()
+    {
+        FakeMcpServer? server = null;
+        using var fake = server = HttpServer(new FakeMcpTool("restart", _ =>
+        {
+            server!.EndSession();
+            return "restarting";
+        }));
+        var mcp = HttpServerAt(fake);
+        await using var source = await McpToolSource.ConnectAsync(mcp, [new("restart"), new("echo")], TestContext.Current.CancellationToken);
+        var model = new ScriptedModel()
+            .CallTools(Call("c1", "fake__restart", new { }))
+            .CallTools(Call("c2", "fake__echo", new { text = "hello?" }))
+            .Reply("The server restarted.")
+            .CallTools(Call("c3", "fake__echo", new { text = "hello again" }))
+            .Reply("Back.");
+        var agent = AgentOf(model, source, mcp);
+
+        await agent.RunAsync(new Conversation(), "Go.", cancellationToken: TestContext.Current.CancellationToken);
+        var next = await agent.RunAsync(new Conversation(), "Again.", cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.Equal("restarting", model.Requests[1].Messages[^1].Blocks[0].ToolResult!.Content);
+        var ended = model.Requests[2].Messages[^1].Blocks[0].ToolResult!;
+        Assert.True(ended.IsError);
+        Assert.EndsWith("the server ended the session.", ended.Content, StringComparison.Ordinal);
+        Assert.IsType<Completed>(next);
+        Assert.Equal("hello again", model.Requests[4].Messages[^1].Blocks[0].ToolResult!.Content);
+    }
+
+    [Fact]
+    public async Task MCP_04_a_server_that_speaks_another_protocol_version_is_refused()
+    {
+        using var fake = new FakeMcpServer(new FakeMcpTool("echo", _ => "")) { Token = Token, ProtocolVersion = "1999-01-01" };
+
+        var exception = await Assert.ThrowsAsync<IOException>(
+            () => McpToolSource.ConnectAsync(HttpServerAt(fake), [new("echo")], TestContext.Current.CancellationToken));
+
+        Assert.Contains("speaks protocol 1999-01-01", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task MCP_02_an_empty_credential_is_not_redacted_and_does_not_break_the_calls()
+    {
+        using var fake = HttpServer();
+        var mcp = McpServer.Http("fake", fake.StartHttp(), new Dictionary<string, string> { ["Authorization"] = $"Bearer {Token}", ["X-Trace"] = "" });
+        await using var source = await McpToolSource.ConnectAsync(mcp, [new("echo")], TestContext.Current.CancellationToken);
+        var model = new ScriptedModel().CallTools(Call("c1", "fake__echo", new { text = "plain text" })).Reply("Done.");
+
+        await AgentOf(model, source, mcp).RunAsync(new Conversation(), "Go.", cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.Equal("plain text", model.Requests[1].Messages[^1].Blocks[0].ToolResult!.Content);
+    }
+
+    [Fact]
+    public async Task MCP_04_a_stdio_server_that_exits_while_connecting_is_reported_with_what_it_said_on_its_error_output()
+    {
+        var exception = await Assert.ThrowsAsync<IOException>(() => McpToolSource.ConnectAsync(
+            McpServer.Stdio("fake", "dotnet", [FakeServerProgram, "complain"]), [new("echo")], TestContext.Current.CancellationToken));
+
+        Assert.EndsWith("closed its connection: configuration file missing", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task MCP_03_an_allowed_tool_whose_schema_the_core_cannot_use_fails_the_connect_with_why()
+    {
+        using var fake = HttpServer(new FakeMcpTool("odd", _ => "") { InputSchema = """{"type":"object","properties":{"when":{"type":"datetime"}}}""" });
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => McpToolSource.ConnectAsync(HttpServerAt(fake), [new("odd")], TestContext.Current.CancellationToken));
+
+        Assert.StartsWith("The tool 'odd' of the MCP server 'fake' cannot be used: ", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("files server")]
+    [InlineData("files.server")]
+    [InlineData(" ")]
+    public void MCP_03_a_server_name_that_cannot_prefix_tool_names_is_refused(string name)
+    {
+        Assert.Throws<ArgumentException>(() => McpServer.Http(name, new Uri("http://localhost:1/mcp")));
+    }
 }
