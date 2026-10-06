@@ -49,7 +49,7 @@ public static class BookshopAgent
     };
 
     /// <summary>The chat agent's model, shared by the app and the live smoke test.</summary>
-    public static ClaudeModel Model(bool demo) => new()
+    public static ClaudeModel Model(bool demo, string? apiKey = null) => new(apiKey)
     {
         Model = ClaudeModel.Opus55,
         Effort = ClaudeEffort.Medium,

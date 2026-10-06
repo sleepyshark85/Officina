@@ -49,14 +49,18 @@ OFFICINA_LIVE_TESTS=1 dotnet test tests/BookshopAssistant.Tests --filter Categor
 
 ## Run Bookshop Assistant
 
-Needs Docker and `ANTHROPIC_API_KEY`.
+Needs Docker and an Anthropic API key: put it in `apps/BookshopAssistant/appsettings.Local.json`, which git ignores,
+as `{ "AnthropicApiKey": "sk-ant-…" }`, or sign in with `ant auth login`.
 
 ```sh
 cd apps/BookshopAssistant
-./start.sh                         # or pwsh -File start.ps1; BOOKSHOP_DB_PORT=5433 if port 5432 is taken
-export BOOKSHOP_CONNECTION_STRING="Host=localhost;Port=5432;Username=bookshop;Password=shelf-demo-41;Database=bookshop"
-dotnet run                         # add -- --demo (or BOOKSHOP_DEMO=1) to compact and clear early (APP-17); sessions of one mode don't resume in the other
+./start.sh                         # or pwsh -File start.ps1
+dotnet run                         # add -- --demo to compact and clear early (APP-17); sessions of one mode don't resume in the other
 ```
+
+All settings are in `appsettings.json`, with a comment on each; `appsettings.Local.json` overrides any of them on this
+machine. If a port is taken, set another in a `.env` file beside `compose.yaml`, such as `BOOKSHOP_DB_PORT=5433`, and
+change the matching setting (here `Database`) in `appsettings.Local.json`, as `compose.yaml` explains.
 
 Try: *Order the two cheapest fantasy books in stock for Alice Martin and tell me the total.* The demo script,
 [`docs/demo.md`](docs/demo.md), walks through every capability.
@@ -68,8 +72,8 @@ Exports (APP-12) go to `exports/`, through the reference filesystem MCP server, 
 that serves it over Streamable HTTP. Try: *Export Alice Martin's order history as CSV.* The server runs as root in its container,
 so on Linux the exported files are owned by root: readable, and deletable from the folder, but not editable in place.
 
-The assistant remembers each staff member's preferences across sessions, under `data/memory` (or `$BOOKSHOP_DATA/memory`);
+The assistant remembers each staff member's preferences across sessions, under `data/memory` (the `DataFolder` setting);
 `/memory` shows them. Memory follows the staff member at the counter: a session resumed by someone else uses their
 memory, not the memory of the member who started it. Try *I prefer prices with tax*, then ask for a price in a new session.
 
-Traces leave out message text and tool inputs and results; `BOOKSHOP_TELEMETRY_CONTENT=1` puts them in, for debugging.
+Traces leave out message text and tool inputs and results; the `TelemetryContent` setting puts them in, for debugging.
