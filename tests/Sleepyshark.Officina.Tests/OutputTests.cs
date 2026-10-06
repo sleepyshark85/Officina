@@ -25,7 +25,7 @@ public class OutputTests
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
-    private static AgentDefinition Typed(ScriptedModel model) => With(model) with { Output = OutputContract.For<Summary>() };
+    private static Agent Typed(ScriptedModel model) => With(model) with { Output = OutputContract.For<Summary>() };
 
     [Fact]
     public async Task A_valid_reply_completes_with_the_typed_output_and_the_request_carries_the_schema_as_exported()

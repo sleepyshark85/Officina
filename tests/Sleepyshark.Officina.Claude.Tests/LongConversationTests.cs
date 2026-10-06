@@ -77,7 +77,7 @@ public class LongConversationTests
     {
         var api = new FakeApi().Fixture("compaction-iterations.sse").Stream(Sse.Text());
         using var model = Model(api);
-        var agent = new AgentDefinition { Model = model, Instructions = "Answer briefly.", ContextManagement = Both };
+        var agent = new Agent { Model = model, Instructions = "Answer briefly.", ContextManagement = Both };
         var conversation = new Conversation();
 
         var events = new List<RunEvent>();

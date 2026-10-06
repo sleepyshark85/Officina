@@ -29,7 +29,7 @@ public class ChatAssistantTests
             .Reply("20 °C is 68 °F.");
         var first = await Assistant(before).ReplyAsync("ana", "What is 20 °C in Fahrenheit?", Ct);
 
-        // A restart: only the stored JSON is left, and the definition is built afresh.
+        // A restart: only the stored JSON is left, and the agent is built afresh.
         time.Advance(TimeSpan.FromDays(1));
         var after = new ScriptedModel()
             .CallTools(Call("t2", "celsius_to_fahrenheit", new { celsius = 30 }))
@@ -50,7 +50,7 @@ public class ChatAssistantTests
     }
 
     [Fact]
-    public async Task A_conversation_of_a_changed_definition_is_started_anew_rather_than_failing()
+    public async Task A_conversation_of_a_changed_agent_is_started_anew_rather_than_failing()
     {
         await Assistant(new ScriptedModel().Reply("Hello.")).ReplyAsync("ana", "Hi.", Ct);
 

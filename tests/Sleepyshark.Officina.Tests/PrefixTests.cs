@@ -64,7 +64,7 @@ public class PrefixTests
         await agent.RunAsync(conversation, "Capital of France?", cancellationToken: Ct);
         var saved = JsonSerializer.Serialize(conversation);
 
-        // After it: only the JSON is left, and the definition is built afresh.
+        // After it: only the JSON is left, and the agent is built afresh.
         var after = new ScriptedModel().Reply("Berlin.").Reply("Rome.");
         var resumed = JsonSerializer.Deserialize<Conversation>(saved)!;
         var rebuilt = Agents.With(after, tools: Agents.SearchTool());

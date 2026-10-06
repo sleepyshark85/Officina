@@ -25,7 +25,7 @@ public class MemoryRequestTests
         var api = new FakeApi().Stream(CreateCall).Stream(Sse.Text());
         using var model = Model(api);
         var store = new InMemoryMemoryStore();
-        var agent = new AgentDefinition
+        var agent = new Agent
         {
             Model = model,
             Instructions = "Answer briefly.",

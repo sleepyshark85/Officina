@@ -126,7 +126,7 @@ public class ConversationPropertyTests
                         _ => ModelStopReason.MaxTokens,
                     })),
             };
-            var agent = new AgentDefinition
+            var agent = new Agent
             {
                 Model = model,
                 Instructions = Agents.Instructions,

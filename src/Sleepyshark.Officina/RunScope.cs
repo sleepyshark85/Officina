@@ -5,7 +5,7 @@ namespace Sleepyshark.Officina;
 /// <summary>What the steps of one run share: its agent and conversation, its span, its audit trail, its spending and what its tools get.</summary>
 internal sealed class RunScope : IDisposable
 {
-    public RunScope(AgentDefinition agent, Conversation conversation, Activity? span, RunOptions options)
+    public RunScope(Agent agent, Conversation conversation, Activity? span, RunOptions options)
     {
         Agent = agent;
         Conversation = conversation;
@@ -15,7 +15,7 @@ internal sealed class RunScope : IDisposable
         Tools = new ToolContext(options.MemoryScope);
     }
 
-    public AgentDefinition Agent { get; }
+    public Agent Agent { get; }
 
     public Conversation Conversation { get; }
 

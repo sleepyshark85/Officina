@@ -212,7 +212,7 @@ public class RetryTests
                 Sse.Error("overloaded_error")))
             .Stream(Sse.Text("end_turn", "Hello."));
         using var model = Model(api, new InstantTime());
-        var agent = new AgentDefinition { Model = model, Instructions = "Answer briefly." };
+        var agent = new Agent { Model = model, Instructions = "Answer briefly." };
 
         var result = await agent.RunAsync(new Conversation(), "Hi", cancellationToken: Ct);
 
@@ -266,7 +266,7 @@ public class RetryTests
     public async Task A_failed_run_carries_the_failure_s_class()
     {
         using var model = Model(new FakeApi().Error(401, "authentication_error", "invalid x-api-key"));
-        var agent = new AgentDefinition { Model = model, Instructions = "Answer." };
+        var agent = new Agent { Model = model, Instructions = "Answer." };
 
         var result = await agent.RunAsync(new Conversation(), "Hi", cancellationToken: Ct);
 

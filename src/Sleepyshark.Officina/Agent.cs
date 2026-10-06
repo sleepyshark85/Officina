@@ -9,7 +9,7 @@ namespace Sleepyshark.Officina;
 /// What an agent is (AGT-01): a model and instructions, and optionally tools (GEN-02). Immutable, so any number of runs
 /// may share it at once (AGT-04).
 /// </summary>
-public sealed record AgentDefinition
+public sealed record Agent
 {
     public required IModel Model
     {
@@ -106,7 +106,7 @@ public sealed record AgentDefinition
         RunAsync(new Conversation(), message, options, cancellationToken);
 
     /// <summary>
-    /// Runs the agent on <paramref name="conversation"/> (a new one, or one this definition's runs used before) with a new
+    /// Runs the agent on <paramref name="conversation"/> (a new one, or one this agent's runs used before) with a new
     /// user <paramref name="message"/>, and streams what happens, ending with <see cref="RunEnded"/>. While the model asks
     /// for tools, the run runs them, appends their results as one message, and calls the model again.
     /// <paramref name="options"/> give the run its context, memory scope and budget. Cancelling ends the run as
@@ -141,7 +141,7 @@ public sealed record AgentDefinition
     }
 
     /// <summary>
-    /// Whether this definition can run on <paramref name="conversation"/>: true for a new conversation or one started with
+    /// Whether this agent can run on <paramref name="conversation"/>: true for a new conversation or one started with
     /// the same tools, instructions and model settings; a run on any other fails with a prefix mismatch (CTX-04).
     /// </summary>
     public bool CanContinue(Conversation conversation)

@@ -18,7 +18,7 @@ internal static class Agents
         Func<JsonElement, CancellationToken, Task<ToolOutput>>? handler = null, bool needsApproval = false) =>
         new(name, description, schema, kind, handler ?? ((_, _) => Task.FromResult(new ToolOutput("ok"))), needsApproval);
 
-    public static AgentDefinition With(ScriptedModel model, string instructions = Instructions, params Tool[] tools) =>
+    public static Agent With(ScriptedModel model, string instructions = Instructions, params Tool[] tools) =>
         new() { Model = model, Instructions = instructions, Tools = [.. tools] };
 
     /// <summary>The result without its cost, counts and duration, for tests about how a run ended.</summary>

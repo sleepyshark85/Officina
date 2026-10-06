@@ -71,7 +71,7 @@ public class RequestTests
     {
         var api = new FakeApi().Fixture("thinking-text.sse").Stream(Sse.Text());
         using var model = Model(api);
-        var agent = new AgentDefinition { Model = model, Instructions = "Answer briefly." };
+        var agent = new Agent { Model = model, Instructions = "Answer briefly." };
         var conversation = new Conversation();
 
         await agent.RunAsync(conversation, "Find Gaudy Night.", cancellationToken: Ct);

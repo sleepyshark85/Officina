@@ -58,7 +58,7 @@ public sealed partial class BookshopConsole(
     private readonly ConcurrentDictionary<string, TaskCompletionSource<Approval>> approvals = new();
     private CancellationTokenSource? reply;
     private Task<string?>? pendingRead;
-    private AgentDefinition? summarizer;
+    private Agent? summarizer;
 
     /// <summary>The sessions whose summary failed in this console, which <c>/sessions</c> does not try again.</summary>
     private readonly HashSet<string> unsummarized = [];
@@ -89,7 +89,7 @@ public sealed partial class BookshopConsole(
     /// Runs the session until <c>/quit</c> or the end of input. <paramref name="agent"/> must have this console as its
     /// approver; without a <paramref name="summarizer"/>, sessions are not summarized.
     /// </summary>
-    public async Task RunAsync(AgentDefinition agent, AgentDefinition? summarizer = null)
+    public async Task RunAsync(Agent agent, Agent? summarizer = null)
     {
         ArgumentNullException.ThrowIfNull(agent);
         this.summarizer = summarizer;
@@ -249,7 +249,7 @@ public sealed partial class BookshopConsole(
     /// The stored session <paramref name="id"/>, to go on with; null when there is none, it cannot be read, or the agent
     /// has changed since it started, which would fail its next reply with a prefix mismatch (APP-10, CTX-04).
     /// </summary>
-    private async Task<Session?> ResumeAsync(AgentDefinition agent, string id)
+    private async Task<Session?> ResumeAsync(Agent agent, string id)
     {
         if (id.Length == 0)
         {
@@ -382,7 +382,7 @@ public sealed partial class BookshopConsole(
     /// Streams one reply, saving the session after every step of it, within the reply's budget or what is left of the
     /// session's, whichever is less.
     /// </summary>
-    private async Task ReplyAsync(AgentDefinition agent, Session session, string message, string? context, string memoryScope)
+    private async Task ReplyAsync(Agent agent, Session session, string message, string? context, string memoryScope)
     {
         using var span = Source.StartActivity("reply");
         using var cancellation = new CancellationTokenSource();

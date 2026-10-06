@@ -20,7 +20,7 @@ internal sealed class ToolPipeline(RunScope run, ChannelWriter<RunEvent> events)
     /// <summary>The longest result the model gets, in characters (TOOL-06): about 16k tokens.</summary>
     internal const int MaxResultLength = 64_000;
 
-    private readonly AgentDefinition agent = run.Agent;
+    private readonly Agent agent = run.Agent;
     private readonly AuditRecorder audit = run.Audit;
 
     public async Task<ImmutableArray<ToolResult>> RunAsync(IReadOnlyList<ToolCall> calls, CancellationToken cancellationToken)

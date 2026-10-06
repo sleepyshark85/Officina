@@ -8,7 +8,7 @@ If the two disagree, the code is right and this page needs updating.
 | Diagram | Type |
 |---|---|
 | [Core architecture](#core-architecture) | Architecture |
-| [Definition, run and result](#definition-run-and-result) · [Conversation, messages and events](#conversation-messages-and-events) | UML class |
+| [Agent, run and result](#agent-run-and-result) · [Conversation, messages and events](#conversation-messages-and-events) | UML class |
 | [Package dependencies](#package-dependencies) | Dependency graph |
 | [One chat turn](#one-chat-turn) · [A write call that needs approval](#a-write-call-that-needs-approval) · [One model call](#one-model-call) | Sequence |
 
@@ -24,10 +24,10 @@ reached through a contract the core owns and an adapter or the host implements.
 
 | Block | Responsibility | In the code |
 |---|---|---|
-| Agent definition | What an agent is: model, frozen instructions, sorted tools, optional output contract, context management, and host policy (approver, audit sink, secrets, clock). It validates a run's options and starts the run. | `AgentDefinition`, `RunOptions` |
+| Agent | What an agent is: model, frozen instructions, sorted tools, optional output contract, context management, and host policy (approver, audit sink, secrets, clock). It validates a run's options and starts the run. | `Agent`, `RunOptions` |
 | Run engine | Sequences one run: lock the conversation, check the prefix fingerprint, connect tool sources, call the model, append, run tools, loop, and end in exactly one result. | `RunEngine`, `RunScope` |
 | Reply decision | A pure mapping from a model reply (error, stop reason, blocks, tool calls) to "append or not" and "end with this result or continue". | `RunEngine.Decide` |
-| Request composer | Builds every request in the same layout (sorted tools, instructions, history, pending messages). A hash of that prefix stops a conversation from continuing under other tools, instructions or settings. | `ModelRequest`, `AgentDefinition.Fingerprint` |
+| Request composer | Builds every request in the same layout (sorted tools, instructions, history, pending messages). A hash of that prefix stops a conversation from continuing under other tools, instructions or settings. | `ModelRequest`, `Agent.Fingerprint` |
 | Tool pipeline | For each call: find, validate input, ask approval, audit the attempt, invoke, redact and truncate. Reads run together and writes run one at a time; every call gets exactly one result. | `ToolPipeline`, `ToolSources` |
 | Audit recorder | Turns important steps into numbered, redacted, truncated entries. With an audit sink, a write tool runs only once its attempt is recorded. | `AuditRecorder`, `AuditEntry` |
 | Schema validator | Validates JSON against the JSON Schema subset the core uses, and refuses schemas outside it when a tool or output contract is defined. | `SchemaValidator` |
@@ -39,9 +39,9 @@ reached through a contract the core owns and an adapter or the host implements.
 
 ## Core classes
 
-### Definition, run and result
+### Agent, run and result
 
-![Definition, run and result](diagrams/officina-classes-run.svg)
+![Agent, run and result](diagrams/officina-classes-run.svg)
 
 ### Conversation, messages and events
 
@@ -54,7 +54,7 @@ reached through a contract the core owns and an adapter or the host implements.
 | Class | Description |
 |---|---|
 | **Built by the host** | |
-| `AgentDefinition` | Immutable record describing an agent, and the only entry point for runs. It keeps tools sorted and refuses duplicates. |
+| `Agent` | Immutable, stateless record describing an agent, and the only entry point for runs. It keeps tools sorted and refuses duplicates. |
 | `RunOptions` | One run's context (sent as an operator message), memory scope and budget. Each value is validated when set. |
 | `Tool` | A tool the model may call: name, description, input schema, read or write, approval need, handler. `FromFunction` builds one from a typed delegate. |
 | `ToolContext` | What a handler learns about the run calling it: its memory scope. |
@@ -162,7 +162,7 @@ or a transient failure on the last attempt, throws `ClaudeException`, and the ru
 | One primitive | A run of one agent is the only thing the core executes. The session summarizer is a second agent the host runs. | No built-in multi-agent orchestration; hosts compose runs. |
 | Purpose-neutral core | No domain, UI, storage or transport types in the core; bookshop concepts live only in the app. | Hosts write more wiring (telemetry, stores, MCP servers). |
 | **SOLID** | | |
-| Single responsibility | `RunEngine` sequences, `Decide` decides, `ToolPipeline` runs calls; `AuditRecorder`, `Spending` and `Telemetry` each own one concern. `AgentDefinition` describes an agent and `RunOptions` carries per-run input. | Audit and telemetry calls sit inside the engine and pipeline rather than observing events, because a write must wait until its attempt is recorded. |
+| Single responsibility | `RunEngine` sequences, `Decide` decides, `ToolPipeline` runs calls; `AuditRecorder`, `Spending` and `Telemetry` each own one concern. `Agent` describes an agent and `RunOptions` carries per-run input. | Audit and telemetry calls sit inside the engine and pipeline rather than observing events, because a write must wait until its attempt is recorded. |
 | Open/closed | Tools, providers and stores plug in through contracts. The memory tool is an ordinary `Tool` using `ToolContext`; the pipeline has no special case for it. | A provider recognizes the memory tool through the `IsMemory` marker to map it to its native tool. |
 | Liskov substitution | Test doubles behave like the real thing: `ScriptedModel` rejects role sequences the Claude API rejects, and `InMemoryMemoryStore` enforces the same path rules. | The test kit is a shipped package that must track the real adapters. |
 | Interface segregation | `IApprover` and `IAuditSink` have one method each, `IToolSource` three members, `IMemoryStore` five related file operations. | None found. |

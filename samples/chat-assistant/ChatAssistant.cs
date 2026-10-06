@@ -15,9 +15,9 @@ namespace Samples.Chat;
 /// The host's storage, user id to conversation JSON: a dictionary here, a database table in an application.
 /// </param>
 /// <param name="time">The clock the date comes from.</param>
-public sealed class ChatAssistant(AgentDefinition agent, IDictionary<string, string> conversations, TimeProvider time)
+public sealed class ChatAssistant(Agent agent, IDictionary<string, string> conversations, TimeProvider time)
 {
-    public static AgentDefinition Create(IModel model, IMemoryStore memory) => new()
+    public static Agent Create(IModel model, IMemoryStore memory) => new()
     {
         Name = "chat",
         Model = model,
@@ -30,7 +30,7 @@ public sealed class ChatAssistant(AgentDefinition agent, IDictionary<string, str
     {
         var conversation = conversations.TryGetValue(user, out var saved) ? JsonSerializer.Deserialize<Conversation>(saved)! : new Conversation();
 
-        // A conversation of an older definition, with other tools or instructions, cannot go on (CTX-04): start anew.
+        // A conversation of an older agent, with other tools or instructions, cannot go on (CTX-04): start anew.
         if (!agent.CanContinue(conversation))
         {
             conversation = new Conversation();

@@ -56,7 +56,7 @@ public static class Telemetry
     private static readonly Counter<long> AuditFailures = Meter.CreateCounter<long>(
         "officina.audit.failures", "{entry}", "Audit entries the sink failed to write (AUD-06).");
 
-    internal static Activity? StartRun(AgentDefinition agent, Conversation conversation, string message) =>
+    internal static Activity? StartRun(Agent agent, Conversation conversation, string message) =>
         Start($"invoke_agent {agent.Name}", ActivityKind.Internal, Activity.Current?.Context ?? default, agent, [
             new("gen_ai.operation.name", "invoke_agent"),
             new("gen_ai.agent.name", agent.Name),
@@ -67,7 +67,7 @@ public static class Telemetry
         ]);
 
     /// <summary>Ends a run's span and counts it; <paramref name="result"/> is null for a run the host abandoned.</summary>
-    internal static void EndRun(Activity? activity, AgentDefinition agent, RunResult? result)
+    internal static void EndRun(Activity? activity, Agent agent, RunResult? result)
     {
         var (kind, reason, error) = result switch
         {
@@ -99,7 +99,7 @@ public static class Telemetry
         Stop(activity, agent, error is null ? null : (reason!, error));
     }
 
-    internal static Activity? StartModelCall(AgentDefinition agent, Activity? run) =>
+    internal static Activity? StartModelCall(Agent agent, Activity? run) =>
         Start($"chat {agent.Model.Name}", ActivityKind.Client, run?.Context ?? default, agent, [
             new("gen_ai.operation.name", "chat"),
             new("gen_ai.provider.name", agent.Model.Provider),
@@ -111,7 +111,7 @@ public static class Telemetry
     /// Ends a model call's span and records its metrics. The reply's stop reason is null when the call failed (then its
     /// error says why) or was cancelled.
     /// </summary>
-    internal static void EndModelCall(Activity? activity, AgentDefinition agent, long started, ModelReply reply)
+    internal static void EndModelCall(Activity? activity, Agent agent, long started, ModelReply reply)
     {
         var (usage, stop, error) = (reply.Usage, reply.Stop, reply.Error);
         var cost = agent.Model.Price?.Cost(usage) ?? 0;
@@ -157,7 +157,7 @@ public static class Telemetry
     }
 
     /// <summary>Records a compaction on the model call's span, and counts it.</summary>
-    internal static void Compacted(Activity? activity, AgentDefinition agent, CompactionReported compaction)
+    internal static void Compacted(Activity? activity, Agent agent, CompactionReported compaction)
     {
         Compactions.Add(1, Dimensions(agent));
         activity?.SetTag("officina.compaction.tokens", compaction.Tokens);
@@ -165,7 +165,7 @@ public static class Telemetry
     }
 
     /// <summary>Records a clearing of old tool results on the model call's span, and counts it.</summary>
-    internal static void Cleared(Activity? activity, AgentDefinition agent, ClearingReported clearing)
+    internal static void Cleared(Activity? activity, Agent agent, ClearingReported clearing)
     {
         Clearings.Add(1, Dimensions(agent));
         activity?.SetTag("officina.clearing.tokens", clearing.Tokens);
@@ -173,9 +173,9 @@ public static class Telemetry
     }
 
     /// <summary>Counts a retry of a model call.</summary>
-    internal static void Retried(AgentDefinition agent) => Retries.Add(1, Dimensions(agent));
+    internal static void Retried(Agent agent) => Retries.Add(1, Dimensions(agent));
 
-    internal static Activity? StartToolCall(AgentDefinition agent, Activity? run, Tool? tool, ToolCall call) =>
+    internal static Activity? StartToolCall(Agent agent, Activity? run, Tool? tool, ToolCall call) =>
         Start($"execute_tool {call.Name}", ActivityKind.Internal, run?.Context ?? default, agent, [
             new("gen_ai.operation.name", "execute_tool"),
             new("gen_ai.tool.name", call.Name),
@@ -187,7 +187,7 @@ public static class Telemetry
         ]);
 
     /// <summary>Records an approval's answer and how long it was waited for, on the call's span and in the metrics.</summary>
-    internal static void Approved(Activity? activity, AgentDefinition agent, ToolCall call, bool approved, TimeSpan wait)
+    internal static void Approved(Activity? activity, Agent agent, ToolCall call, bool approved, TimeSpan wait)
     {
         var answer = approved ? "approved" : "denied";
         Approvals.Add(1, [.. Dimensions(agent), new("gen_ai.tool.name", call.Name), new("officina.tool.approval", answer)]);
@@ -200,7 +200,7 @@ public static class Telemetry
     /// truncation.
     /// </summary>
     internal static void EndToolCall(
-        Activity? activity, AgentDefinition agent, ToolCall call, long started, ToolOutcome outcome, TimeSpan? ran, int length, bool truncated, string result)
+        Activity? activity, Agent agent, ToolCall call, long started, ToolOutcome outcome, TimeSpan? ran, int length, bool truncated, string result)
     {
         KeyValuePair<string, object?>[] dimensions = [.. Dimensions(agent), new("gen_ai.tool.name", call.Name), new("officina.tool.outcome", Word(outcome))];
         ToolCalls.Add(1, dimensions);
@@ -224,7 +224,7 @@ public static class Telemetry
     }
 
     /// <summary>Counts an audit entry the sink failed to write, and marks the span of the step it recorded (AUD-06).</summary>
-    internal static void AuditFailed(Activity? step, AgentDefinition agent, AuditKind kind)
+    internal static void AuditFailed(Activity? step, Agent agent, AuditKind kind)
     {
         AuditFailures.Add(1, [.. Dimensions(agent), new("officina.audit.kind", kind.ToString())]);
         step?.AddEvent(new ActivityEvent("officina.audit.failed", agent.Time.GetUtcNow(), new ActivityTagsCollection { ["officina.audit.kind"] = kind.ToString() }));
@@ -234,7 +234,7 @@ public static class Telemetry
     /// Starts a span at <paramref name="parent"/> without making it the ambient one: a run's spans are parented explicitly,
     /// as the ambient span does not survive across the run's asynchronous steps.
     /// </summary>
-    private static Activity? Start(string name, ActivityKind kind, ActivityContext parent, AgentDefinition agent, KeyValuePair<string, object?>[] tags)
+    private static Activity? Start(string name, ActivityKind kind, ActivityContext parent, Agent agent, KeyValuePair<string, object?>[] tags)
     {
         var ambient = Activity.Current;
         var activity = Source.StartActivity(name, kind, parent, tags, startTime: agent.Time.GetUtcNow());
@@ -242,7 +242,7 @@ public static class Telemetry
         return activity;
     }
 
-    private static void Stop(Activity activity, AgentDefinition agent, (string Type, string? Description)? error)
+    private static void Stop(Activity activity, Agent agent, (string Type, string? Description)? error)
     {
         if (error is { } failed)
         {
@@ -256,7 +256,7 @@ public static class Telemetry
         Activity.Current = ambient;
     }
 
-    private static KeyValuePair<string, object?>[] Dimensions(AgentDefinition agent) =>
+    private static KeyValuePair<string, object?>[] Dimensions(Agent agent) =>
         [new("gen_ai.agent.name", agent.Name), new("gen_ai.provider.name", agent.Model.Provider), new("gen_ai.request.model", agent.Model.Name)];
 
     private static void SetUsage(Activity activity, Usage usage, decimal cost)
@@ -269,10 +269,10 @@ public static class Telemetry
     }
 
     /// <summary>The content attribute, only when the agent opts in (EVT-04), with its secrets redacted (EVT-03).</summary>
-    private static KeyValuePair<string, object?>[] Content(AgentDefinition agent, string name, Func<string> value) =>
+    private static KeyValuePair<string, object?>[] Content(Agent agent, string name, Func<string> value) =>
         agent.TelemetryContent ? [new(name, agent.Redact(value()))] : [];
 
-    private static void SetContent(Activity activity, AgentDefinition agent, string name, Func<string> value)
+    private static void SetContent(Activity activity, Agent agent, string name, Func<string> value)
     {
         foreach (var (key, content) in Content(agent, name, value))
         {

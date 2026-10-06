@@ -11,7 +11,7 @@ namespace BookshopAssistant;
 public static class BookshopAgent
 {
     /// <summary>The agent; in <c>demo</c> mode (APP-17), compaction and clearing come early enough to see in a short session.</summary>
-    public static AgentDefinition Create(
+    public static Agent Create(
         IModel model, BookshopTools tools, IMemoryStore memory, IApprover approver, IAuditSink audit, IEnumerable<string> secrets,
         TimeProvider time, IEnumerable<Tool>? exportTools = null, bool demo = false) => new()
         {

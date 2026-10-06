@@ -40,7 +40,7 @@ public class ExtractionTests
             .Reply("""{"category":"Billing","urgency":"Normal","orderNumber":null,"summary":"A question about an invoice."}""")
             .Reply("""{"category":"Product","urgency":"Low","orderNumber":null,"summary":"A question about a size."}""");
 
-        // A definition built afresh for each message, as in a new process, sends the same tools, instructions and schema.
+        // An agent built afresh for each message, as in a new process, sends the same tools, instructions and schema.
         await TicketTriage.ClassifyAsync(TicketTriage.Create(model), "Why was I charged twice?", Ct);
         await TicketTriage.ClassifyAsync(TicketTriage.Create(model), "Does this shirt run small?", Ct);
 
