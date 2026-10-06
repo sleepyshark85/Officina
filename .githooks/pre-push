@@ -1,6 +1,7 @@
 #!/bin/sh
-# The local gate before a push: never to main, and only with passing tests when the pushed commits change code or
-# tests. CI runs the same tests; this finds a failure before the push instead of after it.
+# The local gate before a push: never to main, and only with passing tests when the pushed commits change more than
+# docs. It tests the working tree, normally the commits being pushed. CI runs the same tests; this finds a failure
+# before the push instead of after it.
 zero=0000000000000000000000000000000000000000
 changed=false
 while read -r local_ref local_sha remote_ref remote_sha; do
@@ -11,14 +12,14 @@ while read -r local_ref local_sha remote_ref remote_sha; do
 
     [ "$local_sha" = "$zero" ] && continue
     base=$(git merge-base origin/main "$local_sha" 2>/dev/null || echo "")
-    if [ -z "$base" ] || git diff --name-only "$base" "$local_sha" | grep -qvE '\.(md|html|svg|png)$'; then
+    if [ -z "$base" ] || git diff --no-renames --name-only "$base" "$local_sha" | grep -qvE '\.(md|html|svg|png)$'; then
         changed=true
     fi
 done
 
 [ "$changed" = true ] || exit 0
 echo "pre-push: running the tests..." >&2
-if ! dotnet test --configuration Release --nologo --verbosity quiet >&2; then
+if ! dotnet test --configuration Release --nologo --verbosity quiet --blame-hang-timeout 2m >&2; then
     echo "pre-push: tests fail; fix them, then push again." >&2
     exit 1
 fi
