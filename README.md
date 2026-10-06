@@ -32,6 +32,23 @@ compaction, against its own database in Docker; it needs `ANTHROPIC_API_KEY` and
 OFFICINA_LIVE_TESTS=1 dotnet test tests/BookshopAssistant.Tests --filter Category=Live --logger "console;verbosity=detailed"
 ```
 
+Mutation testing (Stryker.NET) checks that the tests catch changes to the library packages. Each package has a
+`stryker-config.json`; run it from the package's folder, and open the HTML report under `StrykerOutput/`:
+
+```sh
+dotnet tool restore
+cd src/Sleepyshark.Officina && dotnet stryker               # every mutant: about 4 minutes
+cd src/Sleepyshark.Officina && dotnet stryker --since:main  # only the files changed since main, as pull requests do
+```
+
+| Package | Baseline score (2026-10-07) | A pull request fails below |
+|---|---|---|
+| `Sleepyshark.Officina` | 73% | 68% |
+| `Sleepyshark.Officina.Claude` | 83% | 78% |
+| `Sleepyshark.Officina.Mcp` | 55% | 50% |
+
+The `mutation` workflow runs this on every pull request, weekly and on demand, and keeps the reports as an artifact.
+
 | Path | Holds |
 |---|---|
 | `src/Sleepyshark.Officina` | The core, with built-in file and in-memory memory stores and a JSON-lines audit sink, used only when the host picks them; depends on the .NET base library and the DI abstractions only |
