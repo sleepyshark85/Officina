@@ -74,7 +74,7 @@ The core serves any agentic purpose, not only the reference application. These r
 
 | ID | Requirement |
 |---|---|
-| GEN-01 | The core holds no domain concept, user interface, storage technology or transport. Everything application-specific comes in through the contracts: model, tools, context, memory store, approver, audit sink, output type. |
+| GEN-01 | The core holds no domain concept, user interface or transport, and chooses no storage technology: it persists nothing unless the host picks one of its built-in stores (MEM-02, AUD-04). Everything application-specific comes in through the contracts: model, tools, context, memory store, approver, audit sink, output type. |
 | GEN-02 | Every part of an agent other than its model and instructions is optional: tools, conversation, memory, output type, approver, budget. An agent with only a model and instructions is valid. |
 | GEN-03 | A run can be **stateless** (a new conversation discarded afterwards: extraction, classification) or **stateful** (a conversation the host keeps: chat, assistants). |
 | GEN-04 | A run can be **interactive** (an approver answers) or **unattended** (no approver: a tool that needs approval is denied, and the model is told why). |
@@ -130,7 +130,7 @@ The core serves any agentic purpose, not only the reference application. These r
 | ID | Requirement |
 |---|---|
 | MEM-01 | An agent can have memory: a set of files the model views, creates, edits and deletes across conversations, through Claude's memory tool (`memory_20250818`) on Claude. |
-| MEM-02 | Memory is stored through a store interface the host chooses; a file-system store and an in-memory store ship. |
+| MEM-02 | Memory is stored through a store interface the host chooses; a file-system store and an in-memory store are built into the core, used only when the host picks them. |
 | MEM-03 | Memory is scoped per run by a key the host gives (for example a user id): a run sees only its scope's files. Paths outside the scope are refused. |
 | MEM-04 | Memory writes go through the tool pipeline like any write tool, so they are logged and can require approval. |
 | MEM-05 | Memory is never put in the instructions; the model reads it on demand, so the cached prefix stays stable. |
@@ -190,7 +190,7 @@ the fact.
 | AUD-01 | Important events are written to an audit trail: run started and ended (result, usage, cost); every tool call (tool, input, outcome, duration); approvals asked and answered; memory writes; budget stops; refusals; compactions; provider failures; prefix mismatches; MCP servers connected, failed or disconnected. |
 | AUD-02 | When the agent has an audit sink, a write tool's attempt is recorded **before** it runs and its outcome after. If the attempt cannot be recorded, the tool does not run and the model gets an error result. Without a sink there is no trail (GEN-02). |
 | AUD-03 | Each entry carries the time, a sequence number, the run, the conversation, the agent, the memory scope and the trace and span of the step it records (EVT-02), so a run can be reconstructed and each entry opened as its trace. Entries are never changed or removed by the core. |
-| AUD-04 | The audit trail is written through an audit sink contract the host chooses; a JSON-lines file sink ships (used by the background agent sample, GEN-06). |
+| AUD-04 | The audit trail is written through an audit sink contract the host chooses; a JSON-lines file sink is built into the core, used only when the host picks it (as the background agent sample does, GEN-06). |
 | AUD-05 | Secrets never reach the audit trail, and large inputs and results are truncated with their size noted. |
 | AUD-06 | Audit sink failures are visible in telemetry: a failed write, and a write tool blocked because its attempt could not be recorded (AUD-02). |
 
@@ -198,7 +198,7 @@ the fact.
 
 | ID | Requirement |
 |---|---|
-| TEST-01 | A test kit ships with a scripted model (replies given in advance, requests recorded), a scripted approver, an in-memory memory store and a fake MCP server, so any agent runs offline and deterministically. |
+| TEST-01 | A test kit ships with a scripted model (replies given in advance, requests recorded), a scripted approver and a fake MCP server; with the core's in-memory memory store, any agent runs offline and deterministically. |
 | TEST-02 | A **prefix stability** check: across the calls of a scripted multi-turn run, each request's tools, instructions and earlier messages are byte-identical to the previous request's. This also holds across a restart: a conversation saved to JSON and resumed with a freshly built agent produces the same prefix. It runs for the reference application and every GEN-06 sample. |
 | TEST-03 | The test suite needs no API key and no network; CI runs it on Linux and Windows. Tests that need the Docker database run on Linux only. |
 | TEST-04 | The reference application has a live smoke test against the Docker database, run on demand with an API key, which drives APP-09, asserts cache reads from the second call on, and forces a compaction (about $0.40 per run). |
@@ -265,5 +265,6 @@ the architecture only keeps room for it.
 | D11 | Telemetry is viewed in an OpenTelemetry dashboard run from the application's compose file (the standalone .NET Aspire dashboard: one container, receives traces, metrics and logs). The core only emits (EVT-02); exporting is the host's choice. | Decided (owner) |
 | D12 | Compaction is the provider's threshold compaction (HIST-01). The newer on-demand compaction (Claude: `compact-2026-09-04`, per the provider's docs; not tested in S02) is not used: it has the client drop the compacted messages from the front of the history, which principle 5 and HIST-03 forbid. | Proposed |
 | D13 | Secrets are redacted everywhere (EVT-03) except in two places, where one a person typed, or that the model repeated from them, can appear. (1) The conversation-appended event carries the assistant's blocks byte-exact, plus the host's and the user's own text (the run context and the user message). **Reason:** redacting history would break the append-only rule (principle 5) and the binding of reasoning blocks to their exact prefix (MDL-05). (2) Streamed text deltas. **Reason:** a secret can be split across chunks, so redacting deltas would need buffering that delays streaming. Everything else is redacted: tool calls in events, tool results and errors, run failures, the final text of a completed run, audit and telemetry. The model sees a secret only if a person gives it one, as tool results are redacted. | Decided |
+| D14 | The file and in-memory memory stores and the JSON-lines audit sink are built into the core, not separate packages. **Reason:** they need nothing beyond the base library, and a host should not need extra packages for local storage. Absent parts still default to none (GEN-02): the core never picks a store itself. | Decided (owner) |
 | Q1 | PostgreSQL client library: the plain provider (Npgsql), not an object mapper, as the queries are few and fixed. | Decided (owner) |
 | Q2 | JSON Schema validation under the core's no-dependency rule (the platform can export a schema from a type but not validate one): a small validator in the core for the subset the core itself produces (TOOL-01, OUT-01) and MCP servers commonly use; a full validator package only if a real schema needs it. | Decided (owner) |

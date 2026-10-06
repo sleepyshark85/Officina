@@ -25,7 +25,7 @@
 
     <svg viewBox="0 0 980 440" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="officina-packages-title officina-packages-desc">
       <title id="officina-packages-title">Package dependencies</title>
-      <desc id="officina-packages-desc">Dependency graph showing the five adapter packages and the Bookshop Assistant all referencing the core, which references nothing outside the .NET base library, and only the Claude package referencing the Anthropic SDK.</desc>
+      <desc id="officina-packages-desc">Dependency graph showing the Claude, MCP and test kit packages and the Bookshop Assistant all referencing the core, which holds the built-in stores and references nothing outside the .NET base library, and only the Claude package referencing the Anthropic SDK.</desc>
       <defs>
         <marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#4f5d75"/></marker>
         <marker id="arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#eb6c36"/></marker>
@@ -41,15 +41,11 @@
       <path d="M 256,96 V 120 Q 256,128 248,128 H 128 Q 120,128 120,136 V 160" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
       <path d="M 288,96 V 160" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
       <path d="M 320,96 V 112 Q 320,120 328,120 H 388 Q 396,120 396,128 V 224 Q 396,232 404,232 H 444 Q 452,232 452,240 V 280" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
-      <path d="M 352,96 V 104 Q 352,112 360,112 H 480 Q 488,112 488,120 V 160" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
       <path d="M 744,96 V 120 Q 744,128 736,128 H 680 Q 672,128 672,136 V 160" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
-      <path d="M 784,96 V 120 Q 784,128 792,128 H 848 Q 856,128 856,136 V 160" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
       <path d="M 120,216 V 280" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
       <path d="M 160,216 V 248 Q 160,256 168,256 H 420 Q 428,256 428,264 V 280" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
       <path d="M 304,216 V 236 Q 304,244 312,244 H 432 Q 440,244 440,252 V 280" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
-      <path d="M 488,216 V 280" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
       <path d="M 672,216 V 236 Q 672,244 664,244 H 520 Q 512,244 512,252 V 280" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
-      <path d="M 856,216 V 248 Q 856,256 848,256 H 532 Q 524,256 524,264 V 280" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
       <rect x="224" y="40" width="160" height="56" rx="6" fill="#f5f5f5"/>
       <rect x="224" y="40" width="160" height="56" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
       <rect x="232" y="46" width="28" height="12" rx="2" fill="none" stroke="rgba(45,49,66,0.30)" stroke-width="0.8"/>
@@ -82,36 +78,20 @@
       <text x="360" y="175" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">1 in</text>
       <text x="304" y="190" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">MCP</text>
       <text x="304" y="206" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">Officina.Mcp</text>
-      <rect x="408" y="160" width="160" height="56" rx="6" fill="#f5f5f5"/>
-      <rect x="408" y="160" width="160" height="56" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
-      <rect x="416" y="166" width="28" height="12" rx="2" fill="none" stroke="rgba(45,49,66,0.30)" stroke-width="0.8"/>
-      <text x="430" y="175" fill="#4f5d75" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">PKG</text>
-      <rect x="528" y="166" width="32" height="12" rx="2" fill="#f5f5f5" stroke="rgba(45,49,66,0.30)" stroke-width="0.8"/>
-      <text x="544" y="175" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">1 in</text>
-      <text x="488" y="190" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Memory files</text>
-      <text x="488" y="206" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">Officina.Memory.Files</text>
       <rect x="592" y="160" width="160" height="56" rx="6" fill="#f5f5f5"/>
       <rect x="592" y="160" width="160" height="56" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
       <rect x="600" y="166" width="28" height="12" rx="2" fill="none" stroke="rgba(45,49,66,0.30)" stroke-width="0.8"/>
       <text x="614" y="175" fill="#4f5d75" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">PKG</text>
       <rect x="712" y="166" width="32" height="12" rx="2" fill="#f5f5f5" stroke="rgba(45,49,66,0.30)" stroke-width="0.8"/>
       <text x="728" y="175" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">1 in</text>
-      <text x="672" y="190" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">JSON-lines audit</text>
-      <text x="672" y="206" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">Officina.Audit.JsonLines</text>
-      <rect x="776" y="160" width="160" height="56" rx="6" fill="#f5f5f5"/>
-      <rect x="776" y="160" width="160" height="56" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
-      <rect x="784" y="166" width="28" height="12" rx="2" fill="none" stroke="rgba(45,49,66,0.30)" stroke-width="0.8"/>
-      <text x="798" y="175" fill="#4f5d75" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">PKG</text>
-      <rect x="896" y="166" width="32" height="12" rx="2" fill="#f5f5f5" stroke="rgba(45,49,66,0.30)" stroke-width="0.8"/>
-      <text x="912" y="175" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">1 in</text>
-      <text x="856" y="190" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Test kit</text>
-      <text x="856" y="206" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">Officina.Testing</text>
+      <text x="672" y="190" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Test kit</text>
+      <text x="672" y="206" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">Officina.Testing</text>
       <rect x="408" y="280" width="160" height="56" rx="6" fill="#f5f5f5"/>
       <rect x="408" y="280" width="160" height="56" rx="6" fill="rgba(45,49,66,0.05)" stroke="#4f5d75" stroke-width="1"/>
       <rect x="416" y="286" width="32" height="12" rx="2" fill="none" stroke="rgba(79,93,117,0.40)" stroke-width="0.8"/>
       <text x="432" y="295" fill="#4f5d75" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">CORE</text>
       <rect x="528" y="286" width="32" height="12" rx="2" fill="#f5f5f5" stroke="rgba(45,49,66,0.30)" stroke-width="0.8"/>
-      <text x="544" y="295" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">6 in</text>
+      <text x="544" y="295" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">4 in</text>
       <text x="488" y="310" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Core</text>
       <text x="488" y="326" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">Sleepyshark.Officina</text>
       <rect x="40" y="280" width="160" height="56" rx="6" fill="#f5f5f5"/>

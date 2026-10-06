@@ -65,7 +65,8 @@ provider, MCP client, test kit and spike findings (`docs/spikes/` there) are reu
 - **Every run ends in a result:** completed, stopped (with a reason) or failed. Tool errors go back to the model.
 - **A write tool never runs unaudited** when the agent has an audit sink: its attempt is recorded before it runs, and
   it does not run if that fails. Without a sink there is no trail at all (GEN-02).
-- **Purpose-neutral core:** no domain concepts, UI, storage technology or transport in the core; everything except
+- **Purpose-neutral core:** no domain concepts, UI or transport in the core, and no storage it picks itself: its
+  built-in stores (file and in-memory memory, JSON-lines audit) run only when the host chooses them. Everything except
   model and instructions is optional.
 - **Dependencies:** no Microsoft Agent Framework or `Microsoft.Extensions.AI`. The Anthropic C# SDK is used only in the
   Claude package; a dependency check test enforces it.

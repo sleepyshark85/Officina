@@ -34,10 +34,9 @@ OFFICINA_LIVE_TESTS=1 dotnet test tests/BookshopAssistant.Tests --filter Categor
 
 | Path | Holds |
 |---|---|
-| `src/Sleepyshark.Officina` | The core; depends on the .NET base library only |
+| `src/Sleepyshark.Officina` | The core, with built-in file and in-memory memory stores and a JSON-lines audit sink, used only when the host picks them; depends on the .NET base library only |
 | `src/Sleepyshark.Officina.Claude` | The Claude adapter; the only project that may reference the Anthropic SDK |
 | `src/Sleepyshark.Officina.Mcp` | The MCP tool source: our own client, over stdio and Streamable HTTP |
-| `src/Sleepyshark.Officina.Memory.Files` | The file-system memory store |
 | `src/Sleepyshark.Officina.Testing` | The test kit |
 | `apps/BookshopAssistant` | The reference application |
 | `samples/hello` | A live chat with Claude (needs `ANTHROPIC_API_KEY`); not part of `dotnet test` |

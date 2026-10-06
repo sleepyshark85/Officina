@@ -17,7 +17,6 @@ using OpenTelemetry.Trace;
 using Sleepyshark.Officina;
 using Sleepyshark.Officina.Claude;
 using Sleepyshark.Officina.Mcp;
-using Sleepyshark.Officina.Memory.Files;
 
 var connectionString = Environment.GetEnvironmentVariable("BOOKSHOP_CONNECTION_STRING");
 if (string.IsNullOrWhiteSpace(connectionString))
