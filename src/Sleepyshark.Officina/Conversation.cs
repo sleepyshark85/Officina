@@ -22,8 +22,8 @@ public sealed class Conversation
     public string Id { get; init; } = Guid.NewGuid().ToString("N");
 
     /// <summary>
-    /// The prefix fingerprint of the agent definition the conversation was started with; null before its first run. A run
-    /// of a definition with another fingerprint fails without calling the model (CTX-04).
+    /// The prefix fingerprint of the agent the conversation was started with; null before its first run. A run
+    /// of an agent with another fingerprint fails without calling the model (CTX-04).
     /// </summary>
     [JsonInclude]
     [JsonPropertyName("fingerprint")]

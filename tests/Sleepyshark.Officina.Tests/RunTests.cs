@@ -27,7 +27,7 @@ public class RunTests
             ],
             conversation.Messages.Select(message => (message.Role, message.Text)));
 
-        // Each request carries the whole conversation so far, and the definition's instructions.
+        // Each request carries the whole conversation so far, and the agent's instructions.
         Assert.Equal([1, 3, 5], model.Requests.Select(request => request.Messages.Length));
         Assert.All(model.Requests, request => Assert.Equal(Agents.Instructions, request.Instructions));
     }
@@ -35,7 +35,7 @@ public class RunTests
     [Fact]
     public async Task An_agent_with_only_a_model_and_instructions_runs_statelessly()
     {
-        var agent = new AgentDefinition { Model = new ScriptedModel().Reply("positive"), Instructions = "Classify the sentiment." };
+        var agent = new Agent { Model = new ScriptedModel().Reply("positive"), Instructions = "Classify the sentiment." };
 
         var result = await agent.RunAsync(new Conversation(), "I love it", cancellationToken: Ct);
 
@@ -160,7 +160,7 @@ public class RunTests
     [Fact]
     public async Task A_model_that_throws_before_streaming_fails_the_run_instead_of_throwing()
     {
-        var agent = new AgentDefinition { Model = new ThrowingModel(), Instructions = Agents.Instructions };
+        var agent = new Agent { Model = new ThrowingModel(), Instructions = Agents.Instructions };
         var conversation = new Conversation();
 
         var result = await agent.RunAsync(conversation, "Hi", cancellationToken: Ct);
@@ -262,7 +262,7 @@ public class RunTests
     [Fact]
     public async Task A_reply_is_kept_when_closing_the_call_fails_after_the_stop_reason()
     {
-        var agent = new AgentDefinition { Model = new FailingDisposeModel(), Instructions = Agents.Instructions };
+        var agent = new Agent { Model = new FailingDisposeModel(), Instructions = Agents.Instructions };
         var conversation = new Conversation();
 
         var result = await agent.RunAsync(conversation, "Hi", cancellationToken: Ct);

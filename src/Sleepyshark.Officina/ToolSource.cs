@@ -44,7 +44,7 @@ public enum ToolSourceState
 internal static class ToolSources
 {
     /// <summary>Connects each tool source of the agent's tools; returns why the run cannot start, or null when all are connected.</summary>
-    public static async Task<string?> ConnectAsync(AgentDefinition agent, AuditRecorder audit, CancellationToken cancellationToken)
+    public static async Task<string?> ConnectAsync(Agent agent, AuditRecorder audit, CancellationToken cancellationToken)
     {
         string? error = null;
         foreach (var source in Of(agent))
@@ -72,7 +72,7 @@ internal static class ToolSources
     }
 
     /// <summary>Writes the connection changes of the agent's tool sources to the audit trail.</summary>
-    public static async Task RecordChangesAsync(AgentDefinition agent, AuditRecorder audit)
+    public static async Task RecordChangesAsync(Agent agent, AuditRecorder audit)
     {
         foreach (var source in Of(agent))
         {
@@ -101,5 +101,5 @@ internal static class ToolSources
         }
     }
 
-    private static IEnumerable<IToolSource> Of(AgentDefinition agent) => agent.Tools.Select(tool => tool.Source).OfType<IToolSource>().Distinct();
+    private static IEnumerable<IToolSource> Of(Agent agent) => agent.Tools.Select(tool => tool.Source).OfType<IToolSource>().Distinct();
 }

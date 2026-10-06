@@ -33,7 +33,7 @@ every phase 1 capability in one place.
 | APP-07 | A business rule failure (not enough stock, unknown customer) comes back to the model as an error result, and the model recovers within the same reply: it explains, or tries another way. |
 | APP-08 | There is no tool that runs arbitrary SQL; every query is fixed and parameterized. |
 | APP-09 | Multi-step requests work as one agentic loop of several turns, for example *"Order the two cheapest fantasy books in stock for Alice Martin and tell me the total"*: find the customer, search, check, place the order after approval, answer. |
-| APP-10 | Sessions (conversations) are stored in the database after every step of a reply (AGT-08) and survive a restart or a crash; `/resume` continues one with its cache intact. A session whose agent definition changed is refused, and a new session is offered. |
+| APP-10 | Sessions (conversations) are stored in the database after every step of a reply (AGT-08) and survive a restart or a crash; `/resume` continues one with its cache intact. A session whose agent changed is refused, and a new session is offered. |
 | APP-11 | Memory per staff member (chosen at start): preferences and notes the assistant keeps across sessions, for example *"I prefer prices with tax"*. |
 | APP-12 | An MCP server (the reference filesystem server, in Docker, over stdio) lets the assistant export reports, for example an order history as CSV, into an `exports` folder. Its allow-list names only the tools the export needs (write a file, list the folder). Writing a file needs approval. |
 | APP-13 | Run context gives the date and the staff member's name, never in the instructions. It is appended at the start of a session and again only when it changes (a new day). |
@@ -85,7 +85,7 @@ The core serves any agentic purpose, not only the reference application. These r
 
 | ID | Requirement |
 |---|---|
-| AGT-01 | An agent is defined in code: model, instructions, tools, output format, budget, memory, approver. The definition is immutable and safe to share across threads. |
+| AGT-01 | An agent is defined in code: model, instructions, tools, output format, memory, approver. It is immutable and safe to share across threads; a run's budget comes with its run input (BUD-01). |
 | AGT-02 | A run takes a conversation and a new user message, loops model call → tool calls → model call until the model stops, and returns a result. |
 | AGT-03 | A run ends in exactly one result: `Completed` (text or typed output), `Stopped` (budget, refusal, output limit, context full, cancelled, iteration limit) or `Failed` (a provider error left after retries, or invalid output). |
 | AGT-04 | Many runs of one agent can execute concurrently, each on its own conversation. |
@@ -199,7 +199,7 @@ the fact.
 | ID | Requirement |
 |---|---|
 | TEST-01 | A test kit ships with a scripted model (replies given in advance, requests recorded), a scripted approver, an in-memory memory store and a fake MCP server, so any agent runs offline and deterministically. |
-| TEST-02 | A **prefix stability** check: across the calls of a scripted multi-turn run, each request's tools, instructions and earlier messages are byte-identical to the previous request's. This also holds across a restart: a conversation saved to JSON and resumed with a freshly built definition produces the same prefix. It runs for the reference application and every GEN-06 sample. |
+| TEST-02 | A **prefix stability** check: across the calls of a scripted multi-turn run, each request's tools, instructions and earlier messages are byte-identical to the previous request's. This also holds across a restart: a conversation saved to JSON and resumed with a freshly built agent produces the same prefix. It runs for the reference application and every GEN-06 sample. |
 | TEST-03 | The test suite needs no API key and no network; CI runs it on Linux and Windows. Tests that need the Docker database run on Linux only. |
 | TEST-04 | The reference application has a live smoke test against the Docker database, run on demand with an API key, which drives APP-09, asserts cache reads from the second call on, and forces a compaction (about $0.40 per run). |
 | TEST-05 | A dependency check, run as a test, fails if the Anthropic SDK is referenced outside the Claude package. |

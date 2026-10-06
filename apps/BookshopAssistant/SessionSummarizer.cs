@@ -22,7 +22,7 @@ public static class SessionSummarizer
     /// <summary>The most characters of one tool result the transcript keeps.</summary>
     private const int ResultLength = 1_000;
 
-    public static AgentDefinition Create(IModel model, TimeProvider time) => new()
+    public static Agent Create(IModel model, TimeProvider time) => new()
     {
         Name = "summarizer",
         Model = model,

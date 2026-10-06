@@ -2,10 +2,10 @@ using Sleepyshark.Officina.Testing;
 
 namespace Sleepyshark.Officina.Tests;
 
-public class AgentDefinitionTests
+public class AgentTests
 {
     [Fact]
-    public async Task Hundred_concurrent_runs_of_one_definition_each_keep_their_own_conversation()
+    public async Task Hundred_concurrent_runs_of_one_agent_each_keep_their_own_conversation()
     {
         const int Runs = 100;
         var model = new ScriptedModel();
@@ -43,10 +43,10 @@ public class AgentDefinitionTests
     }
 
     [Fact]
-    public void A_definition_needs_a_model_and_instructions()
+    public void An_agent_needs_a_model_and_instructions()
     {
-        Assert.Throws<ArgumentNullException>(() => new AgentDefinition { Model = null!, Instructions = "Help." });
-        Assert.Throws<ArgumentException>(() => new AgentDefinition { Model = new ScriptedModel(), Instructions = " " });
+        Assert.Throws<ArgumentNullException>(() => new Agent { Model = null!, Instructions = "Help." });
+        Assert.Throws<ArgumentException>(() => new Agent { Model = new ScriptedModel(), Instructions = " " });
         Assert.Throws<ArgumentException>(() => Agents.Tool("search", "Searches.", "[]"));
     }
 }

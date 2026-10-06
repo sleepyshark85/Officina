@@ -35,7 +35,7 @@ public sealed record Triage(
 /// </summary>
 public static class TicketTriage
 {
-    public static AgentDefinition Create(IModel model) => new()
+    public static Agent Create(IModel model) => new()
     {
         Name = "triage",
         Model = model,
@@ -44,7 +44,7 @@ public static class TicketTriage
     };
 
     /// <summary>Classifies <paramref name="message"/>; null when the run did not complete, such as on a refusal or invalid output.</summary>
-    public static async Task<Triage?> ClassifyAsync(AgentDefinition agent, string message, CancellationToken cancellationToken = default)
+    public static async Task<Triage?> ClassifyAsync(Agent agent, string message, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(agent);
         var result = await agent.RunAsync(message, cancellationToken: cancellationToken).ConfigureAwait(false);

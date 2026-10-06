@@ -21,14 +21,14 @@ contracts and flows only; how they are coded is left to the implementation.
 ```mermaid
 classDiagram
     direction LR
-    AgentDefinition --> Model
-    AgentDefinition --> "0..*" Tool
-    AgentDefinition --> "0..1" OutputContract
-    AgentDefinition --> "0..1" MemoryStore
-    AgentDefinition --> "0..1" Approver
-    AgentDefinition --> "0..1" AuditSink
+    Agent --> Model
+    Agent --> "0..*" Tool
+    Agent --> "0..1" OutputContract
+    Agent --> "0..1" MemoryStore
+    Agent --> "0..1" Approver
+    Agent --> "0..1" AuditSink
     Run --> "0..*" AuditEntry
-    Run --> AgentDefinition
+    Run --> Agent
     Run --> Conversation
     Run --> RunInput
     Run --> "1" Result
@@ -42,8 +42,8 @@ classDiagram
 
 | Concept | Meaning |
 |---|---|
-| **Agent definition** | What an agent is: model, instructions, tools, output contract, memory, approver. Immutable; shared by any number of runs. |
-| **Run** | One unit of work: a definition applied to a conversation and an input, looping until the model stops. Ends in exactly one result. |
+| **Agent** | What an agent is: model, instructions, tools, output contract, memory, approver. Immutable and stateless (its state is the conversation); shared by any number of runs. |
+| **Run** | One unit of work: an agent applied to a conversation and an input, looping until the model stops. Ends in exactly one result. |
 | **Conversation** | The append-only sequence of messages between the agent and the model. Owned and stored by the host; empty and discarded for stateless runs. |
 | **Message, content block** | A message holds blocks: text, reasoning, tool request, tool result, server-tool result, compaction summary. Blocks are kept exactly as the model produced them. |
 | **Run input** | The user's message, plus optional **run context** (date, user profile, retrieved passages), **memory scope** (whose memory this run sees) and **budget** (limits on this run). |
@@ -94,7 +94,7 @@ flowchart TB
 | Component | Responsibility | Never does |
 |---|---|---|
 | **Run engine** | Runs the loop (§5): appends input, calls the model, routes stop reasons, hands tool calls to the pipeline, produces the result | Interpret text; know the application |
-| **Request composer** | Builds each request in the fixed layout (§6) from the definition and the conversation; checks the prefix fingerprint | Edit or drop earlier messages |
+| **Request composer** | Builds each request in the fixed layout (§6) from the agent and the conversation; checks the prefix fingerprint | Edit or drop earlier messages |
 | **Tool pipeline** | For each tool call: validate input → ask approval if needed → invoke → truncate → result. Reads in parallel, writes in order | Throw into the loop; let a tool see other agents, budgets or configuration |
 | **Memory service** | Exposes memory to the model as a tool with view, create, edit, delete and rename commands, confined to the run's scope | Put memory into the instructions |
 | **Output validator** | Validates the final answer against the output contract; a failure ends the run as `Failed` | Accept unvalidated output |
@@ -160,7 +160,7 @@ tools before its first model call, and fails if one cannot connect; connection c
 
 ### 4.6 Host
 
-The host constructs definitions, starts and cancels runs, consumes events, persists conversations between runs (if
+The host constructs agents, starts and cancels runs, consumes events, persists conversations between runs (if
 stateful), and supplies run context. Nothing else crosses into the host.
 
 ## 5. One run
@@ -172,7 +172,7 @@ sequenceDiagram
     participant C as Request composer
     participant M as Model
     participant P as Tool pipeline
-    H->>E: start(definition, conversation, input)
+    H->>E: start(agent, conversation, input)
     E->>C: check prefix fingerprint
     E->>E: hold user message, then run context, as pending
     loop until a stop that ends the run
@@ -383,10 +383,10 @@ run engine.
 | NS-07 Sandbox, workspace | Tools backed by a sandbox | Tools are uniform, wherever they come from | — |
 | NS-08 Providers | Another adapter; a gateway for fallback and shared rate limits | The model contract is neutral and declares capabilities | Caches are per model: switch per conversation, not per call |
 | NS-09 Policies, gates | Stages of the tool pipeline before approval | The pipeline is ordered stages | — |
-| NS-10 Configuration | A loader that produces agent definitions | Definitions are plain immutable values | — |
+| NS-10 Configuration | A loader that produces agents | Agents are plain immutable values | — |
 | NS-11 Knowledge | A source that fills the run context | Run context is already appended after the prefix | Never into the instructions |
 | NS-12 Evaluation | Runs agents over datasets, scripted or live | Results carry typed output and usage | — |
-| NS-13 Hosting | Registration and streaming endpoints for common hosts | Definitions are shareable; runs are independent | — |
+| NS-13 Hosting | Registration and streaming endpoints for common hosts | Agents are shareable; runs are independent | — |
 | NS-14 Batch | A run mode of a provider adapter | Runs are independent | — |
 | NS-15 Tool search | Deferred tools, added or removed by appended messages | Tools are declared once per conversation | Tools are appended, never swapped |
 | NS-16 Programmatic tools | Code execution calling chosen tools | The pipeline still runs each call | — |
@@ -409,8 +409,8 @@ flowchart LR
     User((Staff member)) <--> Console
     subgraph App[Bookshop Assistant]
         Console[Console: input, commands, streaming output, approval prompts, status line]
-        Chat[Chat agent definition]
-        Summ[Summarizer agent definition: stateless, typed output]
+        Chat[Chat agent]
+        Summ[Summarizer agent: stateless, typed output]
         Tools[Bookshop tools: 5 read, 4 write]
         Sessions[Session store]
         AuditDb[Audit sink]
@@ -439,9 +439,9 @@ flowchart LR
 | Part | Role | Core contract used |
 |---|---|---|
 | Console | Reads input and commands; renders streamed text, tool activity and the status line from events; asks approval; cancels on Ctrl+C | Host (events, cancel), approver |
-| Chat agent | Instructions for the shop, the bookshop tools, the MCP export tool, memory; the console gives each reply its budget | Agent definition, run input |
+| Chat agent | Instructions for the shop, the bookshop tools, the MCP export tool, memory; the console gives each reply its budget | Agent, run input |
 | Bookshop tools | Fixed, parameterized queries; order placement and cancellation in one transaction each; business rule failures as error results | Tool |
-| Summarizer agent | On leaving a session: title, summary and changes made, as typed output | Agent definition, output contract (stateless run) |
+| Summarizer agent | On leaving a session: title, summary and changes made, as typed output | Agent, output contract (stateless run) |
 | Session store | Saves the conversation after every reply; lists and resumes sessions | Host persistence |
 | Audit sink | Writes audit entries to a database table; `/audit` reads a session's entries, grouped by run, each with a link to its trace | Audit sink |
 | Telemetry exporter | Exports the core's traces and metrics and the application's logs to the dashboard | Host (telemetry) |

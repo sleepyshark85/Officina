@@ -12,7 +12,7 @@ using var model = new ClaudeModel
     MaxOutputTokens = 2_000,
     CacheLifetime = CacheLifetime.OneHour,
 };
-var agent = new AgentDefinition { Model = model, Instructions = Instructions() };
+var agent = new Agent { Model = model, Instructions = Instructions() };
 var conversation = new Conversation();
 
 Console.WriteLine("Hello: chat with Claude. An empty line quits.");

@@ -22,7 +22,7 @@ public sealed record Budget
 }
 
 /// <summary>What a run has used so far, against its budget (the budget guard of ARCHITECTURE §3).</summary>
-internal sealed class Spending(AgentDefinition agent, Budget? budget)
+internal sealed class Spending(Agent agent, Budget? budget)
 {
     private readonly long started = agent.Time.GetTimestamp();
 

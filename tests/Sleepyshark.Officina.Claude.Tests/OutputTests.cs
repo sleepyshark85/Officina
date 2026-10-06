@@ -70,7 +70,7 @@ public class OutputTests
         var reply = """{\"customer\":\"Ana\",\"mood\":\"Busy\",\"lines\":[{\"bookId\":144,\"copies\":2}],\"gift\":null,\"total\":12.56}""";
         var api = new FakeApi().Stream(Sse.Text("end_turn", reply));
         using var model = Model(api);
-        var agent = new AgentDefinition { Model = model, Instructions = "Read the order.", Output = OutputContract.For<Order>() };
+        var agent = new Agent { Model = model, Instructions = "Read the order.", Output = OutputContract.For<Order>() };
 
         var result = await agent.RunAsync("Ana wants two copies of book 144.", cancellationToken: TestContext.Current.CancellationToken);
 

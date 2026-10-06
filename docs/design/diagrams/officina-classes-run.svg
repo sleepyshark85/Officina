@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg viewBox="0 0 980 764" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="officina-classes-run-title officina-classes-run-desc">
-      <title id="officina-classes-run-title">Definition, run and result</title>
-      <desc id="officina-classes-run-desc">Class diagram showing AgentDefinition aggregating its tools, taking RunOptions and returning a RunResult, which Completed, Stopped and Failed extend.</desc>
+      <title id="officina-classes-run-title">Agent, run and result</title>
+      <desc id="officina-classes-run-desc">Class diagram showing Agent aggregating its tools, taking RunOptions and returning a RunResult, which Completed, Stopped and Failed extend.</desc>
       <defs>
         <style>@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&amp;family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@400;500;600&amp;family=Noto+Sans+KR:wght@400;500;600&amp;family=Noto+Serif+KR:wght@400&amp;family=Noto+Sans+TC:wght@400;500;600&amp;family=Noto+Serif+TC:wght@400&amp;display=swap');</style>
         <marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#4f5d75"/></marker>
@@ -29,7 +29,7 @@
       <path d="M 700,568 V 540 Q 700,532 692,532 H 508 Q 500,532 500,524 V 504" fill="none" stroke="#eb6c36" stroke-width="1" marker-end="url(#uml-triangle-accent)"/>
       <rect x="280" y="40" width="360" height="244" rx="6" fill="#f5f5f5"/>
       <rect x="280" y="40" width="360" height="244" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
-      <text x="460" y="66" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">AgentDefinition</text>
+      <text x="460" y="66" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Agent</text>
       <line x1="280" y1="80" x2="640" y2="80" stroke="#2d3142" stroke-opacity="0.22" stroke-width="1"/>
       <text x="296" y="100" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ Model: IModel</text>
       <text x="296" y="120" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ Instructions: string</text>

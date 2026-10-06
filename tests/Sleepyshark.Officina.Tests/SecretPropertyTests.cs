@@ -39,7 +39,7 @@ public class SecretPropertyTests
             var query = JsonSerializer.Serialize(new { query = test.InInput ? $"find {test.Secret}" : "find" });
             var model = new ScriptedModel().CallTools(new ToolCall("c1", "search", query), new ToolCall("c2", "save", query), new ToolCall("c3", "fail", query));
             _ = test.ModelFails ? model.Fail(new IOException($"Rejected key {test.Secret}."), new TextDelta("Do")) : model.Reply($"Done {test.Secret}");
-            var agent = new AgentDefinition
+            var agent = new Agent
             {
                 Name = name,
                 Model = model,

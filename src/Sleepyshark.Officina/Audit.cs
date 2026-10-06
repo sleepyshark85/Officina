@@ -96,7 +96,7 @@ public sealed record AuditEntry
 /// Turns a run's important events into audit entries (ARCHITECTURE §3), numbered and written one at a time. Without a
 /// sink it records nothing and every record succeeds (GEN-02).
 /// </summary>
-internal sealed class AuditRecorder(AgentDefinition agent, Conversation conversation, Activity? runSpan, string? memoryScope) : IDisposable
+internal sealed class AuditRecorder(Agent agent, Conversation conversation, Activity? runSpan, string? memoryScope) : IDisposable
 {
     /// <summary>The longest text an entry keeps per field, in characters.</summary>
     internal const int MaxTextLength = 4_000;

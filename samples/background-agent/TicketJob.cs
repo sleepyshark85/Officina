@@ -33,9 +33,9 @@ public sealed class TicketJob : IAsyncDisposable
     private readonly McpToolSource helpdesk;
     private readonly JsonLinesAuditSink audit;
 
-    private TicketJob(McpToolSource helpdesk, JsonLinesAuditSink audit, AgentDefinition agent) => (this.helpdesk, this.audit, Agent) = (helpdesk, audit, agent);
+    private TicketJob(McpToolSource helpdesk, JsonLinesAuditSink audit, Agent agent) => (this.helpdesk, this.audit, Agent) = (helpdesk, audit, agent);
 
-    public AgentDefinition Agent { get; }
+    public Agent Agent { get; }
 
     /// <summary>
     /// Connects to the helpdesk at <paramref name="helpdeskUrl"/> with <paramref name="token"/>, and builds the agent.
@@ -57,7 +57,7 @@ public sealed class TicketJob : IAsyncDisposable
                 ToolKind.Write,
                 ([Description("The ticket's id.")] string ticketId, [Description("The amount, in pounds.")] decimal amount) => refund(ticketId, amount),
                 needsApproval: true);
-            var agent = new AgentDefinition
+            var agent = new Agent
             {
                 Name = "ticket-job",
                 Model = model,

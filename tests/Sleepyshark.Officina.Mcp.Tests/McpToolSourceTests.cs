@@ -28,7 +28,7 @@ public sealed class McpToolSourceTests
     private static McpServer HttpServerAt(FakeMcpServer fake, string token = Token) =>
         McpServer.Http("fake", fake.StartHttp(), new Dictionary<string, string> { ["Authorization"] = $"Bearer {token}" });
 
-    private static AgentDefinition Agent(ScriptedModel model, McpToolSource source, McpServer server, IApprover? approver = null, IAuditSink? audit = null) => new()
+    private static Agent AgentOf(ScriptedModel model, McpToolSource source, McpServer server, IApprover? approver = null, IAuditSink? audit = null) => new()
     {
         Name = "mcp-test",
         Model = model,
@@ -56,7 +56,7 @@ public sealed class McpToolSourceTests
             .CallTools(Call("c1", "fake__upper", new { text = "hi" }), Call("c2", "fake__echo", new { text = "there" }), Call("c3", "fake__fail", new { }))
             .Reply("Done.");
 
-        var result = await Agent(model, source, server).RunAsync(new Conversation(), "Go.", cancellationToken: TestContext.Current.CancellationToken);
+        var result = await AgentOf(model, source, server).RunAsync(new Conversation(), "Go.", cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.IsType<Completed>(result);
         Assert.Equal(
@@ -72,7 +72,7 @@ public sealed class McpToolSourceTests
         await using var source = await McpToolSource.ConnectAsync(server, [new("upper")], TestContext.Current.CancellationToken);
         var model = new ScriptedModel().CallTools(Call("c1", "fake__upper", new { text = "hi" })).Reply("Done.");
 
-        var result = await Agent(model, source, server).RunAsync(new Conversation(), "Go.", cancellationToken: TestContext.Current.CancellationToken);
+        var result = await AgentOf(model, source, server).RunAsync(new Conversation(), "Go.", cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.IsType<Completed>(result);
         Assert.Equal([new ToolResult("c1", "HI", false)], LastResults(model));
@@ -98,7 +98,7 @@ public sealed class McpToolSourceTests
 
         // The model is offered the allowed tools only, as the server lists them.
         var model = new ScriptedModel().Reply("Hello.");
-        await Agent(model, source, server).RunAsync(new Conversation(), "Hi.", cancellationToken: TestContext.Current.CancellationToken);
+        await AgentOf(model, source, server).RunAsync(new Conversation(), "Hi.", cancellationToken: TestContext.Current.CancellationToken);
         var offered = Assert.Single(model.Requests).Tools;
         Assert.Equal(["fake__echo", "fake__upper"], offered.Select(tool => tool.Name));
         Assert.Equal("The echo tool.", offered[0].Description);
@@ -124,7 +124,7 @@ public sealed class McpToolSourceTests
         var server = HttpServerAt(fake);
         await using var source = await McpToolSource.ConnectAsync(server, [new("echo")], TestContext.Current.CancellationToken);
         var model = new ScriptedModel().Reply("One.").Reply("Two.").Reply("Three.");
-        var agent = Agent(model, source, server);
+        var agent = AgentOf(model, source, server);
         var conversation = new Conversation();
         await agent.RunAsync(conversation, "First.", cancellationToken: TestContext.Current.CancellationToken);
 
@@ -142,7 +142,7 @@ public sealed class McpToolSourceTests
 
         // A source connected now reads the changed list: an agent built with it is another prefix, so it starts a new conversation.
         await using var changed = await McpToolSource.ConnectAsync(server, [new("echo")], TestContext.Current.CancellationToken);
-        var rebuilt = Agent(new ScriptedModel().Reply("Four."), changed, server);
+        var rebuilt = AgentOf(new ScriptedModel().Reply("Four."), changed, server);
         Assert.False(rebuilt.CanContinue(conversation));
         var mismatch = Assert.IsType<Failed>(await rebuilt.RunAsync(conversation, "Fourth.", cancellationToken: TestContext.Current.CancellationToken));
         Assert.Equal(FailureReason.PrefixMismatch, mismatch.Reason);
@@ -165,7 +165,7 @@ public sealed class McpToolSourceTests
         using var telemetry = new TelemetryCollector();
         var events = new List<RunEvent>();
 
-        await foreach (var runEvent in Agent(model, source, server, approver, sink).StreamAsync(new Conversation(), "Go.", cancellationToken: TestContext.Current.CancellationToken))
+        await foreach (var runEvent in AgentOf(model, source, server, approver, sink).StreamAsync(new Conversation(), "Go.", cancellationToken: TestContext.Current.CancellationToken))
         {
             events.Add(runEvent);
         }
@@ -197,7 +197,7 @@ public sealed class McpToolSourceTests
         await using var source = await McpToolSource.ConnectAsync(server, [new("echo")], TestContext.Current.CancellationToken);
         var model = new ScriptedModel().Reply("Back.");
         var sink = new RecordingSink();
-        var agent = Agent(model, source, server, audit: sink);
+        var agent = AgentOf(model, source, server, audit: sink);
         var conversation = new Conversation();
         fake.Down = true;
 
@@ -232,7 +232,7 @@ public sealed class McpToolSourceTests
             .Reply("The file server is down.");
         var sink = new RecordingSink();
 
-        var result = await Agent(model, source, mcp, audit: sink).RunAsync(new Conversation(), "Go.", cancellationToken: TestContext.Current.CancellationToken);
+        var result = await AgentOf(model, source, mcp, audit: sink).RunAsync(new Conversation(), "Go.", cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.IsType<Completed>(result);
         var first = model.Requests[1].Messages[^1].Blocks[0].ToolResult!;
@@ -255,7 +255,7 @@ public sealed class McpToolSourceTests
             .CallTools(Call("c2", "fake__echo", new { text = "back" }))
             .Reply("It is back.");
         var sink = new RecordingSink();
-        var agent = Agent(model, source, server, audit: sink);
+        var agent = AgentOf(model, source, server, audit: sink);
         var conversation = new Conversation();
 
         Assert.IsType<Completed>(await agent.RunAsync(conversation, "Crash it.", cancellationToken: TestContext.Current.CancellationToken));
@@ -284,7 +284,7 @@ public sealed class McpToolSourceTests
         var sink = new RecordingSink();
         var events = new List<RunEvent>();
 
-        await foreach (var runEvent in Agent(model, source, server, audit: sink).StreamAsync(new Conversation(), "Go.", cancellationToken: TestContext.Current.CancellationToken))
+        await foreach (var runEvent in AgentOf(model, source, server, audit: sink).StreamAsync(new Conversation(), "Go.", cancellationToken: TestContext.Current.CancellationToken))
         {
             events.Add(runEvent);
         }
@@ -307,7 +307,7 @@ public sealed class McpToolSourceTests
         var server = StdioServer(Token);
         await using var source = await McpToolSource.ConnectAsync(server, [new("token")], TestContext.Current.CancellationToken);
         var model = new ScriptedModel().CallTools(Call("c1", "fake__token", new { })).Reply("Done.");
-        var agent = Agent(model, source, server) with { Secrets = [] };
+        var agent = AgentOf(model, source, server) with { Secrets = [] };
 
         await agent.RunAsync(new Conversation(), "Go.", cancellationToken: TestContext.Current.CancellationToken);
 

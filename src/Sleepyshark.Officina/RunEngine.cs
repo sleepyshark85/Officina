@@ -12,7 +12,7 @@ internal static class RunEngine
     internal const int MaxModelCalls = 25;
 
     public static async IAsyncEnumerable<RunEvent> StreamAsync(
-        AgentDefinition agent, Conversation conversation, string message, RunOptions options, [EnumeratorCancellation] CancellationToken cancellationToken)
+        Agent agent, Conversation conversation, string message, RunOptions options, [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         conversation.StartRun();
         var span = Telemetry.StartRun(agent, conversation, message);
@@ -296,7 +296,7 @@ internal static class RunEngine
     /// without results, which the provider rejects. An end with calls fails, as a completed run would report an answer
     /// the history does not hold.
     /// </remarks>
-    private static (bool Append, RunResult? End) Decide(AgentDefinition agent, ModelReply reply, bool hasCalls, Usage usage, string? budgetCut) =>
+    private static (bool Append, RunResult? End) Decide(Agent agent, ModelReply reply, bool hasCalls, Usage usage, string? budgetCut) =>
         (reply.Error, reply.Stop, reply.Blocks.Count > 0, hasCalls) switch
         {
             ({ } error, _, _, _) => (false, new Failed(FailureReason.ModelError, agent.Redact(error), usage)),
@@ -309,7 +309,7 @@ internal static class RunEngine
         };
 
     /// <summary>The result a reply's stop reason maps to, when the run ends with it.</summary>
-    private static RunResult Result(AgentDefinition agent, ModelStopped stop, IEnumerable<ContentBlock> blocks, Usage usage, string? budgetCut) => stop.Reason switch
+    private static RunResult Result(Agent agent, ModelStopped stop, IEnumerable<ContentBlock> blocks, Usage usage, string? budgetCut) => stop.Reason switch
     {
         ModelStopReason.End => Completed(agent, agent.Redact(string.Concat(blocks.Select(block => block.Text))), usage),
         ModelStopReason.MaxTokens when budgetCut is not null => new Stopped(StopReason.Budget, budgetCut, usage),
@@ -346,7 +346,7 @@ internal static class RunEngine
     }
 
     /// <summary>A completed run's result; with typed output, a reply that fails to read fails the run, with no correction round (OUT-02).</summary>
-    private static RunResult Completed(AgentDefinition agent, string text, Usage usage) => agent.Output?.Read(text) switch
+    private static RunResult Completed(Agent agent, string text, Usage usage) => agent.Output?.Read(text) switch
     {
         null => new Completed(text, usage),
         (_, { } error) => new Failed(FailureReason.InvalidOutput, error, usage),
