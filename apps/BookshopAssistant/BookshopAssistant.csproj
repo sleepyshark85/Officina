@@ -9,7 +9,6 @@
     <ProjectReference Include="..\..\src\Sleepyshark.Officina\Sleepyshark.Officina.csproj" />
     <ProjectReference Include="..\..\src\Sleepyshark.Officina.Claude\Sleepyshark.Officina.Claude.csproj" />
     <ProjectReference Include="..\..\src\Sleepyshark.Officina.Mcp\Sleepyshark.Officina.Mcp.csproj" />
-    <ProjectReference Include="..\..\src\Sleepyshark.Officina.Memory.Files\Sleepyshark.Officina.Memory.Files.csproj" />
   </ItemGroup>
 
   <ItemGroup>

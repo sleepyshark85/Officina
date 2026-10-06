@@ -1,6 +1,5 @@
 using System.Text.Json;
 using Microsoft.Extensions.Time.Testing;
-using Sleepyshark.Officina.Audit.JsonLines;
 using Sleepyshark.Officina.Testing;
 
 namespace Sleepyshark.Officina.Tests;

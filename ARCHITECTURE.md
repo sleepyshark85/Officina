@@ -11,7 +11,7 @@ contracts and flows only; how they are coded is left to the implementation.
 | **One primitive** | Everything is built from one run of one agent. Later patterns compose runs; they never bypass them. | AGT-02 |
 | **Cache-stable** | The request's prefix never changes within a conversation, and history is append-only. | CTX, HIST |
 | **Structured control** | Stop reasons, tool calls and validated output decide what happens next, never free text. | AGT-03 |
-| **Host owns state and policy** | The core persists nothing and decides no policy on its own; the host supplies storage, approval and limits. | AGT-06, GEN-01 |
+| **Host owns state and policy** | The core persists nothing and decides no policy on its own; the host supplies storage (its own, or a built-in store it picks), approval and limits. | AGT-06, GEN-01 |
 | **Accountable** | Every important action leaves a durable audit entry; with an audit sink, a write never happens unrecorded. | AUD |
 | **Observable** | Every run is a trace, every model and tool call a span, with tokens, cache use, cost and outcome; audit entries point to their trace. | EVT, AUD-03 |
 | **Opt-in parts** | Tools, memory, MCP, typed output, approval and budgets are each optional and cost nothing when absent. | GEN-02 |
@@ -71,12 +71,14 @@ flowchart TB
         Guard[Budget guard]
         Events[Event stream and telemetry]
         Audit[Audit recorder]
+        subgraph BuiltIn[Built-in stores: used only when the host picks them]
+            Stores[Memory stores: files, in-memory]
+            Sinks[Audit sink: JSON-lines file]
+        end
     end
     subgraph Adapters[Adapters: one package each]
         Provider[Model provider adapter: Claude]
         McpSrc[MCP tool source]
-        Stores[Memory stores: files, in-memory]
-        Sinks[Audit sinks: JSON-lines file]
     end
     Kit[Test kit]
     Host --> Runtime
@@ -88,7 +90,7 @@ flowchart TB
     Pipeline -->|tool contract| McpSrc
     Pipeline -->|approver contract| Host
     Memory -->|memory store contract| Stores
-    Kit -.->|replaces boundaries| Provider & McpSrc & Stores & Sinks & Host
+    Kit -.->|replaces boundaries| Provider & McpSrc & Host
 ```
 
 | Component | Responsibility | Never does |
@@ -103,9 +105,9 @@ flowchart TB
 | **Audit recorder** | Turns important events into audit entries with run, conversation, agent, scope, sequence and the current trace and span; records a write tool's attempt before it runs and blocks the tool if that fails | Change or remove an entry; record secrets |
 | **Model provider adapter** | Maps the model contract to one provider; uses the provider's native caching, compaction, memory tool and retries | Leak provider types into the core |
 | **MCP tool source** | Connects to an MCP server, pins and filters its tool list, presents each tool through the tool contract | Run tools outside the pipeline |
-| **Memory stores** | Persist memory files for a scope | Decide what is remembered |
-| **Audit sinks** | Persist audit entries durably, in order | Drop an entry silently |
-| **Test kit** | Scripted model, scripted approver, fake MCP server, in-memory store, prefix stability check | Replace anything inside the core |
+| **Memory stores** | Persist memory files for a scope; the core has a file store and an in-memory one, and a host may bring its own | Decide what is remembered |
+| **Audit sinks** | Persist audit entries durably, in order; the core has a JSON-lines file sink, and a host may bring its own | Drop an entry silently |
+| **Test kit** | Scripted model, scripted approver, fake MCP server, prefix stability check | Replace anything inside the core |
 
 **Dependency rule:** the core depends on nothing outside the platform's base library (its tracing and metrics primitives included). Adapters depend on the core; the
 core never depends on an adapter. Only the Claude adapter uses the provider's SDK.

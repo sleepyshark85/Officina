@@ -1,8 +1,11 @@
 using System.Text;
 
-namespace Sleepyshark.Officina.Testing;
+namespace Sleepyshark.Officina;
 
-/// <summary>A memory store that keeps its files in memory, for tests. Safe for concurrent runs.</summary>
+/// <summary>
+/// A memory store that keeps its files in memory, for tests, demos and short-lived agents: everything is gone when the
+/// process ends. Safe for concurrent runs.
+/// </summary>
 public sealed class InMemoryMemoryStore : IMemoryStore
 {
     private readonly Lock gate = new();

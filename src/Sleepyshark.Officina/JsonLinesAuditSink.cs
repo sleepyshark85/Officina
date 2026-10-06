@@ -2,7 +2,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace Sleepyshark.Officina.Audit.JsonLines;
+namespace Sleepyshark.Officina;
 
 /// <summary>
 /// Appends audit entries to a file, one JSON object per line, each flushed to disk before the write returns; a failure

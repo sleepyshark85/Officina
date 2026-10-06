@@ -1,6 +1,6 @@
 using System.Text;
 
-namespace Sleepyshark.Officina.Memory.Files;
+namespace Sleepyshark.Officina;
 
 /// <summary>
 /// Keeps memory files on disk: each scope is a directory under <paramref name="root"/>, named by the hex of its UTF-8

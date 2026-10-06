@@ -1,6 +1,5 @@
 using System.ComponentModel;
 using Sleepyshark.Officina;
-using Sleepyshark.Officina.Audit.JsonLines;
 using Sleepyshark.Officina.Mcp;
 
 namespace Samples.BackgroundAgent;
