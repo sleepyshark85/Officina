@@ -26,7 +26,6 @@ classDiagram
     AgentDefinition --> "0..1" OutputContract
     AgentDefinition --> "0..1" MemoryStore
     AgentDefinition --> "0..1" Approver
-    AgentDefinition --> "0..1" Budget
     AgentDefinition --> "0..1" AuditSink
     Run --> "0..*" AuditEntry
     Run --> AgentDefinition
@@ -38,15 +37,16 @@ classDiagram
     Message --> "1..*" ContentBlock
     RunInput --> "0..1" RunContext
     RunInput --> "0..1" MemoryScope
+    RunInput --> "0..1" Budget
 ```
 
 | Concept | Meaning |
 |---|---|
-| **Agent definition** | What an agent is: model, instructions, tools, output contract, memory, approver, budget. Immutable; shared by any number of runs. |
+| **Agent definition** | What an agent is: model, instructions, tools, output contract, memory, approver. Immutable; shared by any number of runs. |
 | **Run** | One unit of work: a definition applied to a conversation and an input, looping until the model stops. Ends in exactly one result. |
 | **Conversation** | The append-only sequence of messages between the agent and the model. Owned and stored by the host; empty and discarded for stateless runs. |
 | **Message, content block** | A message holds blocks: text, reasoning, tool request, tool result, server-tool result, compaction summary. Blocks are kept exactly as the model produced them. |
-| **Run input** | The user's message, plus optional **run context** (date, user profile, retrieved passages) and **memory scope** (whose memory this run sees). |
+| **Run input** | The user's message, plus optional **run context** (date, user profile, retrieved passages) **memory scope** (whose memory this run sees) and **budget** (limits on this run). |
 | **Model** | A provider's model behind the model contract (§4.1), with its settings fixed for the conversation. |
 | **Tool** | An action the model may request: name, description, input schema, read or write, whether it needs approval. From the application or an MCP server. |
 | **Output contract** | Optional: the schema the final answer must satisfy. |
@@ -439,7 +439,7 @@ flowchart LR
 | Part | Role | Core contract used |
 |---|---|---|
 | Console | Reads input and commands; renders streamed text, tool activity and the status line from events; asks approval; cancels on Ctrl+C | Host (events, cancel), approver |
-| Chat agent | Instructions for the shop, the bookshop tools, the MCP export tool, memory, budgets | Agent definition |
+| Chat agent | Instructions for the shop, the bookshop tools, the MCP export tool, memory; the console gives each reply its budget | Agent definition, run input |
 | Bookshop tools | Fixed, parameterized queries; order placement and cancellation in one transaction each; business rule failures as error results | Tool |
 | Summarizer agent | On leaving a session: title, summary and changes made, as typed output | Agent definition, output contract (stateless run) |
 | Session store | Saves the conversation after every reply; lists and resumes sessions | Host persistence |

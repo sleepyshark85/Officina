@@ -201,7 +201,7 @@ public sealed class MemoryTests : IDisposable
         var agent = Agents.With(new ScriptedModel(), tools: [MemoryTool.Create(new InMemoryMemoryStore())]);
 
         Assert.Throws<ArgumentException>(() => agent.StreamAsync(new Conversation(), "Hi", cancellationToken: Ct));
-        Assert.Throws<ArgumentException>(() => agent.StreamAsync(new Conversation(), "Hi", new() { MemoryScope = "../ana" }, Ct));
+        Assert.Throws<ArgumentException>(() => new RunOptions { MemoryScope = "../ana" });
         Assert.Throws<ArgumentException>(() => agent.StreamAsync(new Conversation(), "Hi", new() { MemoryScope = "" }, Ct));
     }
 

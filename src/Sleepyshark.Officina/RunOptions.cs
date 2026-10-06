@@ -14,7 +14,7 @@ public sealed record RunOptions
         {
             if (value is not null)
             {
-                ArgumentException.ThrowIfNullOrWhiteSpace(value);
+                ArgumentException.ThrowIfNullOrWhiteSpace(value, nameof(Context));
             }
 
             field = value;

@@ -202,7 +202,7 @@ public class RunTests
         var agent = Agents.With(new ScriptedModel());
 
         await Assert.ThrowsAsync<ArgumentException>(() => agent.RunAsync(new Conversation(), " ", cancellationToken: Ct));
-        await Assert.ThrowsAsync<ArgumentException>(() => agent.RunAsync(new Conversation(), "Hi", new() { Context = "\n" }, Ct));
+        Assert.Equal("Context", Assert.Throws<ArgumentException>(() => new RunOptions { Context = "\n" }).ParamName);
     }
 
     [Fact]
