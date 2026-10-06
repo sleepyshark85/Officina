@@ -55,9 +55,10 @@ provider, MCP client, test kit and spike findings (`docs/spikes/` there) are reu
   core: `Conversations`, `Models`, `Runs`, `Tools`, `Memory`, `Audit`…); the namespace stays the package's.
 - **Short code comments:** say what the code cannot, briefly; no requirement IDs or doc section numbers. Test names
   carry the IDs, and `docs/traceability.md` maps them.
-- **Who codes and reviews (when subagents are used):** Opus writes big or risky slices; Sonnet only small, well-bounded
-  fixes. An Opus reviewer approves each PR, checking conventions, the design rules below and over-complication; at most
-  3 review rounds, then stop and summarize for the owner.
+- **Who codes and reviews:** the agents in `.claude/agents/`: `developer` (Opus) for big or risky slices, `fixer`
+  (Sonnet) only for small, well-bounded fixes, and `reviewer` (Opus), which approves each PR with a verdict comment the
+  review gate reads, checking conventions, the design rules below and over-complication; at most 3 review rounds, then
+  stop and summarize for the owner.
 - Review comments may arrive as a pending review: read them with GraphQL
   `pullRequest(number: N) { reviewThreads { … } }`, as the REST endpoints don't return them.
 
