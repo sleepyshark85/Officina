@@ -53,17 +53,19 @@ internal sealed class StdioConnection : McpConnection
             start.Environment[name] = value;
         }
 
-        Process process;
+        return new StdioConnection(server, lost, StartProcess(server, start));
+    }
+
+    private static Process StartProcess(McpServer server, ProcessStartInfo start)
+    {
         try
         {
-            process = Process.Start(start) ?? throw new InvalidOperationException("The process did not start.");
+            return Process.Start(start) ?? throw new InvalidOperationException("The process did not start.");
         }
         catch (Exception exception) when (exception is System.ComponentModel.Win32Exception or InvalidOperationException)
         {
             throw new IOException($"The MCP server '{server.Name}' could not be started ({server.Command}): {exception.Message}", exception);
         }
-
-        return new StdioConnection(server, lost, process);
     }
 
     public override async ValueTask DisposeAsync()
@@ -134,18 +136,7 @@ internal sealed class StdioConnection : McpConnection
         {
             while (await process.StandardOutput.ReadLineAsync().ConfigureAwait(false) is { } line)
             {
-                JsonElement message;
-                try
-                {
-                    using var document = JsonDocument.Parse(line);
-                    message = document.RootElement.Clone();
-                }
-                catch (JsonException)
-                {
-                    continue;
-                }
-
-                if (IsResponse(message, out var id) && waiting.TryGetValue(id, out var response))
+                if (Parse(line) is { } message && IsResponse(message, out var id) && waiting.TryGetValue(id, out var response))
                 {
                     response.TrySetResult(message);
                 }
@@ -168,6 +159,20 @@ internal sealed class StdioConnection : McpConnection
         foreach (var response in waiting.Values)
         {
             response.TrySetException(error);
+        }
+    }
+
+    /// <summary>A line of the server's output as a message; null for anything else it writes there.</summary>
+    private static JsonElement? Parse(string line)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(line);
+            return document.RootElement.Clone();
+        }
+        catch (JsonException)
+        {
+            return null;
         }
     }
 }

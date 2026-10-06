@@ -123,9 +123,9 @@ only a live run or inspection checks, noted in the last column.
 | ID | Tests | Also checked by |
 |---|---|---|
 | MCP-01 | Mcp: `MCP_01_a_stdio_server_s_tools_run_and_their_results_reach_the_model`, `MCP_01_an_http_server_s_tools_run_with_the_credential_the_host_gives`; Samples/BackgroundAgentTests (HTTP); App/ExportTests (HTTP) | |
-| MCP-02 | Mcp: `MCP_02_an_mcp_tool_goes_through_validation_approval_audit_truncation_and_events`, `MCP_02_MCP_03_only_allowed_tools_appear_…` | |
-| MCP-03 | Mcp: `MCP_02_MCP_03_only_allowed_tools_appear_named_by_server_and_tool_…`, `MCP_03_an_allowed_tool_the_server_lacks_fails_the_connection_clearly`, `MCP_03_CTX_04_the_tool_list_is_read_once_and_pinned_for_the_conversation`, `MCP_03_a_registered_source_is_connected_with_its_pinned_tools_under_the_server_s_name` | |
-| MCP-04 | Mcp: `MCP_04_a_server_down_at_the_start_of_a_run_fails_it_clearly_and_the_next_run_reconnects`, `MCP_04_an_http_server_that_fails_mid_run_gives_error_results_…`, `MCP_04_a_stdio_server_that_exits_mid_run_…`, `MCP_04_a_stdio_server_that_cannot_start_fails_to_connect_clearly`, `MCP_04_a_connect_cancelled_while_the_server_starts_leaves_no_server_running`, `MCP_04_a_source_that_cannot_connect_is_not_registered` | |
+| MCP-02 | Mcp: `MCP_02_an_mcp_tool_goes_through_validation_approval_audit_truncation_and_events`, `MCP_02_MCP_03_only_allowed_tools_appear_…`, `MCP_02_an_empty_credential_is_not_redacted_and_does_not_break_the_calls` | |
+| MCP-03 | Mcp: `MCP_02_MCP_03_only_allowed_tools_appear_named_by_server_and_tool_…`, `MCP_03_an_allowed_tool_the_server_lacks_fails_the_connection_clearly`, `MCP_03_CTX_04_the_tool_list_is_read_once_and_pinned_for_the_conversation`, `MCP_03_a_registered_source_is_connected_with_its_pinned_tools_under_the_server_s_name`, `MCP_03_an_allowed_tool_whose_schema_the_core_cannot_use_fails_the_connect_with_why`, `MCP_03_a_server_name_that_cannot_prefix_tool_names_is_refused` | |
+| MCP-04 | Mcp: `MCP_04_a_server_down_at_the_start_of_a_run_fails_it_clearly_and_the_next_run_reconnects`, `MCP_04_an_http_server_that_fails_mid_run_gives_error_results_…`, `MCP_04_a_stdio_server_that_exits_mid_run_…`, `MCP_04_a_stdio_server_that_cannot_start_fails_to_connect_clearly`, `MCP_04_a_connect_cancelled_while_the_server_starts_leaves_no_server_running`, `MCP_04_a_source_that_cannot_connect_is_not_registered`, `MCP_04_an_http_session_the_server_ends_mid_run_gives_error_results_and_the_next_run_starts_a_new_one`, `MCP_04_a_server_that_speaks_another_protocol_version_is_refused`, `MCP_04_a_stdio_server_that_exits_while_connecting_is_reported_with_what_it_said_on_its_error_output` | |
 
 ## Output (OUT)
 
@@ -138,7 +138,7 @@ only a live run or inspection checks, noted in the last column.
 
 | ID | Tests | Also checked by |
 |---|---|---|
-| BUD-01 | Core/BudgetTests: every `BUD_01_…` test, `TEST_07_a_budget_is_overshot_by_at_most_one_call_s_input_…`; Claude/RequestTests: `The_output_limit_is_the_lower_of_the_model_s_and_the_budget_s`; Samples/BackgroundAgentTests: `A_job_that_keeps_calling_tools_stops_at_its_budget` | |
+| BUD-01 | Core/BudgetTests: every `BUD_01_…` test, `TEST_07_a_budget_is_overshot_by_at_most_one_call_s_input_…`; Claude/RequestTests: `The_output_limit_is_the_lower_of_the_model_s_and_the_budget_s`; Samples/BackgroundAgentTests: `A_job_that_keeps_calling_tools_stops_at_its_budget`, `BUD_01_a_call_budget_used_up_on_the_last_allowed_call_stops_for_the_budget_not_the_iteration_limit`, `BUD_01_a_reply_cut_by_the_model_s_own_output_limit_stops_for_that_limit_even_when_a_call_budget_is_used_up`, `BUD_01_a_time_budget_is_used_up_the_moment_it_is_reached` | |
 | BUD-02 | Core/BudgetTests: `Cost_prices_each_kind_of_token_and_cache_writes_by_how_long_they_are_kept`; Claude/StreamTests: `Opus_5_5_is_priced_by_default_and_a_host_may_give_another_price` | |
 | BUD-03 | Core/BudgetTests: `BUD_03_a_result_reports_tokens_cost_model_calls_tool_calls_and_duration_…` | |
 

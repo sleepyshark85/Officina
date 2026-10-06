@@ -10,8 +10,9 @@ namespace Sleepyshark.Officina.Testing;
 /// <summary>
 /// An MCP server with tools given in advance, over stdio (<see cref="ServeAsync"/>, hosted by a test program) or
 /// Streamable HTTP on a local port (<see cref="StartHttp"/>). It lists one tool per page, sends a notification before
-/// each result (as an event stream over HTTP) that clients must skip, and records the calls. Over HTTP it can require a
-/// bearer token and go <see cref="Down"/>.
+/// each result (as an event stream over HTTP) that clients must skip, and records the calls. Over HTTP it requires the
+/// headers the protocol does (both accepted content types; the protocol version after initializing), can require a
+/// bearer token, go <see cref="Down"/> or end its session.
 /// </summary>
 public sealed class FakeMcpServer : IDisposable
 {
@@ -20,7 +21,7 @@ public sealed class FakeMcpServer : IDisposable
     private readonly Lock gate = new();
     private readonly List<FakeMcpTool> tools;
     private readonly List<(string Tool, string Arguments)> calls = [];
-    private readonly string session = Guid.NewGuid().ToString("N");
+    private string session = Guid.NewGuid().ToString("N");
     private HttpListener? listener;
 
     public FakeMcpServer(params FakeMcpTool[] tools) => this.tools = [.. tools];
@@ -30,6 +31,9 @@ public sealed class FakeMcpServer : IDisposable
 
     /// <summary>While true, the HTTP server drops every request, as if down; a tool may set it to fail mid-call.</summary>
     public bool Down { get; set; }
+
+    /// <summary>The protocol version the server answers with; by default the one the client asks for.</summary>
+    public string? ProtocolVersion { get; init; }
 
     /// <summary>The HTTP endpoint, once started.</summary>
     public Uri? Url { get; private set; }
@@ -55,6 +59,9 @@ public sealed class FakeMcpServer : IDisposable
             tools.AddRange(replacement);
         }
     }
+
+    /// <summary>Forgets the HTTP session, as a restarted server does; a request in it then gets 404.</summary>
+    public void EndSession() => session = Guid.NewGuid().ToString("N");
 
     /// <summary>Serves over stdio, one JSON-RPC message per line, until <paramref name="input"/> ends.</summary>
     public async Task ServeAsync(TextReader input, TextWriter output, CancellationToken cancellationToken = default)
@@ -126,7 +133,11 @@ public sealed class FakeMcpServer : IDisposable
             using var reader = new StreamReader(context.Request.InputStream);
             var request = JsonNode.Parse(await reader.ReadToEndAsync().ConfigureAwait(false))!.AsObject();
             var authorized = Token is null || context.Request.Headers["Authorization"] == $"Bearer {Token}";
-            var answer = authorized ? Handle(request) : null;
+            var accepts = context.Request.Headers["Accept"] is { } accept && accept.Contains("application/json", StringComparison.Ordinal)
+                && accept.Contains("text/event-stream", StringComparison.Ordinal);
+            var initializing = (string?)request["method"] == "initialize";
+            var versioned = initializing || context.Request.Headers["MCP-Protocol-Version"] is { Length: > 0 };
+            var answer = authorized && accepts && versioned ? Handle(request) : null;
             if (Down)
             {
                 response.Abort();
@@ -137,7 +148,11 @@ public sealed class FakeMcpServer : IDisposable
             {
                 response.StatusCode = 401;
             }
-            else if ((string?)request["method"] != "initialize" && context.Request.Headers["Mcp-Session-Id"] != session)
+            else if (!accepts || !versioned)
+            {
+                response.StatusCode = 400;
+            }
+            else if (!initializing && context.Request.Headers["Mcp-Session-Id"] != session)
             {
                 response.StatusCode = 404;
             }
@@ -150,7 +165,8 @@ public sealed class FakeMcpServer : IDisposable
                 response.Headers["Mcp-Session-Id"] = session;
                 var stream = (string?)request["method"] == "tools/call";
                 response.ContentType = stream ? "text/event-stream" : "application/json";
-                var body = stream ? $"data: {Notification}\n\ndata: {answer.ToJsonString()}\n\n" : answer.ToJsonString();
+                // The notification's field has no space after the colon, which the event stream format allows.
+                var body = stream ? $"data:{Notification}\n\ndata: {answer.ToJsonString()}\n\n" : answer.ToJsonString();
                 await response.OutputStream.WriteAsync(Encoding.UTF8.GetBytes(body)).ConfigureAwait(false);
             }
 
@@ -175,7 +191,7 @@ public sealed class FakeMcpServer : IDisposable
         {
             "initialize" => new JsonObject
             {
-                ["protocolVersion"] = (string?)parameters?["protocolVersion"],
+                ["protocolVersion"] = ProtocolVersion ?? (string?)parameters?["protocolVersion"],
                 ["capabilities"] = new JsonObject { ["tools"] = new JsonObject() },
                 ["serverInfo"] = new JsonObject { ["name"] = "fake", ["version"] = "1.0.0" },
             },

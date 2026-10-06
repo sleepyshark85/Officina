@@ -309,4 +309,40 @@ public class TelemetryTests
             return Task.FromResult(Approval.Granted);
         }
     }
+
+    [Fact]
+    public async Task A_model_call_s_time_to_first_token_is_the_wait_for_its_first_text_not_its_last()
+    {
+        using var telemetry = new TelemetryCollector();
+        var time = new FakeTimeProvider();
+        var agent = new Agent { Name = "first-token", Model = new SlowStreamModel(time), Instructions = Agents.Instructions, Time = time };
+
+        await agent.RunAsync(new Conversation(), "Hello.", cancellationToken: Ct);
+
+        var call = telemetry.Spans("first-token").Single(span => span.GetTagItem("officina.model.time_to_first_token") is not null);
+        Assert.Equal(1.0, call.GetTagItem("officina.model.time_to_first_token"));
+    }
+
+    /// <summary>Streams its first text after one second and more text a second later.</summary>
+    private sealed class SlowStreamModel(FakeTimeProvider time) : IModel
+    {
+        public string Settings => "slow";
+
+        public string Provider => "scripted";
+
+        public string Name => "slow";
+
+        public ModelPrice? Price => null;
+
+        public async IAsyncEnumerable<ModelEvent> StreamAsync(ModelRequest request, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)
+        {
+            await Task.Yield();
+            time.Advance(TimeSpan.FromSeconds(1));
+            yield return new TextDelta("Hel");
+            time.Advance(TimeSpan.FromSeconds(1));
+            yield return new TextDelta("lo.");
+            yield return new BlockReceived(ScriptedModel.TextBlock("Hello."));
+            yield return new ModelStopped(ModelStopReason.End);
+        }
+    }
 }
