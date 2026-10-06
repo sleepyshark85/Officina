@@ -151,7 +151,7 @@ public sealed class McpToolSourceTests
     [Fact]
     public async Task MCP_02_an_mcp_tool_goes_through_validation_approval_audit_truncation_and_events()
     {
-        using var fake = HttpServer(new FakeMcpTool("big", _ => new string('x', 70_000)) { ReadOnly = true });
+        using var fake = HttpServer(new FakeMcpTool("big", _ => new string('x', 70_000)));
         var server = HttpServerAt(fake);
         await using var source = await McpToolSource.ConnectAsync(
             server, [new("upper", NeedsApproval: true), new("big")], TestContext.Current.CancellationToken);

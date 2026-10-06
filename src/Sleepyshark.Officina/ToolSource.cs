@@ -33,7 +33,7 @@ public enum ToolSourceState
 {
     Connected,
 
-    /// <summary>An attempt to connect failed.</summary>
+    /// <summary>An attempt to connect failed, or the source could not report its changes.</summary>
     Failed,
 
     /// <summary>A connection was lost.</summary>

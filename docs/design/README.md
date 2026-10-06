@@ -29,7 +29,7 @@ reached through a contract the core owns and an adapter or the host implements.
 | Reply decision | A pure mapping from a model reply (error, stop reason, blocks, tool calls) to "append or not" and "end with this result or continue". | `RunEngine.Decide` |
 | Request composer | Builds every request in the same layout (sorted tools, instructions, history, pending messages). A hash of that prefix stops a conversation from continuing under other tools, instructions or settings. | `ModelRequest`, `AgentDefinition.Fingerprint` |
 | Tool pipeline | For each call: find, validate input, ask approval, audit the attempt, invoke, redact and truncate. Reads run together and writes run one at a time; every call gets exactly one result. | `ToolPipeline`, `ToolSources` |
-| Audit recorder | Turns important steps into numbered, redacted, truncated entries. A write tool runs only once its attempt is recorded. | `AuditRecorder`, `AuditEntry` |
+| Audit recorder | Turns important steps into numbered, redacted, truncated entries. With an audit sink, a write tool runs only once its attempt is recorded. | `AuditRecorder`, `AuditEntry` |
 | Schema validator | Validates JSON against the JSON Schema subset the core uses, and refuses schemas outside it when a tool or output contract is defined. | `SchemaValidator` |
 | Memory tool | Memory as an ordinary write tool with Claude's memory commands, confined to the run's memory scope and never part of the instructions. | `MemoryTool`, `MemoryPath` |
 | Output contract | Exports a JSON schema from an application type, then validates and deserializes the final reply; a mismatch fails the run. | `OutputContract`, `TypedJson` |
