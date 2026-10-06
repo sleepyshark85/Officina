@@ -72,9 +72,9 @@ public class SessionTests(BookshopDatabase database) : IClassFixture<BookshopDat
     {
         var store = new SessionStore(database.DataSource);
         var conversation = new Conversation { Id = "taken-id-001" };
-        await store.SaveAsync(conversation, "Sam", default, 0.5m, created: false, TestContext.Current.CancellationToken);
+        await store.SaveAsync(conversation, "Sam", default, 0.5m, previous: null, TestContext.Current.CancellationToken);
 
-        await Assert.ThrowsAsync<Npgsql.PostgresException>(() => store.SaveAsync(conversation, "Kim", default, 0, created: false, TestContext.Current.CancellationToken));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => store.SaveAsync(conversation, "Kim", default, 0, previous: null, TestContext.Current.CancellationToken));
 
         var kept = await store.LoadAsync(conversation.Id, TestContext.Current.CancellationToken);
         Assert.Equal(("Sam", 0.5m), (kept!.StaffMember, kept.Cost));
