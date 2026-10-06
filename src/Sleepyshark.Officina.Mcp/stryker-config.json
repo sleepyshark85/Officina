@@ -1,0 +1,22 @@
+{
+  "stryker-config": {
+    "project": "Sleepyshark.Officina.Mcp.csproj",
+    "test-projects": [
+      "../../tests/Sleepyshark.Officina.Mcp.Tests/Sleepyshark.Officina.Mcp.Tests.csproj"
+    ],
+    "test-runner": "mtp",
+    "ignore-methods": [
+      "ConfigureAwait"
+    ],
+    "reporters": [
+      "html",
+      "json",
+      "progress"
+    ],
+    "thresholds": {
+      "high": 80,
+      "low": 60,
+      "break": 50
+    }
+  }
+}

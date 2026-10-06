@@ -7,3 +7,4 @@ TestResults/
 data/
 appsettings.Local.json
 .env
+StrykerOutput/
