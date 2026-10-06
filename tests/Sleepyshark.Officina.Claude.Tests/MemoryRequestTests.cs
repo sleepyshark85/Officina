@@ -4,7 +4,7 @@ using static Sleepyshark.Officina.Claude.Tests.StreamTests;
 
 namespace Sleepyshark.Officina.Claude.Tests;
 
-/// <summary>MEM-01 on Claude: the memory tool is Claude's native one, in its place among the sorted tools, and its calls run.</summary>
+/// <summary>The memory tool on Claude is its native one, in place among the sorted tools, and its calls run.</summary>
 public class MemoryRequestTests
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;

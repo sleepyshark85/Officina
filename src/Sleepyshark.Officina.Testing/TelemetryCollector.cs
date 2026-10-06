@@ -5,8 +5,8 @@ using System.Diagnostics.Metrics;
 namespace Sleepyshark.Officina.Testing;
 
 /// <summary>
-/// Collects the core's spans and measurements in memory while it lives (TEST-06), in place of an exporter. Every run in
-/// the process is seen, those of tests running at the same time included, so a test picks its own by agent name.
+/// Collects the core's spans and measurements in memory while it lives, in place of an exporter. It sees every run in
+/// the process, concurrent tests' included, so a test picks its own by agent name.
 /// </summary>
 public sealed class TelemetryCollector : IDisposable
 {
@@ -39,7 +39,7 @@ public sealed class TelemetryCollector : IDisposable
         meters.Start();
     }
 
-    /// <summary>The ended spans of the traces holding runs of agents named <paramref name="agent"/>, in the order they ended.</summary>
+    /// <summary>The ended spans of traces holding runs of agents named <paramref name="agent"/>, in the order they ended.</summary>
     public IReadOnlyList<Activity> Spans(string agent)
     {
         var all = spans.ToList();

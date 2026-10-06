@@ -5,8 +5,8 @@ using System.Text.Json.Serialization;
 namespace Sleepyshark.Officina.Audit.JsonLines;
 
 /// <summary>
-/// Appends audit entries to a file, one JSON object per line (AUD-04). Each write is flushed to disk before it returns,
-/// so an acknowledged entry is durable; a failure throws. Safe for concurrent runs within one process.
+/// Appends audit entries to a file, one JSON object per line, each flushed to disk before the write returns; a failure
+/// throws. Safe for concurrent runs within one process.
 /// </summary>
 public sealed class JsonLinesAuditSink(string path) : IAuditSink, IDisposable
 {

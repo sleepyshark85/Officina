@@ -1,12 +1,10 @@
-// Bookshop Assistant, the reference application (REQUIREMENTS §2, ARCHITECTURE §12): a console chatbot for bookshop
-// staff over the PostgreSQL database in compose.yaml. Needs BOOKSHOP_CONNECTION_STRING and ANTHROPIC_API_KEY. Traces,
-// metrics and logs go over OTLP to the dashboard in compose.yaml (APP-20): OTEL_EXPORTER_OTLP_ENDPOINT, by default
-// http://localhost:4317; BOOKSHOP_DASHBOARD_URL is where /audit links to, by default http://localhost:18888. Exports go to
-// the exports folder, through the filesystem MCP server the compose file runs in Docker (APP-12). Demo mode (APP-17), with
-// --demo or BOOKSHOP_DEMO=1, compacts and clears old tool results early enough to see in a short session. What the
-// assistant remembers for each staff member is kept under BOOKSHOP_DATA, by default the data folder of the current one.
-// BOOKSHOP_TELEMETRY_CONTENT=1 puts message text and tool inputs and results in the traces too (EVT-04), for debugging.
-// BOOKSHOP_REPLY_BUDGET, in US dollars, lowers each reply's budget, for the demo script's budget stop.
+// Bookshop Assistant, the reference application: a console chatbot for bookshop staff over the PostgreSQL database in
+// compose.yaml. Needs BOOKSHOP_CONNECTION_STRING and ANTHROPIC_API_KEY. Telemetry goes over OTLP to the compose file's
+// dashboard (OTEL_EXPORTER_OTLP_ENDPOINT, default http://localhost:4317); /audit links to BOOKSHOP_DASHBOARD_URL
+// (default http://localhost:18888). Exports go to the exports folder through the compose file's filesystem MCP server.
+// Options: --demo or BOOKSHOP_DEMO=1 compacts and clears early enough to see in a short session; BOOKSHOP_DATA holds
+// each staff member's memory (default ./data); BOOKSHOP_TELEMETRY_CONTENT=1 puts message text and tool inputs and
+// results in traces, for debugging; BOOKSHOP_REPLY_BUDGET (US dollars) lowers each reply's budget, to show a budget stop.
 using System.Globalization;
 using BookshopAssistant;
 using Microsoft.Extensions.Logging;
@@ -29,7 +27,7 @@ if (string.IsNullOrWhiteSpace(connectionString))
     return 1;
 }
 
-// A lower budget for each reply (APP-14), in US dollars, to show a budget stop.
+// A lower budget per reply, in US dollars, to show a budget stop.
 decimal? replyBudget = null;
 if (Environment.GetEnvironmentVariable("BOOKSHOP_REPLY_BUDGET") is { Length: > 0 } budgetText)
 {
@@ -72,15 +70,15 @@ var console = new BookshopConsole(
     Console.In, Console.Out, TimeProvider.System, echoInput: Console.IsInputRedirected, audit, new SessionStore(database), dashboard,
     logging.CreateLogger<BookshopConsole>(), replyBudget is { } reply ? Budgets.Default with { Reply = reply } : null, memory);
 
-// Ctrl+C stops the reply in progress and the session goes on (APP-03); with no reply in progress, it quits.
-// An exception here would end the process, so none escapes.
+// Ctrl+C stops the reply in progress and the session goes on; with no reply in progress, it quits. No exception may
+// escape here, as it would end the process.
 Console.CancelKeyPress += (_, press) =>
 {
     try
     {
         press.Cancel = console.CancelReply();
     }
-#pragma warning disable CA1031 // A failed cancel must not end the application (APP-03).
+#pragma warning disable CA1031 // A failed cancel must not end the application.
     catch (Exception)
 #pragma warning restore CA1031
     {
@@ -88,7 +86,7 @@ Console.CancelKeyPress += (_, press) =>
     }
 };
 
-// The export server (APP-12), from the compose file in the current folder, or BOOKSHOP_COMPOSE_FILE.
+// The export server, from the compose file in the current folder, or BOOKSHOP_COMPOSE_FILE.
 var composeFile = Environment.GetEnvironmentVariable("BOOKSHOP_COMPOSE_FILE") is { Length: > 0 } file ? file : "compose.yaml";
 McpToolSource exports;
 try

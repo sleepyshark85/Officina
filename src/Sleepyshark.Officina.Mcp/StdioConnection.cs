@@ -7,9 +7,9 @@ using System.Text.Json.Nodes;
 namespace Sleepyshark.Officina.Mcp;
 
 /// <summary>
-/// The stdio transport: the server is a child process, and each message is one line of its standard input or output.
-/// A reader matches responses to requests by id, so calls may be in flight together; when the process's output ends,
-/// the connection is lost and every waiting request fails.
+/// The stdio transport: the server is a child process, and each message is one line of its input or output. A reader
+/// matches responses to requests by id, so calls may overlap; when the output ends, the connection is lost and every
+/// waiting request fails.
 /// </summary>
 internal sealed class StdioConnection : McpConnection
 {
@@ -27,8 +27,7 @@ internal sealed class StdioConnection : McpConnection
     {
         this.process = process;
 
-        // The server's log is not kept, but it is drained, so a server that logs a lot never blocks; its last line
-        // explains a server that exits.
+        // The server's log is drained but not kept, so a chatty server never blocks; its last line explains an exit.
         process.ErrorDataReceived += (_, line) => lastError = string.IsNullOrWhiteSpace(line.Data) ? lastError : line.Data;
         process.BeginErrorReadLine();
         reading = Task.Run(ReadAsync);
@@ -100,7 +99,7 @@ internal sealed class StdioConnection : McpConnection
         var response = id is { } key ? waiting.GetOrAdd(key, _ => new(TaskCreationOptions.RunContinuationsAsynchronously)) : null;
         try
         {
-            // The reader fails the requests waiting when it stops; one added after that sees the loss here.
+            // The reader fails waiting requests when it stops; one added after that sees the loss here.
             if (Lost is { } reason)
             {
                 throw new IOException(reason);
@@ -128,7 +127,7 @@ internal sealed class StdioConnection : McpConnection
         }
     }
 
-    /// <summary>Hands each response to the request waiting for it; skips the server's own requests, notifications and other output.</summary>
+    /// <summary>Hands each response to the request waiting for it; skips the server's own requests and other output.</summary>
     private async Task ReadAsync()
     {
         try
@@ -156,7 +155,7 @@ internal sealed class StdioConnection : McpConnection
         {
         }
 
-        // The server's last words on its error output often say why it ended; they are read in full once it exits.
+        // The server's last words on its error output often say why it ended; they are complete once it exits.
         try
         {
             await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(1)).ConfigureAwait(false);

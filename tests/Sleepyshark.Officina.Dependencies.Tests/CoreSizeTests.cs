@@ -1,6 +1,6 @@
 namespace Sleepyshark.Officina.Dependencies.Tests;
 
-/// <summary>Principle 11: the phase 1 core stays small. Growing past the budget needs a reason and a change here.</summary>
+/// <summary>The core stays small: growing past its line budget needs a reason and a change here.</summary>
 public class CoreSizeTests
 {
     private const int LineBudget = 3_500;

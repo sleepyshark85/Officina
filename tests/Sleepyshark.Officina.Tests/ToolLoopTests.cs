@@ -4,7 +4,7 @@ using Sleepyshark.Officina.Testing;
 
 namespace Sleepyshark.Officina.Tests;
 
-/// <summary>The tool loop (AGT-02, CTX-06, TOOL-02…06, GEN-04, AGT-05): S05's acceptance criteria.</summary>
+/// <summary>The tool loop: running calls, their results, approval, unattended runs and cancellation.</summary>
 public class ToolLoopTests
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
@@ -224,7 +224,7 @@ public class ToolLoopTests
                 bothReading.SetResult();
             }
 
-            // Returns only once both reads have started: they can only finish by running at the same time.
+            // Returns only once both reads have started, so they can only finish by running at the same time.
             await bothReading.Task.WaitAsync(TimeSpan.FromSeconds(30), cancellationToken);
             log.Enqueue($"end {name}");
             return new ToolOutput(name);
@@ -407,7 +407,7 @@ public class ToolLoopTests
             Results(conversation, 2));
     }
 
-    /// <summary>Approves, while the host cancels the run: a cancel that lands during approval.</summary>
+    /// <summary>Approves while the host cancels the run: a cancel that lands during approval.</summary>
     private sealed class CancellingApprover(CancellationTokenSource cancellation) : IApprover
     {
         public async Task<Approval> ApproveAsync(Tool tool, ToolCall toolCall, CancellationToken cancellationToken)

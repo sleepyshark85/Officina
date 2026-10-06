@@ -130,7 +130,7 @@ public class CancellationTests
             sink.Entries.Where(entry => entry.Kind == AuditKind.ToolEnded && entry.Outcome == "interrupted").Select(entry => (entry.CallId, entry.Outcome)));
     }
 
-    /// <summary>A tool source, such as an MCP server, that is still connecting when the host cancels the run.</summary>
+    /// <summary>A tool source, such as an MCP server, still connecting when the host cancels the run.</summary>
     private sealed class CancellingSource(CancellationTokenSource host) : IToolSource
     {
         public string Name => "slow";

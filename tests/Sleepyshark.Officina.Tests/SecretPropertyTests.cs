@@ -6,10 +6,9 @@ using Sleepyshark.Officina.Testing;
 namespace Sleepyshark.Officina.Tests;
 
 /// <summary>
-/// TEST-07, EVT-03: a generated secret, put in tool inputs, tool results, tool errors, a denial's reason, a model
-/// failure and the model's final reply, never reaches the events, the telemetry (with or without content, EVT-04) or the
-/// audit trail. Only the two exceptions of D13 are skipped: the assistant's messages as appended to the conversation,
-/// byte-exact, and the streamed text deltas.
+/// A generated secret, put in tool inputs, results and errors, a denial's reason, a model failure and the final reply,
+/// never reaches events, telemetry (with or without content) or the audit trail, except where allowed by design: the
+/// assistant's messages as appended, byte-exact, and streamed text deltas.
 /// </summary>
 public class SecretPropertyTests
 {
@@ -18,7 +17,7 @@ public class SecretPropertyTests
     /// <summary>Where the secret goes in one run.</summary>
     public sealed record Placement(string Secret, bool InInput, bool InResult, bool InError, bool InDenial, bool ModelFails, bool Content);
 
-    // Secrets mix characters that JSON escapes with others, and always hold one that no id, time or redaction mark has.
+    // Secrets mix characters JSON escapes with others, and always hold one no id, time or redaction mark has.
     private static readonly Gen<string> Secret = Gen.Select(
         Gen.Char["0123456789XYZ\"\\é€ü#% "].Array[5, 12], Gen.Char["XYZ\"\\é€ü#%"], (chars, mark) => mark + new string(chars));
 
@@ -66,7 +65,7 @@ public class SecretPropertyTests
             };
             seen.AddRange(events.Select(runEvent => runEvent switch
             {
-                // The two exceptions of D13: the assistant's messages as appended, byte-exact, and streamed text deltas.
+                // The exceptions by design: the assistant's messages as appended, byte-exact, and streamed text deltas.
                 ConversationAppended { Message.Role: Role.Assistant } or TextStreamed => "",
                 ConversationAppended appended => JsonSerializer.Serialize(appended.Message),
                 RunEnded ended => JsonSerializer.Serialize(ended.Result, ended.Result.GetType()),

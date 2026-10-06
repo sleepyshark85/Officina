@@ -3,25 +3,25 @@ using System.Globalization;
 namespace Sleepyshark.Officina;
 
 /// <summary>
-/// Limits on one run (BUD-01), each optional. Every limit is checked before every model call, and the call's output token
-/// limit is lowered to what the remaining cost and tokens allow, so a call overshoots by at most its input (about twice
-/// that when it compacts, as compaction reads the prompt again). A call in flight is never stopped.
+/// Limits on one run, each optional, checked before every model call. Each call's output limit is lowered to what the
+/// remaining cost and tokens allow, so a call overshoots by at most its input (about twice that when it compacts). A
+/// call in flight is never stopped.
 /// </summary>
 public sealed record Budget
 {
-    /// <summary>The most the run may spend, in US dollars, at the model's price; it needs a model with a price.</summary>
+    /// <summary>The most the run may spend, in US dollars at the model's price; needs a model with a price.</summary>
     public decimal? Cost { get; init; }
 
-    /// <summary>The most tokens the run may use, of every kind (input, output, cache reads and writes).</summary>
+    /// <summary>The most tokens the run may use: input, output, cache reads and writes.</summary>
     public long? Tokens { get; init; }
 
     public int? ModelCalls { get; init; }
 
-    /// <summary>The longest the run may take; checked before each model call, so a call that starts in time may end after it.</summary>
+    /// <summary>The longest the run may take; a call that starts in time may end after it.</summary>
     public TimeSpan? Time { get; init; }
 }
 
-/// <summary>What a run has used so far, against its budget (the budget guard of ARCHITECTURE §3).</summary>
+/// <summary>What a run has used so far, against its budget.</summary>
 internal sealed class Spending(Agent agent, Budget? budget)
 {
     private readonly long started = agent.Time.GetTimestamp();
@@ -44,7 +44,7 @@ internal sealed class Spending(Agent agent, Budget? budget)
         ModelCalls++;
     }
 
-    /// <summary>The result's usage figures beside its tokens (BUD-03).</summary>
+    /// <summary>The result with its cost, counts and duration.</summary>
     public RunResult Report(RunResult result) =>
         result with { Cost = Cost, ModelCalls = ModelCalls, ToolCalls = ToolCalls, Duration = Elapsed };
 

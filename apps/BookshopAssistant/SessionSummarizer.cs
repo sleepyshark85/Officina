@@ -4,7 +4,7 @@ using Sleepyshark.Officina;
 
 namespace BookshopAssistant;
 
-/// <summary>What the summarizer writes about a session (APP-15).</summary>
+/// <summary>What the summarizer writes about a session.</summary>
 public sealed record SessionSummary(
     [property: Description("A title of a few words, naming the customers, books or orders the session was about.")] string Title,
     [property: Description("One to three sentences on what the staff member asked and what came of it.")] string Summary,
@@ -12,10 +12,9 @@ public sealed record SessionSummary(
     IReadOnlyList<string> Changes);
 
 /// <summary>
-/// The session summarizer (APP-15, ARCHITECTURE §12.1): a stateless agent with typed output and no tools. It reads a
-/// session's transcript as plain text in one user message: the staff member's messages, the assistant's replies, and
-/// each tool call with its input and outcome, so it can tell which changes were made. Its $0.05 budget limits a run's
-/// output, not its input: the transcript is read whole, so a long session's summary may cost more (BUD-01).
+/// The session summarizer: a stateless agent with typed output and no tools. It reads a session's transcript as one
+/// user message: the staff's messages, the assistant's replies, and each tool call with its input and outcome, so it can
+/// tell which changes were made. Its $0.05 budget limits output, not input: a long session's summary may cost more.
 /// </summary>
 public static class SessionSummarizer
 {

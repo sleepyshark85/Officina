@@ -5,10 +5,10 @@ using System.Threading.Channels;
 
 namespace Sleepyshark.Officina;
 
-/// <summary>One run of an agent (ARCHITECTURE §5). Every run ends in a <see cref="RunEnded"/>; model behaviour never throws.</summary>
+/// <summary>One run of an agent. Every run ends in a <see cref="RunEnded"/>; model behaviour never throws.</summary>
 internal static class RunEngine
 {
-    /// <summary>The most model calls one run makes; a run that needs more ends as <see cref="StopReason.IterationLimit"/>.</summary>
+    /// <summary>The most model calls a run makes; one that needs more ends as <see cref="StopReason.IterationLimit"/>.</summary>
     internal const int MaxModelCalls = 25;
 
     public static async IAsyncEnumerable<RunEvent> StreamAsync(
@@ -56,7 +56,7 @@ internal static class RunEngine
         }
     }
 
-    /// <summary>Calls the model and runs the tools it asks for, until a stop that ends the run; leaves the run's result in <paramref name="result"/>.</summary>
+    /// <summary>Calls the model and runs its tools until a stop ends the run; leaves the result in <paramref name="result"/>.</summary>
     private static async IAsyncEnumerable<RunEvent> LoopAsync(
         RunScope run, string message, string? context, StrongBox<RunResult> result, [EnumeratorCancellation] CancellationToken cancellationToken)
     {
@@ -83,8 +83,8 @@ internal static class RunEngine
             yield return new ConversationAppended(conversation, interrupted);
         }
 
-        // The user message and run context enter the conversation only with the reply that answers them, so a run that
-        // gets no reply leaves the conversation as it was, and valid for the next request.
+        // The message and context enter the conversation only with the reply that answers them, so a run that gets no reply
+        // leaves the conversation valid for the next request.
         ImmutableArray<Message> pending = context is null
             ? [Message.Of(Role.User, message)]
             : [Message.Of(Role.User, message), Message.Of(Role.Operator, context)];
@@ -114,7 +114,7 @@ internal static class RunEngine
 
             var usage = spending.Usage;
 
-            // A reply the lowered output limit cut short stopped for the budget, once the budget allows no more.
+            // A reply cut short by the lowered output limit stopped for the budget, once the budget allows no more.
             var budgetCut = limit is not null && reply.Stop?.Reason == ModelStopReason.MaxTokens ? spending.Reached() : null;
             var toolCalls = reply.Blocks.Select(block => block.ToolCall).OfType<ToolCall>().ToList();
             var (append, end) = Decide(agent, reply, toolCalls.Count > 0, usage, budgetCut);
@@ -138,9 +138,8 @@ internal static class RunEngine
 
             spending.ToolCalls += toolCalls.Count;
 
-            // A reply's calls all get results, in one message, even when the run is cancelled meanwhile (CTX-06, AGT-05).
-            // The pipeline's events stream while it runs. A host that stops reading them abandons the run: the tools are
-            // cancelled, and the run waits for them, so none runs on after it, nor on a conversation another run may take.
+            // A reply's calls all get results, in one message, even if the run is cancelled meanwhile. If the host stops reading
+            // the events, the tools are cancelled and awaited, so none outlives the run or touches a conversation another run takes.
             var events = Channel.CreateUnbounded<RunEvent>(new UnboundedChannelOptions { SingleReader = true });
             using var tools = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             var running = RunToolsAsync(new ToolPipeline(run, events.Writer), toolCalls, events.Writer, tools.Token);
@@ -175,7 +174,7 @@ internal static class RunEngine
         }
     }
 
-    /// <summary>The result of a call whose reply the application never received, as it stopped mid-reply.</summary>
+    /// <summary>The result of a call whose reply was never recorded, as the application stopped mid-reply.</summary>
     internal const string Interrupted = "The call was interrupted: the application stopped before its result was recorded, so it may or may not have taken effect.";
 
     private static async Task<ImmutableArray<ToolResult>> RunToolsAsync(
@@ -269,7 +268,7 @@ internal static class RunEngine
                 stream = null;
                 var disposed = await TryAsync(async () => await disposing.DisposeAsync().ConfigureAwait(false), cancellationToken).ConfigureAwait(false);
 
-                // Once the stop reason has arrived the reply is complete, and a failure to close the call does not lose it.
+                // Once the stop reason has arrived the reply is complete; failing to close the call does not lose it.
                 reply.Error ??= reply.Stop is null ? disposed : null;
             }
         }
@@ -286,15 +285,14 @@ internal static class RunEngine
     }
 
     /// <summary>
-    /// What a reply means for the run: whether it is appended, with the messages it answers, and the result that ends
-    /// the run, or null to run its tool calls and call the model again.
+    /// What a reply means: whether it is appended, with the messages it answers, and the result that ends the run, or null
+    /// to run its tool calls and call the model again.
     /// </summary>
     /// <remarks>
-    /// A reply cut off before its stop reason is not appended (AGT-05), nor is one without content. Nor is one that
-    /// requested tools but stopped for another reason (output limit, context full, refusal, end, unknown): its calls do
-    /// not run, as its last tool input may be cut short (the SDK keeps an empty one), and appending it would leave calls
-    /// without results, which the provider rejects. An end with calls fails, as a completed run would report an answer
-    /// the history does not hold.
+    /// A reply cut off before its stop reason is not appended, nor is one without content, nor one that asked for tools but
+    /// stopped for another reason: its calls do not run, as its last input may be cut short, and calls without results are
+    /// rejected by the provider.
+    /// An end with calls fails, as a completed run would report an answer the history does not hold.
     /// </remarks>
     private static (bool Append, RunResult? End) Decide(Agent agent, ModelReply reply, bool hasCalls, Usage usage, string? budgetCut) =>
         (reply.Error, reply.Stop, reply.Blocks.Count > 0, hasCalls) switch
@@ -321,9 +319,8 @@ internal static class RunEngine
     };
 
     /// <summary>
-    /// Gives error results to the calls of a conversation saved after its model asked for tools and before their results
-    /// came, as the application stopped mid-reply: it may be resumed, and the provider rejects calls without results.
-    /// Returns the message appended, or null when no call was left unanswered.
+    /// Gives error results to calls left unanswered when the application stopped mid-reply, so the conversation can resume:
+    /// the provider rejects calls without results. Returns the message appended, or null when none was needed.
     /// </summary>
     private static async Task<Message?> AnswerInterruptedAsync(Conversation conversation, AuditRecorder audit)
     {
@@ -345,7 +342,7 @@ internal static class RunEngine
         return interrupted;
     }
 
-    /// <summary>A completed run's result; with typed output, a reply that fails to read fails the run, with no correction round (OUT-02).</summary>
+    /// <summary>A completed run's result; with typed output, a reply that cannot be read fails the run, with no retry.</summary>
     private static RunResult Completed(Agent agent, string text, Usage usage) => agent.Output?.Read(text) switch
     {
         null => new Completed(text, usage),
@@ -355,7 +352,7 @@ internal static class RunEngine
 
     private static string Say(FormattableString text) => text.ToString(CultureInfo.InvariantCulture);
 
-    /// <summary>Runs a step of the model call; returns the failure's message, or null when it succeeded or the run was cancelled.</summary>
+    /// <summary>Runs a step of the model call; returns the failure's message, or null on success or cancellation.</summary>
     private static async ValueTask<string?> TryAsync(Func<ValueTask> step, CancellationToken cancellationToken)
     {
         try
@@ -367,7 +364,7 @@ internal static class RunEngine
         {
             return null;
         }
-#pragma warning disable CA1031 // Any failure of the model ends the run as failed (principle 8).
+#pragma warning disable CA1031 // Any model failure fails the run.
         catch (Exception exception)
 #pragma warning restore CA1031
         {

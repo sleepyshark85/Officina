@@ -5,7 +5,7 @@ using static Sleepyshark.Officina.Tests.Agents;
 
 namespace Sleepyshark.Officina.Tests;
 
-/// <summary>Typed output (OUT-01, OUT-02, GEN-05), stateless runs (GEN-03), and TEST-08's refusal of schemas outside the subset.</summary>
+/// <summary>Typed output, stateless runs, and the refusal of schemas outside the subset.</summary>
 public class OutputTests
 {
     public sealed record Summary([property: Description("A short title.")] string Title, IReadOnlyList<string> Changes, int? Score = null);

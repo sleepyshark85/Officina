@@ -3,9 +3,8 @@ using System.Text.Json;
 namespace Sleepyshark.Officina.Testing;
 
 /// <summary>
-/// The prefix stability check of TEST-02: each request's prefix (model settings, tools, instructions, output schema and
-/// context management) and earlier messages are byte-identical to the previous request's. Pass the requests of a scripted
-/// run, or of several runs, saves and resumes, in the order they were sent.
+/// Checks that each request's prefix and earlier messages are byte-identical to the previous request's. Pass the
+/// requests of a scripted run, or of several runs, saves and resumes, in the order they were sent.
 /// </summary>
 public static class PrefixStability
 {

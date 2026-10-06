@@ -3,17 +3,17 @@ using System.Text;
 namespace Sleepyshark.Officina.Memory.Files;
 
 /// <summary>
-/// Keeps memory files on disk (MEM-02): each scope is a directory under <paramref name="root"/>, named by the lower-case
-/// hex of the scope's UTF-8 bytes so that scopes differing only in case stay apart on a case-insensitive file system,
-/// and each file a UTF-8 text file under it. Besides <see cref="MemoryPath"/>'s checks, a path must resolve inside its scope's directory, and
-/// no part of it, nor the scope's directory, may be a link (a symbolic link or junction), so no file outside the scope
-/// is reached through one; files reached only through a link are not listed. Directories left empty are removed.
+/// Keeps memory files on disk: each scope is a directory under <paramref name="root"/>, named by the hex of its UTF-8
+/// bytes so scopes differing in case stay apart, with UTF-8 text files under it. Beyond <see cref="MemoryPath"/>'s
+/// checks, a path must resolve inside its scope's directory, and neither that directory nor any part of the path may be
+/// a link (symbolic link or junction), so no file outside the scope is reached; files reached only through a link are
+/// not listed. Directories left empty are removed.
 /// </summary>
 /// <remarks>
-/// It guards against the model's paths, not against other processes changing the directory while it runs. On a
-/// case-insensitive file system, paths within one scope that differ only in case name the same file. A scope's directory
-/// name is twice as long as its UTF-8 bytes, and file systems allow names of 255 characters at most, so creating a file
-/// fails in a scope of more than 127 UTF-8 bytes, although <see cref="MemoryPath"/> accepts it.
+/// It guards against the model's paths, not other processes changing the directory. On a case-insensitive file system,
+/// paths in one scope that differ only in case name the same file. Directory names are twice the scope's UTF-8 bytes
+/// and file systems cap names at 255 characters, so a scope over 127 UTF-8 bytes cannot hold files, although
+/// <see cref="MemoryPath"/> accepts it.
 /// </remarks>
 public sealed class FileMemoryStore(string root) : IMemoryStore
 {
@@ -118,7 +118,7 @@ public sealed class FileMemoryStore(string root) : IMemoryStore
         }
     }
 
-    /// <summary>Removes the directories above <paramref name="file"/> that are left empty, up to the scope's.</summary>
+    /// <summary>Removes the directories above <paramref name="file"/> left empty, up to the scope's.</summary>
     private void Prune(string scope, string file)
     {
         var directory = Directory(scope);

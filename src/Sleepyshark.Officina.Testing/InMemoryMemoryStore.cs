@@ -2,7 +2,7 @@ using System.Text;
 
 namespace Sleepyshark.Officina.Testing;
 
-/// <summary>A memory store that keeps its files in memory (MEM-02), for tests. Safe to use from concurrent runs.</summary>
+/// <summary>A memory store that keeps its files in memory, for tests. Safe for concurrent runs.</summary>
 public sealed class InMemoryMemoryStore : IMemoryStore
 {
     private readonly Lock gate = new();

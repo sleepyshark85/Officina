@@ -6,8 +6,8 @@ using static BookshopAssistant.Tests.ConsoleSession;
 namespace BookshopAssistant.Tests;
 
 /// <summary>
-/// TEST-09: each console flow of S06's APP requirements, end to end. The real console, agent, core and tools run against
-/// the real database; only the model and the staff member are scripted.
+/// Each console flow, end to end: the real console, agent, core and tools against the real database; only the model
+/// and the staff member are scripted.
 /// </summary>
 public class EndToEndTests(BookshopDatabase database) : IClassFixture<BookshopDatabase>
 {
@@ -176,7 +176,7 @@ public class EndToEndTests(BookshopDatabase database) : IClassFixture<BookshopDa
     [DatabaseFact]
     public async Task APP_13_the_run_context_names_the_date_and_staff_member_and_is_sent_again_only_on_a_new_day()
     {
-        // Each reading of the clock moves it on 12 hours: the messages come at 08:00 and 20:00 on Monday, then 08:00 on Tuesday.
+        // Each clock reading moves it on 12 hours: messages come at 08:00 and 20:00 on Monday, then 08:00 on Tuesday.
         var time = new FakeTimeProvider(Start) { AutoAdvanceAmount = TimeSpan.FromHours(12) };
         var model = Model().Reply("Good morning.").Reply("Good evening.").Reply("Good morning again.");
 

@@ -1,6 +1,6 @@
 namespace Sleepyshark.Officina.Dependencies.Tests;
 
-/// <summary>TEST-05 against this repository.</summary>
+/// <summary>The dependency check against this repository.</summary>
 public class RepositoryDependencyTests
 {
     [Fact]

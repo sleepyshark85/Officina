@@ -7,11 +7,10 @@ using Sleepyshark.Officina.Testing;
 namespace Sleepyshark.Officina.Tests;
 
 /// <summary>
-/// TEST-07: over generated sequences of runs on one conversation, with cancels, model failures and tool calls (reads and
-/// writes, errors, invalid input, denials, unknown tools, writes whose audit fails), each saved and resumed, the
-/// conversation always passes the role-sequence check, the prefix stays byte-identical, every tool call has exactly one
-/// result, no write runs before its audit entry, no secret reaches the events or the audit trail, and a compaction block
-/// stays in the conversation as received (HIST-01, MDL-05).
+/// Over generated runs on one conversation (cancels, model failures, reads and writes, errors, invalid input, denials,
+/// unknown tools, writes whose audit fails), each saved and resumed: the role sequence holds, the prefix stays
+/// byte-identical, every call has one result, no write runs before its audit entry, no secret reaches events or audit,
+/// and a compaction block stays as received.
 /// </summary>
 public class ConversationPropertyTests
 {
@@ -47,7 +46,7 @@ public class ConversationPropertyTests
 
     /// <summary>
     /// One run: the model's tool-calling replies, how it ends, and when the host cancels: 0 never, 1–4 when that tool call
-    /// of the run starts, 5 mid-stream, 6 before the run starts.
+    /// starts, 5 mid-stream, 6 before the run starts.
     /// </summary>
     public sealed record RunSpec(CallSpec[][] ToolReplies, Ending Ending, int CancelAt, bool Attended);
 
@@ -167,7 +166,7 @@ public class ConversationPropertyTests
             Assert.Equal(calls, results);
             Assert.Equal(calls.Count, calls.Distinct().Count());
 
-            // TEST-02: every request repeats the conversation as it was before the run, byte for byte, after the same tools and instructions.
+            // Every request repeats the conversation as it was before the run, byte for byte, after the same prefix.
             foreach (var request in model.Requests)
             {
                 Assert.Equal(before, request.Messages.Take(before.Count).Select(message => JsonSerializer.Serialize(message)));
@@ -193,7 +192,7 @@ public class ConversationPropertyTests
         return new ToolCall(id, call.Tool.ToString().ToLowerInvariant(), input);
     }
 
-    /// <summary>Approves a call whose input asks for it: a policy, standing in for the human.</summary>
+    /// <summary>Approves a call whose input asks for it: a policy standing in for the human.</summary>
     private sealed class InputApprover : IApprover
     {
         public Task<Approval> ApproveAsync(Tool tool, ToolCall toolCall, CancellationToken cancellationToken) =>

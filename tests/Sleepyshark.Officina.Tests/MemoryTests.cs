@@ -4,7 +4,7 @@ using Sleepyshark.Officina.Testing;
 
 namespace Sleepyshark.Officina.Tests;
 
-/// <summary>The memory service and stores (MEM-01…05, AUD-03), through real runs: only the model and the approver are scripted.</summary>
+/// <summary>The memory tool and stores, through real runs: only the model and the approver are scripted.</summary>
 public sealed class MemoryTests : IDisposable
 {
     private readonly List<DirectoryInfo> folders = [];
@@ -264,7 +264,7 @@ public sealed class MemoryTests : IDisposable
         Assert.True(agent.CanContinue(conversation));
     }
 
-    /// <summary>A store that checks, at each write, that the call's attempt is already in the audit trail (AUD-02).</summary>
+    /// <summary>A store that checks, at each write, that the call's attempt is already in the audit trail.</summary>
     private sealed class AuditedStore(RecordingSink sink) : IMemoryStore
     {
         private readonly InMemoryMemoryStore inner = new();

@@ -4,7 +4,7 @@ using Npgsql;
 
 namespace BookshopAssistant.Tests;
 
-/// <summary>APP-08: no tool takes SQL text; every query is a fixed, parameterized constant. Static checks, no database.</summary>
+/// <summary>No tool takes SQL text; every query is a fixed, parameterized constant. Static checks, no database.</summary>
 public partial class NoSqlTextTests
 {
     /// <summary>The only text the model may give: values compared as values, never run.</summary>

@@ -5,30 +5,29 @@ using System.Text.Json;
 namespace Sleepyshark.Officina;
 
 /// <summary>
-/// The part of every request that stays the same for a whole conversation, so the provider can cache it (CTX-01): the
-/// model's settings, the tools sorted by name, the frozen instructions, the typed output schema and how the provider
-/// shortens the conversation. Its <see cref="Fingerprint"/> identifies it: a conversation is bound to the fingerprint of
-/// its first run, and a run with another fails without calling the model (CTX-04). Two prefixes are equal when their
-/// fingerprints are; the fingerprint is computed when read, so a copy made with <c>with</c> is never stale.
+/// What stays the same in every request of a conversation, so the provider can cache it: model settings, sorted tools,
+/// instructions, output schema and context management. Its <see cref="Fingerprint"/> identifies it: a conversation is
+/// bound to its first run's, and a run with another fails without calling the model. Prefixes are equal when their
+/// fingerprints are; the fingerprint is computed when read, so a <c>with</c> copy is never stale.
 /// </summary>
-/// <param name="ModelSettings">The model's <see cref="IModel.Settings"/>; a provider ignores it, as it knows its own.</param>
-/// <param name="Tools">The tools, in any order, each with its own name; the prefix keeps them sorted by name.</param>
+/// <param name="ModelSettings">The model's <see cref="IModel.Settings"/>; providers ignore it, knowing their own.</param>
+/// <param name="Tools">The tools, in any order, each with its own name; kept sorted by name.</param>
 /// <param name="Instructions">The frozen instructions.</param>
-/// <param name="OutputSchema">The JSON schema typed output must match, if the agent requires typed output (OUT-01).</param>
-/// <param name="ContextManagement">How the provider shortens the conversation, if at all (HIST-01, HIST-02).</param>
+/// <param name="OutputSchema">The JSON schema typed output must match, if any.</param>
+/// <param name="ContextManagement">How the provider shortens the conversation, if at all.</param>
 public sealed record RequestPrefix(
     string ModelSettings, ImmutableArray<Tool> Tools, string Instructions, string? OutputSchema = null, ContextManagement? ContextManagement = null)
 {
     public string ModelSettings { get; init => field = value ?? throw new ArgumentNullException(nameof(value)); } =
         ModelSettings ?? throw new ArgumentNullException(nameof(ModelSettings));
 
-    /// <summary>The tools, sorted by name so every request lists them in the same order (CTX-01).</summary>
+    /// <summary>Sorted by name, so every request lists them in the same order.</summary>
     public ImmutableArray<Tool> Tools { get; init => field = Sorted(value); } = Sorted(Tools);
 
     public string Instructions { get; init => field = value ?? throw new ArgumentNullException(nameof(value)); } =
         Instructions ?? throw new ArgumentNullException(nameof(Instructions));
 
-    /// <summary>A SHA-256 hash of everything in the prefix that reaches the model; equal prefixes have equal fingerprints.</summary>
+    /// <summary>A SHA-256 hash of everything in the prefix that reaches the model.</summary>
     public string Fingerprint => Convert.ToHexStringLower(SHA256.HashData(JsonBytes(writer =>
     {
         // {"model":…,"instructions":…,"tools":[…],"output":…,"contextManagement":{…}}: stored conversations carry the
@@ -43,10 +42,7 @@ public sealed record RequestPrefix(
         writer.WriteEndObject();
     })));
 
-    /// <summary>
-    /// The parts in which this prefix differs from <paramref name="other"/>, named for people (such as <c>tools</c> or
-    /// <c>output schema</c>); none when the fingerprints are equal.
-    /// </summary>
+    /// <summary>The parts in which this prefix differs from <paramref name="other"/>, named for people; none when equal.</summary>
     public IReadOnlyList<string> Differences(RequestPrefix other)
     {
         ArgumentNullException.ThrowIfNull(other);
@@ -82,7 +78,7 @@ public sealed record RequestPrefix(
         }
     }
 
-    /// <summary>The tools sorted by name; throws <see cref="ArgumentException"/> when two share a name, which would leave their order to chance.</summary>
+    /// <summary>The tools sorted by name; throws <see cref="ArgumentException"/> when two share a name.</summary>
     internal static ImmutableArray<Tool> Sorted(ImmutableArray<Tool> tools)
     {
         var sorted = tools.IsDefault ? [] : tools.Sort((left, right) => string.CompareOrdinal(left.Name, right.Name));

@@ -3,7 +3,7 @@ using System.Text.Json.Nodes;
 
 namespace Sleepyshark.Officina.Dependencies.Tests;
 
-/// <summary>A throwaway repository with projects restored as NuGet would restore them, for proving that the check catches violations.</summary>
+/// <summary>A throwaway repository, restored as NuGet would, to prove the check catches violations.</summary>
 internal sealed class FixtureRepository : IDisposable
 {
     public FixtureRepository()
@@ -14,7 +14,7 @@ internal sealed class FixtureRepository : IDisposable
     public string Root { get; }
 
     /// <param name="name">The project name, such as <c>Sleepyshark.Officina.Claude</c>.</param>
-    /// <param name="references">What the project references itself: package ids, or names of other fixture projects.</param>
+    /// <param name="references">What the project itself references: package ids, or other fixture projects' names.</param>
     /// <param name="graph">What each package or project in the restore graph depends on.</param>
     public FixtureRepository AddProject(string name, string[] references, Dictionary<string, string[]>? graph = null)
     {

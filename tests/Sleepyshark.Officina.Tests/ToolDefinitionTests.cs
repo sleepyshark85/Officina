@@ -5,7 +5,7 @@ using Sleepyshark.Officina.Testing;
 
 namespace Sleepyshark.Officina.Tests;
 
-/// <summary>Tools from typed functions (TOOL-01) and the schema subset (Q2).</summary>
+/// <summary>Tools from typed functions, and the schema subset.</summary>
 public class ToolDefinitionTests
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;

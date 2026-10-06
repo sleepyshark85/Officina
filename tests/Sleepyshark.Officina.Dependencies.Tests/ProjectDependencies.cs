@@ -3,9 +3,9 @@ using System.Text.Json;
 
 namespace Sleepyshark.Officina.Dependencies.Tests;
 
-/// <summary>A project's resolved dependency graph, read from the <c>project.assets.json</c> that restore writes.</summary>
+/// <summary>A project's resolved dependency graph, from the <c>project.assets.json</c> restore writes.</summary>
 /// <param name="Name">The project name.</param>
-/// <param name="Direct">The packages and projects the project references itself.</param>
+/// <param name="Direct">The packages and projects the project itself references.</param>
 /// <param name="Graph">Every package and project in the restore graph, with what each depends on.</param>
 /// <param name="FrameworkReferences">Shared frameworks the project references, such as <c>Microsoft.NETCore.App</c>.</param>
 internal sealed record ProjectDependencies(
@@ -49,7 +49,7 @@ internal sealed record ProjectDependencies(
         return new ProjectDependencies(name, direct.ToImmutable(), graph.ToImmutable(), frameworkReferences.ToImmutable());
     }
 
-    /// <summary>Everything the project reaches, without walking past the given nodes. The stop nodes themselves are included.</summary>
+    /// <summary>Everything the project reaches, without walking past the given nodes, which are included.</summary>
     public ImmutableHashSet<string> Reachable(Func<string, bool> stopAt)
     {
         var seen = ImmutableHashSet.CreateBuilder<string>(Ids);

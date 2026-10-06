@@ -6,42 +6,38 @@ using System.Text.Json.Schema;
 
 namespace Sleepyshark.Officina;
 
-/// <summary>Whether a tool only reads, or changes something (TOOL-03).</summary>
+/// <summary>Whether a tool only reads, or changes something.</summary>
 public enum ToolKind
 {
-    /// <summary>Reads only: the read calls of one reply run concurrently.</summary>
+    /// <summary>Reads only: a reply's read calls run concurrently.</summary>
     Read,
 
-    /// <summary>Changes something: write calls run one at a time, in order, each audited before it runs (AUD-02).</summary>
+    /// <summary>Changes something: write calls run one at a time, in order, each audited before it runs.</summary>
     Write,
 }
 
-/// <summary>What a tool's handler returns: content for the model, and whether it is an error result (TOOL-05).</summary>
+/// <summary>What a tool's handler returns: content for the model, and whether it is an error result.</summary>
 public sealed record ToolOutput(string Content, bool IsError = false)
 {
     public string Content { get; } = Content ?? throw new ArgumentNullException(nameof(Content));
 }
 
-/// <summary>What a tool's handler knows of the run that calls it (ARCHITECTURE §4.2).</summary>
-/// <param name="MemoryScope">Whose memory the run sees (MEM-03); null for a run without one.</param>
+/// <summary>What a tool's handler knows of the run that calls it.</summary>
+/// <param name="MemoryScope">Whose memory the run sees; null for a run without one.</param>
 public sealed record ToolContext(string? MemoryScope);
 
 /// <summary>
-/// A tool the model may request (TOOL-01, ARCHITECTURE §4.2). Its name, description and input schema are part of the
-/// cached prefix; its kind and approval need are not sent to the model.
+/// A tool the model may request. Its name, description and input schema are part of the cached prefix; its kind and
+/// approval need are not sent to the model.
 /// </summary>
 public sealed class Tool
 {
     /// <param name="name">Unique among the agent's tools.</param>
     /// <param name="description">What the tool does, for the model.</param>
-    /// <param name="inputSchema">
-    /// The JSON schema of the tool's input, an object schema in the subset the core validates; it is sent as written.
-    /// </param>
+    /// <param name="inputSchema">An object schema in the subset the core validates; sent as written.</param>
     /// <param name="kind">Whether the tool reads or writes.</param>
-    /// <param name="handler">
-    /// Runs the tool on input that matches the schema. A thrown exception becomes an error result with its message.
-    /// </param>
-    /// <param name="needsApproval">Whether the run's approver must approve each call before it runs (TOOL-04).</param>
+    /// <param name="handler">Runs the tool on valid input; a thrown exception becomes an error result with its message.</param>
+    /// <param name="needsApproval">Whether the approver must approve each call before it runs.</param>
     public Tool(
         string name, string description, string inputSchema, ToolKind kind,
         Func<JsonElement, CancellationToken, Task<ToolOutput>> handler, bool needsApproval = false)
@@ -90,10 +86,7 @@ public sealed class Tool
     /// <summary>The source the tool comes from, such as an MCP server; null for the application's own tools.</summary>
     public IToolSource? Source { get; init; }
 
-    /// <summary>
-    /// Whether this is the memory tool (MEM-01), which a provider with a native memory tool presents as that tool, and
-    /// whose runs need a memory scope.
-    /// </summary>
+    /// <summary>Whether this is the memory tool: a provider may present it as its native one, and its runs need a memory scope.</summary>
     public bool IsMemory { get; internal init; }
 
     internal JsonElement Schema { get; }
@@ -103,18 +96,18 @@ public sealed class Tool
     /// <summary>Calls whose input this accepts never need approval, such as the memory tool's views; null exempts none.</summary>
     internal Func<JsonElement, bool>? ExemptFromApproval { get; init; }
 
-    /// <summary>Whether a call with <paramref name="input"/> needs the approver's approval (TOOL-04).</summary>
+    /// <summary>Whether a call with <paramref name="input"/> needs the approver's approval.</summary>
     internal bool NeedsApprovalFor(JsonElement input) => NeedsApproval && ExemptFromApproval?.Invoke(input) != true;
 
     /// <summary>
-    /// Builds a tool from an ordinary typed function (TOOL-01). Each parameter is a property of the input, with its schema
-    /// exported from its type and a <see cref="DescriptionAttribute"/> as its description; a parameter with a default
-    /// value is optional, and a <see cref="CancellationToken"/> gets the run's. The function may be async; a
-    /// <see cref="ToolOutput"/> or string it returns is the result as is, anything else is sent as JSON.
+    /// Builds a tool from a typed function. Each parameter is an input property, with its schema exported from its type and
+    /// its <see cref="DescriptionAttribute"/> as description; a parameter with a default is optional, and a
+    /// <see cref="CancellationToken"/> gets the run's. The function may be async; a <see cref="ToolOutput"/> or string it
+    /// returns is the result as is, anything else is sent as JSON.
     /// </summary>
     /// <remarks>
-    /// Known limit: it uses reflection, for the schema and for JSON, so it is neither trim nor AOT safe, and it fails
-    /// where reflection-based JSON is disabled. The constructor works everywhere.
+    /// Uses reflection for the schema and JSON, so it is not trim or AOT safe and fails where reflection-based JSON is
+    /// disabled; the constructor works everywhere.
     /// </remarks>
     public static Tool FromFunction(string name, string description, ToolKind kind, Delegate function, bool needsApproval = false)
     {
@@ -175,7 +168,7 @@ public sealed class Tool
     }
 }
 
-/// <summary>Answers approval requests (TOOL-04, ARCHITECTURE §4.3): a person or a policy. A run without one is unattended (GEN-04).</summary>
+/// <summary>Answers approval requests: a person or a policy. A run without one is unattended.</summary>
 public interface IApprover
 {
     /// <summary>Decides whether <paramref name="toolCall"/> of <paramref name="tool"/>, which needs approval, may run.</summary>

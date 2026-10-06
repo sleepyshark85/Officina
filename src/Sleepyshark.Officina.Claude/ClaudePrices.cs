@@ -1,9 +1,8 @@
 namespace Sleepyshark.Officina.Claude;
 
 /// <summary>
-/// Claude's list prices by model, in US dollars per million tokens (BUD-02): cache reads at the model's own rate, cache
-/// writes at 1.25 times input for five minutes and twice input for an hour. A host with other prices replaces a model's
-/// price through <see cref="ClaudeModel.Price"/>.
+/// Claude's list prices, in US dollars per million tokens: cache reads at the model's rate, cache writes at 1.25 times
+/// input for five minutes and twice input for an hour. A host with other prices sets <see cref="ClaudeModel.Price"/>.
 /// </summary>
 public static class ClaudePrices
 {

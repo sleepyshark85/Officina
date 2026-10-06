@@ -2,7 +2,7 @@ using static Sleepyshark.Officina.Claude.Tests.StreamTests;
 
 namespace Sleepyshark.Officina.Claude.Tests;
 
-/// <summary>Retries and error classes (MDL-04), on recorded HTTP responses; the clock never sleeps.</summary>
+/// <summary>Retries and error classes, on recorded HTTP responses; the clock never sleeps.</summary>
 public class RetryTests
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;

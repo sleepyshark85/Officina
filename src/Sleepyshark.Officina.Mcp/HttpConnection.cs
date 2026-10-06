@@ -6,9 +6,9 @@ using System.Text.Json.Nodes;
 namespace Sleepyshark.Officina.Mcp;
 
 /// <summary>
-/// The Streamable HTTP transport: each message is a POST, and the server answers a request with a JSON body or with an
-/// event stream that ends in the response. A session id the server gives is sent back with every later message; a
-/// session the server no longer knows (404) loses the connection, as the protocol asks the client to start a new one.
+/// The Streamable HTTP transport: each message is a POST, answered with a JSON body or an event stream ending in the
+/// response. A session id the server gives is sent back with every later message; a 404 for it loses the connection, as
+/// the protocol asks the client to start a new session.
 /// </summary>
 internal sealed class HttpConnection(McpServer server, Action<string> lost) : McpConnection(server, lost)
 {

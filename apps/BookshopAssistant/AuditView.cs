@@ -5,8 +5,8 @@ using Sleepyshark.Officina;
 namespace BookshopAssistant;
 
 /// <summary>
-/// What <c>/audit</c> shows (APP-16): a session's entries in order, grouped by run, each run with a link to its trace in
-/// the telemetry dashboard (APP-20), and each run's end with its tokens and cost.
+/// What <c>/audit</c> shows: a session's entries grouped by run, each run linked to its trace in the dashboard, and each
+/// run's end with its tokens and cost.
 /// </summary>
 public static class AuditView
 {

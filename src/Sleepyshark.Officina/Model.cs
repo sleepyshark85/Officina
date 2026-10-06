@@ -4,14 +4,14 @@ using System.Text.Json.Serialization;
 namespace Sleepyshark.Officina;
 
 /// <summary>
-/// A provider's model with its settings fixed (MDL-01, MDL-03): the only way the core reaches a model. Transient failures
-/// are retried inside the implementation; a failure that remains is thrown, and the run ends as failed.
+/// A provider's model with fixed settings: the only way the core reaches a model. It retries transient failures itself;
+/// a failure that remains is thrown, and the run fails.
 /// </summary>
 public interface IModel
 {
     /// <summary>
-    /// The model and every setting that shapes its requests, as text that changes whenever any of them does. It is part of
-    /// the prefix fingerprint (CTX-04).
+    /// The model and every setting that shapes its requests, as text that changes when any of them does: it is part of the
+    /// prefix fingerprint.
     /// </summary>
     string Settings { get; }
 
@@ -21,10 +21,10 @@ public interface IModel
     /// <summary>The model's identifier, as telemetry names it (<c>gen_ai.request.model</c>).</summary>
     string Name { get; }
 
-    /// <summary>What the model's tokens cost (BUD-02); null when unknown, and then they cost nothing in results and budgets.</summary>
+    /// <summary>What the model's tokens cost; null when unknown, and then they cost nothing in results and budgets.</summary>
     ModelPrice? Price { get; }
 
-    /// <summary>What the provider supports beyond the basic contract; none unless the model declares it (HIST-03).</summary>
+    /// <summary>What the provider supports beyond the basic contract; none unless the model declares it.</summary>
     ModelCapabilities Capabilities => ModelCapabilities.None;
 
     /// <summary>
@@ -34,31 +34,31 @@ public interface IModel
     IAsyncEnumerable<ModelEvent> StreamAsync(ModelRequest request, CancellationToken cancellationToken);
 }
 
-/// <summary>One request in the fixed layout of CTX-01: the prefix that stays the same for the conversation, then the conversation.</summary>
-/// <param name="Prefix">Model settings, tools sorted by name, frozen instructions, output schema and context management.</param>
+/// <summary>One request: the prefix that stays the same for the conversation, then the conversation.</summary>
+/// <param name="Prefix">Model settings, sorted tools, instructions, output schema and context management.</param>
 /// <param name="Messages">The conversation, with the run's pending messages.</param>
 /// <param name="MaxOutputTokens">
-/// The most output tokens the remaining budget allows (BUD-01), when it limits them: the model uses this or its own
-/// limit, whichever is lower. It is not part of the prefix.
+/// The most output tokens the remaining budget allows, if it limits them; the model uses the lower of this and its own.
+/// Not part of the prefix.
 /// </param>
 public sealed record ModelRequest(RequestPrefix Prefix, ImmutableArray<Message> Messages, int? MaxOutputTokens = null);
 
 /// <summary>Something the model streams while it replies.</summary>
 public abstract record ModelEvent;
 
-/// <summary>A piece of the reply's text, for display as it streams. The complete block follows in a <see cref="BlockReceived"/>.</summary>
+/// <summary>A piece of reply text, for display as it streams; the complete block follows in a <see cref="BlockReceived"/>.</summary>
 public sealed record TextDelta(string Text) : ModelEvent;
 
 /// <summary>A complete content block of the reply, in reply order.</summary>
 public sealed record BlockReceived(ContentBlock Block) : ModelEvent;
 
 /// <summary>
-/// The call failed and is made again (MDL-04), whether or not its reply had started: everything streamed before this
-/// belongs to a reply that will not come, and the reply starts again. Usage the failed attempt reported stays counted.
+/// The call failed and is made again: everything streamed before this belongs to a reply that will not come. Usage the
+/// failed attempt reported stays counted.
 /// </summary>
 public sealed record ModelRetried : ModelEvent;
 
-/// <summary>Tokens the call used since its previous report: reports are increments, and the run adds them up.</summary>
+/// <summary>Tokens used since the call's previous report: reports are increments.</summary>
 public sealed record UsageReceived(Usage Usage) : ModelEvent;
 
 /// <summary>Why the model stopped: the reply's last event.</summary>
@@ -66,7 +66,7 @@ public sealed record UsageReceived(Usage Usage) : ModelEvent;
 /// <param name="Detail">The refusal's category, or the provider's own word for an unknown reason.</param>
 public sealed record ModelStopped(ModelStopReason Reason, string? Detail = null) : ModelEvent;
 
-/// <summary>The model contract's stop reasons (ARCHITECTURE §4.1).</summary>
+/// <summary>Why a model stopped, in the model contract's words.</summary>
 public enum ModelStopReason
 {
     /// <summary>A reason the provider gave that is none of the others.</summary>
@@ -83,7 +83,7 @@ public enum ModelStopReason
 /// <param name="Output">Output tokens.</param>
 /// <param name="CacheRead">Input tokens read from the cache.</param>
 /// <param name="CacheWrite">Input tokens written to the cache.</param>
-/// <param name="CacheWriteHour">Of <paramref name="CacheWrite"/>, the tokens written to the cache for an hour rather than the short default, which cost more.</param>
+/// <param name="CacheWriteHour">Of <paramref name="CacheWrite"/>, those cached for an hour, which cost more.</param>
 public readonly record struct Usage(long Input, long Output, long CacheRead, long CacheWrite, long CacheWriteHour = 0)
 {
     /// <summary>All the tokens, of every kind.</summary>
@@ -95,14 +95,12 @@ public readonly record struct Usage(long Input, long Output, long CacheRead, lon
         left.CacheWriteHour + right.CacheWriteHour);
 }
 
-/// <summary>
-/// A model's prices, in US dollars per million tokens (BUD-02). Cache writes are priced by how long the cache keeps them.
-/// </summary>
+/// <summary>A model's prices, in US dollars per million tokens.</summary>
 /// <param name="Input">Input tokens neither read from nor written to the cache.</param>
 /// <param name="Output">Output tokens.</param>
 /// <param name="CacheRead">Input tokens read from the cache.</param>
-/// <param name="CacheWrite">Input tokens written to the cache for the short default time.</param>
-/// <param name="CacheWriteHour">Input tokens written to the cache for an hour.</param>
+/// <param name="CacheWrite">Input tokens cached for the short default time.</param>
+/// <param name="CacheWriteHour">Input tokens cached for an hour.</param>
 public sealed record ModelPrice(decimal Input, decimal Output, decimal CacheRead, decimal CacheWrite, decimal CacheWriteHour)
 {
     /// <summary>What <paramref name="usage"/> costs, in US dollars.</summary>

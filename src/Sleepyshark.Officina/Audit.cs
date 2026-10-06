@@ -4,15 +4,15 @@ using System.Globalization;
 namespace Sleepyshark.Officina;
 
 /// <summary>
-/// Where the audit trail goes (AUD-04, ARCHITECTURE §4.5). Entries of one run arrive one at a time, in sequence order.
-/// A write that returns is durable; a write that fails throws, and is never swallowed by the sink.
+/// Where the audit trail goes. A run's entries arrive one at a time, in sequence order. A write that returns is durable;
+/// a write that fails throws, and the sink never swallows it.
 /// </summary>
 public interface IAuditSink
 {
     Task WriteAsync(AuditEntry entry, CancellationToken cancellationToken);
 }
 
-/// <summary>What an audit entry records (AUD-01).</summary>
+/// <summary>What an audit entry records.</summary>
 public enum AuditKind
 {
     RunStarted,
@@ -20,7 +20,7 @@ public enum AuditKind
     /// <summary>The run's result, refusals, provider failures and prefix mismatches included, with its usage.</summary>
     RunEnded,
 
-    /// <summary>A tool call is about to run; a write tool's call runs only once this is recorded (AUD-02).</summary>
+    /// <summary>A tool call is about to run; a write runs only once this is recorded.</summary>
     ToolStarted,
 
     /// <summary>A tool call's outcome: every call has one, whether it ran or not.</summary>
@@ -31,21 +31,21 @@ public enum AuditKind
     ApprovalAnswered,
 
     /// <summary>
-    /// A tool source connected, failed to connect, or lost its connection; the entry's tool names the source (AUD-01). It
-    /// is recorded by the run that noticed it: with a shared source, not always the run whose call met it.
+    /// A tool source connected, failed to connect, or lost its connection; the entry's tool names the source. With a shared
+    /// source, it is recorded by the run that noticed it, not always the one whose call met it.
     /// </summary>
     ToolSource,
 
-    /// <summary>The provider compacted the conversation during a model call (HIST-04): the detail says how much.</summary>
+    /// <summary>The provider compacted the conversation during a model call; the detail says how much.</summary>
     Compacted,
 
-    /// <summary>The provider cleared old tool results for a model call (HIST-04): the detail says how many.</summary>
+    /// <summary>The provider cleared old tool results for a model call; the detail says how many.</summary>
     Cleared,
 }
 
 /// <summary>
-/// One durable record of a run (AUD-03): when, in which order, of which run, conversation, agent and memory scope, in
-/// which trace and span, and what. Text is truncated with its size noted, and the agent's secrets are redacted (AUD-05).
+/// One durable record of a run: when, in which order, of which run, conversation, agent and memory scope, in which trace
+/// and span, and what. Text is truncated with its size noted, and secrets are redacted.
 /// </summary>
 public sealed record AuditEntry
 {
@@ -60,13 +60,13 @@ public sealed record AuditEntry
 
     public required string Agent { get; init; }
 
-    /// <summary>Whose memory the run sees, as the host named it in the run input; null for a run without one.</summary>
+    /// <summary>Whose memory the run sees; null for a run without one.</summary>
     public string? MemoryScope { get; init; }
 
-    /// <summary>The run's trace (EVT-02), in W3C hex form; null when nothing listens to the core's telemetry.</summary>
+    /// <summary>The run's trace, in W3C hex form; null when nothing listens to the core's telemetry.</summary>
     public string? TraceId { get; init; }
 
-    /// <summary>The span of the step recorded: the run's for its start and end, the tool call's for the others.</summary>
+    /// <summary>The step's span: the run's for its start and end, the tool call's for the others.</summary>
     public string? SpanId { get; init; }
 
     public required AuditKind Kind { get; init; }
@@ -88,13 +88,13 @@ public sealed record AuditEntry
 
     public Usage? Usage { get; init; }
 
-    /// <summary>What the run's tokens cost, in US dollars, for its end.</summary>
+    /// <summary>What the run's tokens cost, in US dollars, on its end entry.</summary>
     public decimal? Cost { get; init; }
 }
 
 /// <summary>
-/// Turns a run's important events into audit entries (ARCHITECTURE §3), numbered and written one at a time. Without a
-/// sink it records nothing and every record succeeds (GEN-02).
+/// Turns a run's important events into numbered audit entries, written one at a time. Without a sink it records nothing
+/// and every record succeeds.
 /// </summary>
 internal sealed class AuditRecorder(Agent agent, Conversation conversation, Activity? runSpan, string? memoryScope) : IDisposable
 {
@@ -104,14 +104,13 @@ internal sealed class AuditRecorder(Agent agent, Conversation conversation, Acti
     private readonly SemaphoreSlim gate = new(1, 1);
     private long sequence;
 
-    /// <summary>Identifies the run in the audit trail and its telemetry.</summary>
+    /// <summary>Identifies the run in the audit trail and telemetry.</summary>
     public string Run { get; } = Guid.NewGuid().ToString("N");
 
     /// <summary>
-    /// Records an entry of the step whose span is <paramref name="step"/>, or else of the run; returns whether it was
-    /// recorded. The recorder fills in when, which run, conversation, agent, scope and span, and the kind;
-    /// <paramref name="details"/> adds the rest to that entry, such as its tool and outcome. A failed write shows in
-    /// telemetry (AUD-06); only a write tool's attempt depends on it.
+    /// Records an entry for the step whose span is <paramref name="step"/>, or for the run; returns whether it was recorded.
+    /// The recorder fills in the time, identity, span and kind; <paramref name="details"/> adds the rest, such as the tool
+    /// and outcome. A failed write shows in telemetry; only a write tool's attempt depends on it.
     /// </summary>
     public async Task<bool> RecordAsync(AuditKind kind, Func<AuditEntry, AuditEntry>? details = null, Activity? step = null)
     {

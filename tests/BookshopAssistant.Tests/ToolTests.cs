@@ -3,7 +3,7 @@ using Sleepyshark.Officina;
 
 namespace BookshopAssistant.Tests;
 
-/// <summary>The nine tools against the real seeded database (APP-05…07, APP-18).</summary>
+/// <summary>The nine tools against the real seeded database.</summary>
 public class ToolTests(BookshopDatabase database) : IClassFixture<BookshopDatabase>
 {
     private const int Alice = 1;
@@ -57,7 +57,7 @@ public class ToolTests(BookshopDatabase database) : IClassFixture<BookshopDataba
     {
         var output = await Tools.SearchBooksAsync(limit: BookshopTools.MaxSearchResults, cancellationToken: Ct);
 
-        // About four characters a token for this JSON (APP-17), under the core's result limit (TOOL-06), so nothing is cut.
+        // About four characters a token for this JSON, under the core's result limit, so nothing is cut.
         Assert.Equal(BookshopTools.MaxSearchResults, Ok(output).GetArrayLength());
         Assert.InRange(output.Content.Length, 40_000, 60_000);
     }

@@ -5,8 +5,8 @@ using Sleepyshark.Officina.Tests;
 namespace Sleepyshark.Officina.Mcp.Tests;
 
 /// <summary>
-/// S11: the MCP tool source against the test kit's fake MCP server, over stdio (a child process) and Streamable HTTP
-/// (in this process). Only the model, the server and the human are scripted; the core runs for real.
+/// The MCP tool source against the test kit's fake server, over stdio (a child process) and Streamable HTTP (in
+/// process). Only the model, the server and the human are scripted.
 /// </summary>
 public sealed class McpToolSourceTests
 {
@@ -96,7 +96,7 @@ public sealed class McpToolSourceTests
         Assert.Equal([true, false], overridden.Tools.Select(tool => tool.NeedsApproval));
         Assert.All(source.Tools, tool => Assert.Same(source, tool.Source));
 
-        // The model is offered the allowed tools only, as the server lists them.
+        // The model is offered only the allowed tools, as the server lists them.
         var model = new ScriptedModel().Reply("Hello.");
         await AgentOf(model, source, server).RunAsync(new Conversation(), "Hi.", cancellationToken: TestContext.Current.CancellationToken);
         var offered = Assert.Single(model.Requests).Prefix.Tools;
@@ -128,7 +128,7 @@ public sealed class McpToolSourceTests
         var conversation = new Conversation();
         await agent.RunAsync(conversation, "First.", cancellationToken: TestContext.Current.CancellationToken);
 
-        // The server changes its tools, and even loses its connection, which the next run makes anew.
+        // The server changes its tools and even loses its connection, which the next run restores.
         fake.SetTools(new FakeMcpTool("echo", _ => "") { Description = "A new description." });
         await agent.RunAsync(conversation, "Second.", cancellationToken: TestContext.Current.CancellationToken);
         fake.Down = true;
@@ -140,7 +140,7 @@ public sealed class McpToolSourceTests
         Assert.All(model.Requests, request => Assert.Equal("The echo tool.", Assert.Single(request.Prefix.Tools).Description));
         Assert.Empty(PrefixStability.Problems(model.Requests));
 
-        // A source connected now reads the changed list: an agent built with it is another prefix, so it starts a new conversation.
+        // A source connected now reads the changed list: its agent has another prefix, so it starts a new conversation.
         await using var changed = await McpToolSource.ConnectAsync(server, [new("echo")], TestContext.Current.CancellationToken);
         var rebuilt = AgentOf(new ScriptedModel().Reply("Four."), changed, server);
         Assert.False(rebuilt.CanContinue(conversation));
@@ -211,7 +211,7 @@ public sealed class McpToolSourceTests
         fake.Down = false;
         Assert.IsType<Completed>(await agent.RunAsync(conversation, "Hi again.", cancellationToken: TestContext.Current.CancellationToken));
 
-        // AUD-01: the host's first connection, the loss, the failed attempt, and the new connection.
+        // The host's first connection, the loss, the failed attempt, and the new connection.
         Assert.Equal(["fake connected", "fake disconnected", "fake failed", "fake connected"], SourceChanges(sink));
     }
 
@@ -322,7 +322,7 @@ public sealed class McpToolSourceTests
         using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
         var connecting = McpToolSource.ConnectAsync(silent, [], cancellation.Token);
 
-        // The server has started, and will never answer: the connect is cancelled while it waits for the answer.
+        // The server has started and will never answer: the connect is cancelled while it waits.
         while (!File.Exists(processIdFile))
         {
             await Task.Delay(20, TestContext.Current.CancellationToken);

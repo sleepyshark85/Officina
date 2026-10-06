@@ -6,13 +6,12 @@ using Anthropic.Models.Beta.Messages;
 namespace Sleepyshark.Officina.Claude;
 
 /// <summary>
-/// Lays out one request (CTX-01, CTX-03, ARCHITECTURE §10): the tools sorted by name, each with eager input streaming,
-/// and the memory tool as Claude's native <c>memory_20250818</c>;
-/// the instructions as one system block with a cache point; automatic caching for the tail; then the conversation, where
-/// an operator message is a mid-conversation <c>system</c> message (CTX-02) and a block with raw JSON is sent as that JSON,
-/// byte for byte (MDL-05). A tool result is a <c>tool_result</c> block, with <c>is_error</c> when the call failed; a user
-/// message that follows a tool results message is a second user turn, which the API joins to the first. A typed output
-/// schema goes as the structured output format, adjusted (OUT-01); the tool choice is never forced.
+/// Lays out one request: the tools sorted by name with eager input streaming, the memory tool as Claude's native
+/// <c>memory_20250818</c>; the instructions as one cached system block; automatic caching for the tail; then the
+/// conversation, where an operator message becomes a mid-conversation <c>system</c> message and raw blocks are sent byte
+/// for byte. A tool result is a <c>tool_result</c> block, with <c>is_error</c> on failure; a user message after tool
+/// results is a second user turn, which the API joins to the first. A typed output schema goes as the structured output
+/// format, adjusted; the tool choice is never forced.
 /// </summary>
 internal static class ClaudeRequest
 {
@@ -49,10 +48,7 @@ internal static class ClaudeRequest
         .. context.CompactAt is null ? [] : new ApiEnum<string, AnthropicBeta>[] { "compact-2026-01-12" },
     ];
 
-    /// <summary>
-    /// Server-side context management (HIST-01, HIST-02): tool-result clearing, then threshold compaction (D12), whose
-    /// trigger must be at least 50,000 input tokens.
-    /// </summary>
+    /// <summary>Tool-result clearing, then threshold compaction, whose trigger must be at least 50,000 input tokens.</summary>
     private static List<Edit> Edits(ContextManagement context)
     {
         var edits = new List<Edit>();
@@ -89,7 +85,7 @@ internal static class ClaudeRequest
 
     private static BetaToolUnion Tool(Tool tool)
     {
-        // The memory tool is Claude's own, which the model is trained on: it has no schema or description of ours (MEM-01).
+        // The memory tool is Claude's own, which the model is trained on: it carries no schema or description of ours.
         if (tool.IsMemory)
         {
             return new BetaMemoryTool20250818();
@@ -105,7 +101,7 @@ internal static class ClaudeRequest
         };
     }
 
-    /// <summary>The messages as raw JSON, so stored blocks reach the wire exactly as they were received.</summary>
+    /// <summary>The messages as raw JSON, so stored blocks reach the wire exactly as received.</summary>
     private static JsonElement Messages(IEnumerable<Message> messages)
     {
         using var buffer = new MemoryStream();

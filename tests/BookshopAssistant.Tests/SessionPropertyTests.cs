@@ -8,16 +8,15 @@ using static BookshopAssistant.Tests.ConsoleSession;
 namespace BookshopAssistant.Tests;
 
 /// <summary>
-/// TEST-07 and TEST-02 for the reference application: over generated sequences of replies, each saved to the sessions
-/// table's text column after every step and resumed with a freshly built agent, some crashing while their tools run, the
-/// prefix stays byte-identical and every request is valid.
+/// Over generated replies, each saved to the sessions table's text column after every step and resumed with a freshly
+/// built agent, some crashing while their tools run, the prefix stays byte-identical and every request is valid.
 /// </summary>
 public class SessionPropertyTests(BookshopDatabase database) : IClassFixture<BookshopDatabase>
 {
-    /// <summary>One reply: its text, whether it carries a reasoning block, calls a tool, sends run context, and crashes while the tool runs.</summary>
+    /// <summary>One reply: its text, and whether it has a reasoning block, calls a tool, sends run context and crashes mid-tool.</summary>
     public sealed record ReplySpec(string Text, bool Thinking, bool CallsTool, bool Context, bool Crashes);
 
-    /// <summary>Pieces that JSON escapes, or that a store could normalize: quotes, backslashes, NUL, non-ASCII, a surrogate pair, a line separator.</summary>
+    /// <summary>Pieces JSON escapes or a store could normalize: quotes, backslashes, NUL, non-ASCII, a surrogate pair, a line separator.</summary>
     private static readonly string[] Pieces = ["café", "\"quoted\"", "back\\slash", "nul\0", "😀", "line\u2028sep", "<b>&amp;", "+1", "tab\tnew\nline", " "];
 
     private static readonly Gen<ReplySpec> Steps = Gen.Select(

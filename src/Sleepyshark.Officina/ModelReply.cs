@@ -13,7 +13,7 @@ internal sealed class ModelReply
 
     public string? Error { get; set; }
 
-    /// <summary>What the provider did to shorten the conversation for this call, for the audit trail (HIST-04).</summary>
+    /// <summary>What the provider did to shorten the conversation for this call, for the audit trail.</summary>
     public List<(AuditKind Kind, string Detail)> ContextEdits { get; } = [];
 
     public int Retries { get; set; }

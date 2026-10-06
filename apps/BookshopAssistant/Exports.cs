@@ -4,10 +4,9 @@ using Sleepyshark.Officina.Mcp;
 namespace BookshopAssistant;
 
 /// <summary>
-/// The export tools (APP-12): the reference filesystem MCP server, run in Docker over stdio by the compose file's
+/// The export tools: the reference filesystem MCP server, run in Docker over stdio by the compose file's
 /// <c>filesystem</c> service, which sees only the <c>exports</c> folder. The allow-list holds what an export needs:
-/// writing a file, which needs approval, and listing the folder. MCP annotations are not trusted (MCP-02): every tool is a
-/// write unless the host marks it read, so the application marks the listing read.
+/// writing a file (with approval) and listing the folder, which is marked read as MCP tools are writes by default.
 /// </summary>
 public static class Exports
 {
@@ -19,14 +18,13 @@ public static class Exports
     ];
 
     /// <summary>
-    /// The server, started with <c>docker compose run</c> on <paramref name="composeFile"/>; <paramref name="folder"/>,
-    /// if given, replaces the compose file's <c>exports</c> folder.
+    /// The server, started with <c>docker compose run</c> on <paramref name="composeFile"/>; <paramref name="folder"/>, if
+    /// given, replaces the compose file's <c>exports</c> folder.
     /// </summary>
     /// <remarks>
-    /// Ctrl+C, which cancels a reply (APP-03), reaches every process of the terminal's foreground process group, and stops
-    /// <c>docker compose run</c> with its container. On Linux the server therefore runs in a session of its own
-    /// (<c>setsid</c>), out of Ctrl+C's reach. Elsewhere it shares the console, so Ctrl+C also stops it, possibly during a
-    /// write; the next reply starts it again (MCP-04), and the audit trail shows it as disconnected.
+    /// Ctrl+C, which cancels a reply, reaches the terminal's whole foreground process group and would stop <c>docker
+    /// compose run</c>. On Linux the server therefore runs in its own session (<c>setsid</c>). Elsewhere Ctrl+C also stops it,
+    /// possibly mid-write; the next reply restarts it, and the audit trail shows it as disconnected.
     /// </remarks>
     public static McpServer Server(string composeFile, string? folder = null)
     {

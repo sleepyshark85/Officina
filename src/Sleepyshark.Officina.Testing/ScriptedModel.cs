@@ -4,9 +4,8 @@ using System.Text.Json;
 namespace Sleepyshark.Officina.Testing;
 
 /// <summary>
-/// A model that answers with replies scripted in advance, in order, and records every request (TEST-01). It needs no
-/// network or API key, and is safe to call from concurrent runs. Like the Claude API, it rejects a request whose
-/// messages break the <see cref="RoleSequence"/>.
+/// A model that answers with replies scripted in advance, in order, and records every request. It needs no network or
+/// API key and is safe for concurrent runs. Like the Claude API, it rejects requests that break <see cref="RoleSequence"/>.
 /// </summary>
 public sealed class ScriptedModel : IModel
 {
@@ -52,7 +51,7 @@ public sealed class ScriptedModel : IModel
         return Enqueue(events);
     }
 
-    /// <summary>Adds a call that streams <paramref name="streamedFirst"/> and then fails with <paramref name="exception"/>.</summary>
+    /// <summary>Adds a call that streams <paramref name="streamedFirst"/>, then fails with <paramref name="exception"/>.</summary>
     public ScriptedModel Fail(Exception exception, params ModelEvent[] streamedFirst)
     {
         ArgumentNullException.ThrowIfNull(exception);
@@ -71,7 +70,7 @@ public sealed class ScriptedModel : IModel
     public static ContentBlock TextBlock(string text) =>
         new(text, JsonSerializer.Serialize(new { type = "text", text }));
 
-    /// <summary>A tool call block as a provider sends it, with its raw JSON and its neutral view.</summary>
+    /// <summary>A tool call block as a provider sends it, with its raw JSON and neutral view.</summary>
     public static ContentBlock ToolCallBlock(ToolCall call)
     {
         ArgumentNullException.ThrowIfNull(call);
@@ -89,7 +88,7 @@ public sealed class ScriptedModel : IModel
             requests.Add(request);
         }
 
-        // An invalid request gets no reply, so the reply stays scripted for the next one, as the Claude API rejects it unanswered.
+        // An invalid request gets no reply, so the reply stays queued for the next one, as the Claude API rejects it unanswered.
         CheckRoles(request);
         lock (gate)
         {

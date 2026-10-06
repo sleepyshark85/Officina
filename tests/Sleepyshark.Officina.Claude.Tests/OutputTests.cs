@@ -4,7 +4,7 @@ using static Sleepyshark.Officina.Claude.Tests.StreamTests;
 
 namespace Sleepyshark.Officina.Claude.Tests;
 
-/// <summary>Typed output through Claude's structured output (OUT-01), with the schema adjusted as spike finding 6 found it needs.</summary>
+/// <summary>Typed output through Claude's structured output, with the schema adjusted to what it accepts.</summary>
 public class OutputTests
 {
     private static readonly JsonSerializerOptions Indented = new() { WriteIndented = true };

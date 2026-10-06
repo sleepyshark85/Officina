@@ -12,18 +12,17 @@ public enum Resolution
     Escalated,
 }
 
-/// <summary>What a job reports about its ticket: its typed output (OUT-01).</summary>
+/// <summary>What a job reports about its ticket: its typed output.</summary>
 public sealed record TicketOutcome(
     [property: Description("Answered when the note answers the customer; escalated when a person must act.")] Resolution Resolution,
     [property: Description("One sentence for the support team on what was done and why.")] string Report);
 
 /// <summary>
-/// A background agent (ARCHITECTURE §8): a job per support ticket, started by a queue or a schedule, with nobody to ask.
-/// It has no approver, so a call that needs approval is denied and the model is told (GEN-04). Its tools are the
-/// helpdesk's, from an MCP server over Streamable HTTP (MCP-01), and the application's own refund tool. Its record goes
-/// to a JSON-lines audit file (AUD-04), each job is limited by a budget (BUD-01), and it returns typed output beside its
-/// side effect, a note on the ticket. Each job is one stateless run, on a conversation named after its ticket. It has no
-/// memory: §8 allows one per job or tenant, but memory is optional (GEN-02), and a job that starts afresh needs none.
+/// A background agent: one job per support ticket, started by a queue or schedule, with nobody to ask. Without an
+/// approver, calls needing approval are denied and the model is told. Its tools are the helpdesk's MCP server, over
+/// Streamable HTTP, plus the app's own refund tool. It audits to a JSON-lines file, each job has a budget, and it returns
+/// typed output beside its side effect, a note on the ticket. Each job is one stateless run, on a conversation named
+/// after its ticket; it needs no memory, as each job starts afresh.
 /// </summary>
 public sealed class TicketJob : IAsyncDisposable
 {
@@ -38,15 +37,15 @@ public sealed class TicketJob : IAsyncDisposable
     public Agent Agent { get; }
 
     /// <summary>
-    /// Connects to the helpdesk at <paramref name="helpdeskUrl"/> with <paramref name="token"/>, and builds the agent.
-    /// <paramref name="refund"/> issues a refund in the application, given a ticket id and an amount; it returns a receipt.
+    /// Connects to the helpdesk at <paramref name="helpdeskUrl"/> with <paramref name="token"/> and builds the agent.
+    /// <paramref name="refund"/> issues a refund for a ticket id and amount, and returns a receipt.
     /// </summary>
     public static async Task<TicketJob> StartAsync(
         IModel model, Uri helpdeskUrl, string token, Func<string, decimal, string> refund, string auditFile, CancellationToken cancellationToken = default)
     {
         var server = McpServer.Http("helpdesk", helpdeskUrl, new Dictionary<string, string> { ["Authorization"] = $"Bearer {token}" });
 
-        // The host decides what each of the server's tools may do, rather than trusting its annotations (MCP-02).
+        // The host decides what each of the server's tools may do, rather than trusting its annotations.
         var helpdesk = await McpToolSource.ConnectAsync(
             server, [new AllowedTool("get_ticket", ToolKind.Read), new AllowedTool("add_note", ToolKind.Write)], cancellationToken).ConfigureAwait(false);
         try

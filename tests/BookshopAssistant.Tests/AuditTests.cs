@@ -5,7 +5,7 @@ using static BookshopAssistant.Tests.ConsoleSession;
 
 namespace BookshopAssistant.Tests;
 
-/// <summary>The audit table sink against the real database, and <c>/audit</c> end to end (APP-16, AUD-03, TEST-09).</summary>
+/// <summary>The audit table sink against the real database, and <c>/audit</c> end to end.</summary>
 public class AuditTests(BookshopDatabase database) : IClassFixture<BookshopDatabase>
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;

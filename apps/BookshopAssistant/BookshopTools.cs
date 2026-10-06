@@ -13,13 +13,13 @@ public sealed record OrderLine(
     [property: Description("How many copies, at least 1.")] int Quantity);
 
 /// <summary>
-/// The bookshop's nine tools (APP-05, APP-06) over PostgreSQL. Every query is a fixed, parameterized constant (APP-08):
-/// the model gives values, never SQL. A business rule failure, such as not enough stock, is an error result (APP-07); a
-/// database that cannot be reached throws, which the core turns into an error result too (APP-18).
+/// The bookshop's nine tools over PostgreSQL. Every query is a fixed, parameterized constant: the model gives values,
+/// never SQL. A business rule failure, such as too little stock, is an error result; a database that cannot be reached
+/// throws, which the core also turns into an error result.
 /// </summary>
 public sealed class BookshopTools(NpgsqlDataSource database)
 {
-    /// <summary>The most books one search returns: enough for a broad search of about 15k tokens (APP-17, TOOL-06).</summary>
+    /// <summary>The most books one search returns: enough for a broad search of about 15k tokens.</summary>
     public const int MaxSearchResults = 400;
 
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
@@ -249,7 +249,7 @@ public sealed class BookshopTools(NpgsqlDataSource database)
             return Error($"There is no customer with id {customerId}.");
         }
 
-        // Locks the books' stock rows, in id order so concurrent orders cannot deadlock, until the order commits.
+        // Locks the books' stock rows in id order, so concurrent orders cannot deadlock, until the order commits.
         var books = new Dictionary<int, (string Title, decimal Price, int Stock)>();
         await using (var command = new NpgsqlCommand(LockStockSql, connection, transaction))
         {

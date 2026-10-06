@@ -3,7 +3,7 @@ using static Sleepyshark.Officina.Claude.Tests.StreamTests;
 
 namespace Sleepyshark.Officina.Claude.Tests;
 
-/// <summary>The request layout (CTX-01, CTX-02, CTX-03, MDL-05), checked against golden JSON.</summary>
+/// <summary>The request layout, checked against golden JSON.</summary>
 public class RequestTests
 {
     private static readonly JsonSerializerOptions Indented = new() { WriteIndented = true };

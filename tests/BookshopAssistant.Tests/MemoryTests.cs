@@ -6,8 +6,8 @@ using static BookshopAssistant.Tests.ConsoleSession;
 namespace BookshopAssistant.Tests;
 
 /// <summary>
-/// TEST-09: memory per staff member end to end (APP-11, MEM-01…05). Each <see cref="ConsoleSession.RunAsync"/> is a start
-/// of the application; what one remembers, the next finds only in the memory store.
+/// Memory per staff member, end to end. Each <see cref="ConsoleSession.RunAsync"/> is an application start; what one
+/// remembers, the next finds only in the memory store.
 /// </summary>
 public class MemoryTests(BookshopDatabase database) : IClassFixture<BookshopDatabase>
 {
@@ -48,12 +48,12 @@ public class MemoryTests(BookshopDatabase database) : IClassFixture<BookshopData
             Assert.Equal("Here's the content of /memories/preferences.md with line numbers:\n     1\tShow prices with tax.", LastResults(second).Single().Content);
             InOrder(transcript, $"  > memory ", "  < memory: ok", "costs £7.54 with tax.", "/memories/preferences.md\n", "  Show prices with tax.\n");
 
-            // The run context names who is at the counter; memory never enters the instructions (MEM-05).
+            // The run context names who is at the counter; memory never enters the instructions.
             Assert.Contains("The staff member using the assistant is sam.", second.Requests[0].Messages[1].Text, StringComparison.Ordinal);
             Assert.All([.. first.Requests, .. second.Requests], request => Assert.Equal(first.Requests[0].Prefix.Instructions, request.Prefix.Instructions));
             Assert.DoesNotContain("Show prices", first.Requests[0].Prefix.Instructions, StringComparison.Ordinal);
 
-            // The write was audited before it ran, in Sam's scope (MEM-04, AUD-03).
+            // The write was audited before it ran, in Sam's scope.
             Assert.Equal("sam", await database.ScalarAsync<string>("select memory_scope from audit where call_id = $1 and kind = 'ToolStarted'", save));
             Assert.True(await database.ScalarAsync<bool>(
                 "select (select id from audit where call_id = $1 and kind = 'ToolStarted') < (select id from audit where call_id = $1 and kind = 'ToolEnded')", save));
