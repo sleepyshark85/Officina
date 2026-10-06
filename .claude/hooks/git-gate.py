@@ -74,6 +74,20 @@ def before_push(here, branch):
               "--verbosity", "quiet", "--blame-hang-timeout", "2m"], "Blocked: the tests fail; fix them, then push again.")
 
 
+def stages_all(rest):
+    """Whether commit options stage every tracked change themselves: -a, --all, or -a in a cluster such as -am."""
+    for arg in rest:
+        if arg in ("-a", "--all"):
+            return True
+        if re.fullmatch(r"-[A-Za-z]+", arg):
+            for flag in arg[1:]:
+                if flag == "a":
+                    return True
+                if flag in "mFCct":
+                    break
+    return False
+
+
 def block(reason):
     print(reason, file=sys.stderr)
     sys.exit(2)
@@ -90,6 +104,7 @@ def main():
     branches = {}
     staged = None
     checks = []
+    staging = False
     try:
         parsed = list(commands(text))
     except ValueError:
@@ -125,10 +140,18 @@ def main():
             targets = [branch if target in ("HEAD", "@") else target.removeprefix("refs/heads/") for target in targets]
             if "main" in targets:
                 block("Blocked: never push to main (CLAUDE.md). Push a branch and open a pull request.")
-            checks.append(lambda here=here, branch=branch: before_push(here, branch))
+            sources = [spec.lstrip("+").split(":")[0] for spec in refspecs]
+            pushed = branch if not sources or sources[0] in ("", "HEAD", "@") else sources[0]
+            checks.append(lambda here=here, pushed=pushed: before_push(here, pushed))
+        elif verb in ("add", "rm", "mv"):
+            staging = True
         elif verb == "commit":
             if branch == "main":
                 block("Blocked: never commit on main (CLAUDE.md). Create a branch first.")
+            # This hook runs before the whole line, so it sees the index only as it was before the line ran.
+            if staging or stages_all(rest):
+                block("Blocked: stage files in their own command before committing (no add/rm/mv in the same line, "
+                      "no commit -a), so the checks see what the commit holds.")
             staged = git(here, "diff", "--cached", "--name-status")
             checks.append(lambda here=here: before_commit(here))
 

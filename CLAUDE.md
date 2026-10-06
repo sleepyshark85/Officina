@@ -39,7 +39,9 @@ provider, MCP client, test kit and spike findings (`docs/spikes/` there) are reu
 - **Claude Code hooks enforce the mechanical rules** (`.claude/settings.json`, scripts in `.claude/hooks/`): no push
   to `main`, no commit on `main`, branch prefixes; before a commit that stages code, the format check and the Release
   build, and the staged files shown; before a push of more than docs, the tests; one type per `.cs` file named after
-  it, and no requirement IDs in code comments. A blocked action says why; fix the cause, never work around the hook.
+  it, and no requirement IDs in code comments. Stage files in their own command before `git commit` (no `add` in the
+  same line, no `commit -a`): the hook runs before the line, so it sees only what is already staged. A blocked action
+  says why; fix the cause, never work around the hook.
 - **The simplest thing that works.** Build only what the slice's acceptance criteria need: no abstraction without a
   current user, no setting without a known case (until then, a constant), no optimization without a measured target.
   Prefer a framework feature over custom code. Simplicity never at the cost of separation of concerns or clear design.
