@@ -46,7 +46,7 @@ classDiagram
 | **Run** | One unit of work: a definition applied to a conversation and an input, looping until the model stops. Ends in exactly one result. |
 | **Conversation** | The append-only sequence of messages between the agent and the model. Owned and stored by the host; empty and discarded for stateless runs. |
 | **Message, content block** | A message holds blocks: text, reasoning, tool request, tool result, server-tool result, compaction summary. Blocks are kept exactly as the model produced them. |
-| **Run input** | The user's message, plus optional **run context** (date, user profile, retrieved passages) **memory scope** (whose memory this run sees) and **budget** (limits on this run). |
+| **Run input** | The user's message, plus optional **run context** (date, user profile, retrieved passages), **memory scope** (whose memory this run sees) and **budget** (limits on this run). |
 | **Model** | A provider's model behind the model contract (§4.1), with its settings fixed for the conversation. |
 | **Tool** | An action the model may request: name, description, input schema, read or write, whether it needs approval. From the application or an MCP server. |
 | **Output contract** | Optional: the schema the final answer must satisfy. |
