@@ -11,6 +11,7 @@ If the two disagree, the code is right and this page needs updating.
 | [Agent, run and result](#agent-run-and-result) · [Conversation, messages and events](#conversation-messages-and-events) | UML class |
 | [Package dependencies](#package-dependencies) | Dependency graph |
 | [One chat turn](#one-chat-turn) · [A write call that needs approval](#a-write-call-that-needs-approval) · [One model call](#one-model-call) | Sequence |
+| [The agentic run loop](#the-agentic-run-loop) · [One tool call](#one-tool-call) | Flowchart |
 
 The diagrams follow the diagram-design skill's default style. Each `.html` file in [diagrams/](diagrams/) is the
 source; the `.svg` beside it is exported from it for this page.
@@ -157,6 +158,49 @@ message, and stored blocks are sent as their raw JSON. A transient failure (rate
 retried up to 5 attempts, waiting for `Retry-After` (at most 30 s) or a backoff with jitter. The engine discards the
 text already streamed. "Prompt is too long" stops the run as `ContextFull`. An authentication or invalid-request error,
 or a transient failure on the last attempt, throws `ClaudeException`, and the run fails.
+
+## Agentic loop
+
+### The agentic run loop
+
+![The agentic run loop](diagrams/officina-run-loop.svg)
+
+`RunEngine` drives a run: it calls the model, runs the tools the reply asks for, and calls the model again, until a
+structured signal ends it. Nothing in the reply's text decides anything. Each way out gives one `RunResult`:
+
+| Where | Signal | Result |
+|---|---|---|
+| Prefix check | The conversation's bound fingerprint differs from the agent's | `Failed(PrefixMismatch)` |
+| Tool sources | An `IToolSource` cannot connect | `Failed(ToolSourceUnavailable)`; cancelled meanwhile: `Stopped(Cancelled)` |
+| Budget check, before each call | `Spending.Reached()`: model calls, time, tokens or cost | `Stopped(Budget)`, with which limit as the detail |
+| Budget check | The 25 model calls a run may make are used up | `Stopped(IterationLimit)` |
+| Model call | An exception after the provider's retries, or a stream that ends without a stop reason | `Failed(ModelError)` |
+| Model call | Cancelled before the stop reason arrived | `Stopped(Cancelled)` |
+| Stop reason | `End` with no tool calls | `Completed`; with typed output, `Failed(InvalidOutput)` when the reply does not read |
+| Stop reason | `End` but the reply asked for tools; `ToolUse` with no calls; a stop reason the run cannot act on | `Failed(UnexpectedStop)` |
+| Stop reason | `MaxTokens` | `Stopped(OutputLimit)`, or `Stopped(Budget)` when the budget lowered the limit |
+| Stop reason | `Refusal`, `ContextFull` | `Stopped(Refusal)`, `Stopped(ContextFull)` |
+| Stop reason | `ToolUse` with calls | The loop goes on: the reply and the turn's input are appended, then the tools run |
+| After the tools | The host cancelled while they ran | `Stopped(Cancelled)`, after every call's result is appended |
+
+The user's message and the run context are held back and appended only together with the reply that answers them, so a
+run that ends without a reply leaves the conversation valid for the next one. A reply is not appended when the call
+failed or was cancelled, when it has no content, or when it asked for tools but stopped for anything other than
+`ToolUse` (`End`, `MaxTokens`, `Refusal`, `ContextFull`), as its last input may be cut short and calls without results
+are rejected. Calls a crash left unanswered get error results once the run has passed its prefix and tool-source
+checks, before the first model call. The run then ends with a `RunEnded` event, a `RunEnded` audit
+entry and the run span, whichever way it ended; a run the host abandons still ends its span and frees the conversation.
+
+### One tool call
+
+![One tool call](diagrams/officina-tool-call-flow.svg)
+
+`ToolPipeline` runs one reply's calls in call order. Read calls run together; a write waits for the calls before it
+and runs alone, and approvals are asked one at a time. Every refusal is an error result the model reads, never an
+exception: an unknown tool, invalid JSON, input that fails the schema, a denied or unattended approval, a write whose
+attempt could not be audited, a handler that throws or is cancelled. Calls that never started because the run was
+cancelled get an error result too, so every call in the reply is answered, in one message, in call order. The finish
+step redacts the agent's secrets and cuts the result at 64,000 characters with a note saying so.
 
 ## Principles and trade-offs
 

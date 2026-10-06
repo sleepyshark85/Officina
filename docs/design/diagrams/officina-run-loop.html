@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>The agentic run loop</title>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&amp;family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@400;500;600&amp;family=Noto+Sans+KR:wght@400;500;600&amp;family=Noto+Serif+KR:wght@400&amp;family=Noto+Sans+TC:wght@400;500;600&amp;family=Noto+Serif+TC:wght@400&amp;display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --color-paper: #f5f5f5; --color-ink: #2d3142; --color-muted: #4f5d75; --color-accent: #eb6c36;
+      --font-sans: 'Geist', system-ui, sans-serif; --font-serif: 'Instrument Serif', 'Noto Serif KR', serif; --font-mono: 'Geist Mono', ui-monospace, monospace;
+    }
+    body { font-family: var(--font-sans); background: var(--color-paper); color: var(--color-ink); min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 3rem 2rem; }
+    .frame { max-width: 1200px; width: 100%; }
+    .eyebrow { font-family: var(--font-mono); font-size: 0.66rem; font-weight: 500; letter-spacing: 0.18em; text-transform: uppercase; color: var(--color-muted); margin-bottom: 0.5rem; }
+    h1 { font-family: var(--font-serif); font-size: clamp(1.5rem, 2.4vw + 0.75rem, 2rem); font-weight: 400; letter-spacing: -0.02em; line-height: 1.15; color: var(--color-ink); margin-bottom: 1.5rem; }
+    svg { width: 100%; min-width: 760px; display: block; }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <p class="eyebrow">Flowchart · Run engine</p>
+    <h1>The agentic run loop</h1>
+
+    <svg viewBox="0 0 880 1048" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="officina-run-loop-title officina-run-loop-desc">
+      <title id="officina-run-loop-title">The agentic run loop</title>
+      <desc id="officina-run-loop-desc">Flowchart showing a run checking its prefix and tool sources, answering calls a crash left, checking its budget, calling the model, and either running the reply's tool calls and calling the model again or ending as completed, stopped or failed.</desc>
+      <defs>
+        <marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#4f5d75"/></marker>
+        <marker id="arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#eb6c36"/></marker>
+        <marker id="arrow-link" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#2e5aa8"/></marker>
+      </defs>
+      <rect width="100%" height="100%" fill="#f5f5f5"/>
+      <path d="M 300,96 L 300,128" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <path d="M 300,216 L 300,248" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <path d="M 300,336 L 300,368" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <path d="M 300,424 L 300,456" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <path d="M 300,544 L 300,576" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <path d="M 300,640 L 300,672" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <path d="M 300,760 L 300,792" fill="none" stroke="#eb6c36" stroke-width="1.2" marker-end="url(#arrow-accent)"/>
+      <path d="M 160,824 L 104,824 Q 96,824 96,816 L 96,508 Q 96,500 104,500 L 200,500" fill="none" stroke="#eb6c36" stroke-width="1.2" marker-end="url(#arrow-accent)"/>
+      <path d="M 400,172 L 792,172 Q 800,172 800,180 L 800,888" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <path d="M 400,292 L 752,292 Q 760,292 760,300 L 760,888" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <path d="M 400,500 L 712,500 Q 720,500 720,508 L 720,888" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <path d="M 400,716 L 672,716 Q 680,716 680,724 L 680,888" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <rect x="320.0" y="227" width="24.8" height="12" rx="2" fill="#f5f5f5"/>
+      <text x="324.0" y="236" fill="#7a8399" font-size="8" font-family="'Geist Mono', monospace" text-anchor="start" letter-spacing="0.06em">YES</text>
+      <rect x="320.0" y="347" width="24.8" height="12" rx="2" fill="#f5f5f5"/>
+      <text x="324.0" y="356" fill="#7a8399" font-size="8" font-family="'Geist Mono', monospace" text-anchor="start" letter-spacing="0.06em">YES</text>
+      <rect x="320.0" y="555" width="24.8" height="12" rx="2" fill="#f5f5f5"/>
+      <text x="324.0" y="564" fill="#7a8399" font-size="8" font-family="'Geist Mono', monospace" text-anchor="start" letter-spacing="0.06em">YES</text>
+      <rect x="320.0" y="771" width="86.4" height="12" rx="2" fill="#f5f5f5"/>
+      <text x="324.0" y="780" fill="#7a8399" font-size="8" font-family="'Geist Mono', monospace" text-anchor="start" letter-spacing="0.06em">TOOL USE+CALLS</text>
+      <rect x="104.0" y="655" width="58.4" height="12" rx="2" fill="#f5f5f5"/>
+      <text x="108.0" y="664" fill="#7a8399" font-size="8" font-family="'Geist Mono', monospace" text-anchor="start" letter-spacing="0.06em">NEXT CALL</text>
+      <rect x="525.2" y="155" width="69.6" height="12" rx="2" fill="#f5f5f5"/>
+      <text x="560.0" y="164" fill="#7a8399" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">NO · FAILED</text>
+      <rect x="530.8" y="275" width="58.4" height="12" rx="2" fill="#f5f5f5"/>
+      <text x="560.0" y="284" fill="#7a8399" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">NO · ENDS</text>
+      <rect x="522.4" y="483" width="75.2" height="12" rx="2" fill="#f5f5f5"/>
+      <text x="560.0" y="492" fill="#7a8399" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">NO · STOPPED</text>
+      <rect x="510.8" y="699" width="58.4" height="12" rx="2" fill="#f5f5f5"/>
+      <text x="540.0" y="708" fill="#7a8399" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">ANY OTHER</text>
+      <rect x="160" y="40" width="280" height="56" rx="20" fill="#f5f5f5"/>
+      <rect x="160" y="40" width="280" height="56" rx="20" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+      <text x="300.0" y="60.0" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Run starts</text>
+      <text x="300.0" y="75.0" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">one run per conversation at a time</text>
+      <text x="300.0" y="87.0" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">RunStarted audited · run span opened</text>
+      <polygon points="300,128.0 400.0,172 300,216.0 200.0,172" fill="#f5f5f5"/>
+      <polygon points="300,128.0 400.0,172 300,216.0 200.0,172" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+      <text x="300" y="170" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Prefix unchanged?</text>
+      <text x="300" y="185" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">fingerprint check</text>
+      <polygon points="300,248.0 400.0,292 300,336.0 200.0,292" fill="#f5f5f5"/>
+      <polygon points="300,248.0 400.0,292 300,336.0 200.0,292" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+      <text x="300" y="290" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Tool sources up?</text>
+      <text x="300" y="305" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">connect · reconnect</text>
+      <rect x="160" y="368" width="280" height="56" rx="6" fill="#f5f5f5"/>
+      <rect x="160" y="368" width="280" height="56" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+      <text x="300.0" y="394.0" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Answer unanswered calls</text>
+      <text x="300.0" y="409.0" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">error results for calls a crash left</text>
+      <polygon points="300,456.0 400.0,500 300,544.0 200.0,500" fill="#f5f5f5"/>
+      <polygon points="300,456.0 400.0,500 300,544.0 200.0,500" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+      <text x="300" y="498" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Budget left?</text>
+      <text x="300" y="513" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">≤25 calls · run budget</text>
+      <rect x="160" y="576" width="280" height="64" rx="6" fill="#f5f5f5"/>
+      <rect x="160" y="576" width="280" height="64" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+      <rect x="168" y="582" width="35" height="12" rx="2" fill="none" stroke="#2d3142" stroke-opacity="0.4" stroke-width="0.8"/>
+      <text x="185.5" y="591" fill="#2d3142" fill-opacity="0.8" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">MODEL</text>
+      <text x="300.0" y="600.0" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Call the model</text>
+      <text x="300.0" y="615.0" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">prefix + history + this turn</text>
+      <text x="300.0" y="627.0" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">streams text · blocks · usage</text>
+      <polygon points="300,672.0 400.0,716 300,760.0 200.0,716" fill="#f5f5f5"/>
+      <polygon points="300,672.0 400.0,716 300,760.0 200.0,716" fill="#eb6c36" fill-opacity="0.08" stroke="#eb6c36" stroke-width="1"/>
+      <text x="300" y="714" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Stop reason?</text>
+      <text x="300" y="729" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">error · cancel · stop_reason</text>
+      <rect x="160" y="792" width="280" height="64" rx="6" fill="#f5f5f5"/>
+      <rect x="160" y="792" width="280" height="64" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+      <rect x="168" y="798" width="35" height="12" rx="2" fill="none" stroke="#2d3142" stroke-opacity="0.4" stroke-width="0.8"/>
+      <text x="185.5" y="807" fill="#2d3142" fill-opacity="0.8" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">TOOLS</text>
+      <text x="300.0" y="816.0" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Append reply, run tools</text>
+      <text x="300.0" y="831.0" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">each call through the tool pipeline</text>
+      <text x="300.0" y="843.0" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">results appended as one message</text>
+      <rect x="640" y="888" width="200" height="64" rx="20" fill="#f5f5f5"/>
+      <rect x="640" y="888" width="200" height="64" rx="20" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+      <text x="740.0" y="912.0" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Run ends</text>
+      <text x="740.0" y="927.0" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">Completed · Stopped · Failed</text>
+      <text x="740.0" y="939.0" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">RunEnded event + audit entry</text>
+      <text x="460" y="790" fill="#4f5d75" font-size="13" font-style="italic" font-family="'Instrument Serif', serif">Cancelled mid-tools: every call</text>
+      <text x="460" y="807" fill="#4f5d75" font-size="13" font-style="italic" font-family="'Instrument Serif', serif">still gets its result, then</text>
+      <text x="460" y="824" fill="#4f5d75" font-size="13" font-style="italic" font-family="'Instrument Serif', serif">the run stops.</text>
+      <line x1="40" y1="972" x2="840" y2="972" stroke="#2d3142" stroke-opacity="0.10" stroke-width="0.8"/>
+      <text x="40" y="988" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.18em">LEGEND</text>
+      <rect x="40" y="1002" width="28" height="12" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+      <text x="76" y="1012" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Start / end</text>
+      <rect x="156" y="1002" width="28" height="12" rx="2" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+      <text x="192" y="1012" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Step</text>
+      <polygon points="253,1000 267,1008 253,1016 239,1008" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+      <text x="275" y="1012" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Decision on a structured signal</text>
+      <rect x="451" y="1002" width="28" height="12" rx="2" fill="#eb6c36" fill-opacity="0.08" stroke="#eb6c36" stroke-width="1"/>
+      <text x="487" y="1012" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">The structured signal that loops</text>
+
+    </svg>
+  </div>
+</body>
+</html>
