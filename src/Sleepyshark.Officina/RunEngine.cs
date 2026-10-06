@@ -117,7 +117,7 @@ internal static class RunEngine
             // A reply the lowered output limit cut short stopped for the budget, once the budget allows no more.
             var budgetCut = limit is not null && reply.Stop?.Reason == ModelStopReason.MaxTokens ? spending.Reached() : null;
             var toolCalls = reply.Blocks.Select(block => block.ToolCall).OfType<ToolCall>().ToList();
-            var (append, end) = Decide(agent, reply, toolCalls, usage, budgetCut);
+            var (append, end) = Decide(agent, reply, toolCalls.Count > 0, usage, budgetCut);
             if (append)
             {
                 conversation.Bind(fingerprint);
@@ -317,16 +317,16 @@ internal static class RunEngine
     /// without results, which the provider rejects. An end with calls fails, as a completed run would report an answer
     /// the history does not hold.
     /// </remarks>
-    private static (bool Append, RunResult? End) Decide(AgentDefinition agent, Reply reply, List<ToolCall> toolCalls, Usage usage, string? budgetCut) =>
-        (reply.Error, reply.Stop, toolCalls.Count > 0) switch
+    private static (bool Append, RunResult? End) Decide(AgentDefinition agent, Reply reply, bool hasCalls, Usage usage, string? budgetCut) =>
+        (reply.Error, reply.Stop, reply.Blocks.Count > 0, hasCalls) switch
         {
-            ({ } error, _, _) => (false, new Failed(FailureReason.ModelError, agent.Redact(error), usage)),
-            (_, null, _) => (false, new Stopped(StopReason.Cancelled, null, usage)),
-            _ when reply.Blocks.Count == 0 => (false, Result(agent, reply.Stop, reply.Blocks, usage, budgetCut)),
-            (_, { Reason: ModelStopReason.ToolUse }, true) => (true, null),
-            (_, { Reason: ModelStopReason.End }, true) => (false, new Failed(FailureReason.UnexpectedStop, "The model's reply asked for tools but did not stop for them.", usage)),
-            (_, _, true) => (false, Result(agent, reply.Stop, reply.Blocks, usage, budgetCut)),
-            _ => (true, Result(agent, reply.Stop, reply.Blocks, usage, budgetCut)),
+            ({ } error, _, _, _) => (false, new Failed(FailureReason.ModelError, agent.Redact(error), usage)),
+            (_, null, _, _) => (false, new Stopped(StopReason.Cancelled, null, usage)),
+            (_, { } stop, false, _) => (false, Result(agent, stop, reply.Blocks, usage, budgetCut)),
+            (_, { Reason: ModelStopReason.ToolUse }, _, true) => (true, null),
+            (_, { Reason: ModelStopReason.End }, _, true) => (false, new Failed(FailureReason.UnexpectedStop, "The model's reply asked for tools but did not stop for them.", usage)),
+            (_, { } stop, _, true) => (false, Result(agent, stop, reply.Blocks, usage, budgetCut)),
+            (_, { } stop, _, false) => (true, Result(agent, stop, reply.Blocks, usage, budgetCut)),
         };
 
     /// <summary>The result a reply's stop reason maps to, when the run ends with it.</summary>
