@@ -144,7 +144,7 @@ public class ConversationPropertyTests
 
             var before = conversation.Messages.Select(message => JsonSerializer.Serialize(message)).ToList();
             var events = new List<RunEvent>();
-            await foreach (var runEvent in agent.StreamAsync(conversation, "Go.", "Date: 2026-10-05.", cancellation.Token))
+            await foreach (var runEvent in agent.StreamAsync(conversation, "Go.", new() { Context = "Date: 2026-10-05." }, cancellation.Token))
             {
                 events.Add(runEvent);
                 if (runEvent is TextStreamed && run.CancelAt == 5)

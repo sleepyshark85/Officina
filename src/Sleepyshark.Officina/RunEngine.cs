@@ -13,9 +13,9 @@ internal static class RunEngine
     internal const int MaxModelCalls = 25;
 
     public static async IAsyncEnumerable<RunEvent> StreamAsync(
-        AgentDefinition agent, Conversation conversation, string message, string? context, string? memoryScope,
-        [EnumeratorCancellation] CancellationToken cancellationToken)
+        AgentDefinition agent, Conversation conversation, string message, RunOptions options, [EnumeratorCancellation] CancellationToken cancellationToken)
     {
+        var (context, memoryScope) = (options.Context, options.MemoryScope);
         conversation.StartRun();
         var span = Telemetry.StartRun(agent, conversation, message);
         var ended = false;
@@ -25,7 +25,7 @@ internal static class RunEngine
             span?.SetTag("officina.run.id", audit.Run);
             span?.SetTag("officina.memory.scope", memoryScope);
             await audit.RecordAsync(AuditKind.RunStarted).ConfigureAwait(false);
-            var (result, spending) = (new StrongBox<RunResult>(), new Spending(agent));
+            var (result, spending) = (new StrongBox<RunResult>(), new Spending(agent, options.Budget));
             await foreach (var runEvent in LoopAsync(agent, conversation, message, context, memoryScope, audit, span, spending, result, cancellationToken).ConfigureAwait(false))
             {
                 yield return runEvent;

@@ -309,7 +309,7 @@ public sealed partial class BookshopConsole(
     /// </summary>
     private async Task<SessionSummary?> SummarizeAsync(string id, Conversation conversation)
     {
-        var result = await summarizer!.RunAsync(SessionSummarizer.Transcript(conversation));
+        var result = await summarizer!.RunAsync(SessionSummarizer.Transcript(conversation), SessionSummarizer.Options);
         if (result is not Completed { Output: SessionSummary summary })
         {
             var reason = result switch
@@ -389,14 +389,14 @@ public sealed partial class BookshopConsole(
         Volatile.Write(ref reply, cancellation);
         var conversation = session.Conversation;
         var left = budgets.Session - session.Cost;
-        var budgeted = agent with { Budget = new Budget { Cost = Math.Max(0, Math.Min(budgets.Reply, left)) } };
+        var options = new RunOptions { Context = context, MemoryScope = memoryScope, Budget = new Budget { Cost = Math.Max(0, Math.Min(budgets.Reply, left)) } };
         var (saveFailed, labelled, compacted) = (false, false, false);
 
         // What the reply has spent so far, from each model call's usage, so every save stores the session's whole spend.
         var (spent, spentCost) = (default(Usage), 0m);
         try
         {
-            await foreach (var runEvent in budgeted.StreamAsync(conversation, message, context, memoryScope, cancellation.Token))
+            await foreach (var runEvent in agent.StreamAsync(conversation, message, options, cancellation.Token))
             {
                 switch (runEvent)
                 {

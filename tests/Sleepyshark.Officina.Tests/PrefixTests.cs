@@ -60,7 +60,7 @@ public class PrefixTests
             .Reply("Paris.");
         var conversation = new Conversation();
         var agent = Agents.With(before, tools: Agents.SearchTool());
-        await agent.RunAsync(conversation, "Hi", "Date: 2026-10-05.", Ct);
+        await agent.RunAsync(conversation, "Hi", new() { Context = "Date: 2026-10-05." }, Ct);
         await agent.RunAsync(conversation, "Capital of France?", cancellationToken: Ct);
         var saved = JsonSerializer.Serialize(conversation);
 
@@ -68,7 +68,7 @@ public class PrefixTests
         var after = new ScriptedModel().Reply("Berlin.").Reply("Rome.");
         var resumed = JsonSerializer.Deserialize<Conversation>(saved)!;
         var rebuilt = Agents.With(after, tools: Agents.SearchTool());
-        await rebuilt.RunAsync(resumed, "And Germany?", "Date: 2026-10-06.", Ct);
+        await rebuilt.RunAsync(resumed, "And Germany?", new() { Context = "Date: 2026-10-06." }, Ct);
         var last = await rebuilt.RunAsync(resumed, "And Italy?", cancellationToken: Ct);
 
         Assert.Equal("Rome.", Assert.IsType<Completed>(last).Text);

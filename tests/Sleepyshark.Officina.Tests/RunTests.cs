@@ -54,7 +54,7 @@ public class RunTests
             new ModelStopped(ModelStopReason.End));
         var conversation = new Conversation();
 
-        var events = await Agents.CollectAsync(Agents.With(model).StreamAsync(conversation, "Hi", "Today is Monday.", Ct));
+        var events = await Agents.CollectAsync(Agents.With(model).StreamAsync(conversation, "Hi", new() { Context = "Today is Monday." }, Ct));
 
         Assert.Collection(
             events,
@@ -74,7 +74,7 @@ public class RunTests
     {
         var model = new ScriptedModel().Reply("Good morning, Ana.");
 
-        await Agents.With(model).RunAsync(new Conversation(), "Hi", "Date: 2026-10-05. Staff: Ana.", Ct);
+        await Agents.With(model).RunAsync(new Conversation(), "Hi", new() { Context = "Date: 2026-10-05. Staff: Ana." }, Ct);
 
         Assert.Equal(
             [(Role.User, "Hi"), (Role.Operator, "Date: 2026-10-05. Staff: Ana.")],
@@ -175,7 +175,7 @@ public class RunTests
         var model = new ScriptedModel().Reply(new ModelStopped(ModelStopReason.End));
         var conversation = new Conversation();
 
-        var result = await Agents.With(model).RunAsync(conversation, "Hi", "Date: 2026-10-05.", Ct);
+        var result = await Agents.With(model).RunAsync(conversation, "Hi", new() { Context = "Date: 2026-10-05." }, Ct);
 
         Assert.Equal(new Completed("", default), Agents.Outcome(result));
         Assert.Empty(conversation.Messages);
@@ -188,8 +188,8 @@ public class RunTests
         var agent = Agents.With(model);
         var conversation = new Conversation();
 
-        Assert.IsType<Failed>(await agent.RunAsync(conversation, "Hi", "Date: 2026-10-05.", Ct));
-        var result = await agent.RunAsync(conversation, "Hi again", "Date: 2026-10-05.", Ct);
+        Assert.IsType<Failed>(await agent.RunAsync(conversation, "Hi", new() { Context = "Date: 2026-10-05." }, Ct));
+        var result = await agent.RunAsync(conversation, "Hi again", new() { Context = "Date: 2026-10-05." }, Ct);
 
         Assert.Equal("Hello.", Assert.IsType<Completed>(result).Text);
         Assert.Equal([Role.User, Role.Operator], model.Requests[1].Messages.Select(message => message.Role));
@@ -202,7 +202,7 @@ public class RunTests
         var agent = Agents.With(new ScriptedModel());
 
         await Assert.ThrowsAsync<ArgumentException>(() => agent.RunAsync(new Conversation(), " ", cancellationToken: Ct));
-        await Assert.ThrowsAsync<ArgumentException>(() => agent.RunAsync(new Conversation(), "Hi", "\n", Ct));
+        await Assert.ThrowsAsync<ArgumentException>(() => agent.RunAsync(new Conversation(), "Hi", new() { Context = "\n" }, Ct));
     }
 
     [Fact]

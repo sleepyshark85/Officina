@@ -21,7 +21,7 @@ public class ToolLoopTests
         var tool = Agents.Tool("search", schema: Agents.SearchSchema, handler: (input, _) => Task.FromResult(new ToolOutput($"found {input.GetProperty("query")}")));
         var conversation = new Conversation();
 
-        var result = await Agents.With(model, tools: tool).RunAsync(conversation, "Is Gaudy Night in stock?", "Date: 2026-10-05.", Ct);
+        var result = await Agents.With(model, tools: tool).RunAsync(conversation, "Is Gaudy Night in stock?", new() { Context = "Date: 2026-10-05." }, Ct);
 
         Assert.Equal("It is in stock.", Assert.IsType<Completed>(result).Text);
         Assert.Equal([new ToolResult("c1", "found Gaudy Night", false)], Results(conversation, 3));
@@ -31,7 +31,7 @@ public class ToolLoopTests
     }
 
     [Fact]
-    public async Task A_tool_handler_gets_the_runs_memory_scope()
+    public async Task MEM_03_a_tool_handler_gets_the_runs_memory_scope()
     {
         var scopes = new ConcurrentQueue<string?>();
         var whoami = new Tool("whoami", "Says whose run it is.", """{"type":"object"}""", ToolKind.Read, (_, context, _) =>
@@ -42,7 +42,7 @@ public class ToolLoopTests
         var model = new ScriptedModel().CallTools(new ToolCall("c1", "whoami", "{}")).Reply("Sam.").CallTools(new ToolCall("c2", "whoami", "{}")).Reply("Nobody.");
         var agent = Agents.With(model, tools: whoami);
 
-        await agent.RunAsync(new Conversation(), "Who am I?", null, "sam", Ct);
+        await agent.RunAsync(new Conversation(), "Who am I?", new() { MemoryScope = "sam" }, Ct);
         await agent.RunAsync("Who am I?", cancellationToken: Ct);
 
         Assert.Equal(["sam", null], scopes);
@@ -307,7 +307,7 @@ public class ToolLoopTests
         var agent = Agents.With(model, tools: tool);
         var conversation = new Conversation();
 
-        var result = await agent.RunAsync(conversation, "Find it.", "Date: 2026-10-05.", Ct);
+        var result = await agent.RunAsync(conversation, "Find it.", new() { Context = "Date: 2026-10-05." }, Ct);
 
         Assert.Equal(new Stopped(StopReason.OutputLimit, null, default), Agents.Outcome(result));
         Assert.False(ran);
@@ -336,7 +336,7 @@ public class ToolLoopTests
         var agent = Agents.With(model, tools: tool);
         var conversation = new Conversation();
 
-        var result = await agent.RunAsync(conversation, "Find it.", "Date: 2026-10-05.", Ct);
+        var result = await agent.RunAsync(conversation, "Find it.", new() { Context = "Date: 2026-10-05." }, Ct);
 
         Assert.Equal(expected, Agents.Outcome(result));
         Assert.False(ran);
@@ -460,7 +460,7 @@ public class ToolLoopTests
             Results(conversation, 2));
 
         // The next run's message follows the results, which the API joins into one user turn.
-        Assert.Equal("Hello again.", Assert.IsType<Completed>(await agent.RunAsync(conversation, "Hi.", "Date: 2026-10-05.", Ct)).Text);
+        Assert.Equal("Hello again.", Assert.IsType<Completed>(await agent.RunAsync(conversation, "Hi.", new() { Context = "Date: 2026-10-05." }, Ct)).Text);
         Assert.Null(RoleSequence.Problem(conversation.Messages));
     }
 

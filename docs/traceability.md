@@ -103,7 +103,7 @@ only a live run or inspection checks, noted in the last column.
 |---|---|---|
 | MEM-01 | Core/MemoryTests: `MEM_01_the_model_views_creates_edits_renames_and_deletes_files_…`, `MEM_01_mistakes_are_error_results_that_change_nothing`, `MEM_01_a_long_file_s_view_is_cut_at_16_000_characters_…`; Claude/MemoryRequestTests: `The_memory_tool_is_sent_as_claude_s_native_tool_…` | |
 | MEM-02 | Core/MemoryTests: `MEM_01_the_model_views_…` (both stores), `MEM_03_scopes_that_differ_only_in_case_stay_apart` | |
-| MEM-03 | Core/MemoryTests: `MEM_03_a_run_sees_only_its_scope_s_files`, `MEM_03_a_path_outside_the_scope_is_refused_with_an_error_result`, `MEM_03_a_run_of_an_agent_with_memory_needs_a_valid_scope`, `MEM_03_windows_device_names_are_not_memory_paths`; Core/MemoryPropertyTests: `Memory_paths_never_leave_their_scope`; Samples/ChatAssistantTests: `Memory_is_kept_per_user_…` | |
+| MEM-03 | Core/MemoryTests: `MEM_03_a_run_sees_only_its_scope_s_files`, `MEM_03_a_path_outside_the_scope_is_refused_with_an_error_result`, `MEM_03_a_run_of_an_agent_with_memory_needs_a_valid_scope`, `MEM_03_windows_device_names_are_not_memory_paths`; Core/ToolLoopTests: `MEM_03_a_tool_handler_gets_the_runs_memory_scope`; Core/MemoryPropertyTests: `Memory_paths_never_leave_their_scope`; Samples/ChatAssistantTests: `Memory_is_kept_per_user_…` | |
 | MEM-04 | Core/MemoryTests: `MEM_04_memory_writes_are_audited_before_they_run_and_ask_approval_while_views_do_not` | |
 | MEM-05 | Core/MemoryTests: `MEM_05_memory_never_reaches_the_instructions_and_the_prefix_stays_stable_as_it_changes` | |
 

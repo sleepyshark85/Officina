@@ -87,14 +87,17 @@ public static class MemoryTool
     public static Tool Create(IMemoryStore store, bool needsApproval = false)
     {
         ArgumentNullException.ThrowIfNull(store);
-        return new Tool(
-            Name, Description, Schema, ToolKind.Write,
-            (input, context, cancellationToken) => RunAsync(store, context.MemoryScope ?? throw new InvalidOperationException("The run has no memory scope."), input, cancellationToken),
-            needsApproval)
+        return new Tool(Name, Description, Schema, ToolKind.Write, HandleAsync, needsApproval)
         {
             IsMemory = true,
             ExemptFromApproval = Views,
         };
+
+        Task<ToolOutput> HandleAsync(JsonElement input, ToolContext context, CancellationToken cancellationToken)
+        {
+            var scope = context.MemoryScope ?? throw new InvalidOperationException("The run has no memory scope.");
+            return RunAsync(store, scope, input, cancellationToken);
+        }
     }
 
     /// <summary>For providers without a native memory tool: what the model reads instead of its trained description.</summary>

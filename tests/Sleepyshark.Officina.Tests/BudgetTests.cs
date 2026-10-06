@@ -17,8 +17,8 @@ public class BudgetTests
     private static ModelEvent[] CallTool(string id, Usage usage) =>
         [new BlockReceived(ScriptedModel.ToolCallBlock(new ToolCall(id, "search", """{"query":"x"}"""))), new UsageReceived(usage), new ModelStopped(ModelStopReason.ToolUse)];
 
-    private static AgentDefinition Agent(ScriptedModel model, Budget? budget, TimeProvider? time = null, Tool? tool = null) =>
-        Agents.With(model, tools: tool ?? Agents.SearchTool()) with { Budget = budget, Time = time ?? TimeProvider.System };
+    private static AgentDefinition Agent(ScriptedModel model, TimeProvider? time = null, Tool? tool = null) =>
+        Agents.With(model, tools: tool ?? Agents.SearchTool()) with { Time = time ?? TimeProvider.System };
 
     [Fact]
     public void Cost_prices_each_kind_of_token_and_cache_writes_by_how_long_they_are_kept()
@@ -39,7 +39,7 @@ public class BudgetTests
             .Reply([.. CallTool("c1", new Usage(100, 20, 0, 1_000, 1_000))[..^1], .. CallTool("c2", new Usage(0, 5, 0, 0))[..1], new ModelStopped(ModelStopReason.ToolUse)])
             .Reply(new BlockReceived(ScriptedModel.TextBlock("Done.")), new UsageReceived(new Usage(10, 5, 1_100, 0)), new ModelStopped(ModelStopReason.End));
 
-        var events = await Agents.CollectAsync(Agent(model, null, time, slow).StreamAsync(new Conversation(), "Go.", cancellationToken: Ct));
+        var events = await Agents.CollectAsync(Agent(model, time, slow).StreamAsync(new Conversation(), "Go.", cancellationToken: Ct));
 
         var result = Assert.IsType<Completed>(Assert.IsType<RunEnded>(events[^1]).Result);
         Assert.Equal(new Usage(110, 25, 1_100, 1_000, 1_000), result.Usage);
@@ -53,7 +53,7 @@ public class BudgetTests
         var model = new ScriptedModel { Price = Price }.Reply(CallTool("c1", new Usage(100, 50, 0, 0))).Reply("Unused.");
         var conversation = new Conversation();
 
-        var result = await Agent(model, new Budget { Cost = 0.001m }).RunAsync(conversation, "Go.", cancellationToken: Ct);
+        var result = await Agent(model).RunAsync(conversation, "Go.", new() { Budget = new Budget { Cost = 0.001m } }, Ct);
 
         var stopped = Assert.IsType<Stopped>(result);
         Assert.Equal((StopReason.Budget, "The cost budget is used up: $0.0014 of $0.001."), (stopped.Reason, stopped.Detail));
@@ -68,8 +68,8 @@ public class BudgetTests
     {
         var model = new ScriptedModel { Price = Price }.Reply(CallTool("c1", new Usage(200, 100, 0, 0))).Reply("Done.").Reply("Free.");
 
-        await Agent(model, new Budget { Cost = 0.01m, Tokens = 1_000 }).RunAsync(new Conversation(), "Go.", cancellationToken: Ct);
-        await Agent(model, null).RunAsync(new Conversation(), "Go.", cancellationToken: Ct);
+        await Agent(model).RunAsync(new Conversation(), "Go.", new() { Budget = new Budget { Cost = 0.01m, Tokens = 1_000 } }, Ct);
+        await Agent(model).RunAsync(new Conversation(), "Go.", cancellationToken: Ct);
 
         // $0.01 buys 500 output tokens, and 1,000 tokens are left; then $0.0072 buys 360, and 700 tokens are left.
         Assert.Equal([500, 360, null], model.Requests.Select(request => request.MaxOutputTokens));
@@ -81,8 +81,8 @@ public class BudgetTests
         ModelEvent[] Cut(long output) => [new TextDelta("Long"), new BlockReceived(ScriptedModel.TextBlock("Long")), new UsageReceived(new Usage(10, output, 0, 0)), new ModelStopped(ModelStopReason.MaxTokens)];
         var model = new ScriptedModel { Price = Price }.Reply(Cut(50)).Reply(Cut(30));
 
-        var cut = await Agent(model, new Budget { Cost = 0.001m }).RunAsync(new Conversation(), "Go.", cancellationToken: Ct);
-        var own = await Agent(model, new Budget { Cost = 0.01m }).RunAsync(new Conversation(), "Go.", cancellationToken: Ct);
+        var cut = await Agent(model).RunAsync(new Conversation(), "Go.", new() { Budget = new Budget { Cost = 0.001m } }, Ct);
+        var own = await Agent(model).RunAsync(new Conversation(), "Go.", new() { Budget = new Budget { Cost = 0.01m } }, Ct);
 
         Assert.Equal((StopReason.Budget, "The cost budget is used up: $0.00104 of $0.001."), (Assert.IsType<Stopped>(cut).Reason, ((Stopped)cut).Detail));
         Assert.Equal(StopReason.OutputLimit, Assert.IsType<Stopped>(own).Reason);
@@ -99,8 +99,8 @@ public class BudgetTests
         });
         var model = new ScriptedModel().CallTools(new ToolCall("c1", "search", """{"query":"x"}""")).CallTools(new ToolCall("c2", "search", """{"query":"x"}"""));
 
-        var calls = await Agent(model, new Budget { ModelCalls = 1 }).RunAsync(new Conversation(), "Go.", cancellationToken: Ct);
-        var timed = await Agent(model, new Budget { Time = TimeSpan.FromSeconds(5) }, time, slow).RunAsync(new Conversation(), "Go.", cancellationToken: Ct);
+        var calls = await Agent(model).RunAsync(new Conversation(), "Go.", new() { Budget = new Budget { ModelCalls = 1 } }, Ct);
+        var timed = await Agent(model, time, slow).RunAsync(new Conversation(), "Go.", new() { Budget = new Budget { Time = TimeSpan.FromSeconds(5) } }, Ct);
 
         Assert.Equal("The model call budget is used up: 1 of 1.", Assert.IsType<Stopped>(calls).Detail);
         Assert.Equal("The time budget is used up: 10 s of 5 s.", Assert.IsType<Stopped>(timed).Detail);
@@ -113,7 +113,7 @@ public class BudgetTests
         var model = new ScriptedModel().Reply("Unused.");
         var conversation = new Conversation();
 
-        var result = await Agent(model, new Budget { Tokens = 0 }).RunAsync(conversation, "Go.", cancellationToken: Ct);
+        var result = await Agent(model).RunAsync(conversation, "Go.", new() { Budget = new Budget { Tokens = 0 } }, Ct);
 
         Assert.Equal(StopReason.Budget, Assert.IsType<Stopped>(result).Reason);
         Assert.Empty(model.Requests);
@@ -126,7 +126,7 @@ public class BudgetTests
         // The first call costs $0.0014; the $0.00001 left would buy half an output token at $20 per million.
         var model = new ScriptedModel { Price = Price }.Reply(CallTool("c1", new Usage(100, 50, 0, 0))).Reply("Unused.");
 
-        var result = await Agent(model, new Budget { Cost = 0.00141m }).RunAsync(new Conversation(), "Go.", cancellationToken: Ct);
+        var result = await Agent(model).RunAsync(new Conversation(), "Go.", new() { Budget = new Budget { Cost = 0.00141m } }, Ct);
 
         Assert.Equal((StopReason.Budget, "The cost budget is used up: $0.0014 of $0.00141."), (Assert.IsType<Stopped>(result).Reason, ((Stopped)result).Detail));
         Assert.Single(model.Requests);
@@ -135,9 +135,9 @@ public class BudgetTests
     [Fact]
     public void A_cost_budget_needs_a_model_with_a_price()
     {
-        var agent = Agent(new ScriptedModel(), new Budget { Cost = 1m });
+        var agent = Agent(new ScriptedModel());
 
-        Assert.Throws<InvalidOperationException>(() => agent.StreamAsync(new Conversation(), "Go.", cancellationToken: Ct));
+        Assert.Throws<InvalidOperationException>(() => agent.StreamAsync(new Conversation(), "Go.", new() { Budget = new Budget { Cost = 1m } }, Ct));
     }
 
     /// <summary>One model call of the property: the prompt's tokens, how much output it wants, and whether it compacts.</summary>
@@ -163,9 +163,9 @@ public class BudgetTests
     {
         var model = new PlannedModel(@case.Calls);
         var budget = new Budget { Cost = @case.Cost, Tokens = @case.Tokens, ModelCalls = @case.ModelCalls };
-        var agent = new AgentDefinition { Model = model, Instructions = Agents.Instructions, Tools = [Agents.SearchTool()], Budget = budget };
+        var agent = new AgentDefinition { Model = model, Instructions = Agents.Instructions, Tools = [Agents.SearchTool()] };
 
-        var result = await agent.RunAsync(new Conversation(), "Go.", cancellationToken: Ct);
+        var result = await agent.RunAsync(new Conversation(), "Go.", new() { Budget = budget }, Ct);
 
         Assert.True(result is Completed or Stopped { Reason: StopReason.Budget }, $"The run ended {result}.");
         // Only the last call can cross a limit, as each call starts below all of them; it overshoots by its input at most.

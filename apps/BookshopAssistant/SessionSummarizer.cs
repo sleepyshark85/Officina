@@ -28,9 +28,11 @@ public static class SessionSummarizer
         Model = model,
         Instructions = Instructions,
         Output = OutputContract.For<SessionSummary>(),
-        Budget = new Budget { Cost = 0.05m },
         Time = time,
     };
+
+    /// <summary>Each summary's run: it may spend at most five cents.</summary>
+    public static readonly RunOptions Options = new() { Budget = new Budget { Cost = 0.05m } };
 
     /// <summary>The session's transcript, as the summarizer reads it.</summary>
     public static string Transcript(Conversation conversation)

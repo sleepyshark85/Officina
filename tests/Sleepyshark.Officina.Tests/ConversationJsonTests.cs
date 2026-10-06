@@ -22,7 +22,7 @@ public class ConversationJsonTests
             new BlockReceived(new ContentBlock("Bonjour ☃", """{"type":"text","text":"Bonjour ☃"}""")),
             new ModelStopped(ModelStopReason.End));
         var conversation = new Conversation();
-        await Agents.With(model).RunAsync(conversation, "Salut ✓", "Date: 2026-10-05.", TestContext.Current.CancellationToken);
+        await Agents.With(model).RunAsync(conversation, "Salut ✓", new() { Context = "Date: 2026-10-05." }, TestContext.Current.CancellationToken);
         var options = new JsonSerializerOptions { WriteIndented = indented };
 
         var json = JsonSerializer.Serialize(conversation, options);
@@ -57,7 +57,7 @@ public class ConversationJsonTests
             .Reply(new BlockReceived(new ContentBlock(null, Thinking)), new BlockReceived(ScriptedModel.TextBlock("Hello.")), new ModelStopped(ModelStopReason.End))
             .Reply("Again.");
         var conversation = new Conversation();
-        await Agents.With(model).RunAsync(conversation, "Hi", "Date: 2026-10-05.", TestContext.Current.CancellationToken);
+        await Agents.With(model).RunAsync(conversation, "Hi", new() { Context = "Date: 2026-10-05." }, TestContext.Current.CancellationToken);
 
         // As jsonb would: parse, then write again with other spacing and escaping.
         var normalized = JsonNode.Parse(JsonSerializer.Serialize(conversation))!.ToJsonString(new JsonSerializerOptions(Relaxed) { WriteIndented = true });
