@@ -37,8 +37,9 @@ Mutation testing (Stryker.NET) checks that the tests catch changes to the librar
 
 ```sh
 dotnet tool restore
-cd src/Sleepyshark.Officina && dotnet stryker               # every mutant: about 4 minutes
-cd src/Sleepyshark.Officina && dotnet stryker --since:main  # only the files changed since main, as pull requests do
+cd src/Sleepyshark.Officina
+dotnet stryker               # every mutant: about 4 minutes
+dotnet stryker --since:main  # or only the files changed since main, as pull requests do
 ```
 
 | Package | Baseline score (2026-10-07) | A pull request fails below |
@@ -47,7 +48,9 @@ cd src/Sleepyshark.Officina && dotnet stryker --since:main  # only the files cha
 | `Sleepyshark.Officina.Claude` | 83% | 78% |
 | `Sleepyshark.Officina.Mcp` | 55% | 50% |
 
-The `mutation` workflow runs this on every pull request, weekly and on demand, and keeps the reports as an artifact.
+The MCP score leaves out `McpConnection.RequestAsync`, `StdioConnection.Start` and `StdioConnection.ReadAsync`: their
+mutants do not compile (an unassigned local), so Stryker drops them. The `mutation` workflow runs this on every pull
+request, weekly and on demand, and keeps the reports as an artifact.
 
 | Path | Holds |
 |---|---|
