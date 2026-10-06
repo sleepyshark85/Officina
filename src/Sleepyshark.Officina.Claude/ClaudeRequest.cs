@@ -9,9 +9,8 @@ namespace Sleepyshark.Officina.Claude;
 /// <summary>
 /// Lays out one request: the tools sorted by name with eager input streaming, the memory tool as Claude's native
 /// <c>memory_20250818</c>; the instructions as one cached system block, with the prefix's lifetime; automatic caching
-/// for the tail, with the conversation's; then the
-/// conversation, where an operator message becomes a mid-conversation <c>system</c> message and raw blocks are sent byte
-/// for byte. A tool result is a <c>tool_result</c> block, with <c>is_error</c> on failure; a user message after tool
+/// for the tail, with the conversation's; then the conversation, where an operator message becomes a mid-conversation
+/// <c>system</c> message and raw blocks are sent byte for byte. A tool result is a <c>tool_result</c> block, with <c>is_error</c> on failure; a user message after tool
 /// results is a second user turn, which the API joins to the first. A typed output schema goes as the structured output
 /// format, adjusted; the tool choice is never forced.
 /// </summary>
