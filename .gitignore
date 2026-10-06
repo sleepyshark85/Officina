@@ -3,7 +3,10 @@ obj/
 TestResults/
 *.user
 .vs/
-.claude/
+.claude/*
+!.claude/settings.json
+!.claude/hooks/
+*/**/.claude/
 data/
 appsettings.Local.json
 .env
