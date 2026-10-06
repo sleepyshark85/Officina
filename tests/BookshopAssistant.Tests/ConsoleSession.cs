@@ -7,8 +7,8 @@ using Sleepyshark.Officina.Testing;
 namespace BookshopAssistant.Tests;
 
 /// <summary>
-/// Drives the real console against the real database (TEST-09): only the model (a <see cref="ScriptedModel"/>) and the
-/// human (scripted input lines, which also answer the approval prompts) are scripted.
+/// Drives the real console against the real database; only the model (a <see cref="ScriptedModel"/>) and the human
+/// (input lines, which also answer approval prompts) are scripted.
 /// </summary>
 internal static class ConsoleSession
 {
@@ -18,26 +18,24 @@ internal static class ConsoleSession
     /// <summary>Where the console links runs to their traces.</summary>
     public static readonly Uri Dashboard = new("http://dashboard.test/");
 
-    /// <summary>Opus 5.5's price, which the scripted model charges, as the console's budgets need a price.</summary>
+    /// <summary>Opus 5.5's price, which the scripted model charges, as the console's budgets need one.</summary>
     public static readonly ModelPrice Price = ClaudePrices.Table["claude-opus-5-5"];
 
-    /// <summary>A scripted model with <see cref="Price"/>, which declares Claude's compaction and clearing as the agent uses them.</summary>
+    /// <summary>A scripted model with <see cref="Price"/>, declaring the compaction and clearing the agent uses.</summary>
     public static ScriptedModel Model(string settings = "scripted") =>
         new() { Price = Price, Settings = settings, Capabilities = ModelCapabilities.Compaction | ModelCapabilities.ContextEditing };
 
     /// <summary>Runs a session and returns its transcript.</summary>
     /// <param name="database">The database the tools use.</param>
-    /// <param name="model">The model: a scripted one, or Claude in the live smoke test (TEST-04).</param>
-    /// <param name="script">
-    /// The staff member's input: each string is a line they type, and each <see cref="Func{Task}"/> runs before the next line is read.
-    /// </param>
-    /// <param name="time">The console's clock; by default a fake one stopped at <see cref="Start"/>, which the agent always uses for its audit times.</param>
-    /// <param name="cancelOn">When the transcript first contains this text, the console is asked to cancel the reply, as Ctrl+C does.</param>
-    /// <param name="budgets">The console's budgets; by default, its own.</param>
+    /// <param name="model">A scripted model, or Claude in the live smoke test.</param>
+    /// <param name="script">The staff member's input: each string is a typed line; each <see cref="Func{Task}"/> runs before the next line.</param>
+    /// <param name="time">The console's clock; by default a fake one stopped at <see cref="Start"/>, which the agent always uses for audit.</param>
+    /// <param name="cancelOn">When the transcript first contains this text, the reply is cancelled, as by Ctrl+C.</param>
+    /// <param name="budgets">The console's budgets; by default its own.</param>
     /// <param name="summaries">The summarizer's scripted model; without one, sessions are not summarized.</param>
-    /// <param name="exportTools">The export server's tools (APP-12); none by default.</param>
-    /// <param name="demo">Whether the agent runs in demo mode (APP-17).</param>
-    /// <param name="memory">The memory store; by default an empty one in memory.</param>
+    /// <param name="exportTools">The export server's tools; none by default.</param>
+    /// <param name="demo">Whether the agent runs in demo mode.</param>
+    /// <param name="memory">The memory store; by default an empty in-memory one.</param>
     public static async Task<string> RunAsync(
         BookshopDatabase database, IModel model, IEnumerable<object> script, TimeProvider? time = null, string? cancelOn = null,
         Budgets? budgets = null, ScriptedModel? summaries = null, IEnumerable<Tool>? exportTools = null, bool demo = false,

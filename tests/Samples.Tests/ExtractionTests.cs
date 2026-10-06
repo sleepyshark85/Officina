@@ -4,7 +4,7 @@ using Sleepyshark.Officina.Testing;
 
 namespace Samples.Tests;
 
-/// <summary>GEN-06: the extraction and classification sample, offline, with only the model scripted.</summary>
+/// <summary>The extraction and classification sample, offline, with only the model scripted.</summary>
 public class ExtractionTests
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;

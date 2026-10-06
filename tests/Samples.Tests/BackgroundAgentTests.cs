@@ -6,8 +6,8 @@ using Sleepyshark.Officina.Testing;
 namespace Samples.Tests;
 
 /// <summary>
-/// GEN-06: the background agent sample, offline: unattended, with the helpdesk a fake MCP server over Streamable HTTP
-/// and the audit trail a JSON-lines file. Only the model, the MCP server and the refund back end are replaced.
+/// The background agent sample, offline and unattended: the helpdesk is a fake MCP server over Streamable HTTP, the
+/// audit trail a JSON-lines file. Only the model, the MCP server and the refund back end are replaced.
 /// </summary>
 public sealed class BackgroundAgentTests : IDisposable
 {
@@ -58,13 +58,13 @@ public sealed class BackgroundAgentTests : IDisposable
         var outcome = Assert.IsType<TicketOutcome>(Assert.IsType<Completed>(result).Output);
         Assert.Equal(Resolution.Escalated, outcome.Resolution);
 
-        // Nobody could approve the refund, so it never ran, and the model was told why (GEN-04).
+        // Nobody could approve the refund, so it never ran, and the model was told why.
         Assert.Empty(refunds);
         Assert.Equal(
             new ToolResult("c2", "The call needs approval, and this run is unattended, so it was denied.", true),
             model.Requests[2].Messages[^1].Blocks[0].ToolResult);
 
-        // The helpdesk's tools ran on the server, over HTTP with the token (MCP-01).
+        // The helpdesk's tools ran on the server, over HTTP with the token.
         Assert.Equal(["get_ticket", "add_note"], helpdesk.Calls.Select(call => call.Tool));
 
         // The JSON-lines file holds the run's record: the server connected, the write audited before it ran, the end.

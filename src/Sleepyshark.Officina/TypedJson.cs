@@ -7,12 +7,12 @@ using System.Text.Json.Serialization.Metadata;
 
 namespace Sleepyshark.Officina;
 
-/// <summary>JSON for application types: typed functions' input and output (TOOL-01), and typed output (OUT-01).</summary>
+/// <summary>JSON for application types: typed functions' input and output, and typed output.</summary>
 internal static class TypedJson
 {
     /// <summary>
-    /// How typed functions read their input and write their output, and how typed output is read (OUT-01): members in camel case,
-    /// numbers never read from strings, nullable annotations and required members respected, unknown properties refused, enums by name.
+    /// Camel-case members, numbers never read from strings, nullable annotations and required members respected, unknown
+    /// properties refused, enums by name.
     /// </summary>
     internal static readonly JsonSerializerOptions Options = new()
     {

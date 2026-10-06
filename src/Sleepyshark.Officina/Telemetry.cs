@@ -6,11 +6,10 @@ using System.Text.Json;
 namespace Sleepyshark.Officina;
 
 /// <summary>
-/// The core's traces and metrics (EVT-02, ARCHITECTURE §7), emitted through .NET's own <see cref="ActivitySource"/> and
-/// <see cref="Meter"/>, both named <see cref="SourceName"/>; the host chooses an exporter. One trace per run (a child of
-/// the host's current span, if it has one): a run span, with a span per model call and per tool call. Names follow the
-/// OpenTelemetry semantic conventions for generative AI where one exists; the rest are under <c>officina.</c>. Message
-/// text, tool inputs and results appear only when the agent opts in (EVT-04), and secrets never do (EVT-03).
+/// The core's traces and metrics, through .NET's <see cref="ActivitySource"/> and <see cref="Meter"/>, both named
+/// <see cref="SourceName"/>; the host chooses an exporter. One trace per run, under the host's current span if any: a run
+/// span with a span per model call and tool call. Names follow the OpenTelemetry generative-AI conventions where they
+/// exist, else <c>officina.</c>. Message text, tool inputs and results appear only on opt-in; secrets never do.
 /// </summary>
 public static class Telemetry
 {
@@ -31,10 +30,10 @@ public static class Telemetry
         "gen_ai.client.operation.duration", "s", "Duration of a model call, retries included.");
 
     private static readonly Histogram<double> CacheHitRatio = Meter.CreateHistogram<double>(
-        "officina.model.cache_hit_ratio", "1", "The share of a model call's input tokens read from the cache (CTX-05).");
+        "officina.model.cache_hit_ratio", "1", "The share of a model call's input tokens read from the cache.");
 
     private static readonly Histogram<double> Cost = Meter.CreateHistogram<double>(
-        "officina.model.cost", "{USD}", "What a model call cost, in US dollars, at the model's price (BUD-02).");
+        "officina.model.cost", "{USD}", "What a model call cost, in US dollars, at the model's price.");
 
     private static readonly Counter<long> Retries = Meter.CreateCounter<long>("officina.model.retries", "{retry}", "Model call retries.");
 
@@ -46,15 +45,15 @@ public static class Telemetry
     private static readonly Counter<long> Approvals = Meter.CreateCounter<long>("officina.tool.approvals", "{approval}", "Approvals, by answer.");
 
     private static readonly Counter<long> Compactions = Meter.CreateCounter<long>(
-        "officina.model.compactions", "{compaction}", "Compactions of the conversation by the provider (HIST-04).");
+        "officina.model.compactions", "{compaction}", "Compactions of the conversation by the provider.");
 
     private static readonly Counter<long> Clearings = Meter.CreateCounter<long>(
-        "officina.model.clearings", "{clearing}", "Model calls for which the provider cleared old tool results (HIST-04).");
+        "officina.model.clearings", "{clearing}", "Model calls for which the provider cleared old tool results.");
 
     private static readonly Counter<long> Runs = Meter.CreateCounter<long>("officina.runs", "{run}", "Runs, by result.");
 
     private static readonly Counter<long> AuditFailures = Meter.CreateCounter<long>(
-        "officina.audit.failures", "{entry}", "Audit entries the sink failed to write (AUD-06).");
+        "officina.audit.failures", "{entry}", "Audit entries the sink failed to write.");
 
     internal static Activity? StartRun(Agent agent, Conversation conversation, string message) =>
         Start($"invoke_agent {agent.Name}", ActivityKind.Internal, Activity.Current?.Context ?? default, agent, [
@@ -66,7 +65,7 @@ public static class Telemetry
             .. Content(agent, "gen_ai.input.messages", () => Messages("user", message)),
         ]);
 
-    /// <summary>Ends a run's span and counts it; <paramref name="result"/> is null for a run the host abandoned.</summary>
+    /// <summary>Ends a run's span and counts the run; <paramref name="result"/> is null for a run the host abandoned.</summary>
     internal static void EndRun(Activity? activity, Agent agent, RunResult? result)
     {
         var (kind, reason, error) = result switch
@@ -108,8 +107,8 @@ public static class Telemetry
         ]);
 
     /// <summary>
-    /// Ends a model call's span and records its metrics. The reply's stop reason is null when the call failed (then its
-    /// error says why) or was cancelled.
+    /// Ends a model call's span and records its metrics. The reply's stop reason is null when the call failed (its error
+    /// says why) or was cancelled.
     /// </summary>
     internal static void EndModelCall(Activity? activity, Agent agent, long started, ModelReply reply)
     {
@@ -186,7 +185,7 @@ public static class Telemetry
             .. Content(agent, "gen_ai.tool.call.arguments", () => agent.Redact(call.Input)),
         ]);
 
-    /// <summary>Records an approval's answer and how long it was waited for, on the call's span and in the metrics.</summary>
+    /// <summary>Records an approval's answer and wait, on the call's span and in the metrics.</summary>
     internal static void Approved(Activity? activity, Agent agent, ToolCall call, bool approved, TimeSpan wait)
     {
         var answer = approved ? "approved" : "denied";
@@ -195,10 +194,7 @@ public static class Telemetry
         activity?.SetTag("officina.tool.approval_wait", wait.TotalSeconds);
     }
 
-    /// <summary>
-    /// Ends a tool call's span and records its metrics. <paramref name="length"/> is the result's length before
-    /// truncation.
-    /// </summary>
+    /// <summary>Ends a tool call's span and records its metrics; <paramref name="length"/> is before truncation.</summary>
     internal static void EndToolCall(
         Activity? activity, Agent agent, ToolCall call, long started, ToolOutcome outcome, TimeSpan? ran, int length, bool truncated, string result)
     {
@@ -223,7 +219,7 @@ public static class Telemetry
         });
     }
 
-    /// <summary>Counts an audit entry the sink failed to write, and marks the span of the step it recorded (AUD-06).</summary>
+    /// <summary>Counts an audit entry the sink failed to write, and marks the span of the step it recorded.</summary>
     internal static void AuditFailed(Activity? step, Agent agent, AuditKind kind)
     {
         AuditFailures.Add(1, [.. Dimensions(agent), new("officina.audit.kind", kind.ToString())]);
@@ -231,8 +227,8 @@ public static class Telemetry
     }
 
     /// <summary>
-    /// Starts a span at <paramref name="parent"/> without making it the ambient one: a run's spans are parented explicitly,
-    /// as the ambient span does not survive across the run's asynchronous steps.
+    /// Starts a span under <paramref name="parent"/> without making it ambient: the ambient span does not survive across a
+    /// run's asynchronous steps, so spans are parented explicitly.
     /// </summary>
     private static Activity? Start(string name, ActivityKind kind, ActivityContext parent, Agent agent, KeyValuePair<string, object?>[] tags)
     {
@@ -268,7 +264,7 @@ public static class Telemetry
         activity.SetTag("gen_ai.usage.cache_creation.input_tokens", usage.CacheWrite);
     }
 
-    /// <summary>The content attribute, only when the agent opts in (EVT-04), with its secrets redacted (EVT-03).</summary>
+    /// <summary>The content attribute, only when the agent opts in, with its secrets redacted.</summary>
     private static KeyValuePair<string, object?>[] Content(Agent agent, string name, Func<string> value) =>
         agent.TelemetryContent ? [new(name, agent.Redact(value()))] : [];
 
@@ -297,6 +293,6 @@ internal enum ToolOutcome
     Ok,
     Error,
 
-    /// <summary>A write that did not run, as its attempt could not be audited (AUD-06).</summary>
+    /// <summary>A write that did not run, as its attempt could not be audited.</summary>
     Blocked,
 }

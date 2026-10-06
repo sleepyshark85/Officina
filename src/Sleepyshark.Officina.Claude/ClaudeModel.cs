@@ -4,7 +4,7 @@ using Anthropic.Models.Beta.Messages;
 
 namespace Sleepyshark.Officina.Claude;
 
-/// <summary>How hard Claude thinks and how much it spends (MDL-03); always set, never left to the model's default.</summary>
+/// <summary>How hard Claude thinks and how much it spends; always set, never left to the model's default.</summary>
 public enum ClaudeEffort
 {
     Low,
@@ -14,7 +14,7 @@ public enum ClaudeEffort
     Max,
 }
 
-/// <summary>How long Claude keeps the cached prefix (CTX-03): five minutes, or an hour for users who reply slowly.</summary>
+/// <summary>How long Claude keeps the cached prefix: five minutes, or an hour for users who reply slowly.</summary>
 public enum CacheLifetime
 {
     FiveMinutes,
@@ -22,16 +22,15 @@ public enum CacheLifetime
 }
 
 /// <summary>
-/// Claude through the official Anthropic SDK's beta messages API (MDL-02, ARCHITECTURE §10). Every request streams, with
-/// adaptive thinking and no refusal fallback (D10). Its settings are fixed once created (MDL-03). Transient failures are
-/// retried here (MDL-04); the SDK's own retries are off.
+/// Claude through the Anthropic SDK's beta messages API. Every request streams, with adaptive thinking and no refusal
+/// fallback. Settings are fixed once created. Transient failures are retried here; the SDK's own retries are off.
 /// </summary>
 public sealed class ClaudeModel : IModel, IDisposable
 {
     private readonly AnthropicClient client;
     private readonly TimeProvider time;
 
-    /// <param name="apiKey">The API key; when null, the SDK finds credentials as it does by default (<c>ANTHROPIC_API_KEY</c>).</param>
+    /// <param name="apiKey">The API key; when null, the SDK finds credentials as usual (<c>ANTHROPIC_API_KEY</c>).</param>
     /// <param name="http">Sends the HTTP requests; tests pass one that answers with recorded responses.</param>
     /// <param name="time">The clock retries wait on; tests pass one that does not sleep.</param>
     public ClaudeModel(string? apiKey = null, HttpMessageHandler? http = null, TimeProvider? time = null)
@@ -54,14 +53,14 @@ public sealed class ClaudeModel : IModel, IDisposable
     /// <summary>The lifetime of both cache points: the instructions' and the conversation tail's.</summary>
     public CacheLifetime CacheLifetime { get; init; } = CacheLifetime.FiveMinutes;
 
-    /// <summary>What the model's tokens cost; by default its row of <see cref="ClaudePrices.Table"/>, if it has one.</summary>
+    /// <summary>What the model's tokens cost; by default its row of <see cref="ClaudePrices.Table"/>, if any.</summary>
     public ModelPrice? Price
     {
         get => field ?? ClaudePrices.Table.GetValueOrDefault(Model);
         init;
     }
 
-    /// <summary>Server-side compaction and tool-result clearing, through the beta context management (ARCHITECTURE §10).</summary>
+    /// <summary>Server-side compaction and tool-result clearing, through the beta context management.</summary>
     public ModelCapabilities Capabilities => ModelCapabilities.Compaction | ModelCapabilities.ContextEditing;
 
     public string Provider => "anthropic";

@@ -5,8 +5,8 @@ using Anthropic.Models.Beta.Messages;
 namespace Sleepyshark.Officina.Claude;
 
 /// <summary>
-/// Reads a complete streamed reply: each content block with its JSON as <see cref="ContentBlock.Raw"/> (MDL-05), what the
-/// provider did to shorten the conversation (HIST-04), the usage of the call as one increment, and the stop reason.
+/// Reads a complete streamed reply: each content block with its JSON as <see cref="ContentBlock.Raw"/>, what the
+/// provider did to shorten the conversation, the call's usage as one increment, and the stop reason.
 /// </summary>
 internal static class ClaudeReply
 {
@@ -31,8 +31,8 @@ internal static class ClaudeReply
     }
 
     /// <summary>
-    /// A compaction, from the call's compaction iteration: what it read is what it summarized, and what it wrote is the
-    /// summary. A clearing of tool results, from the edits the API applied; compaction is not among them (spike S02).
+    /// A compaction comes from the call's compaction iteration: what it read was summarized, what it wrote is the summary.
+    /// A clearing comes from the edits the API applied, which do not include compaction.
     /// </summary>
     private static IEnumerable<ModelEvent> ContextEdits(BetaMessage message)
     {
@@ -71,8 +71,8 @@ internal static class ClaudeReply
     private static string? Category(BetaMessage message) => message.StopDetails?.Category?.Raw();
 
     /// <summary>
-    /// The call's tokens, with the cache writes kept for an hour apart, as they cost more. When the call ran several iterations (such as a compaction before the reply), the totals count
-    /// only the last one, so the iterations are added up instead (spike S02, recommendation 2).
+    /// The call's tokens, with hour-long cache writes apart, as they cost more. When a call runs several iterations (such as
+    /// a compaction, then the reply), the totals count only the last, so the iterations are added up instead.
     /// </summary>
     private static Usage Usage(BetaUsage usage)
     {
@@ -90,8 +90,8 @@ internal static class ClaudeReply
     }
 
     /// <summary>
-    /// The tokens an attempt reported before it failed mid-stream: its start's usage, updated by any later delta, whose
-    /// counts are totals so far. Zero when the attempt failed before it started.
+    /// The tokens an attempt reported before it failed mid-stream: its start's usage, updated by later deltas, whose counts
+    /// are running totals. Zero when the attempt failed before it started.
     /// </summary>
     public static Usage Partial(IEnumerable<BetaRawMessageStreamEvent> events)
     {

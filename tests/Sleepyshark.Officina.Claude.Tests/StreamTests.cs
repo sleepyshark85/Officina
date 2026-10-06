@@ -2,7 +2,7 @@ using System.Text.Json;
 
 namespace Sleepyshark.Officina.Claude.Tests;
 
-/// <summary>How a streamed reply maps to the model contract's events (MDL-01, MDL-05, MDL-06, CTX-05).</summary>
+/// <summary>How a streamed reply maps to the model contract's events.</summary>
 public class StreamTests
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;

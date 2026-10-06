@@ -7,17 +7,13 @@ namespace BookshopAssistant;
 /// <summary>A stored session: its conversation, who started it, and what its replies used.</summary>
 public sealed record StoredSession(Conversation Conversation, string StaffMember, Usage Usage, decimal Cost);
 
-/// <summary>
-/// A session as <c>/sessions</c> lists it, with its summary (APP-15); <paramref name="Stale"/> when it has none, or was
-/// updated after it.
-/// </summary>
+/// <summary>A session as <c>/sessions</c> lists it; <paramref name="Stale"/> when it has no summary, or changed since.</summary>
 public sealed record SessionListing(
     string Id, string StaffMember, string? Title, string? Summary, IReadOnlyList<string> Changes, decimal Cost, DateTimeOffset Updated, bool Stale);
 
 /// <summary>
-/// The session store (APP-10, ARCHITECTURE §12.1): the <c>sessions</c> table, one row per conversation, keyed by the
-/// conversation's id. The conversation is kept as the core's JSON in a text column, so it reads back byte for byte and
-/// resumes with its prefix, and its cache, intact.
+/// The session store: the <c>sessions</c> table, one row per conversation, keyed by its id. The conversation is kept as
+/// the core's JSON in a text column, so it reads back byte for byte and resumes with its prefix and cache intact.
 /// </summary>
 public sealed class SessionStore(NpgsqlDataSource database)
 {
@@ -52,11 +48,10 @@ public sealed class SessionStore(NpgsqlDataSource database)
         """;
 
     /// <summary>
-    /// Saves the session as it is now: its conversation, and its totals, <paramref name="usage"/> and
-    /// <paramref name="cost"/>, which replace the stored ones, so a save that failed or never came loses nothing for good.
-    /// A <paramref name="created"/> session is stored already; a new one is inserted, and an id that another session has
-    /// throws rather than overwriting it. The database stamps the time, and moves it only when the conversation changed, so a
-    /// summary stays current through a save of the totals alone (APP-15).
+    /// Saves the session as it is now. <paramref name="usage"/> and <paramref name="cost"/> replace the stored totals, so a
+    /// failed or missing save loses nothing for good. A <paramref name="created"/> session is updated; a new one is inserted,
+    /// and an id already taken throws rather than overwriting. The database stamps the time, moving it only when the
+    /// conversation changed, so a summary stays current through a save of the totals alone.
     /// </summary>
     public async Task SaveAsync(
         Conversation conversation, string staffMember, Usage usage, decimal cost, bool created, CancellationToken cancellationToken)
@@ -113,7 +108,7 @@ public sealed class SessionStore(NpgsqlDataSource database)
         return sessions;
     }
 
-    /// <summary>Stores the summary of session <paramref name="id"/> (APP-15), as of now.</summary>
+    /// <summary>Stores the summary of session <paramref name="id"/>, as of now.</summary>
     public async Task SaveSummaryAsync(string id, SessionSummary summary, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(summary);

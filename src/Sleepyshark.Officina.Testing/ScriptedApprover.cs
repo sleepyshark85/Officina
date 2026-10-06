@@ -1,8 +1,8 @@
 namespace Sleepyshark.Officina.Testing;
 
 /// <summary>
-/// The human at an approval prompt, scripted (TEST-01): answers each request with the next answer given in advance, in
-/// order, and records the calls it was asked about. It throws when it has no answer left, which denies the call.
+/// The human at an approval prompt, scripted: gives the next answer in advance for each request, and records the calls
+/// asked about. It throws when out of answers, which denies the call.
 /// </summary>
 public sealed class ScriptedApprover : IApprover
 {

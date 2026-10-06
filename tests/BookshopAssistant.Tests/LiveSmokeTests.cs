@@ -6,20 +6,20 @@ using static BookshopAssistant.Tests.ConsoleSession;
 namespace BookshopAssistant.Tests;
 
 /// <summary>
-/// The live smoke test (TEST-04): the real console, Claude in demo mode and the database in Docker, with only the staff
-/// member scripted. One test drives APP-09 with its approval; the other reaches a compaction (APP-17) with the demo
-/// script's catalogue searches (<c>docs/demo.md</c>). Both check that every model call after the first reads the cache.
-/// Together they cost about $0.40, so they run only on demand: see the README.
+/// The live smoke tests: the real console, Claude in demo mode and the database in Docker, with only the staff member
+/// scripted. One places an order with approval; the other reaches a compaction with the demo script's catalogue
+/// searches (<c>docs/demo.md</c>). Both check that every model call after the first reads the cache. Together they cost
+/// about $0.40, so they run only on demand: see the README.
 /// </summary>
 [Trait("Category", "Live")]
 public class LiveSmokeTests(BookshopDatabase database) : IClassFixture<BookshopDatabase>
 {
-    /// <summary>APP-09's request, as in the demo script.</summary>
+    /// <summary>The order request, as in the demo script.</summary>
     private const string Order = "Order the two cheapest fantasy books in stock for Alice Martin and tell me the total.";
 
     /// <summary>
-    /// The demo script's four searches of 10–15k tokens each, which together cross 50,000 input tokens. The demo asks for
-    /// them one a turn; here they come in one turn, which costs less.
+    /// The demo script's four 10–15k-token searches, which together cross 50,000 input tokens. The demo asks one a turn; here
+    /// they come in one turn, which costs less.
     /// </summary>
     private const string Searches = """
         Run these four catalogue searches together, then just give me the four counts: every book priced at most £18 (up to 300 of them),
@@ -82,15 +82,15 @@ public class LiveSmokeTests(BookshopDatabase database) : IClassFixture<BookshopD
 }
 
 /// <summary>
-/// A live test (TEST-04): skipped unless <c>OFFICINA_LIVE_TESTS=1</c> and <c>ANTHROPIC_API_KEY</c> are set, where the
-/// database tests run (<see cref="BookshopDatabase.Available"/>), so neither <c>dotnet test</c> nor CI spends on it.
+/// A live test: skipped unless <c>OFFICINA_LIVE_TESTS=1</c> and <c>ANTHROPIC_API_KEY</c> are set where the database tests
+/// run (<see cref="BookshopDatabase.Available"/>), so neither <c>dotnet test</c> nor CI spends on it.
 /// </summary>
 public sealed class LiveFactAttribute : FactAttribute
 {
     public LiveFactAttribute([CallerFilePath] string? sourceFilePath = null, [CallerLineNumber] int sourceLineNumber = -1)
         : base(sourceFilePath, sourceLineNumber)
     {
-        Skip = "Live: set OFFICINA_LIVE_TESTS=1 and ANTHROPIC_API_KEY, on Linux with Docker (TEST-04).";
+        Skip = "Live: set OFFICINA_LIVE_TESTS=1 and ANTHROPIC_API_KEY, on Linux with Docker.";
         SkipUnless = nameof(Enabled);
         SkipType = typeof(LiveFactAttribute);
     }

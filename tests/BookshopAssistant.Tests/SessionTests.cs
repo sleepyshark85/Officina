@@ -5,8 +5,8 @@ using static BookshopAssistant.Tests.ConsoleSession;
 namespace BookshopAssistant.Tests;
 
 /// <summary>
-/// TEST-09: sessions, the status line and budgets end to end (APP-02, APP-10, APP-14). Each <see cref="ConsoleSession.RunAsync"/>
-/// is a start of the application: what one leaves behind, the next finds only in the database.
+/// Sessions, the status line and budgets, end to end. Each <see cref="ConsoleSession.RunAsync"/> is an application start:
+/// what one leaves behind, the next finds only in the database.
 /// </summary>
 public class SessionTests(BookshopDatabase database) : IClassFixture<BookshopDatabase>
 {

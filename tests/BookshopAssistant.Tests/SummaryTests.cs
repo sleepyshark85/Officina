@@ -6,8 +6,8 @@ using static BookshopAssistant.Tests.ConsoleSession;
 namespace BookshopAssistant.Tests;
 
 /// <summary>
-/// TEST-09: the session summarizer (APP-15) end to end. Every session these tests leave behind ends up summarized, so
-/// the tests of this class see no stale session of another's in <c>/sessions</c>.
+/// The session summarizer, end to end. Every session these tests leave behind ends up summarized, so they see no stale
+/// session of another's in <c>/sessions</c>.
 /// </summary>
 public class SummaryTests(BookshopDatabase database) : IClassFixture<BookshopDatabase>
 {
@@ -97,7 +97,7 @@ public class SummaryTests(BookshopDatabase database) : IClassFixture<BookshopDat
     }
 }
 
-/// <summary>TEST-09: a summary that fails (APP-15, OUT-02) is told, and the session keeps no title.</summary>
+/// <summary>A summary that fails is told, and the session keeps no title.</summary>
 public class SummaryFailureTests(BookshopDatabase database) : IClassFixture<BookshopDatabase>
 {
     [DatabaseFact]
@@ -111,7 +111,7 @@ public class SummaryFailureTests(BookshopDatabase database) : IClassFixture<Book
         InOrder(transcript, "you> /quit\n", $"[Session {id} could not be summarized: The output does not match its schema: /changes: is required]");
         Assert.Equal(DBNull.Value, await database.ScalarAsync<object>("select title from sessions where id = $1", id));
 
-        // /sessions tries it again, once: a summary that fails again is not tried on every listing.
+        // /sessions retries it once: a summary that fails again is not tried on every listing.
         var retried = Model().Reply("not a summary");
         var listing = await RunAsync(database, Model(), ["Sam", "/sessions", "/sessions", "/quit"], summaries: retried);
 

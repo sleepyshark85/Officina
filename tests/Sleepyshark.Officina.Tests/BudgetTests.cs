@@ -6,7 +6,7 @@ using Sleepyshark.Officina.Testing;
 
 namespace Sleepyshark.Officina.Tests;
 
-/// <summary>Prices, usage in results and budgets (BUD-01…03), with the overshoot property of TEST-07.</summary>
+/// <summary>Prices, usage in results, budgets, and the property that a budget is overshot by at most one call's input.</summary>
 public class BudgetTests
 {
     /// <summary>Opus 5.5's list price: $4 in, $20 out, $0.20 cache read; writes 1.25× input for five minutes, 2× for an hour.</summary>
@@ -140,7 +140,7 @@ public class BudgetTests
         Assert.Throws<InvalidOperationException>(() => agent.StreamAsync(new Conversation(), "Go.", new() { Budget = new Budget { Cost = 1m } }, Ct));
     }
 
-    /// <summary>One model call of the property: the prompt's tokens, how much output it wants, and whether it compacts.</summary>
+    /// <summary>One model call: the prompt's tokens, the output it wants, and whether it compacts.</summary>
     public sealed record PlannedCall(int Input, int CacheRead, int CacheWrite, int Output, bool Compacts);
 
     /// <summary>A budget, and the calls the model would make if nothing stopped it; each but the last asks for a tool.</summary>
@@ -168,7 +168,7 @@ public class BudgetTests
         var result = await agent.RunAsync(new Conversation(), "Go.", new() { Budget = budget }, Ct);
 
         Assert.True(result is Completed or Stopped { Reason: StopReason.Budget }, $"The run ended {result}.");
-        // Only the last call can cross a limit, as each call starts below all of them; it overshoots by its input at most.
+        // Only the last call can cross a limit, as each starts below all of them; it overshoots by its input at most.
         var last = model.Made == 0 ? new PlannedCall(0, 0, 0, 0, false) : @case.Calls[model.Made - 1];
         var factor = last.Compacts ? 2 : 1;
         var tokenOvershoot = (long)(last.Input + last.CacheRead + last.CacheWrite) * factor;
@@ -181,7 +181,7 @@ public class BudgetTests
 
     /// <summary>
     /// A model that makes the planned calls in order, keeping each reply within the request's output limit as a real one
-    /// does; a call that compacts reads its prompt twice, as server-side compaction does.
+    /// does; a compacting call reads its prompt twice, as server-side compaction does.
     /// </summary>
     private sealed class PlannedModel(PlannedCall[] plan) : IModel
     {

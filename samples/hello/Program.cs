@@ -1,6 +1,6 @@
 // Hello: a live chat with Claude through Officina. Needs ANTHROPIC_API_KEY. Type a message per line; an empty line or
-// end of input quits. After each reply a status line shows the call's tokens and how many were read from the cache:
-// from the second message on, the instructions and the earlier turns are cache reads.
+// end of input quits. After each reply a status line shows the call's tokens and cache reads: from the second message
+// on, the instructions and earlier turns are read from the cache.
 using System.Globalization;
 using Sleepyshark.Officina;
 using Sleepyshark.Officina.Claude;
@@ -20,7 +20,7 @@ while (Console.ReadLine() is { Length: > 0 } line)
 {
     Console.WriteLine($"> {line}");
 
-    // The date is run context, sent after the message; the instructions never change (CTX-01, CTX-02).
+    // The date is run context, sent after the message; the instructions never change.
     var context = $"Today is {DateTime.Now.ToString("dddd d MMMM yyyy", CultureInfo.InvariantCulture)}.";
     await foreach (var runEvent in agent.StreamAsync(conversation, line, new() { Context = context }))
     {

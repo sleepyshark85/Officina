@@ -5,10 +5,7 @@ using System.Text;
 
 namespace Sleepyshark.Officina.Claude.Tests;
 
-/// <summary>
-/// The Claude API's side of the network, a system boundary: answers each request with the next scripted HTTP response and
-/// keeps the bodies of the requests as sent.
-/// </summary>
+/// <summary>The Claude API's side of the network: answers each request with the next scripted response, keeping the bodies sent.</summary>
 internal sealed class FakeApi : HttpMessageHandler
 {
     private readonly ConcurrentQueue<Func<HttpResponseMessage>> responses = new();
@@ -28,12 +25,12 @@ internal sealed class FakeApi : HttpMessageHandler
 
     private readonly TaskCompletionSource arrived = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-    /// <summary>Completes when the first request has reached the fake API, so a test can start a second call after it.</summary>
+    /// <summary>Completes when the first request arrives, so a test can start a second call after it.</summary>
     public TaskCompletionSource FirstRequest { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
     public List<string> Requests { get; } = [];
 
-    /// <summary>Answers with an event stream from <c>Fixtures/</c>, hand-written in the API's documented SSE format.</summary>
+    /// <summary>Answers with an event stream from <c>Fixtures/</c>, hand-written in the API's SSE format.</summary>
     public FakeApi Fixture(string name) => Stream(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Fixtures", name)));
 
     /// <summary>Answers 200 with this server-sent event stream.</summary>
@@ -113,8 +110,8 @@ internal sealed class DroppingStream(byte[] bytes) : MemoryStream(bytes)
 }
 
 /// <summary>
-/// A clock whose waits end at once, keeping what each wait asked for, so retry tests never sleep. A held clock's waits
-/// never end. Each wait is kept with the <see cref="Caller"/> of the code that started it.
+/// A clock whose waits end at once, recording what each asked for, so retry tests never sleep; a held clock's waits never
+/// end. Each wait is kept with the <see cref="Caller"/> that started it.
 /// </summary>
 internal sealed class InstantTime(bool held = false) : TimeProvider
 {

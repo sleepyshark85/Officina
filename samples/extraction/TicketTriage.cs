@@ -21,7 +21,7 @@ public enum Urgency
     High,
 }
 
-/// <summary>What the triage agent extracts from a customer message: its typed output (OUT-01).</summary>
+/// <summary>What the triage agent extracts from a customer message: its typed output.</summary>
 public sealed record Triage(
     [property: Description("What the message is about.")] Category Category,
     [property: Description("High when the customer is blocked or has been charged wrongly; low for a question that can wait.")] Urgency Urgency,
@@ -29,9 +29,8 @@ public sealed record Triage(
     [property: Description("One sentence on what the customer wants.")] string Summary);
 
 /// <summary>
-/// Extraction and classification (ARCHITECTURE §8): a stateless agent with no tools, no approver and no memory, only a
-/// model, instructions and typed output (GEN-02, GEN-05). Each message is one run on a new conversation, discarded
-/// afterwards (GEN-03), which ends at the model's <c>end</c> after one call.
+/// Extraction and classification: a stateless agent with only a model, instructions and typed output. Each message is
+/// one run on a new, discarded conversation, ending at the model's <c>end</c> after one call.
 /// </summary>
 public static class TicketTriage
 {
@@ -43,7 +42,7 @@ public static class TicketTriage
         Output = OutputContract.For<Triage>(),
     };
 
-    /// <summary>Classifies <paramref name="message"/>; null when the run did not complete, such as on a refusal or invalid output.</summary>
+    /// <summary>Classifies <paramref name="message"/>; null when the run did not complete, as on a refusal or invalid output.</summary>
     public static async Task<Triage?> ClassifyAsync(Agent agent, string message, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(agent);

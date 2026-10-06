@@ -5,7 +5,7 @@ using Sleepyshark.Officina.Testing;
 
 namespace Sleepyshark.Officina.Tests;
 
-/// <summary>The audit trail (AUD-01…05).</summary>
+/// <summary>The audit trail.</summary>
 public class AuditTests
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
@@ -216,7 +216,7 @@ public class AuditTests
             sink.Entries.Where(entry => entry.Kind == AuditKind.ToolSource).Select(entry => (entry.Tool, entry.Outcome, entry.Detail)).Distinct());
     }
 
-    /// <summary>A tool source, such as an MCP server, that connects but fails whenever it is asked for its changes.</summary>
+    /// <summary>A tool source, such as an MCP server, that connects but fails whenever asked for its changes.</summary>
     private sealed class SilentSource : IToolSource
     {
         public string Name => "silent";

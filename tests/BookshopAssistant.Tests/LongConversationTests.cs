@@ -4,7 +4,7 @@ using static BookshopAssistant.Tests.ConsoleSession;
 
 namespace BookshopAssistant.Tests;
 
-/// <summary>APP-17 and HIST-04 in the console (TEST-09); the live part of APP-17 is the demo script's.</summary>
+/// <summary>Demo-mode compaction and clearing in the console; the live part is the demo script's.</summary>
 public class LongConversationTests(BookshopDatabase database) : IClassFixture<BookshopDatabase>
 {
     [DatabaseFact]

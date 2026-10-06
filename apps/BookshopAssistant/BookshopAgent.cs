@@ -4,13 +4,12 @@ using Sleepyshark.Officina.Claude;
 namespace BookshopAssistant;
 
 /// <summary>
-/// The chat agent (ARCHITECTURE §12.1): frozen instructions, the bookshop tools, memory (APP-11) and, when given, the
-/// export tools of the filesystem MCP server (APP-12). Who and when come as run context; what is remembered, the model
-/// reads through the memory tool.
+/// The chat agent: frozen instructions, the bookshop tools, memory and, when given, the filesystem MCP server's export
+/// tools. Who and when come as run context; the model reads what is remembered through the memory tool.
 /// </summary>
 public static class BookshopAgent
 {
-    /// <summary>The agent; in <c>demo</c> mode (APP-17), compaction and clearing come early enough to see in a short session.</summary>
+    /// <summary>The agent; in demo mode, compaction and clearing come early enough to see in a short session.</summary>
     public static Agent Create(
         IModel model, BookshopTools tools, IMemoryStore memory, IApprover approver, IAuditSink audit, IEnumerable<string> secrets,
         TimeProvider time, IEnumerable<Tool>? exportTools = null, bool demo = false) => new()
@@ -27,8 +26,8 @@ public static class BookshopAgent
         };
 
     /// <summary>
-    /// How long sessions stay short (HIST-01, HIST-02): compaction at Claude's default threshold, and clearing of old tool
-    /// results only when it frees at least about two broad searches' worth, as each clearing rewrites the cached tail.
+    /// Compaction at Claude's default threshold, and clearing of old tool results only when it frees about two broad
+    /// searches' worth, as each clearing rewrites the cached tail.
     /// </summary>
     public static readonly ContextManagement LongConversations = new()
     {
@@ -37,12 +36,11 @@ public static class BookshopAgent
     };
 
     /// <summary>
-    /// Demo mode (APP-17): compaction at Claude's minimum, which the demo script's four catalogue searches of 10–15k tokens
-    /// reach, and clearing when a request holds more than 12 tool calls (the API clears above <c>After</c>, not at it).
-    /// Clearing comes first and counts every tool call, the memory tool's too, which the model calls once or twice a
-    /// turn: at 4, it cleared the searches before they could compact. It keeps the 10 most recent results, so a turn of
-    /// 8 parallel lookups plus a memory call or two never loses what it just fetched (at 2, the model fetched them
-    /// again; at 8, a memory note pushed one out).
+    /// Demo mode: compaction at Claude's minimum, which the demo's four 10–15k-token searches reach, and clearing above 12
+    /// tool calls (the API clears above <c>After</c>, not at it). Clearing runs first and counts the memory tool's calls
+    /// too: at 4 it cleared the searches before they could compact. Keeping the 10 latest results means a turn of 8 lookups
+    /// plus a memory call or two never loses what it just fetched (at 2 the model refetched; at 8 a memory note pushed one
+    /// out).
     /// </summary>
     public static readonly ContextManagement Demo = new()
     {
@@ -50,7 +48,7 @@ public static class BookshopAgent
         ClearToolResults = new ToolResultClearing(After: 12, Keep: 10),
     };
 
-    /// <summary>The chat agent's model, which the application and the live smoke test (TEST-04) share.</summary>
+    /// <summary>The chat agent's model, shared by the app and the live smoke test.</summary>
     public static ClaudeModel Model(bool demo) => new()
     {
         Model = "claude-opus-5-5",
@@ -61,7 +59,7 @@ public static class BookshopAgent
         CacheLifetime = demo ? CacheLifetime.FiveMinutes : CacheLifetime.OneHour,
     };
 
-    /// <summary>The run context (APP-13, CTX-02): today's date and who is at the counter.</summary>
+    /// <summary>The run context: today's date and who is at the counter.</summary>
     public static string Context(DateTimeOffset now, string staffMember) =>
         $"Today is {now:dddd d MMMM yyyy}. The staff member using the assistant is {staffMember}.";
 

@@ -8,16 +8,14 @@ using System.Threading.Channels;
 namespace Sleepyshark.Officina;
 
 /// <summary>
-/// Runs the tool calls of one reply (ARCHITECTURE §3): for each, find the tool → validate the input → ask approval if
-/// needed → record the attempt → invoke → truncate. Read calls run concurrently, a write call waits for the calls before
-/// it and runs alone (TOOL-03); approvals are asked one at a time, in call order. Every call gets exactly one result,
-/// in call order (CTX-06), and every failure is an error result, never an exception (TOOL-05). What happens is written
-/// to <paramref name="events"/> as it happens (EVT-01). Each call that starts gets a span under the run's (EVT-02).
-/// Each handler gets the run's <see cref="ToolContext"/>, its memory scope included (MEM-03).
+/// Runs one reply's tool calls: find the tool, validate the input, ask approval if needed, record the attempt, invoke,
+/// truncate. Reads run concurrently; a write waits for the calls before it and runs alone; approvals are asked one at a
+/// time, in call order. Every call gets exactly one result, in call order, and every failure is an error result, never
+/// an exception. Events go to <paramref name="events"/> as they happen, and each started call gets a span.
 /// </summary>
 internal sealed class ToolPipeline(RunScope run, ChannelWriter<RunEvent> events)
 {
-    /// <summary>The longest result the model gets, in characters (TOOL-06): about 16k tokens.</summary>
+    /// <summary>The longest result the model gets, in characters: about 16k tokens.</summary>
     internal const int MaxResultLength = 64_000;
 
     private readonly Agent agent = run.Agent;
@@ -49,7 +47,7 @@ internal sealed class ToolPipeline(RunScope run, ChannelWriter<RunEvent> events)
                 continue;
             }
 
-            // The host may have cancelled while the approver decided or while this write waited for the reads before it.
+            // The host may have cancelled while the approver decided, or while this write waited for the reads before it.
             if (cancellationToken.IsCancellationRequested)
             {
                 break;
@@ -69,7 +67,7 @@ internal sealed class ToolPipeline(RunScope run, ChannelWriter<RunEvent> events)
         await Task.WhenAll(reads).ConfigureAwait(false);
         await ToolSources.RecordChangesAsync(agent, audit).ConfigureAwait(false);
 
-        // Calls that never started, because the run was cancelled (AGT-05).
+        // Calls that never started, because the run was cancelled.
         for (var index = 0; index < calls.Count; index++)
         {
             results[index] ??= await EndAsync(calls[index], steps[index], new ToolOutput("The call was cancelled before it started.", true), null)
@@ -177,7 +175,7 @@ internal sealed class ToolPipeline(RunScope run, ChannelWriter<RunEvent> events)
         {
             output = new ToolOutput("The call was cancelled while it ran.", true);
         }
-#pragma warning disable CA1031 // Any failure of a tool goes back to the model as an error result (TOOL-05).
+#pragma warning disable CA1031 // Any tool failure goes back to the model as an error result.
         catch (Exception exception)
 #pragma warning restore CA1031
         {
@@ -188,9 +186,8 @@ internal sealed class ToolPipeline(RunScope run, ChannelWriter<RunEvent> events)
     }
 
     /// <summary>
-    /// Redacts the agent's secrets, truncates the output (TOOL-06), records the call's outcome and makes its result.
-    /// <paramref name="step"/> is null for a call that never started; <paramref name="blocked"/> marks a write that did not
-    /// run because its attempt could not be audited.
+    /// Redacts secrets, truncates the output, records the outcome and makes the result. <paramref name="step"/> is null for
+    /// a call that never started; <paramref name="blocked"/> marks a write not run because its attempt was not audited.
     /// </summary>
     private async Task<ToolResult> EndAsync(ToolCall call, Step? step, ToolOutput output, TimeSpan? duration, bool blocked = false)
     {
@@ -217,7 +214,7 @@ internal sealed class ToolPipeline(RunScope run, ChannelWriter<RunEvent> events)
         return result;
     }
 
-    /// <summary>The call as the events show it: its input without the agent's secrets (EVT-03).</summary>
+    /// <summary>The call as events show it: its input without the agent's secrets.</summary>
     private ToolCall Shown(ToolCall call) => call with { Input = agent.Redact(call.Input) };
 
     /// <summary>A started call's span, if anything listens, and when it started.</summary>

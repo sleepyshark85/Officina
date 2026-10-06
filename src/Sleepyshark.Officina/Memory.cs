@@ -3,13 +3,13 @@ using System.Text.Json;
 
 namespace Sleepyshark.Officina;
 
-/// <summary>A memory file of a scope: its path within the scope, its parts separated by <c>/</c>, and its size in bytes.</summary>
+/// <summary>A memory file: its path within the scope (parts separated by <c>/</c>) and its size in bytes.</summary>
 public sealed record MemoryFile(string Path, long Size);
 
 /// <summary>
-/// Where memory files are kept (MEM-02, ARCHITECTURE §4.4). Every operation is within one scope, and a scope never sees
-/// another's files. Scopes and paths are those <see cref="MemoryPath"/> accepts; a store refuses any other with an
-/// <see cref="ArgumentException"/>, so no path leaves its scope (MEM-03). Directories are implied by the files' paths.
+/// Where memory files are kept. Every operation is within one scope, which never sees another's files. A store refuses
+/// any scope or path <see cref="MemoryPath"/> rejects, with an <see cref="ArgumentException"/>, so no path leaves its
+/// scope. Directories are implied by the files' paths.
 /// </summary>
 public interface IMemoryStore
 {
@@ -25,15 +25,15 @@ public interface IMemoryStore
     /// <summary>Deletes the file; does nothing when there is none.</summary>
     Task DeleteAsync(string scope, string path, CancellationToken cancellationToken);
 
-    /// <summary>Moves the file to <paramref name="newPath"/>; throws when there is no such file, or one at <paramref name="newPath"/>.</summary>
+    /// <summary>Moves the file; throws when it does not exist, or when <paramref name="newPath"/> does.</summary>
     Task RenameAsync(string scope, string path, string newPath, CancellationToken cancellationToken);
 }
 
 /// <summary>
-/// The scopes and paths a memory store accepts (MEM-03): a scope is one path part, and a path is parts separated by
-/// <c>/</c>. A part is never empty, <c>.</c> or <c>..</c>, never ends with a dot or a space, holds no control character
-/// and none of <c>\ / : * ? " &lt; &gt; | %</c>, and is no device name Windows reserves (<c>CON</c>, <c>COM1</c>, <c>CONIN$</c>…). So a path is relative, has one
-/// separator on every system, cannot climb out, and has no encoded form: it names the same file in every store.
+/// The scopes and paths a memory store accepts. A scope is one path part; a path is parts separated by <c>/</c>. A part
+/// is never empty, <c>.</c> or <c>..</c>, never ends with a dot or space, holds no control character and none of
+/// <c>\ / : * ? " &lt; &gt; | %</c>, and is no reserved Windows device name (<c>CON</c>, <c>COM1</c>, <c>CONIN$</c>…).
+/// So a path is relative, cannot climb out, and names the same file in every store.
 /// </summary>
 public static class MemoryPath
 {
@@ -50,7 +50,7 @@ public static class MemoryPath
 
     public static bool IsValidScope(string? scope) => scope is not null && IsPart(scope);
 
-    /// <summary>Throws <see cref="ArgumentException"/> unless <paramref name="scope"/>, and <paramref name="path"/> if given, are valid.</summary>
+    /// <summary>Throws <see cref="ArgumentException"/> unless <paramref name="scope"/>, and any <paramref name="path"/>, are valid.</summary>
     public static void Check(string scope, string? path = null)
     {
         if (!IsValidScope(scope) || (path is not null && !IsValid(path)))
@@ -65,10 +65,10 @@ public static class MemoryPath
 }
 
 /// <summary>
-/// The memory service (MEM-01, ARCHITECTURE §7): memory as a tool with the commands of Claude's memory tool (view,
-/// create, str_replace, insert, delete, rename) over files under <c>/memories</c>, which map to the run's memory scope in
-/// a store. It is a write tool, so every call is audited before it runs (MEM-04); approval, when asked for, is asked
-/// for the commands that change memory. Memory is never put in the instructions: the model reads it on demand (MEM-05).
+/// Memory as a tool with the commands of Claude's memory tool (view, create, str_replace, insert, delete, rename) over
+/// files under <c>/memories</c>, mapped to the run's memory scope. It is a write tool, so every call is audited first;
+/// approval, if asked for, covers only the commands that change memory. The model reads memory on demand; it is never
+/// in the instructions.
 /// </summary>
 public static class MemoryTool
 {
@@ -77,13 +77,13 @@ public static class MemoryTool
     /// <summary>The memory directory as the model sees it.</summary>
     public const string Root = "/memories";
 
-    /// <summary>The most characters a memory file may hold; a command that would make it longer is refused.</summary>
+    /// <summary>The most characters a memory file may hold; a command that would exceed it is refused.</summary>
     public const int MaxFileLength = 50_000;
 
-    /// <summary>The most characters a file's <c>view</c> shows, as the model's tool description says; ranges show the rest.</summary>
+    /// <summary>The most characters a <c>view</c> shows; ranges show the rest.</summary>
     internal const int MaxViewLength = 16_000;
 
-    /// <summary>The memory tool over <paramref name="store"/>; each run that has it must give a memory scope.</summary>
+    /// <summary>The memory tool over <paramref name="store"/>; runs that have it need a memory scope.</summary>
     public static Tool Create(IMemoryStore store, bool needsApproval = false)
     {
         ArgumentNullException.ThrowIfNull(store);
@@ -100,7 +100,7 @@ public static class MemoryTool
         }
     }
 
-    /// <summary>For providers without a native memory tool: what the model reads instead of its trained description.</summary>
+    /// <summary>For providers without a native memory tool: the description the model reads instead.</summary>
     private const string Description =
         "Your memory: a directory of text files under /memories that persists across conversations. Commands: view (a file, " +
         "or a directory's listing), create (create or overwrite a file), str_replace, insert, delete and rename.";
@@ -112,10 +112,10 @@ public static class MemoryTool
         "old_path":{"type":"string"},"new_path":{"type":"string"}},"required":["command"]}
         """;
 
-    /// <summary>Whether the call only views memory, and so is never asked approval for.</summary>
+    /// <summary>Whether the call only views memory, and so never needs approval.</summary>
     private static bool Views(JsonElement input) => Text(input, "command") == "view";
 
-    /// <summary>Runs one command in <paramref name="scope"/>: every outcome but the store's failures is a result.</summary>
+    /// <summary>Runs one command in <paramref name="scope"/>; every outcome but a store failure is a result.</summary>
     private static async Task<ToolOutput> RunAsync(IMemoryStore store, string scope, JsonElement input, CancellationToken cancellationToken)
     {
         var command = Text(input, "command");
@@ -276,7 +276,7 @@ public static class MemoryTool
                 return refused;
             }
 
-            // A snippet of the edited lines, with four lines of context on either side.
+            // The edited lines, with four lines of context on either side.
             var (lines, first) = (Lines(edited), content[..found[0]].Count(c => c == '\n') + 1);
             var last = Math.Min(lines.Length, first + replacement.Count(c => c == '\n') + 4);
             return new($"The memory file has been edited. A snippet of {path} with line numbers:\n{Numbered(lines, Math.Max(1, first - 4), last)}");

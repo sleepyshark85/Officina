@@ -2,7 +2,7 @@ using System.Collections.Concurrent;
 
 namespace Sleepyshark.Officina.Tests;
 
-/// <summary>An audit sink in memory, a storage boundary: keeps the entries it accepts, and refuses those <paramref name="fails"/> picks.</summary>
+/// <summary>An in-memory audit sink: keeps the entries it accepts, and refuses those <paramref name="fails"/> picks.</summary>
 internal sealed class RecordingSink(Func<AuditEntry, bool>? fails = null) : IAuditSink
 {
     private readonly ConcurrentQueue<AuditEntry> entries = new();

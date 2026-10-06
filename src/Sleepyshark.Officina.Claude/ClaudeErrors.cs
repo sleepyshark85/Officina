@@ -4,10 +4,10 @@ using Anthropic.Models;
 
 namespace Sleepyshark.Officina.Claude;
 
-/// <summary>What kind of failure a Claude call ended with, once retries are over or when retrying cannot help.</summary>
+/// <summary>What kind of failure a Claude call ended with, once retries are over or cannot help.</summary>
 public enum ClaudeFailure
 {
-    /// <summary>Rate limits, overload, server errors and network errors, still failing after every attempt.</summary>
+    /// <summary>Rate limits, overload, server or network errors that persisted through every attempt.</summary>
     Transient,
 
     /// <summary>The API key is missing, wrong, or not allowed to do this.</summary>
@@ -17,16 +17,13 @@ public enum ClaudeFailure
     InvalidRequest,
 }
 
-/// <summary>A Claude call that failed, with its kind; the run ends as failed with its message.</summary>
+/// <summary>A Claude call that failed, with its kind; the run fails with its message.</summary>
 public sealed class ClaudeException(ClaudeFailure failure, string message, Exception inner) : Exception(message, inner)
 {
     public ClaudeFailure Failure { get; } = failure;
 }
 
-/// <summary>
-/// Classifies the SDK's failures (S00b recommendation 5): by exception type first, then by error type, which is all an
-/// error that arrives mid-stream has.
-/// </summary>
+/// <summary>Classifies the SDK's failures by exception type, then by error type, which is all a mid-stream error has.</summary>
 internal static class ClaudeErrors
 {
     /// <summary>Attempts per call, the first included.</summary>
@@ -36,7 +33,7 @@ internal static class ClaudeErrors
 
     private static readonly TimeSpan LongestBackoff = TimeSpan.FromSeconds(30);
 
-    /// <summary>Whether the failure may pass if the call is made again; the caller's own cancellation never is.</summary>
+    /// <summary>Whether the failure may pass on another attempt; the caller's own cancellation never does.</summary>
     public static bool IsTransient(Exception exception, CancellationToken cancellationToken) => exception switch
     {
         _ when cancellationToken.IsCancellationRequested => false,
@@ -48,13 +45,13 @@ internal static class ClaudeErrors
     };
 
     /// <summary>
-    /// A prompt longer than the context window. The API gives it no type of its own, only an invalid-request error whose
-    /// message says so; this is the one place the adapter reads an error's text.
+    /// A prompt longer than the context window. The API gives it no type, only an invalid-request error whose message says
+    /// so; this is the one place the adapter reads an error's text.
     /// </summary>
     public static bool IsPromptTooLong(Exception exception) =>
         exception is AnthropicBadRequestException bad && bad.Message.Contains("prompt is too long", StringComparison.OrdinalIgnoreCase);
 
-    /// <summary>The failure to throw, or null for one that is not the API's (such as the caller's cancellation), to let pass.</summary>
+    /// <summary>The failure to throw, or null for one that is not the API's (such as the caller's cancellation).</summary>
     public static ClaudeException? Classify(Exception exception, CancellationToken cancellationToken)
     {
         if (exception is ClaudeException || cancellationToken.IsCancellationRequested)
@@ -74,8 +71,8 @@ internal static class ClaudeErrors
     }
 
     /// <summary>
-    /// The wait before attempt <paramref name="attempt"/> + 1: what the API asked for, up to the longest backoff so a
-    /// server cannot hold a call for ever, or else an exponential backoff with jitter.
+    /// The wait before the next attempt: what the API asked for, capped so a server cannot hold a call for ever, or else an
+    /// exponential backoff with jitter.
     /// </summary>
     public static TimeSpan Backoff(int attempt, TimeSpan? asked)
     {

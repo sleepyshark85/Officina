@@ -5,11 +5,10 @@ using System.Text.Json;
 namespace Sleepyshark.Officina.Mcp;
 
 /// <summary>
-/// An MCP server's tools, as core tools (ARCHITECTURE §7). It reads the server's tool list once, when it connects, keeps
-/// only the allowed tools, names each <c>&lt;server&gt;__&lt;tool&gt;</c> and pins them: <see cref="Tools"/> never
-/// changes, so they stay the same for every conversation of an agent built with them (MCP-03, CTX-04). The tool pipeline
-/// runs their calls like any other tool's (MCP-02). Each run reconnects a server that was lost, and fails if it cannot;
-/// a server lost during a run gives error results for its calls (MCP-04).
+/// An MCP server's tools, as core tools. It reads the server's tool list once, keeps the allowed tools, names each
+/// <c>&lt;server&gt;__&lt;tool&gt;</c> and pins them, so <see cref="Tools"/> stays the same for every conversation.
+/// Each run reconnects a server that was lost, and fails if it cannot; a server lost during a run gives error results
+/// for its calls.
 /// </summary>
 public sealed class McpToolSource : IToolSource, IAsyncDisposable
 {
@@ -25,7 +24,7 @@ public sealed class McpToolSource : IToolSource, IAsyncDisposable
 
     public string Name => server.Name;
 
-    /// <summary>The allowed tools, in the order the allow-list gives them.</summary>
+    /// <summary>The allowed tools, in allow-list order.</summary>
     public ImmutableArray<Tool> Tools { get; private set; } = [];
 
     /// <summary>Connects to <paramref name="server"/> and pins its <paramref name="allowed"/> tools.</summary>
@@ -52,7 +51,7 @@ public sealed class McpToolSource : IToolSource, IAsyncDisposable
         }
     }
 
-    /// <summary>Checks the connection, and connects anew if it was lost; the tool list stays pinned.</summary>
+    /// <summary>Checks the connection, and reconnects if it was lost; the tool list stays pinned.</summary>
     public async Task ConnectAsync(CancellationToken cancellationToken)
     {
         await connecting.WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -177,7 +176,7 @@ public sealed class McpToolSource : IToolSource, IAsyncDisposable
         }
     }
 
-    /// <summary>Calls a tool on the server; a server that is not connected, or fails, throws, which gives the model an error result.</summary>
+    /// <summary>Calls a tool on the server; throws when the server is not connected or fails, giving the model an error result.</summary>
     private async Task<ToolOutput> CallAsync(string name, JsonElement input, CancellationToken cancellationToken)
     {
         var current = connection;
@@ -186,7 +185,7 @@ public sealed class McpToolSource : IToolSource, IAsyncDisposable
             throw new IOException($"The MCP server '{Name}' is not connected{(current?.Lost is { } reason ? $": {reason}" : ".")}");
         }
 
-        // The server's output is redacted of its own credentials here, whether or not the host added them to the agent's secrets (EVT-03).
+        // Redacts the server's own credentials, whether or not the host added them to the agent's secrets.
         var result = await current.CallToolAsync(name, input, cancellationToken).ConfigureAwait(false);
         var content = result.TryGetProperty("content", out var items) && items.ValueKind == JsonValueKind.Array
             ? string.Join("\n", items.EnumerateArray().Select(item => item.TryGetProperty("text", out var text) ? text.GetString() : $"[{item.GetProperty("type").GetString()} content]"))

@@ -6,14 +6,11 @@ using Sleepyshark.Officina;
 namespace Samples.Chat;
 
 /// <summary>
-/// A chat assistant (ARCHITECTURE §8): stateful, with one conversation per user that the host keeps as JSON (GEN-03,
-/// AGT-06), an optional tool, and memory per user (MEM-03). The date is run context, never in the instructions (CTX-02).
-/// Text output, no approver: neither tool needs approval.
+/// A chat assistant: stateful, one conversation per user kept by the host as JSON, an optional tool, and memory per
+/// user. The date is run context, never in the instructions. Text output, no approver: no tool needs approval.
 /// </summary>
 /// <param name="agent">The agent, as <see cref="Create"/> builds it.</param>
-/// <param name="conversations">
-/// The host's storage, user id to conversation JSON: a dictionary here, a database table in an application.
-/// </param>
+/// <param name="conversations">The host's storage, user id to conversation JSON; a database table in a real app.</param>
 /// <param name="time">The clock the date comes from.</param>
 public sealed class ChatAssistant(Agent agent, IDictionary<string, string> conversations, TimeProvider time)
 {
@@ -30,7 +27,7 @@ public sealed class ChatAssistant(Agent agent, IDictionary<string, string> conve
     {
         var conversation = conversations.TryGetValue(user, out var saved) ? JsonSerializer.Deserialize<Conversation>(saved)! : new Conversation();
 
-        // A conversation of an older agent, with other tools or instructions, cannot go on (CTX-04): start anew.
+        // A conversation of an older agent, with other tools or instructions, cannot go on: start anew.
         if (!agent.CanContinue(conversation))
         {
             conversation = new Conversation();

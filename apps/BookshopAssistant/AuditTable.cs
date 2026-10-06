@@ -4,9 +4,8 @@ using Sleepyshark.Officina;
 namespace BookshopAssistant;
 
 /// <summary>
-/// The application's audit sink (APP-16): each entry becomes a row of the <c>audit</c> table, written before the call
-/// returns, so an acknowledged entry is durable; a failure throws, as the core expects (AUD-04). It also reads a
-/// session's entries back for <c>/audit</c>: a session's id is its conversation's.
+/// The app's audit sink: each entry becomes a row of the <c>audit</c> table, written before the call returns; a failure
+/// throws. It also reads a session's entries back for <c>/audit</c>: a session's id is its conversation's.
 /// </summary>
 public sealed class AuditTable(NpgsqlDataSource database) : IAuditSink
 {

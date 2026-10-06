@@ -299,7 +299,7 @@ public class RunTests
         }
     }
 
-    /// <summary>A model that fails before it returns a stream, as one that checks its request eagerly may.</summary>
+    /// <summary>A model that fails before it returns a stream, as one checking its request eagerly may.</summary>
     private sealed class ThrowingModel : IModel
     {
         public string Settings => "throwing";

@@ -6,7 +6,7 @@ using Sleepyshark.Officina.Testing;
 
 namespace Samples.Tests;
 
-/// <summary>GEN-06: the chat assistant sample, offline, with only the model, the clock and storage replaced.</summary>
+/// <summary>The chat assistant sample, offline, with only the model, the clock and storage replaced.</summary>
 public class ChatAssistantTests
 {
     private readonly FakeTimeProvider time = new(new DateTimeOffset(2026, 10, 6, 9, 0, 0, TimeSpan.Zero));
@@ -54,7 +54,7 @@ public class ChatAssistantTests
     {
         await Assistant(new ScriptedModel().Reply("Hello.")).ReplyAsync("ana", "Hi.", Ct);
 
-        // An upgrade changed the model settings, which are part of the prefix (CTX-04).
+        // An upgrade changed the model settings, which are part of the prefix.
         var upgraded = new ScriptedModel { Settings = "scripted, effort high" }.Reply("Hello again.");
         var result = await Assistant(upgraded).ReplyAsync("ana", "Hi again.", Ct);
 
@@ -90,7 +90,7 @@ public class ChatAssistantTests
         Assert.Equal(["preferences.md"], (await memory.ListAsync("ana", Ct)).Select(file => file.Path));
         Assert.Empty(await memory.ListAsync("ben", Ct));
 
-        // Memory is a tool the model calls, never part of the instructions (MEM-05).
+        // Memory is a tool the model calls, never part of the instructions.
         Assert.DoesNotContain("Fahrenheit.", later.Requests[0].Prefix.Instructions, StringComparison.Ordinal);
     }
 }

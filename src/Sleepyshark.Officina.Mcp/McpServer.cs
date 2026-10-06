@@ -3,9 +3,9 @@ using System.Collections.Immutable;
 namespace Sleepyshark.Officina.Mcp;
 
 /// <summary>
-/// How to reach an MCP server (MCP-01): a program to start, over stdio, or a URL, over Streamable HTTP. Its name prefixes
-/// its tools' names. The values of its environment variables and headers are treated as credentials: add
-/// <see cref="Secrets"/> to the agent's secrets, so they never reach events, traces or the audit trail (EVT-03).
+/// How to reach an MCP server: a program to start, over stdio, or a URL, over Streamable HTTP. Its name prefixes its
+/// tools' names. Its environment variable and header values count as credentials: add <see cref="Secrets"/> to the
+/// agent's secrets, so they never reach events, traces or the audit trail.
 /// </summary>
 public sealed class McpServer
 {
@@ -35,7 +35,7 @@ public sealed class McpServer
 
     internal IReadOnlyDictionary<string, string> Headers { get; private init; } = ImmutableDictionary<string, string>.Empty;
 
-    /// <summary>A server the source starts as a child process, speaking over its standard input and output.</summary>
+    /// <summary>A server the source starts as a child process, speaking over standard input and output.</summary>
     /// <param name="name">Names the server and prefixes its tools.</param>
     /// <param name="command">The program to start.</param>
     /// <param name="arguments">Its arguments.</param>
@@ -63,12 +63,11 @@ public sealed class McpServer
 }
 
 /// <summary>
-/// A tool of an MCP server that the host allows the agent (MCP-03), and how it runs (MCP-02): read or write, and whether
-/// each call needs approval. A tool is a write unless the host marks it read: the server's <c>readOnlyHint</c> annotation
-/// is a hint, not a guarantee, and a server that wrongly calls a write read-only would let it run alongside other calls,
-/// and even when its attempt could not be audited.
+/// A tool of an MCP server the host allows the agent, and how it runs. It is a write unless the host marks it read: the
+/// server's <c>readOnlyHint</c> is not trusted, as a write wrongly marked read-only would run alongside other calls, and
+/// even when its attempt could not be audited.
 /// </summary>
 /// <param name="Name">The tool's name on the server.</param>
 /// <param name="Kind">Read or write; a write unless the host says otherwise.</param>
-/// <param name="NeedsApproval">Whether each call needs the approver's approval (TOOL-04).</param>
+/// <param name="NeedsApproval">Whether each call needs the approver's approval.</param>
 public sealed record AllowedTool(string Name, ToolKind Kind = ToolKind.Write, bool NeedsApproval = false);

@@ -4,12 +4,11 @@ namespace Sleepyshark.Officina.Tests;
 
 /// <summary>
 /// Runs property tests on CsCheck with fixed seeds, so every run, CI's included, checks the same cases. A failing case is
-/// then shrunk, and the failure reports the seed of the shrunk case and the case itself.
+/// shrunk, and the failure reports the shrunk case and its seed.
 /// </summary>
 /// <remarks>
-/// To replay exactly one case, set the environment variable <c>OFFICINA_SEED</c> to the seed a failure reports and run
-/// the test: only that case runs. CsCheck's own <c>CsCheck_Seed</c> hint does not apply here, as each case passes its
-/// seed explicitly.
+/// To replay one case, set <c>OFFICINA_SEED</c> to the seed a failure reports. CsCheck's own <c>CsCheck_Seed</c> does not
+/// apply, as each case passes its seed explicitly.
 /// </remarks>
 internal static class Property
 {

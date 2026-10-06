@@ -8,10 +8,10 @@ using System.Text.Json.Nodes;
 namespace Sleepyshark.Officina.Testing;
 
 /// <summary>
-/// An MCP server with tools given in advance (TEST-01), served over stdio (<see cref="ServeAsync"/>, for a test program
-/// that hosts it) or Streamable HTTP on a local port (<see cref="StartHttp"/>). It lists its tools one per page, sends a
-/// notification before each tool result (as an event stream over HTTP), which clients must skip, and records the calls
-/// it gets. Over HTTP it can require a bearer token, and can go <see cref="Down"/>.
+/// An MCP server with tools given in advance, over stdio (<see cref="ServeAsync"/>, hosted by a test program) or
+/// Streamable HTTP on a local port (<see cref="StartHttp"/>). It lists one tool per page, sends a notification before
+/// each result (as an event stream over HTTP) that clients must skip, and records the calls. Over HTTP it can require a
+/// bearer token and go <see cref="Down"/>.
 /// </summary>
 public sealed class FakeMcpServer : IDisposable
 {
@@ -28,7 +28,7 @@ public sealed class FakeMcpServer : IDisposable
     /// <summary>The bearer token HTTP requests must carry; null for none.</summary>
     public string? Token { get; init; }
 
-    /// <summary>While true, the HTTP server drops every request, as a server that is down; a tool may set it to fail mid-call.</summary>
+    /// <summary>While true, the HTTP server drops every request, as if down; a tool may set it to fail mid-call.</summary>
     public bool Down { get; set; }
 
     /// <summary>The HTTP endpoint, once started.</summary>
@@ -56,7 +56,7 @@ public sealed class FakeMcpServer : IDisposable
         }
     }
 
-    /// <summary>Serves over stdio: one JSON-RPC message per line, until <paramref name="input"/> ends.</summary>
+    /// <summary>Serves over stdio, one JSON-RPC message per line, until <paramref name="input"/> ends.</summary>
     public async Task ServeAsync(TextReader input, TextWriter output, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(input);
@@ -251,7 +251,7 @@ public sealed class FakeMcpServer : IDisposable
     }
 }
 
-/// <summary>A tool of a <see cref="FakeMcpServer"/>: its handler's text is the result, and an exception it throws an error result.</summary>
+/// <summary>A tool of a <see cref="FakeMcpServer"/>: its handler's text is the result; an exception is an error result.</summary>
 /// <param name="Name">The tool's name on the server.</param>
 /// <param name="Handler">Answers a call's arguments.</param>
 public sealed record FakeMcpTool(string Name, Func<JsonElement, string> Handler)

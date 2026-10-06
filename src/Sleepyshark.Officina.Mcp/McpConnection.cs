@@ -4,9 +4,9 @@ using System.Text.Json.Nodes;
 namespace Sleepyshark.Officina.Mcp;
 
 /// <summary>
-/// A connection to one MCP server: JSON-RPC 2.0 requests and their responses over a transport (MCP-01). It implements
-/// only what a tool source needs: <c>initialize</c>, <c>ping</c>, <c>tools/list</c> and <c>tools/call</c>. A transport
-/// failure loses the connection for good: every later request fails, and the source connects anew at the next run.
+/// A connection to one MCP server: JSON-RPC 2.0 over a transport, with only what a tool source needs: <c>initialize</c>,
+/// <c>ping</c>, <c>tools/list</c> and <c>tools/call</c>. A transport failure loses the connection for good; the source
+/// connects anew at the next run.
 /// </summary>
 internal abstract class McpConnection(McpServer server, Action<string> lost) : IAsyncDisposable
 {
@@ -27,7 +27,7 @@ internal abstract class McpConnection(McpServer server, Action<string> lost) : I
     /// <summary>Set while the source closes the connection, so its end is not reported as a loss.</summary>
     protected bool Closing { get; set; }
 
-    /// <summary>Agrees on the protocol with the server, which accepts other requests only after this.</summary>
+    /// <summary>Agrees on the protocol; the server accepts other requests only after this.</summary>
     public async Task InitializeAsync(CancellationToken cancellationToken)
     {
         var result = await RequestAsync("initialize", new JsonObject
@@ -77,12 +77,12 @@ internal abstract class McpConnection(McpServer server, Action<string> lost) : I
     public abstract ValueTask DisposeAsync();
 
     /// <summary>
-    /// Sends a message. For a request (<paramref name="id"/> given), returns the server's response to it; for a
-    /// notification, null. Throws <see cref="IOException"/> or <see cref="HttpRequestException"/> when the transport fails.
+    /// Sends a message: returns the server's response for a request (<paramref name="id"/> given), null for a notification.
+    /// Throws <see cref="IOException"/> or <see cref="HttpRequestException"/> when the transport fails.
     /// </summary>
     protected abstract Task<JsonElement?> SendAsync(JsonObject message, int? id, CancellationToken cancellationToken);
 
-    /// <summary>Whether a message from the server is the response to a request, rather than a request or notification of its own.</summary>
+    /// <summary>Whether a message from the server responds to a request, rather than being its own request or notification.</summary>
     protected static bool IsResponse(JsonElement message, out int id)
     {
         id = 0;
@@ -102,7 +102,7 @@ internal abstract class McpConnection(McpServer server, Action<string> lost) : I
         return new IOException(Lost ?? reason);
     }
 
-    /// <summary><paramref name="text"/> without the server's credentials, for messages that quote what the server or transport said.</summary>
+    /// <summary><paramref name="text"/> without the server's credentials, for messages quoting the server or transport.</summary>
     public string Redact(string text) =>
         server.Secrets.Where(secret => secret.Length > 0).Aggregate(text, (redacted, secret) => redacted.Replace(secret, "[redacted]", StringComparison.Ordinal));
 
@@ -140,5 +140,5 @@ internal abstract class McpConnection(McpServer server, Action<string> lost) : I
     }
 }
 
-/// <summary>The server answered a request with a JSON-RPC error: it is reachable, but refused or failed the request.</summary>
+/// <summary>The server answered with a JSON-RPC error: it is reachable, but refused or failed the request.</summary>
 internal sealed class McpErrorException(string message) : Exception(message);

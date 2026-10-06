@@ -1,44 +1,41 @@
 namespace Sleepyshark.Officina;
 
-/// <summary>What a model's provider supports beyond the basic contract (ARCHITECTURE §4.1).</summary>
+/// <summary>What a model's provider supports beyond the basic contract.</summary>
 [Flags]
 public enum ModelCapabilities
 {
     None = 0,
 
-    /// <summary>Server-side compaction of the conversation into a summary block (HIST-01).</summary>
+    /// <summary>Server-side compaction of the conversation into a summary block.</summary>
     Compaction = 1,
 
-    /// <summary>Server-side clearing of old tool results (HIST-02).</summary>
+    /// <summary>Server-side clearing of old tool results.</summary>
     ContextEditing = 2,
 }
 
 /// <summary>
-/// How the provider shortens a long conversation on its side (HIST-01, HIST-02); the core never edits the conversation
-/// itself (HIST-03). Fixed per conversation, as it shapes every request: it is part of the prefix fingerprint (CTX-04).
+/// How the provider shortens a long conversation on its side; the core never edits it. Fixed per conversation and part
+/// of the prefix.
 /// </summary>
 public sealed record ContextManagement
 {
-    /// <summary>
-    /// Compacts the conversation once a request's input reaches this many tokens (HIST-01); null for no compaction. The
-    /// provider sets a minimum (Claude: 50,000).
-    /// </summary>
+    /// <summary>Compacts once a request's input reaches this many tokens; null for none. Claude's minimum is 50,000.</summary>
     public long? CompactAt
     {
         get;
         init => field = value is null or > 0 ? value : throw new ArgumentOutOfRangeException(nameof(value), value, "The threshold must be positive.");
     }
 
-    /// <summary>Clears old tool results (HIST-02); null for no clearing.</summary>
+    /// <summary>Clears old tool results; null for none.</summary>
     public ToolResultClearing? ClearToolResults { get; init; }
 }
 
-/// <summary>Clearing of old tool results (HIST-02): which results go, and when.</summary>
+/// <summary>Clearing of old tool results: which go, and when.</summary>
 /// <param name="After">Clears once the conversation holds more than this many tool calls.</param>
 /// <param name="Keep">How many of the latest tool calls keep their results.</param>
 /// <param name="AtLeastTokens">
-/// Clears only when at least this many input tokens go. Each clearing rewrites the cached tail of the conversation, so
-/// this keeps clearings few and worth their cost; zero clears whatever there is.
+/// Clears only when at least this many input tokens go. Each clearing rewrites the cached tail, so this keeps clearings
+/// few and worth their cost; zero clears whatever there is.
 /// </param>
 public sealed record ToolResultClearing(int After, int Keep, long AtLeastTokens = 0)
 {
@@ -49,21 +46,21 @@ public sealed record ToolResultClearing(int After, int Keep, long AtLeastTokens 
     public long AtLeastTokens { get; } = AtLeastTokens >= 0 ? AtLeastTokens : throw new ArgumentOutOfRangeException(nameof(AtLeastTokens), AtLeastTokens, "The minimum cannot be negative.");
 }
 
-/// <summary>The provider compacted the conversation before replying (HIST-04); the summary block is among the reply's blocks.</summary>
+/// <summary>The provider compacted the conversation before replying; the summary block is among the reply's blocks.</summary>
 /// <param name="Tokens">The input tokens summarized.</param>
 /// <param name="SummaryTokens">The summary's size, in tokens.</param>
 public sealed record CompactionReported(long Tokens, long SummaryTokens) : ModelEvent;
 
-/// <summary>The provider cleared old tool results from this request's view of the conversation (HIST-04).</summary>
+/// <summary>The provider cleared old tool results from this request's view of the conversation.</summary>
 /// <param name="Tokens">The input tokens cleared.</param>
 /// <param name="ToolCalls">How many tool calls had their results cleared.</param>
 public sealed record ClearingReported(long Tokens, int ToolCalls) : ModelEvent;
 
-/// <summary>The provider compacted the conversation during a model call (HIST-04); see <see cref="CompactionReported"/>.</summary>
+/// <summary>The provider compacted the conversation during a model call; see <see cref="CompactionReported"/>.</summary>
 public sealed record ConversationCompacted(long Tokens, long SummaryTokens) : RunEvent;
 
 /// <summary>
-/// The provider cleared old tool results for a model call (HIST-04); see <see cref="ClearingReported"/>. The conversation
-/// itself keeps them, so the provider clears them again on every later call, and reports it each time.
+/// The provider cleared old tool results for a model call; see <see cref="ClearingReported"/>. The conversation keeps
+/// them, so the provider clears and reports them again on every later call.
 /// </summary>
 public sealed record ToolResultsCleared(long Tokens, int ToolCalls) : RunEvent;

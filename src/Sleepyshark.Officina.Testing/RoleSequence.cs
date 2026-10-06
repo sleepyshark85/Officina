@@ -1,10 +1,10 @@
 namespace Sleepyshark.Officina.Testing;
 
 /// <summary>
-/// The message order the Claude API accepts, as a check for requests and saved conversations: the first message is the
-/// user's; roles alternate, except that a user message may follow a tool results message (the API joins the two); an
-/// operator message follows a user message and is last or followed by the assistant; and a message with tool calls is
-/// followed by exactly one result per call, in call order, in one message (CTX-06).
+/// The message order the Claude API accepts, to check requests and saved conversations: the user speaks first; roles
+/// alternate, except that a user message may follow tool results (the API joins them); an operator message follows a
+/// user message and is last or followed by the assistant; and tool calls are followed by one message with exactly one
+/// result per call, in call order.
 /// </summary>
 public static class RoleSequence
 {

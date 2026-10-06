@@ -3,7 +3,7 @@ using static Sleepyshark.Officina.Claude.Tests.StreamTests;
 
 namespace Sleepyshark.Officina.Claude.Tests;
 
-/// <summary>Server-side compaction and tool-result clearing (HIST-01…04), with the shapes the S02 spike recorded.</summary>
+/// <summary>Server-side compaction and tool-result clearing, with the response shapes recorded live.</summary>
 public class LongConversationTests
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;

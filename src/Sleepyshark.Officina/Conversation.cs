@@ -5,25 +5,22 @@ using System.Text.Json.Serialization;
 namespace Sleepyshark.Officina;
 
 /// <summary>
-/// The append-only messages between an agent and its model (AGT-06). The host owns it and stores it as JSON between runs;
-/// the core only ever appends. One run at a time may use a conversation.
+/// The append-only messages between an agent and its model. The host owns it and stores it as JSON between runs; the
+/// core only appends. One run at a time may use it.
 /// </summary>
 public sealed class Conversation
 {
     private int running;
 
-    /// <summary>
-    /// Identifies the conversation in the audit trail (AUD-03). A new conversation gets a random id; a host may give its
-    /// own, such as its session id.
-    /// </summary>
+    /// <summary>Identifies the conversation in the audit trail: random by default, or the host's own, such as a session id.</summary>
     [JsonInclude]
     [JsonPropertyName("id")]
     [JsonPropertyOrder(-1)]
     public string Id { get; init; } = Guid.NewGuid().ToString("N");
 
     /// <summary>
-    /// The prefix fingerprint of the agent the conversation was started with; null before its first run. A run
-    /// of an agent with another fingerprint fails without calling the model (CTX-04).
+    /// The prefix fingerprint of the agent it was started with; null before its first run. A run of an agent with another
+    /// fingerprint fails without calling the model.
     /// </summary>
     [JsonInclude]
     [JsonPropertyName("fingerprint")]
@@ -59,12 +56,12 @@ public enum Role
     [JsonStringEnumMemberName("assistant")]
     Assistant,
 
-    /// <summary>The host, speaking with operator authority after the cached prefix: the run context (CTX-02).</summary>
+    /// <summary>The host, with operator authority, after the cached prefix: the run context.</summary>
     [JsonStringEnumMemberName("operator")]
     Operator,
 }
 
-/// <summary>One message: a role and at least one content block. It never changes once created.</summary>
+/// <summary>One message: a role and at least one content block. Never changes once created.</summary>
 public sealed record Message
 {
     [JsonConstructor]
@@ -93,20 +90,19 @@ public sealed record Message
 
     public bool Equals(Message? other) => other is not null && Role == other.Role && Blocks.SequenceEqual(other.Blocks);
 
-    // Equal messages have equal roles and block counts; hashing the blocks too would cost more than it saves.
+    // Equal messages have equal roles and block counts; hashing the blocks would cost more than it saves.
     public override int GetHashCode() => HashCode.Combine(Role, Blocks.Length);
 }
 
 /// <summary>
-/// One piece of a message (MDL-05). A block the model produced keeps the provider's JSON exactly as received in
-/// <see cref="Raw"/>, which is stored and replayed byte for byte; the core reads only the neutral views the provider
-/// adapter gives it, <see cref="Text"/> and <see cref="ToolCall"/>. A block the core made, such as a
-/// <see cref="ToolResult"/>, has no raw form, and the provider adapter renders it.
+/// One piece of a message. A block the model produced keeps the provider's JSON in <see cref="Raw"/>, stored and
+/// replayed byte for byte; the core reads only its neutral views, <see cref="Text"/> and <see cref="ToolCall"/>. A
+/// block the core made, such as a <see cref="ToolResult"/>, has no raw form; the provider adapter renders it.
 /// </summary>
 [JsonConverter(typeof(ContentBlockConverter))]
 public sealed record ContentBlock
 {
-    /// <param name="text">The text, for a text block; null for any other block.</param>
+    /// <param name="text">The text, for a text block; null for any other.</param>
     /// <param name="raw">The provider's JSON for the block, as received; null for a block the core made.</param>
     /// <param name="toolCall">The neutral view of the call, for a block that requests a tool.</param>
     public ContentBlock(string? text, string? raw = null, ToolCall? toolCall = null)
@@ -156,7 +152,7 @@ public sealed record ToolCall(
     [property: JsonPropertyName("name")] string Name,
     [property: JsonPropertyName("input")] string Input);
 
-/// <summary>The result of a tool call, as the model gets it; a failure of any kind is an error result (TOOL-05).</summary>
+/// <summary>The result of a tool call, as the model gets it; any failure is an error result.</summary>
 /// <param name="CallId">The id of the call it answers.</param>
 /// <param name="Content">What the tool returned, or why the call failed.</param>
 /// <param name="IsError">Whether the call failed.</param>
@@ -166,8 +162,8 @@ public sealed record ToolResult(
     [property: JsonPropertyName("isError")] bool IsError);
 
 /// <summary>
-/// Stores a block's raw JSON as a JSON string, so it reads back as the exact text it was, even after a store that
-/// normalizes JSON (such as PostgreSQL <c>jsonb</c>) has rewritten the conversation's own JSON (AGT-06).
+/// Stores a block's raw JSON as a JSON string, so it reads back exactly, even after a store that normalizes JSON (such
+/// as PostgreSQL <c>jsonb</c>) has rewritten the conversation's JSON.
 /// </summary>
 internal sealed class ContentBlockConverter : JsonConverter<ContentBlock>
 {

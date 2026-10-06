@@ -6,16 +6,15 @@ using Sleepyshark.Officina.Testing;
 namespace Sleepyshark.Officina.Tests;
 
 /// <summary>
-/// TEST-07, MEM-03: generated paths (climbing, absolute, encoded, through a link, with either separator) never reach a
-/// file outside the run's scope, in either store, whether they come from the model through the memory tool or go to the
-/// store directly. Each case starts from the same files: one in the scope, one in another scope, and a secret outside
-/// the stores, with a link to it inside the scope where the system allows creating one.
+/// Generated paths (climbing, absolute, encoded, through a link, either separator) never reach a file outside the run's
+/// scope, in either store, via the memory tool or the store directly. Each case starts with a file in the scope, one in
+/// another scope, and a secret outside the stores, linked from inside the scope where links can be created.
 /// </summary>
 public class MemoryPropertyTests
 {
     private const string Secret = "TOP-SECRET";
 
-    /// <summary>The file store's directory of the scope <c>sam</c>: the hex of its UTF-8 bytes.</summary>
+    /// <summary>The file store's directory for scope <c>sam</c>: the hex of its UTF-8 bytes.</summary>
     private const string Sam = "73616d";
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
@@ -37,7 +36,7 @@ public class MemoryPropertyTests
 
     private static readonly string[] Commands = ["view", "create", "str_replace", "insert", "delete", "rename", "rename back"];
 
-    /// <summary>One case: a command, its path, and a second path for renames; each case runs against both stores.</summary>
+    /// <summary>One case: a command, its path, and a second path for renames; run against both stores.</summary>
     public sealed record Attempt(string Command, string Path, string Other);
 
     private static readonly Gen<string> Separator = Gen.Frequency((3, Gen.Const("/")), (1, Gen.Const("\\")));
@@ -140,7 +139,7 @@ public class MemoryPropertyTests
             .ToDictionary(file => file.FullName, file => File.ReadAllText(file.FullName)),
         StringComparer.Ordinal);
 
-    /// <summary>Runs a step that a store may refuse: refusing is fine; reaching outside the scope is what the checks catch.</summary>
+    /// <summary>Runs a step a store may refuse: refusing is fine; reaching outside the scope is what the checks catch.</summary>
     private static async Task Try(Func<Task> step)
     {
         try

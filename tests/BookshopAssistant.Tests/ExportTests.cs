@@ -5,9 +5,8 @@ using static BookshopAssistant.Tests.ConsoleSession;
 namespace BookshopAssistant.Tests;
 
 /// <summary>
-/// TEST-09 for APP-12: the console exports a customer's order history as CSV through the real filesystem MCP server,
-/// started by the compose file's service in Docker, writing into a folder of the test's own. Only the model and the
-/// staff member are scripted.
+/// The console exports a customer's order history as CSV through the real filesystem MCP server, started by the compose
+/// file's service in Docker and writing into the test's own folder. Only the model and the staff member are scripted.
 /// </summary>
 public sealed class ExportTests(BookshopDatabase database) : IClassFixture<BookshopDatabase>, IAsyncLifetime
 {
@@ -99,8 +98,8 @@ public sealed class ExportTests(BookshopDatabase database) : IClassFixture<Books
     }
 
     /// <summary>
-    /// Sends SIGINT to the process group of the server's processes, found by the test's own folder in their command line,
-    /// after checking they are in a session other than this process's, which a Ctrl+C in this terminal would reach.
+    /// Sends SIGINT to the server's process group, found by the test's folder in their command line, after checking they
+    /// are in another session than this process, which a Ctrl+C in this terminal would reach.
     /// </summary>
     private async Task InterruptServerAsync()
     {
@@ -135,7 +134,7 @@ public sealed class ExportTests(BookshopDatabase database) : IClassFixture<Books
         }
     }
 
-    /// <summary>A process's state, process group and session, from <c>/proc/&lt;id&gt;/stat</c>, after the command's closing parenthesis.</summary>
+    /// <summary>A process's state, process group and session, from <c>/proc/&lt;id&gt;/stat</c> after the command's closing parenthesis.</summary>
     private static (string State, int Group, int Session) Stat(int processId)
     {
         string text;

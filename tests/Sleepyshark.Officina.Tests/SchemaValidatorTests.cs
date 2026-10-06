@@ -4,7 +4,7 @@ using Json.Schema;
 
 namespace Sleepyshark.Officina.Tests;
 
-/// <summary>The schema validator (Q2, TOOL-02), and TEST-08: it agrees with an established validator on the subset.</summary>
+/// <summary>The schema validator, and that it agrees with an established validator on the subset.</summary>
 public class SchemaValidatorTests
 {
     private static readonly Gen<string> Number = Gen.OneOfConst("0", "1", "-2", "3", "1.5", "2.0", "-0.5", "100", "1e2", "2.5E-1", "-3e0");

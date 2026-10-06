@@ -5,11 +5,10 @@ using System.Text.RegularExpressions;
 namespace Sleepyshark.Officina;
 
 /// <summary>
-/// Validates JSON against the subset of JSON Schema (draft 2020-12) that the core's schemas use (Q2, TOOL-02): those the
-/// platform's schema exporter makes for tools and typed output, and those MCP servers commonly send. A schema outside
-/// the subset is refused when it is defined, so a schema is never half checked. A <c>pattern</c> is a .NET regular
-/// expression, not ECMA-262: <c>\d</c> and <c>\w</c> also match non-ASCII digits and letters. A pattern that runs past
-/// its timeout throws <see cref="RegexMatchTimeoutException"/>.
+/// Validates JSON against the subset of JSON Schema (draft 2020-12) the core's schemas use: those .NET's exporter makes
+/// for tools and typed output, and those MCP servers commonly send. A schema outside the subset is refused when defined,
+/// so none is half checked. A <c>pattern</c> is a .NET regular expression (<c>\d</c> and <c>\w</c> also match non-ASCII),
+/// and one that runs past its timeout throws <see cref="RegexMatchTimeoutException"/>.
 /// </summary>
 internal static class SchemaValidator
 {
@@ -86,7 +85,7 @@ internal static class SchemaValidator
         }
     }
 
-    /// <summary>Validates <paramref name="value"/> against a schema in the subset; returns the problems, none when it is valid.</summary>
+    /// <summary>Validates <paramref name="value"/> against a schema in the subset; returns the problems, none when valid.</summary>
     public static List<string> Validate(JsonElement schema, JsonElement value)
     {
         var problems = new List<string>();

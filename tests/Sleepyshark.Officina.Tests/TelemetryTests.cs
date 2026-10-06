@@ -5,7 +5,7 @@ using Sleepyshark.Officina.Testing;
 
 namespace Sleepyshark.Officina.Tests;
 
-/// <summary>Traces and metrics of scripted runs, collected in memory (TEST-06, EVT-02…04, AUD-03, AUD-06, CTX-05).</summary>
+/// <summary>Traces and metrics of scripted runs, collected in memory.</summary>
 public class TelemetryTests
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
@@ -113,7 +113,7 @@ public class TelemetryTests
         Assert.Equal(ActivityStatusCode.Unset, order.Status);
         Assert.DoesNotContain("officina.tool.approval", Tags(spans.Single(span => span.OperationName == "execute_tool search")).Keys);
 
-        // AUD-03: each entry carries the trace, and the span of the step it records.
+        // Each entry carries the trace, and the span of the step it records.
         Assert.All(sink.Entries, entry => Assert.Equal(run.TraceId.ToHexString(), entry.TraceId));
         Assert.Equal(
             [

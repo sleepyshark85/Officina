@@ -1,12 +1,9 @@
 namespace Sleepyshark.Officina;
 
-/// <summary>
-/// What one run gets beside its message, each optional (ARCHITECTURE §5). None of it is part of the prefix, so each run
-/// of a conversation may have its own.
-/// </summary>
+/// <summary>What one run gets besides its message, each optional. None of it is part of the prefix.</summary>
 public sealed record RunOptions
 {
-    /// <summary>The run context, appended after the user message as an operator message (CTX-02).</summary>
+    /// <summary>The run context, appended after the user message as an operator message.</summary>
     public string? Context
     {
         get;
@@ -22,8 +19,8 @@ public sealed record RunOptions
     }
 
     /// <summary>
-    /// Whose memory the run sees (MEM-03), one of the scopes <see cref="MemoryPath"/> accepts; an agent with the memory
-    /// tool needs one. Tool handlers get it in their <see cref="ToolContext"/>.
+    /// Whose memory the run sees, a scope <see cref="MemoryPath"/> accepts; an agent with the memory tool needs one. Tool
+    /// handlers get it in their <see cref="ToolContext"/>.
     /// </summary>
     public string? MemoryScope
     {
@@ -39,6 +36,6 @@ public sealed record RunOptions
         }
     }
 
-    /// <summary>Limits on the run (BUD-01); none by default. A host may give each run what is left of a session's budget.</summary>
+    /// <summary>Limits on the run; none by default. A host may give each run what is left of a session's budget.</summary>
     public Budget? Budget { get; init; }
 }

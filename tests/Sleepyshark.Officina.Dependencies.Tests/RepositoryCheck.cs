@@ -1,6 +1,6 @@
 namespace Sleepyshark.Officina.Dependencies.Tests;
 
-/// <summary>Applies <see cref="DependencyRules"/> to every project under <c>src/</c>, <c>apps/</c>, <c>samples/</c> and <c>tests/</c> of a repository.</summary>
+/// <summary>Applies <see cref="DependencyRules"/> to every project under <c>src/</c>, <c>apps/</c>, <c>samples/</c> and <c>tests/</c>.</summary>
 internal static class RepositoryCheck
 {
     // This project spells out the forbidden names, so its own source is not scanned.

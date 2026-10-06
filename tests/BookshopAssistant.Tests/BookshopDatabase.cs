@@ -5,9 +5,9 @@ using Testcontainers.PostgreSql;
 namespace BookshopAssistant.Tests;
 
 /// <summary>
-/// A fresh copy of the seeded bookshop database for one test class. One PostgreSQL container, started on first use with
-/// the application's schema and seed, serves the whole run; each class gets its own database cloned from the seeded one,
-/// so classes never see each other's changes. Linux only (TEST-03, TEST-09), and only where Docker is available.
+/// A fresh copy of the seeded bookshop database per test class. One PostgreSQL container, started on first use with the
+/// app's schema and seed, serves the run; each class gets its own clone, so classes never see each other's changes.
+/// Linux only, and only where Docker is available.
 /// </summary>
 public sealed class BookshopDatabase : IAsyncLifetime
 {
@@ -22,8 +22,8 @@ public sealed class BookshopDatabase : IAsyncLifetime
     public const string Password = "shelf-demo-41";
 
     /// <summary>
-    /// Whether the database tests run here: on Linux, always in CI, where a missing Docker fails them rather than skipping
-    /// them silently; elsewhere on Linux, when Docker is found.
+    /// Whether the database tests run here: on Linux, always in CI (where missing Docker fails them rather than skipping
+    /// silently), elsewhere when Docker is found.
     /// </summary>
     public static bool Available =>
         OperatingSystem.IsLinux()
@@ -69,8 +69,8 @@ public sealed class BookshopDatabase : IAsyncLifetime
     }
 
     /// <summary>
-    /// Makes the database unreachable, as if its server had stopped (APP-18): new connections are refused and open ones
-    /// are ended. <see cref="BringBackAsync"/> undoes it.
+    /// Makes the database unreachable, as if its server stopped: new connections are refused and open ones ended.
+    /// <see cref="BringBackAsync"/> undoes it.
     /// </summary>
     public async Task TakeDownAsync()
     {
@@ -96,7 +96,7 @@ public sealed class BookshopDatabase : IAsyncLifetime
         return (T)(await command.ExecuteScalarAsync())!;
     }
 
-    /// <summary>Runs a statement on the server's maintenance database, as the test's administrator.</summary>
+    /// <summary>Runs a statement on the server's maintenance database, as administrator.</summary>
     private static async Task AdminAsync(string sql)
     {
         await using var connection = new NpgsqlConnection(
@@ -125,7 +125,7 @@ public sealed class DatabaseFactAttribute : FactAttribute
     public DatabaseFactAttribute([CallerFilePath] string? sourceFilePath = null, [CallerLineNumber] int sourceLineNumber = -1)
         : base(sourceFilePath, sourceLineNumber)
     {
-        Skip = "Needs Linux and Docker (TEST-03).";
+        Skip = "Needs Linux and Docker.";
         SkipUnless = nameof(BookshopDatabase.Available);
         SkipType = typeof(BookshopDatabase);
     }

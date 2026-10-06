@@ -1,6 +1,6 @@
 namespace Sleepyshark.Officina.Dependencies.Tests;
 
-/// <summary>Shows that the TEST-05 check catches each kind of violation, and allows what the design allows.</summary>
+/// <summary>The dependency check catches each kind of violation, and allows what the design allows.</summary>
 public sealed class DependencyRulesTests : IDisposable
 {
     private const string Core = "Sleepyshark.Officina";

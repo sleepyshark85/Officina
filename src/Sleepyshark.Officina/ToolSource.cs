@@ -1,10 +1,9 @@
 namespace Sleepyshark.Officina;
 
 /// <summary>
-/// Where tools that hold a connection come from, such as an MCP server (ARCHITECTURE §7). Its tools name it as their
-/// <see cref="Tool.Source"/>. Each run connects every source its agent's tools come from before its first model call,
-/// and fails if one cannot connect (MCP-04); a source that fails later gives error results for its calls. What happens
-/// to a source's connection is written to the audit trail (AUD-01).
+/// A source of tools that holds a connection, such as an MCP server; its tools name it as their <see cref="Tool.Source"/>.
+/// Each run connects its sources before the first model call and fails if one cannot; a source that fails later gives
+/// error results for its calls. Connection changes go to the audit trail.
 /// </summary>
 public interface IToolSource
 {
@@ -12,20 +11,19 @@ public interface IToolSource
     string Name { get; }
 
     /// <summary>
-    /// Makes sure the source is connected, connecting again if it lost its connection. Throws when it cannot, with a
-    /// message that says why and holds no secret. Several runs may call it at once.
+    /// Makes sure the source is connected, reconnecting if it was lost. Throws when it cannot, with a message that says why
+    /// and holds no secret. Several runs may call it at once.
     /// </summary>
     Task ConnectAsync(CancellationToken cancellationToken);
 
     /// <summary>
-    /// What happened to the connection since the last call, oldest first; each change is taken once. Runs take changes
-    /// when they connect and after each batch of tool calls, so a source that several runs share has each change
-    /// recorded in the audit trail of the run that takes it first, which may not be the run whose call met it.
+    /// Connection changes since the last call, oldest first; each is taken once. Runs take them when they connect and after
+    /// each batch of tool calls, so with a shared source a change is recorded by whichever run takes it first.
     /// </summary>
     IReadOnlyList<ToolSourceChange> TakeChanges();
 }
 
-/// <summary>What happened to a tool source's connection; <paramref name="Detail"/> says why it failed or was lost.</summary>
+/// <summary>A change to a tool source's connection; <paramref name="Detail"/> says why it failed or was lost.</summary>
 public sealed record ToolSourceChange(ToolSourceState State, string? Detail = null);
 
 /// <summary>A tool source's connection state, as the audit trail records it.</summary>
@@ -40,10 +38,10 @@ public enum ToolSourceState
     Disconnected,
 }
 
-/// <summary>Connects an agent's tool sources and records what happens to their connections.</summary>
+/// <summary>Connects an agent's tool sources and records their connection changes.</summary>
 internal static class ToolSources
 {
-    /// <summary>Connects each tool source of the agent's tools; returns why the run cannot start, or null when all are connected.</summary>
+    /// <summary>Connects each of the agent's tool sources; returns why the run cannot start, or null when all connected.</summary>
     public static async Task<string?> ConnectAsync(Agent agent, AuditRecorder audit, CancellationToken cancellationToken)
     {
         string? error = null;
@@ -58,7 +56,7 @@ internal static class ToolSources
                 // The run then stops as cancelled, before its first model call.
                 break;
             }
-#pragma warning disable CA1031 // A source that cannot connect fails the run, with its reason (MCP-04).
+#pragma warning disable CA1031 // A source that cannot connect fails the run, with its reason.
             catch (Exception exception)
 #pragma warning restore CA1031
             {
@@ -81,7 +79,7 @@ internal static class ToolSources
             {
                 changes = source.TakeChanges();
             }
-#pragma warning disable CA1031 // A source that fails to report its changes must not end the run (principle 8); it is recorded instead.
+#pragma warning disable CA1031 // A source that cannot report its changes must not end the run; the failure is recorded.
             catch (Exception exception)
 #pragma warning restore CA1031
             {

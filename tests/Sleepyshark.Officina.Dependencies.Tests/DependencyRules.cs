@@ -2,7 +2,7 @@ using System.Text.RegularExpressions;
 
 namespace Sleepyshark.Officina.Dependencies.Tests;
 
-/// <summary>The dependency rules of ARCHITECTURE.md §3 and CLAUDE.md, checked by TEST-05.</summary>
+/// <summary>The dependency rules of ARCHITECTURE.md and CLAUDE.md.</summary>
 internal static partial class DependencyRules
 {
     public const string Claude = "Sleepyshark.Officina.Claude";
@@ -12,8 +12,8 @@ internal static partial class DependencyRules
     {
         var isClaude = Is(project.Name, Claude);
 
-        // Every graph is walked up to the Anthropic SDK, which brings Microsoft.Extensions.AI with it, so a project
-        // that references the SDK is reported once, for that. Other projects are also not walked past the Claude package.
+        // Every graph is walked up to the Anthropic SDK, which brings Microsoft.Extensions.AI, so a project referencing the SDK
+        // is reported once, for that. Other projects are not walked past the Claude package.
         var reached = project.Reachable(id => IsAnthropicSdk(id) || (!isClaude && Is(id, Claude)));
 
         foreach (var id in reached.Order(StringComparer.OrdinalIgnoreCase))
@@ -46,7 +46,7 @@ internal static partial class DependencyRules
         }
     }
 
-    /// <summary>Finds code that uses Microsoft.Extensions.AI types, which no project may do, even where the SDK brings them in.</summary>
+    /// <summary>Finds code that uses Microsoft.Extensions.AI types, which no project may, even where the SDK brings them.</summary>
     public static IEnumerable<string> CheckSource(string path, string text)
     {
         // Deliberately strict: comments and strings match too, so the namespace cannot be mentioned at all.

@@ -7,25 +7,22 @@ using Sleepyshark.Officina;
 
 namespace BookshopAssistant;
 
-/// <summary>The cost limits of the console (APP-14), in US dollars: each reply's, and each session's over all its replies.</summary>
+/// <summary>The console's cost limits, in US dollars: per reply, and per session over all its replies.</summary>
 public sealed record Budgets(decimal Reply, decimal Session)
 {
     public static Budgets Default { get; } = new(Reply: 0.50m, Session: 5m);
 }
 
 /// <summary>
-/// The console (ARCHITECTURE §12.1): asks who is using it, then reads messages and commands, streams each reply with its
-/// tool activity, asks approval for changes, and cancels a reply on request (APP-01, APP-03, APP-06, APP-13). It is also
-/// the agent's approver: the run announces each approval in its event stream, the console asks the staff member there,
-/// in order with everything shown before it, and hands the answer to the waiting run. Each reply is a span of its own, the
-/// parent of the run's trace, so the console's logs join that trace (APP-20); <c>/audit</c> reads <paramref name="audit"/>
-/// and links each run to its trace on <paramref name="dashboard"/> (APP-16). Each conversation is a session, saved in
-/// <paramref name="sessions"/> after every step of a reply (APP-10); each reply ends with a status line of its tokens and
-/// cost, and stops when it reaches its own or its session's budget (APP-14). A session left with <c>/new</c>,
-/// <c>/resume</c> or <c>/quit</c> is summarized, and <c>/sessions</c> summarizes the sessions it lists that were left
-/// without one, as after a crash (APP-15).
-/// Each staff member has a memory scope of their own in <paramref name="memory"/>, which their runs see and
-/// <c>/memory</c> shows (APP-11).
+/// The console: asks who is using it, reads messages and commands, streams each reply with its tool activity, asks
+/// approval for changes and cancels a reply on request. It is the agent's approver: it prompts on each approval event,
+/// in order with what was shown before, and hands the answer to the waiting run. Each reply is a span, the parent of the
+/// run's trace, so the console's logs join it; <c>/audit</c> reads <paramref name="audit"/> and links each run to its
+/// trace on <paramref name="dashboard"/>. Each conversation is a session, saved in <paramref name="sessions"/> after
+/// every step; each reply ends with a status line of tokens and cost, and stops at its own or its session's budget. A
+/// session left with <c>/new</c>, <c>/resume</c> or <c>/quit</c> is summarized, and <c>/sessions</c> summarizes those
+/// left without one, as after a crash. Each staff member has their own memory scope in <paramref name="memory"/>, which
+/// <c>/memory</c> shows.
 /// </summary>
 public sealed partial class BookshopConsole(
     TextReader input, TextWriter output, TimeProvider time, bool echoInput, AuditTable audit, SessionStore sessions, Uri dashboard,
@@ -60,11 +57,11 @@ public sealed partial class BookshopConsole(
     private Task<string?>? pendingRead;
     private Agent? summarizer;
 
-    /// <summary>The sessions whose summary failed in this console, which <c>/sessions</c> does not try again.</summary>
+    /// <summary>The sessions whose summary failed in this console, which <c>/sessions</c> does not retry.</summary>
     private readonly HashSet<string> unsummarized = [];
     private bool atLineStart = true;
 
-    /// <summary>Cancels the reply in progress (APP-03); false when there is none.</summary>
+    /// <summary>Cancels the reply in progress; false when there is none.</summary>
     public bool CancelReply()
     {
         var current = Volatile.Read(ref reply);
@@ -155,7 +152,7 @@ public sealed partial class BookshopConsole(
                     continue;
             }
 
-            // The run context is sent at the start of the session and again only when it changes (APP-13).
+            // The run context is sent at the start of the session and again only when it changes.
             var current = BookshopAgent.Context(time.GetLocalNow(), staffMember);
             await ReplyAsync(agent, session, line, current == session.Context ? null : current, MemoryScope(staffMember));
         }
@@ -195,7 +192,7 @@ public sealed partial class BookshopConsole(
         return null;
     }
 
-    /// <summary>What follows <paramref name="name"/> in <paramref name="command"/>, trimmed; null when it is another command.</summary>
+    /// <summary>What follows <paramref name="name"/> in <paramref name="command"/>, trimmed; null for another command.</summary>
     private static string? Argument(string command, string name) =>
         command == name || command.StartsWith(name + " ", StringComparison.Ordinal) ? command[name.Length..].Trim() : null;
 
@@ -247,7 +244,7 @@ public sealed partial class BookshopConsole(
 
     /// <summary>
     /// The stored session <paramref name="id"/>, to go on with; null when there is none, it cannot be read, or the agent
-    /// has changed since it started, which would fail its next reply with a prefix mismatch (APP-10, CTX-04).
+    /// changed since it started, which would fail its next reply with a prefix mismatch.
     /// </summary>
     private async Task<Session?> ResumeAsync(Agent agent, string id)
     {
@@ -291,10 +288,7 @@ public sealed partial class BookshopConsole(
         };
     }
 
-    /// <summary>
-    /// Summarizes <paramref name="session"/> as it is left (APP-15), unless nothing was said in it since this console took
-    /// it up.
-    /// </summary>
+    /// <summary>Summarizes <paramref name="session"/> as it is left, unless nothing was said since this console took it up.</summary>
     private async Task LeaveAsync(Session session)
     {
         if (summarizer is not null && session.Changed && await SummarizeAsync(session.Id, session.Conversation) is { } summary)
@@ -303,10 +297,7 @@ public sealed partial class BookshopConsole(
         }
     }
 
-    /// <summary>
-    /// Runs the summarizer on a session's conversation and stores its summary; returns it, or null when the run or the
-    /// store failed, which is told.
-    /// </summary>
+    /// <summary>Summarizes a session's conversation and stores the summary; returns it, or null (and says so) on failure.</summary>
     private async Task<SessionSummary?> SummarizeAsync(string id, Conversation conversation)
     {
         var result = await summarizer!.RunAsync(SessionSummarizer.Transcript(conversation), SessionSummarizer.Options);
@@ -338,12 +329,12 @@ public sealed partial class BookshopConsole(
     }
 
     /// <summary>
-    /// A staff member's memory scope: their name, so it is the same whatever case they type it in. Memory follows the staff
-    /// member at the counter, not a session's owner: a session resumed by another member runs in that member's scope.
+    /// A staff member's memory scope: their name, so case does not matter. Memory follows who is at the counter, not who
+    /// owns the session: a session resumed by another member runs in that member's scope.
     /// </summary>
     private static string MemoryScope(string staffMember) => staffMember.Trim().ToLowerInvariant();
 
-    /// <summary>Shows every file of the staff member's memory, with its text (APP-11).</summary>
+    /// <summary>Shows every file of the staff member's memory, with its text.</summary>
     private async Task ShowMemoryAsync(string scope)
     {
         try
@@ -379,8 +370,8 @@ public sealed partial class BookshopConsole(
     }
 
     /// <summary>
-    /// Streams one reply, saving the session after every step of it, within the reply's budget or what is left of the
-    /// session's, whichever is less.
+    /// Streams one reply, saving the session after every step, within the lower of the reply's budget and what is left of
+    /// the session's.
     /// </summary>
     private async Task ReplyAsync(Agent agent, Session session, string message, string? context, string memoryScope)
     {
@@ -484,7 +475,7 @@ public sealed partial class BookshopConsole(
         await EndLineAsync();
     }
 
-    /// <summary>The status line after a reply (APP-14): its tokens, the share of input read from the cache, its cost and the session's.</summary>
+    /// <summary>The status line after a reply: its tokens, the share of input from the cache, its cost and the session's.</summary>
     private static string StatusLine(RunResult result, Session session) => string.Create(
         CultureInfo.InvariantCulture, $"[{Tokens(result.Usage)} · reply ${result.Cost:0.0000} · session ${session.Cost:0.0000}]");
 
@@ -497,8 +488,8 @@ public sealed partial class BookshopConsole(
     }
 
     /// <summary>
-    /// Saves the session with its totals so far; returns whether it was saved. A failure is told once a reply
-    /// (<paramref name="told"/>), and the reply goes on: the next save stores the whole conversation and totals.
+    /// Saves the session with its totals so far; returns whether it was saved. A failure is told once per reply
+    /// (<paramref name="told"/>) and the reply goes on: the next save stores everything.
     /// </summary>
     private async Task<bool> SaveAsync(Session session, Usage usage, decimal cost, bool told)
     {
@@ -520,10 +511,10 @@ public sealed partial class BookshopConsole(
         }
     }
 
-    /// <summary>Shows the call's exact input and asks the staff member (APP-06); the waiting run gets the answer.</summary>
+    /// <summary>Shows the call's exact input and asks the staff member; the waiting run gets the answer.</summary>
     /// <remarks>
-    /// Cancelling the reply at the prompt takes effect at once: the run stops waiting for the answer, and the line being
-    /// typed becomes the next message. A cancelled prompt leaves no answer behind.
+    /// Cancelling the reply at the prompt takes effect at once: the run stops waiting, the line being typed becomes the next
+    /// message, and no answer is left behind.
     /// </remarks>
     private async Task AskApprovalAsync(ToolCall call, CancellationToken cancellationToken)
     {
@@ -555,7 +546,7 @@ public sealed partial class BookshopConsole(
         await output.WriteAsync(prompt);
         await output.FlushAsync(CancellationToken.None);
 
-        // The console's reader blocks, so the read runs aside; a read that a cancel abandons serves the next prompt.
+        // The console's reader blocks, so the read runs aside; a read a cancel abandons serves the next prompt.
         pendingRead ??= Task.Run(async () => await input.ReadLineAsync(), CancellationToken.None);
         string? line;
         try
@@ -569,7 +560,7 @@ public sealed partial class BookshopConsole(
         }
 
         // The line can finish just as the cancel arrives, and WaitAsync then returns it instead of throwing. Keep it
-        // pending so it serves the next prompt rather than being lost.
+        // pending for the next prompt rather than lose it.
         if (cancellationToken.IsCancellationRequested)
         {
             atLineStart = false;
@@ -630,7 +621,7 @@ public sealed partial class BookshopConsole(
     [LoggerMessage(Level = LogLevel.Error, Message = "Reply in conversation {Conversation} failed ({Reason}): {Error}")]
     private static partial void LogReplyFailed(ILogger logger, string conversation, FailureReason reason, string error);
 
-    /// <summary>The session in use: its conversation, who started it, what its replies used, and the run context it last received.</summary>
+    /// <summary>The session in use: its conversation, who started it, what its replies used, and its last run context.</summary>
     private sealed class Session(Conversation conversation, string staffMember)
     {
         public Conversation Conversation { get; } = conversation;

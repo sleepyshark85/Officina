@@ -2,7 +2,7 @@ using Sleepyshark.Officina.Testing;
 
 namespace Sleepyshark.Officina.Tests;
 
-/// <summary>Long conversations (HIST-01…04): the provider shortens them on its side, and the run reports what it did.</summary>
+/// <summary>Long conversations: the provider shortens them on its side, and the run reports what it did.</summary>
 public class LongConversationTests
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
@@ -86,7 +86,7 @@ public class LongConversationTests
 
     /// <summary>
     /// Pins the fingerprint of an agent with neither typed output nor context management: the SHA-256 of
-    /// <c>{"model":…,"instructions":…,"tools":[…]}</c>. A change to it stops every stored session from resuming (CTX-04).
+    /// <c>{"model":…,"instructions":…,"tools":[…]}</c>. If it changes, no stored session can resume.
     /// </summary>
     [Fact]
     public void The_fingerprint_of_a_plain_agent_does_not_change()
