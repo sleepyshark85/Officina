@@ -22,7 +22,7 @@ while (Console.ReadLine() is { Length: > 0 } line)
 
     // The date is run context, sent after the message; the instructions never change (CTX-01, CTX-02).
     var context = $"Today is {DateTime.Now.ToString("dddd d MMMM yyyy", CultureInfo.InvariantCulture)}.";
-    await foreach (var runEvent in agent.StreamAsync(conversation, line, context))
+    await foreach (var runEvent in agent.StreamAsync(conversation, line, new() { Context = context }))
     {
         switch (runEvent)
         {

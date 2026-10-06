@@ -155,7 +155,7 @@ public class AuditTests
         await agent.RunAsync(conversation, "Hack it.", cancellationToken: Ct);
         await agent.RunAsync(conversation, "Again.", cancellationToken: Ct);
         await (agent with { Instructions = "Changed." }).RunAsync(conversation, "Again.", cancellationToken: Ct);
-        await (agent with { Budget = new Budget { ModelCalls = 0 } }).RunAsync(conversation, "Again.", cancellationToken: Ct);
+        await agent.RunAsync(conversation, "Again.", new() { Budget = new Budget { ModelCalls = 0 } }, Ct);
 
         Assert.Equal(
             [

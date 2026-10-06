@@ -37,7 +37,7 @@ public sealed class ChatAssistant(AgentDefinition agent, IDictionary<string, str
         }
 
         var context = string.Create(CultureInfo.InvariantCulture, $"Today is {time.GetUtcNow():yyyy-MM-dd}.");
-        var result = await agent.RunAsync(conversation, message, context, user, cancellationToken).ConfigureAwait(false);
+        var result = await agent.RunAsync(conversation, message, new() { Context = context, MemoryScope = user }, cancellationToken).ConfigureAwait(false);
         conversations[user] = JsonSerializer.Serialize(conversation);
         return result;
     }

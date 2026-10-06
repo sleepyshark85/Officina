@@ -64,7 +64,6 @@ public sealed class TicketJob : IAsyncDisposable
                 Instructions = Instructions,
                 Tools = [.. helpdesk.Tools, refundTool],
                 Output = OutputContract.For<TicketOutcome>(),
-                Budget = PerJob,
                 Secrets = [token],
             };
             var audit = new JsonLinesAuditSink(auditFile);
@@ -80,7 +79,7 @@ public sealed class TicketJob : IAsyncDisposable
 
     /// <summary>Handles one ticket; the result says how the run ended, and on completion holds the <see cref="TicketOutcome"/>.</summary>
     public Task<RunResult> HandleAsync(string ticketId, CancellationToken cancellationToken = default) =>
-        Agent.RunAsync(new Conversation { Id = $"ticket-{ticketId}" }, $"Handle ticket {ticketId}.", cancellationToken: cancellationToken);
+        Agent.RunAsync(new Conversation { Id = $"ticket-{ticketId}" }, $"Handle ticket {ticketId}.", new() { Budget = PerJob }, cancellationToken);
 
     public async ValueTask DisposeAsync()
     {

@@ -19,7 +19,7 @@ public class CancellationTests
         using var cancellation = new CancellationTokenSource();
 
         var events = new List<RunEvent>();
-        await foreach (var runEvent in agent.StreamAsync(conversation, "Capital of France?", "Date: 2026-10-05.", cancellation.Token))
+        await foreach (var runEvent in agent.StreamAsync(conversation, "Capital of France?", new() { Context = "Date: 2026-10-05." }, cancellation.Token))
         {
             events.Add(runEvent);
             if (runEvent is TextStreamed)
@@ -32,7 +32,7 @@ public class CancellationTests
         Assert.Empty(events.OfType<ConversationAppended>());
         Assert.Empty(conversation.Messages);
 
-        var next = await agent.RunAsync(conversation, "Hi", "Date: 2026-10-05.", Ct);
+        var next = await agent.RunAsync(conversation, "Hi", new() { Context = "Date: 2026-10-05." }, Ct);
 
         Assert.Equal("Hello again.", Assert.IsType<Completed>(next).Text);
         Assert.Equal([Role.User, Role.Operator], model.Requests[1].Messages.Select(message => message.Role));

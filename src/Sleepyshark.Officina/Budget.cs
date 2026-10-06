@@ -21,8 +21,8 @@ public sealed record Budget
     public TimeSpan? Time { get; init; }
 }
 
-/// <summary>What a run has used so far, against its agent's budget (the budget guard of ARCHITECTURE §3).</summary>
-internal sealed class Spending(AgentDefinition agent)
+/// <summary>What a run has used so far, against its budget (the budget guard of ARCHITECTURE §3).</summary>
+internal sealed class Spending(AgentDefinition agent, Budget? budget)
 {
     private readonly long started = agent.Time.GetTimestamp();
 
@@ -51,8 +51,8 @@ internal sealed class Spending(AgentDefinition agent)
     /// <summary>The most output tokens the next call may use, or null when the budget does not limit them.</summary>
     public int? OutputLimit()
     {
-        long? limit = agent.Budget?.Tokens - Usage.Total;
-        if (agent.Budget?.Cost is { } cost && agent.Model.Price is { Output: > 0 } price)
+        long? limit = budget?.Tokens - Usage.Total;
+        if (budget?.Cost is { } cost && agent.Model.Price is { Output: > 0 } price)
         {
             var affordable = (long)Math.Min(Math.Floor((cost - Cost) * 1_000_000m / price.Output), long.MaxValue);
             limit = limit is null ? affordable : Math.Min(limit.Value, affordable);
@@ -64,7 +64,6 @@ internal sealed class Spending(AgentDefinition agent)
     /// <summary>Which limit is reached, as a sentence; null when the run may call the model again.</summary>
     public string? Reached()
     {
-        var budget = agent.Budget;
         return budget is null ? null
             : ModelCalls >= budget.ModelCalls ? Say($"The model call budget is used up: {ModelCalls} of {budget.ModelCalls}.")
             : Elapsed >= budget.Time ? Say($"The time budget is used up: {Elapsed.TotalSeconds:0.#} s of {budget.Time.Value.TotalSeconds:0.#} s.")

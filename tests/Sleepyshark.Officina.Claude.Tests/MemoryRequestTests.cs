@@ -37,7 +37,7 @@ public class MemoryRequestTests
             ],
         };
 
-        var result = await agent.RunAsync(new Conversation(), "I prefer prices with tax.", null, "sam", Ct);
+        var result = await agent.RunAsync(new Conversation(), "I prefer prices with tax.", new() { MemoryScope = "sam" }, Ct);
 
         Assert.IsType<Completed>(result);
         Assert.Equal("Prices with tax.", await store.ReadAsync("sam", "prefs.md", Ct));

@@ -22,7 +22,7 @@ public sealed class MemoryTests : IDisposable
     {
         var model = new ScriptedModel().CallTools([.. inputs.Select((input, index) => Memory($"m{index}", input))]).Reply("Done.");
         var agent = Agents.With(model, tools: [MemoryTool.Create(store)]);
-        var result = await agent.RunAsync(new Conversation(), "Go.", null, scope, Ct);
+        var result = await agent.RunAsync(new Conversation(), "Go.", new() { MemoryScope = scope }, Ct);
         Assert.IsType<Completed>(result);
         return [.. model.Requests[^1].Messages[^1].Blocks.Select(block => block.ToolResult!)];
     }
@@ -201,8 +201,8 @@ public sealed class MemoryTests : IDisposable
         var agent = Agents.With(new ScriptedModel(), tools: [MemoryTool.Create(new InMemoryMemoryStore())]);
 
         Assert.Throws<ArgumentException>(() => agent.StreamAsync(new Conversation(), "Hi", cancellationToken: Ct));
-        Assert.Throws<ArgumentException>(() => agent.StreamAsync(new Conversation(), "Hi", null, "../ana", Ct));
-        Assert.Throws<ArgumentException>(() => agent.StreamAsync(new Conversation(), "Hi", null, "", Ct));
+        Assert.Throws<ArgumentException>(() => new RunOptions { MemoryScope = "../ana" });
+        Assert.Throws<ArgumentException>(() => agent.StreamAsync(new Conversation(), "Hi", new() { MemoryScope = "" }, Ct));
     }
 
     [Fact]
@@ -219,7 +219,7 @@ public sealed class MemoryTests : IDisposable
             .Reply("Done.");
         var agent = Agents.With(model, tools: [MemoryTool.Create(store, needsApproval: true)]) with { AuditSink = sink, Approver = approver };
 
-        await agent.RunAsync(new Conversation(), "Go.", null, "sam", Ct);
+        await agent.RunAsync(new Conversation(), "Go.", new() { MemoryScope = "sam" }, Ct);
 
         Assert.Equal(["c", "d"], approver.Asked.Select(call => call.Id));
         Assert.Equal(1, store.Writes);
@@ -236,7 +236,7 @@ public sealed class MemoryTests : IDisposable
         var model = new ScriptedModel().CallTools(Memory("c", new { command = "create", path = "/memories/a.md", file_text = "x" })).Reply("Done.");
         var agent = Agents.With(model, tools: [MemoryTool.Create(new InMemoryMemoryStore())]) with { AuditSink = sink };
 
-        await agent.RunAsync(new Conversation(), "Go.", null, "sam", Ct);
+        await agent.RunAsync(new Conversation(), "Go.", new() { MemoryScope = "sam" }, Ct);
 
         Assert.Equal([AuditKind.RunStarted, AuditKind.ToolStarted, AuditKind.ToolEnded, AuditKind.RunEnded], sink.Entries.Select(entry => entry.Kind));
         Assert.All(sink.Entries, entry => Assert.Equal("sam", entry.MemoryScope));
@@ -255,8 +255,8 @@ public sealed class MemoryTests : IDisposable
         var agent = Agents.With(model, tools: [MemoryTool.Create(store)]);
         var conversation = new Conversation();
 
-        await agent.RunAsync(conversation, "What do I prefer?", null, "sam", Ct);
-        await agent.RunAsync(conversation, "Hi.", null, "sam", Ct);
+        await agent.RunAsync(conversation, "What do I prefer?", new() { MemoryScope = "sam" }, Ct);
+        await agent.RunAsync(conversation, "Hi.", new() { MemoryScope = "sam" }, Ct);
 
         Assert.All(model.Requests, request => Assert.Equal(Agents.Instructions, request.Instructions));
         Assert.Empty(PrefixStability.Problems(model.Requests));
