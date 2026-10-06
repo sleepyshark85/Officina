@@ -32,6 +32,13 @@ compaction, against its own database in Docker; it needs `ANTHROPIC_API_KEY` and
 OFFICINA_LIVE_TESTS=1 dotnet test tests/BookshopAssistant.Tests --filter Category=Live --logger "console;verbosity=detailed"
 ```
 
+The search benchmark is skipped too. It loads a million books and 200,000 customers into its own database, about a
+minute, and prints each search's median time; each must stay under 50 ms:
+
+```sh
+OFFICINA_BENCHMARK=1 dotnet test tests/BookshopAssistant.Tests --filter Category=Benchmark --logger "console;verbosity=detailed"
+```
+
 Mutation testing (Stryker.NET) checks that the tests catch changes to the library packages. Each package has a
 `stryker-config.json`; run it from the package's folder, and open the HTML report under `StrykerOutput/`:
 
