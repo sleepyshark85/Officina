@@ -31,19 +31,7 @@ public sealed record Agent
     public ImmutableArray<Tool> Tools
     {
         get;
-        init
-        {
-            var sorted = value.IsDefault ? [] : value.Sort((left, right) => string.CompareOrdinal(left.Name, right.Name));
-            for (var index = 1; index < sorted.Length; index++)
-            {
-                if (sorted[index].Name == sorted[index - 1].Name)
-                {
-                    throw new ArgumentException($"Two tools are named '{sorted[index].Name}'.", nameof(value));
-                }
-            }
-
-            field = sorted;
-        }
+        init => field = RequestPrefix.Sorted(value);
     } = [];
 
     /// <summary>The typed output the agent requires, if any (OUT-01); without one, a run's result is its text (GEN-05).</summary>
@@ -141,7 +129,7 @@ public sealed record Agent
 
     /// <summary>
     /// Whether this agent can run on <paramref name="conversation"/>: true for a new conversation or one started with
-    /// the same tools, instructions and model settings; a run on any other fails with a prefix mismatch (CTX-04).
+    /// the same request prefix (<see cref="RequestPrefix"/>); a run on any other fails with a prefix mismatch (CTX-04).
     /// </summary>
     public bool CanContinue(Conversation conversation)
     {

@@ -12,7 +12,7 @@ namespace Sleepyshark.Officina;
 /// fingerprints are; the fingerprint is computed when read, so a copy made with <c>with</c> is never stale.
 /// </summary>
 /// <param name="ModelSettings">The model's <see cref="IModel.Settings"/>; a provider ignores it, as it knows its own.</param>
-/// <param name="Tools">The tools, in any order; the prefix keeps them sorted by name.</param>
+/// <param name="Tools">The tools, in any order, each with its own name; the prefix keeps them sorted by name.</param>
 /// <param name="Instructions">The frozen instructions.</param>
 /// <param name="OutputSchema">The JSON schema typed output must match, if the agent requires typed output (OUT-01).</param>
 /// <param name="ContextManagement">How the provider shortens the conversation, if at all (HIST-01, HIST-02).</param>
@@ -82,8 +82,20 @@ public sealed record RequestPrefix(
         }
     }
 
-    private static ImmutableArray<Tool> Sorted(ImmutableArray<Tool> tools) =>
-        tools.IsDefault ? [] : tools.Sort((left, right) => string.CompareOrdinal(left.Name, right.Name));
+    /// <summary>The tools sorted by name; throws <see cref="ArgumentException"/> when two share a name, which would leave their order to chance.</summary>
+    internal static ImmutableArray<Tool> Sorted(ImmutableArray<Tool> tools)
+    {
+        var sorted = tools.IsDefault ? [] : tools.Sort((left, right) => string.CompareOrdinal(left.Name, right.Name));
+        for (var index = 1; index < sorted.Length; index++)
+        {
+            if (sorted[index].Name == sorted[index - 1].Name)
+            {
+                throw new ArgumentException($"Two tools are named '{sorted[index].Name}'.", nameof(tools));
+            }
+        }
+
+        return sorted;
+    }
 
     private void WriteTools(Utf8JsonWriter writer)
     {

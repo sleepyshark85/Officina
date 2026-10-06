@@ -56,7 +56,6 @@ reached through a contract the core owns and an adapter or the host implements.
 | **Built by the host** | |
 | `Agent` | Immutable, stateless record describing an agent, and the only entry point for runs. It keeps tools sorted and refuses duplicates. |
 | `RunOptions` | One run's context (sent as an operator message), memory scope and budget. Each value is validated when set. |
-| `RequestPrefix` | What stays the same in every request of a conversation, so the provider can cache it: model settings, tools sorted by name, instructions, output schema, context management. Its fingerprint identifies it, and two prefixes are equal when their fingerprints are. |
 | `Tool` | A tool the model may call: name, description, input schema, read or write, approval need, handler. `FromFunction` builds one from a typed delegate. |
 | `ToolContext` | What a handler learns about the run calling it: its memory scope. |
 | `OutputContract` | Typed output: a schema exported from an application type, and how to read the reply into it. |
@@ -72,12 +71,13 @@ reached through a contract the core owns and an adapter or the host implements.
 | `RunResult` | Exactly one of `Completed` (text, typed output), `Stopped` (reason) or `Failed` (reason, error), with usage, cost, counts and duration. |
 | **Contracts** | |
 | `IModel` | A provider's model with fixed settings. It streams model events for one request and retries transient failures itself. |
+| `RequestPrefix` | Given to the model with each request: what stays the same in every request of a conversation, so the provider can cache it: model settings, tools sorted by name, instructions, output schema, context management. Its fingerprint identifies it, and two prefixes are equal when their fingerprints are. |
 | `IToolSource` | A source of tools that holds a connection, such as an MCP server: connect before a run, report connection changes. |
 | `IApprover` | A person or policy that approves or denies a call. Without one the run is unattended, and calls that need approval are denied. |
 | `IMemoryStore` | The files of one scope: list, read, write, delete, rename. |
 | `IAuditSink` | Durable, ordered storage of audit entries; a failed write throws. |
 | **Internal** | |
-| `RunScope` | What one run's steps share: agent, conversation, span, audit recorder, spending, tool context. |
+| `RunScope` | What one run's steps share: agent, conversation, request prefix, span, audit recorder, spending, tool context. |
 | `ToolPipeline` | Runs one reply's calls with validation, approval, audit, invocation, redaction and truncation. |
 | `AuditRecorder` | Numbers, redacts and truncates entries, and writes them to the sink one at a time. |
 | `Spending` | Usage, cost, call counts and elapsed time against the run's budget. |
