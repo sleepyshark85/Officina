@@ -7,8 +7,8 @@ public static class McpServices
 {
     /// <summary>
     /// Connects to <paramref name="server"/> and registers the source under the server's name. Connecting is asynchronous,
-    /// which a container cannot do when it makes a service, so it happens here; the container still owns the source and
-    /// disposes it. Throws as <see cref="McpToolSource.ConnectAsync(McpServer, IEnumerable{AllowedTool}, CancellationToken)"/> does, registering nothing.
+    /// which a container cannot do when it makes a service, so it happens here. The container disposes the source once
+    /// it has been resolved; one never resolved stays connected until the process ends. Throws as <see cref="McpToolSource.ConnectAsync(McpServer, IEnumerable{AllowedTool}, CancellationToken)"/> does, registering nothing.
     /// </summary>
     public static async Task<IServiceCollection> AddMcpToolSourceAsync(
         this IServiceCollection services, McpServer server, IEnumerable<AllowedTool> allowed, CancellationToken cancellationToken = default)

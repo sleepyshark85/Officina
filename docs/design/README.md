@@ -94,10 +94,11 @@ Every package references the core, and the core references nothing outside the .
 `Microsoft.Extensions.DependencyInjection.Abstractions` (D15). A dependency test (TEST-05) fails if the core gains any
 other package or a project reference, or if any package but Claude references the Anthropic SDK. Each package registers
 its own services: `OfficinaServices` (`AddFileMemoryStore`, `AddInMemoryMemoryStore`), `ClaudeServices`
-(`AddClaudeModel`, keyed) and `McpServices` (`AddMcpToolSourceAsync`, which connects first and is keyed by the server's
-name); `BookshopServices` registers the app's own and composes them. Package names in the diagram drop the `Sleepyshark.` prefix. The samples and tests also reference the
-core, Claude and MCP packages, and `BookshopAssistant.Tests` references the app; the graph draws only
-their edge to the test kit, the one package the app doesn't use.
+(`AddClaudeModel`, keyed) and `McpServices` (`AddMcpToolSourceAsync`, which connects first and is keyed by the
+server's name); `BookshopServices` registers the app's own and composes them. Package names in the diagram drop the
+`Sleepyshark.` prefix. The samples and tests also reference the core, Claude and MCP packages, and
+`BookshopAssistant.Tests` references the app; the graph draws only their edge to the test kit, the one package the app
+doesn't use.
 
 | Contract | Production | Test double | Notes |
 |---|---|---|---|

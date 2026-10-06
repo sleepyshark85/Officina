@@ -1,5 +1,5 @@
-using Microsoft.Extensions.DependencyInjection;
 using System.Text.Json;
+using Microsoft.Extensions.DependencyInjection;
 using Sleepyshark.Officina.Testing;
 using Sleepyshark.Officina.Tests;
 
