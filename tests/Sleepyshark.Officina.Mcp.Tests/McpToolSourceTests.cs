@@ -394,6 +394,7 @@ public sealed class McpToolSourceTests
         await agent.RunAsync(new Conversation(), "Go.", cancellationToken: TestContext.Current.CancellationToken);
         var next = await agent.RunAsync(new Conversation(), "Again.", cancellationToken: TestContext.Current.CancellationToken);
 
+        Assert.Equal("restarting", model.Requests[1].Messages[^1].Blocks[0].ToolResult!.Content);
         var ended = model.Requests[2].Messages[^1].Blocks[0].ToolResult!;
         Assert.True(ended.IsError);
         Assert.EndsWith("the server ended the session.", ended.Content, StringComparison.Ordinal);

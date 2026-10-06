@@ -28,8 +28,8 @@ public sealed class McpToolSource : IToolSource, IAsyncDisposable
     public ImmutableArray<Tool> Tools { get; private set; } = [];
 
     /// <summary>Connects to <paramref name="server"/> and pins its <paramref name="allowed"/> tools.</summary>
-    /// <exception cref="IOException">The server cannot be started or reached.</exception>
-    /// <exception cref="InvalidOperationException">The server lacks an allowed tool, or refuses the protocol.</exception>
+    /// <exception cref="IOException">The server cannot be started or reached, or speaks another protocol version.</exception>
+    /// <exception cref="InvalidOperationException">The server lacks an allowed tool, or one's schema cannot be used.</exception>
     public static async Task<McpToolSource> ConnectAsync(McpServer server, IEnumerable<AllowedTool> allowed, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(server);

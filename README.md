@@ -55,8 +55,7 @@ dotnet stryker --since:main  # or only the files changed since main, as pull req
 | `Sleepyshark.Officina.Claude` | 83% | 78% |
 | `Sleepyshark.Officina.Mcp` | 69% | 64% |
 
-The `mutation` workflow runs this on every pull
-request, weekly and on demand, and keeps the reports as an artifact.
+The `mutation` workflow runs this on every pull request, weekly and on demand, and keeps the reports as an artifact.
 
 | Path | Holds |
 |---|---|

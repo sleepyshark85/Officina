@@ -138,7 +138,7 @@ only a live run or inspection checks, noted in the last column.
 
 | ID | Tests | Also checked by |
 |---|---|---|
-| BUD-01 | Core/BudgetTests: every `BUD_01_…` test, `TEST_07_a_budget_is_overshot_by_at_most_one_call_s_input_…`; Claude/RequestTests: `The_output_limit_is_the_lower_of_the_model_s_and_the_budget_s`; Samples/BackgroundAgentTests: `A_job_that_keeps_calling_tools_stops_at_its_budget`, `BUD_01_a_call_budget_used_up_on_the_last_allowed_call_stops_for_the_budget_not_the_iteration_limit`, `BUD_01_a_reply_cut_by_the_model_s_own_output_limit_stops_for_that_limit_even_when_a_call_budget_is_used_up`, `BUD_01_a_time_budget_is_used_up_the_moment_it_is_reached` | |
+| BUD-01 | Core/BudgetTests: every `BUD_01_…` test, `TEST_07_a_budget_is_overshot_by_at_most_one_call_s_input_…`; Claude/RequestTests: `The_output_limit_is_the_lower_of_the_model_s_and_the_budget_s`; Samples/BackgroundAgentTests: `A_job_that_keeps_calling_tools_stops_at_its_budget` | |
 | BUD-02 | Core/BudgetTests: `Cost_prices_each_kind_of_token_and_cache_writes_by_how_long_they_are_kept`; Claude/StreamTests: `Opus_5_5_is_priced_by_default_and_a_host_may_give_another_price` | |
 | BUD-03 | Core/BudgetTests: `BUD_03_a_result_reports_tokens_cost_model_calls_tool_calls_and_duration_…` | |
 

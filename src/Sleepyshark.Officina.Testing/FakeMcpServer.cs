@@ -11,8 +11,9 @@ namespace Sleepyshark.Officina.Testing;
 /// An MCP server with tools given in advance, over stdio (<see cref="ServeAsync"/>, hosted by a test program) or
 /// Streamable HTTP on a local port (<see cref="StartHttp"/>). It lists one tool per page, sends a notification before
 /// each result (as an event stream over HTTP) that clients must skip, and records the calls. Over HTTP it requires the
-/// headers the protocol does (both accepted content types; the protocol version after initializing), can require a
-/// bearer token, go <see cref="Down"/> or end its session.
+/// headers the protocol does (both accepted content types; the protocol version after initializing), stricter than a
+/// real server, which assumes an older version when that header is missing. It can require a bearer token, go
+/// <see cref="Down"/> or end its session.
 /// </summary>
 public sealed class FakeMcpServer : IDisposable
 {
@@ -137,7 +138,10 @@ public sealed class FakeMcpServer : IDisposable
                 && accept.Contains("text/event-stream", StringComparison.Ordinal);
             var initializing = (string?)request["method"] == "initialize";
             var versioned = initializing || context.Request.Headers["MCP-Protocol-Version"] is { Length: > 0 };
-            var answer = authorized && accepts && versioned ? Handle(request) : null;
+
+            // As a real server does, a request in an unknown session is refused before anything runs.
+            var known = initializing || context.Request.Headers["Mcp-Session-Id"] == session;
+            var answer = authorized && accepts && versioned && known ? Handle(request) : null;
             if (Down)
             {
                 response.Abort();
@@ -152,7 +156,7 @@ public sealed class FakeMcpServer : IDisposable
             {
                 response.StatusCode = 400;
             }
-            else if (!initializing && context.Request.Headers["Mcp-Session-Id"] != session)
+            else if (!known)
             {
                 response.StatusCode = 404;
             }
@@ -162,7 +166,11 @@ public sealed class FakeMcpServer : IDisposable
             }
             else
             {
-                response.Headers["Mcp-Session-Id"] = session;
+                if (initializing)
+                {
+                    response.Headers["Mcp-Session-Id"] = session;
+                }
+
                 var stream = (string?)request["method"] == "tools/call";
                 response.ContentType = stream ? "text/event-stream" : "application/json";
                 // The notification's field has no space after the colon, which the event stream format allows.
