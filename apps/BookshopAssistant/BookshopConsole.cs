@@ -7,25 +7,19 @@ using Sleepyshark.Officina;
 
 namespace BookshopAssistant;
 
-/// <summary>The console's cost limits, in US dollars: per reply, and per session over all its replies.</summary>
-public sealed record Budgets(decimal Reply, decimal Session)
-{
-    public static Budgets Default { get; } = new(Reply: 0.50m, Session: 5m);
-}
-
 /// <summary>
 /// The console: asks who is using it, reads messages and commands, streams each reply with its tool activity, asks
 /// approval for changes and cancels a reply on request. It is the agent's approver: it prompts on each approval event,
 /// in order with what was shown before, and hands the answer to the waiting run. Each reply is a span, the parent of the
 /// run's trace, so the console's logs join it; <c>/audit</c> reads <paramref name="audit"/> and links each run to its
-/// trace on <paramref name="dashboard"/>. Each conversation is a session, saved in <paramref name="sessions"/> after
+/// trace on <paramref name="dashboard"/>. Each conversation is a session, saved in <paramref name="store"/> after
 /// every step; each reply ends with a status line of tokens and cost, and stops at its own or its session's budget. A
 /// session left with <c>/new</c>, <c>/resume</c> or <c>/quit</c> is summarized, and <c>/sessions</c> summarizes those
 /// left without one, as after a crash. Each staff member has their own memory scope in <paramref name="memory"/>, which
 /// <c>/memory</c> shows.
 /// </summary>
 public sealed partial class BookshopConsole(
-    TextReader input, TextWriter output, TimeProvider time, bool echoInput, AuditTable audit, SessionStore sessions, Uri dashboard,
+    TextReader input, TextWriter output, TimeProvider time, bool echoInput, AuditTable audit, SessionStore store, Uri dashboard,
     ILogger? logger = null, Budgets? budgets = null, IMemoryStore? memory = null) : IApprover
 {
     /// <summary>The name of the console's activity source, for the exporter to listen to.</summary>
@@ -46,22 +40,12 @@ public sealed partial class BookshopConsole(
 
     private static readonly ActivitySource Source = new(SourceName);
 
-    /// <summary>How many sessions <c>/sessions</c> lists.</summary>
-    private const int Listed = 20;
-
-    /// <summary>How many sessions left without a summary one <c>/sessions</c> summarizes; later listings do the rest.</summary>
-    private const int SummariesPerListing = 3;
-
     private readonly ILogger logger = logger ?? NullLogger.Instance;
     private readonly Budgets budgets = budgets ?? Budgets.Default;
 
     private readonly ConcurrentDictionary<string, TaskCompletionSource<Approval>> approvals = new();
     private CancellationTokenSource? reply;
     private Task<string?>? pendingRead;
-    private Agent? summarizer;
-
-    /// <summary>The sessions whose summary failed in this console, which <c>/sessions</c> does not retry.</summary>
-    private readonly HashSet<string> unsummarized = [];
     private bool atLineStart = true;
 
     /// <summary>Cancels the reply in progress; false when there is none.</summary>
@@ -92,7 +76,7 @@ public sealed partial class BookshopConsole(
     public async Task RunAsync(Agent agent, Agent? summarizer = null)
     {
         ArgumentNullException.ThrowIfNull(agent);
-        this.summarizer = summarizer;
+        var sessions = new SessionManager(store, summarizer, budgets, logger, WriteLineAsync);
         await output.WriteLineAsync("Bookshop Assistant. Type /help for commands.");
         var staffMember = await AskStaffMemberAsync();
         if (staffMember is null)
@@ -100,7 +84,7 @@ public sealed partial class BookshopConsole(
             return;
         }
 
-        var session = Session.New(staffMember);
+        var session = SessionManager.New(staffMember);
         await output.WriteLineAsync($"Session {session.Id}.");
         while (await ReadAsync("you> ") is { } line)
         {
@@ -109,18 +93,18 @@ public sealed partial class BookshopConsole(
                 case "":
                     continue;
                 case "/quit":
-                    await LeaveAsync(session);
+                    await sessions.LeaveAsync(session);
                     return;
                 case "/help":
                     await output.WriteLineAsync(Help);
                     continue;
                 case "/new":
-                    await LeaveAsync(session);
-                    session = Session.New(staffMember);
+                    await sessions.LeaveAsync(session);
+                    session = SessionManager.New(staffMember);
                     await output.WriteLineAsync($"New session {session.Id}.");
                     continue;
                 case "/sessions":
-                    await ListSessionsAsync(session);
+                    await ListSessionsAsync(sessions, session);
                     continue;
                 case "/cost":
                     await output.WriteLineAsync(string.Create(
@@ -128,21 +112,7 @@ public sealed partial class BookshopConsole(
                         $"Session {session.Id}: {Tokens(session.Usage)}; cost ${session.Cost:0.0000} of its ${budgets.Session:0.00} budget."));
                     continue;
                 case { } command when Argument(command, "/resume") is { } id:
-                    if (await ResumeAsync(agent, id) is { } resumed)
-                    {
-                        // Resuming the session in use does not leave it, nor forget that it changed.
-                        if (resumed.Id == session.Id)
-                        {
-                            resumed.Changed = session.Changed;
-                        }
-                        else
-                        {
-                            await LeaveAsync(session);
-                        }
-
-                        session = resumed;
-                    }
-
+                    session = await sessions.ResumeAsync(agent, id, session);
                     continue;
                 case { } command when Argument(command, "/audit") is { } id:
                     await ShowAuditAsync(id.Length > 0 ? id : session.Id);
@@ -157,10 +127,10 @@ public sealed partial class BookshopConsole(
 
             // The run context is sent at the start of the session and again only when it changes.
             var current = BookshopAgent.Context(time.GetLocalNow(), staffMember);
-            await ReplyAsync(agent, session, line, current == session.Context ? null : current, MemoryScope(staffMember));
+            await ReplyAsync(agent, sessions, session, line, current == session.Context ? null : current, MemoryScope(staffMember));
         }
 
-        await LeaveAsync(session);
+        await sessions.LeaveAsync(session);
     }
 
     public async Task<Approval> ApproveAsync(Tool tool, ToolCall toolCall, CancellationToken cancellationToken)
@@ -199,154 +169,29 @@ public sealed partial class BookshopConsole(
     private static string? Argument(string command, string name) =>
         command == name || command.StartsWith(name + " ", StringComparison.Ordinal) ? command[name.Length..].Trim() : null;
 
-    private async Task ListSessionsAsync(Session current)
+    private async Task ListSessionsAsync(SessionManager sessions, Session current)
     {
-        try
+        if (await sessions.ListAsync(current) is not { } listed)
         {
-            var listed = await sessions.ListAsync(Listed, CancellationToken.None);
-            var summaries = new Dictionary<string, SessionSummary>();
-            var stale = listed.Where(each => each.Stale && each.Id != current.Id && summarizer is not null && !unsummarized.Contains(each.Id)).ToList();
-            var summarizing = stale.Take(SummariesPerListing).ToList();
-            if (summarizing.Count > 0)
+            return;
+        }
+
+        await WriteLineAsync(listed.Count == 0 ? "No sessions yet." : "Sessions, most recent first:");
+        foreach (var each in listed)
+        {
+            await WriteLineAsync(string.Create(
+                CultureInfo.InvariantCulture,
+                $"{(each.Id == current.Id ? "*" : " ")} {each.Id}  {TimeZoneInfo.ConvertTime(each.Updated, time.LocalTimeZone):ddd d MMM HH:mm}  {each.StaffMember}  {each.Title ?? "(no title yet)"}  ${each.Cost:0.0000}"));
+            if (each.Summary is not null)
             {
-                await output.WriteLineAsync(stale.Count > summarizing.Count
-                    ? $"Summarizing {summarizing.Count} of {stale.Count} sessions left without a summary; /sessions again does more…"
-                    : $"Summarizing {stale.Count} session{(stale.Count == 1 ? "" : "s")} left without a summary…");
+                await WriteLineAsync($"    {each.Summary}");
             }
 
-            foreach (var left in summarizing)
+            if (each.Changes.Count > 0)
             {
-                StoredSession? stored;
-                try
-                {
-                    stored = await sessions.LoadAsync(left.Id, CancellationToken.None);
-                }
-                catch (InvalidDataException exception)
-                {
-                    unsummarized.Add(left.Id);
-                    await output.WriteLineAsync($"[{exception.Message}]");
-                    continue;
-                }
-
-                if (stored is not null && await SummarizeAsync(left.Id, stored.Conversation) is { } summary)
-                {
-                    summaries[left.Id] = summary;
-                }
-            }
-
-            await output.WriteLineAsync(listed.Count == 0 ? "No sessions yet." : "Sessions, most recent first:");
-            foreach (var each in listed)
-            {
-                var (title, text, changes) = summaries.TryGetValue(each.Id, out var fresh)
-                    ? (fresh.Title, fresh.Summary, fresh.Changes)
-                    : (each.Title, each.Summary, each.Changes);
-                await output.WriteLineAsync(string.Create(
-                    CultureInfo.InvariantCulture,
-                    $"{(each.Id == current.Id ? "*" : " ")} {each.Id}  {TimeZoneInfo.ConvertTime(each.Updated, time.LocalTimeZone):ddd d MMM HH:mm}  {each.StaffMember}  {title ?? "(no title yet)"}  ${each.Cost:0.0000}"));
-                if (text is not null)
-                {
-                    await output.WriteLineAsync($"    {text}");
-                }
-
-                if (changes.Count > 0)
-                {
-                    await output.WriteLineAsync($"    Changes: {string.Join("; ", changes)}");
-                }
+                await WriteLineAsync($"    Changes: {string.Join("; ", each.Changes)}");
             }
         }
-        catch (Exception exception) when (exception is Npgsql.NpgsqlException or TimeoutException)
-        {
-            await output.WriteLineAsync($"The sessions could not be read: {exception.Message}");
-        }
-    }
-
-    /// <summary>
-    /// The stored session <paramref name="id"/>, to go on with; null when there is none, it cannot be read, or the agent
-    /// changed since it started, which would fail its next reply with a prefix mismatch.
-    /// </summary>
-    private async Task<Session?> ResumeAsync(Agent agent, string id)
-    {
-        if (id.Length == 0)
-        {
-            await output.WriteLineAsync("Which session? Type /resume <id>; /sessions lists them.");
-            return null;
-        }
-
-        StoredSession? stored;
-        try
-        {
-            stored = await sessions.LoadAsync(id, CancellationToken.None);
-        }
-        catch (Exception exception) when (exception is Npgsql.NpgsqlException or TimeoutException or InvalidDataException)
-        {
-            await output.WriteLineAsync($"The session could not be read: {exception.Message}");
-            return null;
-        }
-
-        if (stored is null)
-        {
-            await output.WriteLineAsync($"There is no session {id}. Type /sessions to list them.");
-            return null;
-        }
-
-        if (!agent.CanContinue(stored.Conversation))
-        {
-            await output.WriteLineAsync($"Session {id} was started with another version of the assistant, so it cannot go on. Type /new to start a new session.");
-            return null;
-        }
-
-        await output.WriteLineAsync(string.Create(
-            CultureInfo.InvariantCulture, $"Resumed session {id}: {stored.Conversation.Messages.Length} messages, ${stored.Cost:0.0000} so far."));
-        return new Session(stored.Conversation, stored.StaffMember)
-        {
-            Saved = stored.Saved,
-            Usage = stored.Usage,
-            Cost = stored.Cost,
-            Context = stored.Conversation.Messages.LastOrDefault(message => message.Role == Role.Operator)?.Text,
-        };
-    }
-
-    /// <summary>Summarizes <paramref name="session"/> as it is left, unless nothing was said since this console took it up.</summary>
-    private async Task LeaveAsync(Session session)
-    {
-        if (summarizer is not null && session.Changed && await SummarizeAsync(session.Id, session.Conversation) is { } summary)
-        {
-            await WriteLineAsync($"Session {session.Id} summarized: {summary.Title}");
-        }
-    }
-
-    /// <summary>
-    /// Summarizes a session's conversation and stores the summary, adding its cost to the session's; returns it, or null
-    /// (and says so) on failure.
-    /// </summary>
-    private async Task<SessionSummary?> SummarizeAsync(string id, Conversation conversation)
-    {
-        var result = await summarizer!.RunAsync(SessionSummarizer.Transcript(conversation), SessionSummarizer.Options);
-        if (result is not Completed { Output: SessionSummary summary })
-        {
-            var reason = result switch
-            {
-                Failed failed => failed.Error,
-                Stopped stopped => $"stopped: {stopped.Reason}",
-                _ => "no summary",
-            };
-            unsummarized.Add(id);
-            LogSummaryFailed(logger, id, reason);
-            await WriteLineAsync($"[Session {id} could not be summarized: {reason}]");
-            return null;
-        }
-
-        try
-        {
-            await sessions.SaveSummaryAsync(id, summary, result.Usage, result.Cost, CancellationToken.None);
-        }
-        catch (Exception exception) when (exception is Npgsql.NpgsqlException or TimeoutException)
-        {
-            LogSummaryFailed(logger, id, exception.Message);
-            await WriteLineAsync($"[The summary of session {id} could not be saved: {exception.Message}]");
-        }
-
-        return summary;
     }
 
     /// <summary>
@@ -394,14 +239,14 @@ public sealed partial class BookshopConsole(
     /// Streams one reply, saving the session after every step, within the lower of the reply's budget and what is left of
     /// the session's.
     /// </summary>
-    private async Task ReplyAsync(Agent agent, Session session, string message, string? context, string memoryScope)
+    private async Task ReplyAsync(Agent agent, SessionManager sessions, Session session, string message, string? context, string memoryScope)
     {
         using var span = Source.StartActivity("reply");
         using var cancellation = new CancellationTokenSource();
         Volatile.Write(ref reply, cancellation);
         var conversation = session.Conversation;
-        var left = budgets.Session - session.Cost;
-        var options = new RunOptions { Context = context, MemoryScope = memoryScope, Budget = new Budget { Cost = Math.Max(0, Math.Min(budgets.Reply, left)) } };
+        var options = sessions.Options(session, context, memoryScope);
+        var sessionLimits = sessions.SessionBudgetLimits(session);
         var (saveFailed, labelled, compacted) = (false, false, false);
 
         // What the reply has spent so far, from each model call's usage, so every save stores the session's whole spend.
@@ -454,11 +299,11 @@ public sealed partial class BookshopConsole(
                     case ConversationAppended { Message: var appended }:
                         session.Changed = true;
                         session.Context = appended.Role == Role.Operator ? appended.Text : session.Context;
-                        saveFailed |= !await SaveAsync(session, session.Usage + spent, session.Cost + spentCost, saveFailed);
+                        saveFailed |= !await sessions.SaveAsync(session, session.Usage + spent, session.Cost + spentCost, saveFailed);
                         break;
                     case RunEnded { Result: var result }:
                         (session.Usage, session.Cost) = (session.Usage + result.Usage, session.Cost + result.Cost);
-                        await SaveAsync(session, session.Usage, session.Cost, saveFailed);
+                        await sessions.SaveAsync(session, session.Usage, session.Cost, saveFailed);
                         LogReplyEnded(logger, conversation.Id, result.GetType().Name, result.Usage.Input + result.Usage.CacheRead + result.Usage.CacheWrite, result.Usage.Output);
                         if (result is Failed failure)
                         {
@@ -472,7 +317,7 @@ public sealed partial class BookshopConsole(
                                 : "[The reply has no text. Please ask again.]",
                             Completed => "",
                             Stopped { Reason: StopReason.Cancelled } => "[Cancelled.]",
-                            Stopped { Reason: StopReason.Budget } when left <= budgets.Reply => string.Create(
+                            Stopped { Reason: StopReason.Budget } when sessionLimits => string.Create(
                                 CultureInfo.InvariantCulture,
                                 $"[Stopped: this session has reached its budget of ${budgets.Session:0.00##}. Type /new to start a new session.]"),
                             Stopped { Reason: StopReason.Budget } => string.Create(
@@ -506,31 +351,6 @@ public sealed partial class BookshopConsole(
         return string.Create(
             CultureInfo.InvariantCulture,
             $"tokens: {input:N0} in ({(input == 0 ? 0 : (double)usage.CacheRead / input):0%} from cache), {usage.Output:N0} out");
-    }
-
-    /// <summary>
-    /// Saves the session with its totals so far; returns whether it was saved. A failure is told once per reply
-    /// (<paramref name="told"/>) and the reply goes on: the next save stores everything.
-    /// </summary>
-    private async Task<bool> SaveAsync(Session session, Usage usage, decimal cost, bool told)
-    {
-        try
-        {
-            session.Saved = await sessions.SaveAsync(session.Conversation, session.StaffMember, usage, cost, session.Saved, CancellationToken.None);
-            return true;
-        }
-        catch (Exception exception) when (exception is Npgsql.NpgsqlException or TimeoutException or InvalidOperationException)
-        {
-            LogSaveFailed(logger, session.Id, exception.Message);
-            if (!told)
-            {
-                await WriteLineAsync(exception is InvalidOperationException
-                    ? $"[The session could not be saved: {exception.Message} Type /resume {session.Id} to go on from what was saved.]"
-                    : $"[The session could not be saved: {exception.Message}]");
-            }
-
-            return false;
-        }
     }
 
     /// <summary>Shows the call's exact input and asks the staff member; the waiting run gets the answer.</summary>
@@ -634,40 +454,6 @@ public sealed partial class BookshopConsole(
     [LoggerMessage(Level = LogLevel.Information, Message = "Reply in conversation {Conversation} ended {Result}: {InputTokens} input tokens, {OutputTokens} output tokens")]
     private static partial void LogReplyEnded(ILogger logger, string conversation, string result, long inputTokens, long outputTokens);
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Session {Session} could not be summarized: {Error}")]
-    private static partial void LogSummaryFailed(ILogger logger, string session, string error);
-
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Session {Session} could not be saved: {Error}")]
-    private static partial void LogSaveFailed(ILogger logger, string session, string error);
-
     [LoggerMessage(Level = LogLevel.Error, Message = "Reply in conversation {Conversation} failed ({Reason}): {Error}")]
     private static partial void LogReplyFailed(ILogger logger, string conversation, FailureReason reason, string error);
-
-    /// <summary>The session in use: its conversation, who started it, what its replies used, and its last run context.</summary>
-    private sealed class Session(Conversation conversation, string staffMember)
-    {
-        public Conversation Conversation { get; } = conversation;
-
-        public string Id => Conversation.Id;
-
-        public string StaffMember { get; } = staffMember;
-
-        public Usage Usage { get; set; }
-
-        public decimal Cost { get; set; }
-
-        public string? Context { get; set; }
-
-        /// <summary>How many tool calls the last clearing line named, so a clearing the provider repeats is shown once.</summary>
-        public int? ClearedToolCalls { get; set; }
-
-        /// <summary>The text the session was last stored as; null before its first save.</summary>
-        public string? Saved { get; set; }
-
-        /// <summary>Whether the conversation grew since this console took it up, so leaving it needs a new summary.</summary>
-        public bool Changed { get; set; }
-
-        /// <summary>A new session, with an id short enough to type in <c>/resume</c>; one that collides fails its first save.</summary>
-        public static Session New(string staffMember) => new(new Conversation { Id = Guid.NewGuid().ToString("N")[..12] }, staffMember);
-    }
 }
