@@ -78,17 +78,8 @@ internal static class RunEngine
             yield break;
         }
 
-        // A conversation saved after its model asked for tools, and before their results came, gets error results first,
-        // as the application stopped mid-reply: it may be resumed, and the provider rejects calls without results.
-        if (conversation.Messages is [.., { Role: Role.Assistant } last] && last.Blocks.Select(block => block.ToolCall).OfType<ToolCall>().ToList() is { Count: > 0 } unanswered)
+        if (await AnswerInterruptedAsync(conversation, audit).ConfigureAwait(false) is { } interrupted)
         {
-            foreach (var call in unanswered)
-            {
-                await audit.RecordAsync(AuditKind.ToolEnded, tool: call.Name, callId: call.Id, input: call.Input, outcome: "interrupted", detail: Interrupted).ConfigureAwait(false);
-            }
-
-            var interrupted = new Message(Role.User, [.. unanswered.Select(call => new ContentBlock(new ToolResult(call.Id, Interrupted, IsError: true)))]);
-            conversation.Append(interrupted);
             yield return new ConversationAppended(conversation, interrupted);
         }
 
@@ -126,32 +117,22 @@ internal static class RunEngine
             // A reply the lowered output limit cut short stopped for the budget, once the budget allows no more.
             var budgetCut = limit is not null && reply.Stop?.Reason == ModelStopReason.MaxTokens ? spending.Reached() : null;
             var toolCalls = reply.Blocks.Select(block => block.ToolCall).OfType<ToolCall>().ToList();
-
-            // A reply cut off before its stop reason is not appended (AGT-05), nor is one without content. Nor is one that
-            // requested tools but stopped for another reason (output limit, context full, refusal, end, unknown): its calls
-            // do not run, as its last tool input may be cut short (the SDK keeps an empty one), and appending it would leave
-            // calls without results, which the provider rejects. The run ends with the result its stop reason maps to; an end with calls fails, as a completed
-            // run would report an answer the history does not hold.
-            if (reply.Error is not null || reply.Stop is null || reply.Blocks.Count == 0 || (toolCalls.Count > 0 && reply.Stop.Reason != ModelStopReason.ToolUse))
+            var (append, end) = Decide(agent, reply, toolCalls, usage, budgetCut);
+            if (append)
             {
-                result.Value = reply.Error is not null ? new Failed(FailureReason.ModelError, agent.Redact(reply.Error), usage)
-                    : reply.Stop is null ? new Stopped(StopReason.Cancelled, null, usage)
-                    : toolCalls.Count > 0 && reply.Stop.Reason == ModelStopReason.End ? new Failed(FailureReason.UnexpectedStop, "The model's reply asked for tools but did not stop for them.", usage)
-                    : Result(agent, reply.Stop, reply.Blocks, usage, budgetCut);
-                yield break;
+                conversation.Bind(fingerprint);
+                foreach (var appended in pending.Add(new Message(Role.Assistant, reply.Blocks.ToImmutable())))
+                {
+                    conversation.Append(appended);
+                    yield return new ConversationAppended(conversation, appended);
+                }
+
+                pending = [];
             }
 
-            conversation.Bind(fingerprint);
-            foreach (var appended in pending.Add(new Message(Role.Assistant, reply.Blocks.ToImmutable())))
+            if (end is not null)
             {
-                conversation.Append(appended);
-                yield return new ConversationAppended(conversation, appended);
-            }
-
-            pending = [];
-            if (reply.Stop.Reason != ModelStopReason.ToolUse || toolCalls.Count == 0)
-            {
-                result.Value = Result(agent, reply.Stop, reply.Blocks, usage, budgetCut);
+                result.Value = end;
                 yield break;
             }
 
@@ -325,6 +306,30 @@ internal static class RunEngine
         }
     }
 
+    /// <summary>
+    /// What a reply means for the run: whether it is appended, with the messages it answers, and the result that ends
+    /// the run, or null to run its tool calls and call the model again.
+    /// </summary>
+    /// <remarks>
+    /// A reply cut off before its stop reason is not appended (AGT-05), nor is one without content. Nor is one that
+    /// requested tools but stopped for another reason (output limit, context full, refusal, end, unknown): its calls do
+    /// not run, as its last tool input may be cut short (the SDK keeps an empty one), and appending it would leave calls
+    /// without results, which the provider rejects. An end with calls fails, as a completed run would report an answer
+    /// the history does not hold.
+    /// </remarks>
+    private static (bool Append, RunResult? End) Decide(AgentDefinition agent, Reply reply, List<ToolCall> toolCalls, Usage usage, string? budgetCut) =>
+        (reply.Error, reply.Stop, toolCalls.Count > 0) switch
+        {
+            ({ } error, _, _) => (false, new Failed(FailureReason.ModelError, agent.Redact(error), usage)),
+            (_, null, _) => (false, new Stopped(StopReason.Cancelled, null, usage)),
+            _ when reply.Blocks.Count == 0 => (false, Result(agent, reply.Stop, reply.Blocks, usage, budgetCut)),
+            (_, { Reason: ModelStopReason.ToolUse }, true) => (true, null),
+            (_, { Reason: ModelStopReason.End }, true) => (false, new Failed(FailureReason.UnexpectedStop, "The model's reply asked for tools but did not stop for them.", usage)),
+            (_, _, true) => (false, Result(agent, reply.Stop, reply.Blocks, usage, budgetCut)),
+            _ => (true, Result(agent, reply.Stop, reply.Blocks, usage, budgetCut)),
+        };
+
+    /// <summary>The result a reply's stop reason maps to, when the run ends with it.</summary>
     private static RunResult Result(AgentDefinition agent, ModelStopped stop, IEnumerable<ContentBlock> blocks, Usage usage, string? budgetCut) => stop.Reason switch
     {
         ModelStopReason.End => Completed(agent, agent.Redact(string.Concat(blocks.Select(block => block.Text))), usage),
@@ -335,6 +340,29 @@ internal static class RunEngine
         ModelStopReason.ToolUse => new Failed(FailureReason.UnexpectedStop, "The model stopped to use tools but called none.", usage),
         _ => new Failed(FailureReason.UnexpectedStop, $"The model stopped for a reason the run cannot act on: {stop.Detail ?? stop.Reason.ToString()}.", usage),
     };
+
+    /// <summary>
+    /// Gives error results to the calls of a conversation saved after its model asked for tools and before their results
+    /// came, as the application stopped mid-reply: it may be resumed, and the provider rejects calls without results.
+    /// Returns the message appended, or null when no call was left unanswered.
+    /// </summary>
+    private static async Task<Message?> AnswerInterruptedAsync(Conversation conversation, AuditRecorder audit)
+    {
+        if (conversation.Messages is not [.., { Role: Role.Assistant } last]
+            || last.Blocks.Select(block => block.ToolCall).OfType<ToolCall>().ToList() is not { Count: > 0 } unanswered)
+        {
+            return null;
+        }
+
+        foreach (var call in unanswered)
+        {
+            await audit.RecordAsync(AuditKind.ToolEnded, tool: call.Name, callId: call.Id, input: call.Input, outcome: "interrupted", detail: Interrupted).ConfigureAwait(false);
+        }
+
+        var interrupted = new Message(Role.User, [.. unanswered.Select(call => new ContentBlock(new ToolResult(call.Id, Interrupted, IsError: true)))]);
+        conversation.Append(interrupted);
+        return interrupted;
+    }
 
     /// <summary>A completed run's result; with typed output, a reply that fails to read fails the run, with no correction round (OUT-02).</summary>
     private static RunResult Completed(AgentDefinition agent, string text, Usage usage) => agent.Output?.Read(text) switch
