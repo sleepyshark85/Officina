@@ -1,6 +1,7 @@
 using DotNet.Testcontainers.Builders;
 using DotNet.Testcontainers.Containers;
 using DotNet.Testcontainers.Images;
+using Microsoft.Extensions.DependencyInjection;
 using Sleepyshark.Officina.Mcp;
 using Sleepyshark.Officina.Testing;
 using static BookshopAssistant.Tests.ConsoleSession;
@@ -32,7 +33,7 @@ public sealed class ExportTests(BookshopDatabase database) : IClassFixture<Books
 
     private readonly string folder = Directory.CreateTempSubdirectory("bookshop-exports-").FullName;
     private IContainer? server;
-    private McpToolSource? exports;
+    private Uri? url;
 
     public async ValueTask InitializeAsync()
     {
@@ -44,18 +45,12 @@ public sealed class ExportTests(BookshopDatabase database) : IClassFixture<Books
                 .WithWaitStrategy(Wait.ForUnixContainer().UntilHttpRequestIsSucceeded(request => request.ForPort(Port).ForPath("/healthz")))
                 .Build();
             await server.StartAsync(TestContext.Current.CancellationToken);
-            var url = new UriBuilder("http", server.Hostname, server.GetMappedPublicPort(Port), "/mcp").Uri;
-            exports = await Exports.ConnectAsync(Exports.Server(url), TestContext.Current.CancellationToken);
+            url = new UriBuilder("http", server.Hostname, server.GetMappedPublicPort(Port), "/mcp").Uri;
         }
     }
 
     public async ValueTask DisposeAsync()
     {
-        if (exports is not null)
-        {
-            await exports.DisposeAsync();
-        }
-
         if (server is not null)
         {
             await server.DisposeAsync();
@@ -65,10 +60,13 @@ public sealed class ExportTests(BookshopDatabase database) : IClassFixture<Books
     }
 
     [DatabaseFact]
-    public void APP_12_the_allow_list_offers_only_writing_a_file_with_approval_and_listing_the_folder()
+    public async Task APP_12_the_allow_list_offers_only_writing_a_file_with_approval_and_listing_the_folder()
     {
-        Assert.Equal(["filesystem__write_file", "filesystem__list_directory"], exports!.Tools.Select(tool => tool.Name));
-        Assert.Equal([true, false], exports.Tools.Select(tool => tool.NeedsApproval));
+        await using var services = (await new ServiceCollection().AddExportsAsync(url!, TestContext.Current.CancellationToken)).Build();
+        var tools = services.GetRequiredKeyedService<McpToolSource>(Exports.Name).Tools;
+
+        Assert.Equal(["filesystem__write_file", "filesystem__list_directory"], tools.Select(tool => tool.Name));
+        Assert.Equal([true, false], tools.Select(tool => tool.NeedsApproval));
     }
 
     [DatabaseFact]
@@ -82,7 +80,7 @@ public sealed class ExportTests(BookshopDatabase database) : IClassFixture<Books
             .Reply(SayThenCall("Checking the folder.", Call("c4", "filesystem__list_directory", new { path = "/projects/exports" })))
             .Reply("Exported to order-history-alice-martin.csv.");
 
-        var transcript = await RunAsync(database, model, ["Sam", "Export Alice Martin's order history as CSV.", "y", "/quit"], exportTools: exports!.Tools);
+        var transcript = await RunAsync(database, model, ["Sam", "Export Alice Martin's order history as CSV.", "y", "/quit"], exports: url);
 
         InOrder(
             transcript,
@@ -103,7 +101,7 @@ public sealed class ExportTests(BookshopDatabase database) : IClassFixture<Books
             .Reply(SayThenCall("I'll write the file.", Call("c1", "filesystem__write_file", new { path = FilePath, content = "id\n" })))
             .Reply("Understood, no file.");
 
-        var transcript = await RunAsync(database, model, ["Sam", "Export it.", "n", "/quit"], exportTools: exports!.Tools);
+        var transcript = await RunAsync(database, model, ["Sam", "Export it.", "n", "/quit"], exports: url);
 
         InOrder(transcript, "    Approve? [y/N] n", "  < filesystem__write_file: error: The call was denied: the staff member declined", "Understood, no file.");
         Assert.Empty(Directory.EnumerateFileSystemEntries(folder));

@@ -176,11 +176,16 @@ public class EndToEndTests(BookshopDatabase database) : IClassFixture<BookshopDa
     [DatabaseFact]
     public async Task APP_13_the_run_context_names_the_date_and_staff_member_and_is_sent_again_only_on_a_new_day()
     {
-        // Each clock reading moves it on 12 hours: messages come at 08:00 and 20:00 on Monday, then 08:00 on Tuesday.
-        var time = new FakeTimeProvider(Start) { AutoAdvanceAmount = TimeSpan.FromHours(12) };
+        // Messages come at 08:00 and 20:00 on Monday, then 08:00 on Tuesday.
+        var time = new FakeTimeProvider(Start);
+        var later = (Func<Task>)(() =>
+        {
+            time.Advance(TimeSpan.FromHours(12));
+            return Task.CompletedTask;
+        });
         var model = Model().Reply("Good morning.").Reply("Good evening.").Reply("Good morning again.");
 
-        await RunAsync(database, model, ["Sam", "Morning!", "Evening!", "Next morning!", "/quit"], time);
+        await RunAsync(database, model, ["Sam", "Morning!", later, "Evening!", later, "Next morning!", "/quit"], time: time);
 
         var contexts = model.Requests[^1].Messages.Where(message => message.Role == Role.Operator).Select(message => message.Text);
         Assert.Equal(

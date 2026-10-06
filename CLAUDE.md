@@ -69,7 +69,10 @@ provider, MCP client, test kit and spike findings (`docs/spikes/` there) are reu
   built-in stores (file and in-memory memory, JSON-lines audit) run only when the host chooses them. Everything except
   model and instructions is optional.
 - **Dependencies:** no Microsoft Agent Framework or `Microsoft.Extensions.AI`. The Anthropic C# SDK is used only in the
-  Claude package; a dependency check test enforces it.
+  Claude package. The core references only `Microsoft.Extensions.DependencyInjection.Abstractions`; a dependency check
+  test enforces both.
+- **Each project registers its own services** (`Add…` methods on `IServiceCollection`); the application composes them in
+  one container, and tests build that container and replace only the boundaries.
 
 ## Claude API notes
 

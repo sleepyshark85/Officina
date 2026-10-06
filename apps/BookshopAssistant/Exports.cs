@@ -1,3 +1,4 @@
+using Microsoft.Extensions.DependencyInjection;
 using Sleepyshark.Officina;
 using Sleepyshark.Officina.Mcp;
 
@@ -17,10 +18,10 @@ public static class Exports
         new("list_directory", ToolKind.Read),
     ];
 
-    /// <summary>The server at <paramref name="url"/>, its <c>/mcp</c> endpoint.</summary>
-    public static McpServer Server(Uri url) => McpServer.Http("filesystem", url);
+    /// <summary>The server's name, which prefixes its tools and keys its source in the container.</summary>
+    public const string Name = "filesystem";
 
-    /// <summary>Connects to the server and pins its allowed tools.</summary>
-    public static Task<McpToolSource> ConnectAsync(McpServer server, CancellationToken cancellationToken) =>
-        McpToolSource.ConnectAsync(server, Allowed, cancellationToken);
+    /// <summary>Connects to the server at <paramref name="url"/>, its <c>/mcp</c> endpoint, pins its allowed tools and registers it.</summary>
+    public static Task<IServiceCollection> AddExportsAsync(this IServiceCollection services, Uri url, CancellationToken cancellationToken) =>
+        services.AddMcpToolSourceAsync(McpServer.Http(Name, url), Allowed, cancellationToken);
 }

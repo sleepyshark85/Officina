@@ -8,6 +8,9 @@ internal static partial class DependencyRules
     public const string Claude = "Sleepyshark.Officina.Claude";
     public const string Core = "Sleepyshark.Officina";
 
+    /// <summary>The one package the core may reference: interfaces only, so each package can register its own services.</summary>
+    public const string DependencyInjection = "Microsoft.Extensions.DependencyInjection.Abstractions";
+
     public static IEnumerable<string> Check(ProjectDependencies project)
     {
         var isClaude = Is(project.Name, Claude);
@@ -34,14 +37,14 @@ internal static partial class DependencyRules
 
         if (Is(project.Name, Core))
         {
-            foreach (var id in project.Direct.Order(StringComparer.OrdinalIgnoreCase))
+            foreach (var id in project.Direct.Where(id => !Is(id, DependencyInjection)).Order(StringComparer.OrdinalIgnoreCase))
             {
-                yield return $"{Core} must depend on the .NET base library only, but references {id}.";
+                yield return $"{Core} must depend on the .NET base library and {DependencyInjection} only, but references {id}.";
             }
 
             foreach (var framework in project.FrameworkReferences.Where(name => !Is(name, "Microsoft.NETCore.App")))
             {
-                yield return $"{Core} must depend on the .NET base library only, but references the {framework} framework.";
+                yield return $"{Core} must depend on the .NET base library and {DependencyInjection} only, but references the {framework} framework.";
             }
         }
     }

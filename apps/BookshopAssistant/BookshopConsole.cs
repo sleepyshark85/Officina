@@ -2,7 +2,6 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Globalization;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Logging.Abstractions;
 using Sleepyshark.Officina;
 
 namespace BookshopAssistant;
@@ -12,15 +11,15 @@ namespace BookshopAssistant;
 /// approval for changes and cancels a reply on request. It is the agent's approver: it prompts on each approval event,
 /// in order with what was shown before, and hands the answer to the waiting run. Each reply is a span, the parent of the
 /// run's trace, so the console's logs join it; <c>/audit</c> reads <paramref name="audit"/> and links each run to its
-/// trace on <paramref name="dashboard"/>. Each conversation is a session, saved in <paramref name="store"/> after
+/// trace on the dashboard in <paramref name="settings"/>. Each conversation is a session, saved in <paramref name="store"/> after
 /// every step; each reply ends with a status line of tokens and cost, and stops at its own or its session's budget. A
 /// session left with <c>/new</c>, <c>/resume</c> or <c>/quit</c> is summarized, and <c>/sessions</c> summarizes those
 /// left without one, as after a crash. Each staff member has their own memory scope in <paramref name="memory"/>, which
 /// <c>/memory</c> shows.
 /// </summary>
 public sealed partial class BookshopConsole(
-    TextReader input, TextWriter output, TimeProvider time, bool echoInput, AuditTable audit, SessionStore store, Uri dashboard,
-    ILogger? logger = null, Budgets? budgets = null, IMemoryStore? memory = null) : IApprover
+    Terminal terminal, TimeProvider time, AuditTable audit, SessionStore store, BookshopSettings settings, Budgets budgets, IMemoryStore memory,
+    ILogger<BookshopConsole> logger) : IApprover
 {
     /// <summary>The name of the console's activity source, for the exporter to listen to.</summary>
     public const string SourceName = "BookshopAssistant";
@@ -40,8 +39,9 @@ public sealed partial class BookshopConsole(
 
     private static readonly ActivitySource Source = new(SourceName);
 
-    private readonly ILogger logger = logger ?? NullLogger.Instance;
-    private readonly Budgets budgets = budgets ?? Budgets.Default;
+    private readonly TextReader input = terminal.Input;
+    private readonly TextWriter output = terminal.Output;
+    private readonly Uri dashboard = settings.DashboardUrl;
 
     private readonly ConcurrentDictionary<string, TaskCompletionSource<Approval>> approvals = new();
     private CancellationTokenSource? reply;
@@ -205,12 +205,12 @@ public sealed partial class BookshopConsole(
     {
         try
         {
-            var files = memory is null ? [] : (await memory.ListAsync(scope, CancellationToken.None)).OrderBy(file => file.Path, StringComparer.Ordinal).ToList();
+            var files = (await memory.ListAsync(scope, CancellationToken.None)).OrderBy(file => file.Path, StringComparer.Ordinal).ToList();
             await output.WriteLineAsync(files.Count == 0 ? "Nothing remembered yet." : "Remembered:");
             foreach (var file in files)
             {
                 await output.WriteLineAsync($"{MemoryTool.Root}/{file.Path}");
-                foreach (var line in (await memory!.ReadAsync(scope, file.Path, CancellationToken.None) ?? "").TrimEnd('\n').Split('\n'))
+                foreach (var line in (await memory.ReadAsync(scope, file.Path, CancellationToken.None) ?? "").TrimEnd('\n').Split('\n'))
                 {
                     await output.WriteLineAsync($"  {line}");
                 }
@@ -410,7 +410,7 @@ public sealed partial class BookshopConsole(
         }
 
         pendingRead = null;
-        if (echoInput)
+        if (terminal.EchoInput)
         {
             await output.WriteLineAsync(line ?? "");
         }

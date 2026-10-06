@@ -31,10 +31,10 @@ public sealed class BookshopDatabase : IAsyncLifetime
             || File.Exists("/var/run/docker.sock")
             || Environment.GetEnvironmentVariable("DOCKER_HOST") is not null);
 
-    public NpgsqlDataSource DataSource { get; private set; } = null!;
+    /// <summary>This test class's database, with the password, as the application's settings hold it.</summary>
+    public string ConnectionString { get; private set; } = "";
 
-    /// <summary>The application's tools on this database.</summary>
-    public BookshopTools Tools => new(DataSource);
+    public NpgsqlDataSource DataSource { get; private set; } = null!;
 
     public async ValueTask InitializeAsync()
     {
@@ -57,7 +57,8 @@ public sealed class BookshopDatabase : IAsyncLifetime
             Gate.Release();
         }
 
-        DataSource = NpgsqlDataSource.Create(new NpgsqlConnectionStringBuilder(container.GetConnectionString()) { Database = name }.ConnectionString);
+        ConnectionString = new NpgsqlConnectionStringBuilder(container.GetConnectionString()) { Database = name }.ConnectionString;
+        DataSource = NpgsqlDataSource.Create(ConnectionString);
     }
 
     public async ValueTask DisposeAsync()
@@ -76,6 +77,9 @@ public sealed class BookshopDatabase : IAsyncLifetime
     {
         await AdminAsync($"alter database {name} allow_connections false");
         await AdminAsync($"select pg_terminate_backend(pid) from pg_stat_activity where datname = '{name}'");
+
+        // The test's own idle connections are ended too; the next query must open a fresh one.
+        DataSource.Clear();
     }
 
     /// <summary>Makes the database reachable again after <see cref="TakeDownAsync"/>.</summary>
