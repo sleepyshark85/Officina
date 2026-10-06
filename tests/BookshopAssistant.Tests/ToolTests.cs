@@ -60,6 +60,9 @@ public class ToolTests(BookshopDatabase database) : IClassFixture<BookshopDataba
         Assert.Empty(Ok(await Tools.FindCustomerAsync("_", Ct)).EnumerateArray());
         Assert.Empty(Ok(await Tools.FindCustomerAsync(@"alice\", Ct)).EnumerateArray());
         Assert.Single(Ok(await Tools.FindCustomerAsync("MARTIN@example", Ct)).EnumerateArray());
+
+        // Empty text names no one: the customer search returns no one rather than the first 20 customers.
+        Assert.Empty(Ok(await Tools.FindCustomerAsync("  ", Ct)).EnumerateArray());
     }
 
     [DatabaseFact]

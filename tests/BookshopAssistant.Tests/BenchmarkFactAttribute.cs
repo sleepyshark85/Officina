@@ -4,7 +4,7 @@ namespace BookshopAssistant.Tests;
 
 /// <summary>
 /// A benchmark: skipped unless <c>OFFICINA_BENCHMARK=1</c> is set where the database tests run
-/// (<see cref="BookshopDatabase.Available"/>), as it loads a large catalogue and takes minutes.
+/// (<see cref="BookshopDatabase.Available"/>), as it loads a large catalogue and takes about a minute.
 /// </summary>
 public sealed class BenchmarkFactAttribute : FactAttribute
 {

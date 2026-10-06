@@ -41,6 +41,8 @@ public sealed class BookshopTools(NpgsqlDataSource database)
         Tool.FromFunction("restock_book", "Adds copies of a book to its stock.", ToolKind.Write, RestockBookAsync, needsApproval: true),
     ];
 
+    // Fast only when planned with each call's values, as an unprepared command is: a generic plan cannot use the
+    // trigram indexes for a pattern it does not know, so do not prepare these searches.
     private const string SearchBooksSql = """
         select b.id, b.title, a.name, g.name, b.price, s.quantity
         from books b
