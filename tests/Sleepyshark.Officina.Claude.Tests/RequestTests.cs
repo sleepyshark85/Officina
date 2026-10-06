@@ -34,11 +34,34 @@ public class RequestTests
     [Fact]
     public void The_request_body_matches_the_golden_layout()
     {
-        using var model = new ClaudeModel("test-key") { Model = "claude-opus-5-5", Effort = ClaudeEffort.High, MaxOutputTokens = 8000, CacheLifetime = CacheLifetime.OneHour };
+        using var model = new ClaudeModel("test-key")
+        {
+            Model = "claude-opus-5-5",
+            Effort = ClaudeEffort.High,
+            MaxOutputTokens = 8000,
+            PrefixCacheLifetime = CacheLifetime.OneHour,
+            ConversationCacheLifetime = CacheLifetime.FiveMinutes,
+        };
 
         var body = JsonSerializer.Serialize(ClaudeRequest.Build(model, Request).RawBodyData, Indented);
 
         Assert.Equal(Golden("request-layout.json"), body.ReplaceLineEndings("\n"));
+    }
+
+    [Fact]
+    public void A_prefix_cached_for_less_time_than_the_conversation_is_refused()
+    {
+        using var model = new ClaudeModel("test-key")
+        {
+            Model = "claude-opus-5-5",
+            Effort = ClaudeEffort.High,
+            PrefixCacheLifetime = CacheLifetime.FiveMinutes,
+            ConversationCacheLifetime = CacheLifetime.OneHour,
+        };
+
+        var exception = Assert.Throws<InvalidOperationException>(() => ClaudeRequest.Build(model, Request));
+
+        Assert.Contains("cannot be shorter than the conversation's", exception.Message, StringComparison.Ordinal);
     }
 
     [Theory]

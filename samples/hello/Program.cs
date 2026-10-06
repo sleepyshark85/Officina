@@ -10,7 +10,8 @@ using var model = new ClaudeModel
     Model = ClaudeModel.Opus55,
     Effort = ClaudeEffort.Low,
     MaxOutputTokens = 2_000,
-    CacheLifetime = CacheLifetime.OneHour,
+    PrefixCacheLifetime = CacheLifetime.OneHour,
+    ConversationCacheLifetime = CacheLifetime.OneHour,
 };
 var agent = new Agent { Model = model, Instructions = Instructions() };
 var conversation = new Conversation();

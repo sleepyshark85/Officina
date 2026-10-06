@@ -8,9 +8,9 @@ namespace Sleepyshark.Officina.Claude;
 
 /// <summary>
 /// Lays out one request: the tools sorted by name with eager input streaming, the memory tool as Claude's native
-/// <c>memory_20250818</c>; the instructions as one cached system block; automatic caching for the tail; then the
-/// conversation, where an operator message becomes a mid-conversation <c>system</c> message and raw blocks are sent byte
-/// for byte. A tool result is a <c>tool_result</c> block, with <c>is_error</c> on failure; a user message after tool
+/// <c>memory_20250818</c>; the instructions as one cached system block, with the prefix's lifetime; automatic caching
+/// for the tail, with the conversation's; then the conversation, where an operator message becomes a mid-conversation
+/// <c>system</c> message and raw blocks are sent byte for byte. A tool result is a <c>tool_result</c> block, with <c>is_error</c> on failure; a user message after tool
 /// results is a second user turn, which the API joins to the first. A typed output schema goes as the structured output
 /// format, adjusted; the tool choice is never forced.
 /// </summary>
@@ -18,7 +18,12 @@ internal static class ClaudeRequest
 {
     public static MessageCreateParams Build(ClaudeModel model, ModelRequest request)
     {
-        var cache = new BetaCacheControlEphemeral { Ttl = CacheTtl(model.CacheLifetime) };
+        if (model.PrefixCacheLifetime == CacheLifetime.FiveMinutes && model.ConversationCacheLifetime == CacheLifetime.OneHour)
+        {
+            throw new InvalidOperationException("The prefix's cache lifetime cannot be shorter than the conversation's: the API requires longer-lived cache entries first.");
+        }
+
+        var prefixCache = new BetaCacheControlEphemeral { Ttl = CacheTtl(model.PrefixCacheLifetime) };
         var typed = new MessageCreateParams
         {
             Model = model.Model,
@@ -27,9 +32,9 @@ internal static class ClaudeRequest
             OutputConfig = request.Prefix.OutputSchema is null
                 ? new BetaOutputConfig { Effort = Effort(model.Effort) }
                 : new BetaOutputConfig { Effort = Effort(model.Effort), Format = new BetaJsonOutputFormat { Schema = OutputSchema.Adjust(request.Prefix.OutputSchema) } },
-            CacheControl = cache,
+            CacheControl = new BetaCacheControlEphemeral { Ttl = CacheTtl(model.ConversationCacheLifetime) },
             Tools = [.. request.Prefix.Tools.Select(Tool)],
-            System = new List<BetaTextBlockParam> { new() { Text = request.Prefix.Instructions, CacheControl = cache } },
+            System = new List<BetaTextBlockParam> { new() { Text = request.Prefix.Instructions, CacheControl = prefixCache } },
             Messages = [.. request.Messages.Select(Message)],
         };
         // An empty setting asks for nothing, so the request has no context management.
@@ -73,8 +78,15 @@ internal static class ClaudeRequest
     /// <summary>The effort as the API names it.</summary>
     public static string EffortWord(ClaudeEffort effort) => ((ApiEnum<string, Effort>)Effort(effort)).Raw();
 
-    /// <summary>The cache lifetime as the API names it.</summary>
-    public static string CacheWord(CacheLifetime lifetime) => ((ApiEnum<string, Ttl>)CacheTtl(lifetime)).Raw();
+    /// <summary>
+    /// The cache lifetimes as the API names them: one word when they are the same, as before they could differ, so a
+    /// stored conversation keeps its prefix fingerprint; otherwise the prefix's, then the conversation's.
+    /// </summary>
+    public static string CacheWords(ClaudeModel model) => model.PrefixCacheLifetime == model.ConversationCacheLifetime
+        ? CacheWord(model.PrefixCacheLifetime)
+        : $"{CacheWord(model.PrefixCacheLifetime)}/{CacheWord(model.ConversationCacheLifetime)}";
+
+    private static string CacheWord(CacheLifetime lifetime) => ((ApiEnum<string, Ttl>)CacheTtl(lifetime)).Raw();
 
     private static Ttl CacheTtl(CacheLifetime lifetime) => lifetime == CacheLifetime.OneHour ? Ttl.Ttl1h : Ttl.Ttl5m;
 

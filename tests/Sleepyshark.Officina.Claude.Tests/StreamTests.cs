@@ -146,9 +146,18 @@ public class StreamTests
     public void The_settings_name_every_setting_that_shapes_a_request()
     {
         using var five = Model(new FakeApi());
-        using var hour = new ClaudeModel("k") { Model = "claude-opus-5-5", Effort = ClaudeEffort.Medium, CacheLifetime = CacheLifetime.OneHour };
+        using var hour = new ClaudeModel("k")
+        {
+            Model = "claude-opus-5-5",
+            Effort = ClaudeEffort.Medium,
+            PrefixCacheLifetime = CacheLifetime.OneHour,
+            ConversationCacheLifetime = CacheLifetime.OneHour,
+        };
+        using var mixed = new ClaudeModel("k") { Model = "claude-opus-5-5", Effort = ClaudeEffort.Medium, PrefixCacheLifetime = CacheLifetime.OneHour };
 
+        // One word when the lifetimes are the same, as before they could differ, so stored conversations keep their fingerprint.
         Assert.Equal("claude model=claude-opus-5-5 effort=medium max_tokens=64000 cache=5m thinking=adaptive", five.Settings);
-        Assert.NotEqual(five.Settings, hour.Settings);
+        Assert.Equal("claude model=claude-opus-5-5 effort=medium max_tokens=64000 cache=1h thinking=adaptive", hour.Settings);
+        Assert.Equal("claude model=claude-opus-5-5 effort=medium max_tokens=64000 cache=1h/5m thinking=adaptive", mixed.Settings);
     }
 }

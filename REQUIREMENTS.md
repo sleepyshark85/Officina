@@ -111,7 +111,7 @@ The core serves any agentic purpose, not only the reference application. These r
 |---|---|
 | CTX-01 | A request is laid out as: tools (sorted by name, serialized deterministically) → instructions (frozen) → conversation. Nothing per-request or per-user appears in tools or instructions. |
 | CTX-02 | Context that varies per run or per turn (date, user profile, retrieved passages, reminders) is appended to the conversation as an operator message after the cached prefix, through a run-context hook the host supplies. |
-| CTX-03 | The Claude model places cache breakpoints: one on the last instructions block, with a TTL the agent chooses (5 minutes by default, 1 hour for conversations where users reply slowly), and automatic caching on the conversation's tail. |
+| CTX-03 | The Claude model places cache breakpoints: one on the last instructions block, which caches the prefix, and automatic caching on the conversation's tail. Each has its own TTL, chosen by the agent: 5 minutes by default, 1 hour where reads come further apart (a prefix shared by many conversations, users who reply slowly). The prefix's TTL may not be shorter than the tail's, as the API requires longer-lived entries first. |
 | CTX-04 | Tools and model never change within a conversation. Changing either starts a new conversation. |
 | CTX-05 | Usage reports cache reads and writes per call, and telemetry exposes the cache hit ratio per agent (APP-20 shows it). |
 | CTX-06 | All tool results of one model reply go back in a single message, in the order of the calls. |
