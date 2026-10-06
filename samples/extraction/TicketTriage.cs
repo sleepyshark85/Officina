@@ -1,32 +1,6 @@
-using System.ComponentModel;
 using Sleepyshark.Officina;
 
 namespace Samples.Extraction;
-
-/// <summary>What a customer message is about.</summary>
-public enum Category
-{
-    Billing,
-    Delivery,
-    Product,
-    Account,
-    Other,
-}
-
-/// <summary>How soon a customer message needs an answer.</summary>
-public enum Urgency
-{
-    Low,
-    Normal,
-    High,
-}
-
-/// <summary>What the triage agent extracts from a customer message: its typed output.</summary>
-public sealed record Triage(
-    [property: Description("What the message is about.")] Category Category,
-    [property: Description("High when the customer is blocked or has been charged wrongly; low for a question that can wait.")] Urgency Urgency,
-    [property: Description("The order number the message gives, such as A-1042, or null when it gives none.")] string? OrderNumber,
-    [property: Description("One sentence on what the customer wants.")] string Summary);
 
 /// <summary>
 /// Extraction and classification: a stateless agent with only a model, instructions and typed output. Each message is

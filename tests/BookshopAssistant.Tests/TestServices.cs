@@ -2,7 +2,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Time.Testing;
 using Sleepyshark.Officina;
-using Sleepyshark.Officina.Testing;
 
 namespace BookshopAssistant.Tests;
 

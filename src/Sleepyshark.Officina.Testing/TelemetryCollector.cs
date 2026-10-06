@@ -62,6 +62,3 @@ public sealed class TelemetryCollector : IDisposable
     private void Measure(Instrument instrument, double value, ReadOnlySpan<KeyValuePair<string, object?>> tags) =>
         measurements.Enqueue(new Measured(instrument.Name, value, tags.ToArray().ToDictionary(tag => tag.Key, tag => tag.Value)));
 }
-
-/// <summary>One measurement: the instrument's name, the value and its tags.</summary>
-public sealed record Measured(string Instrument, double Value, IReadOnlyDictionary<string, object?> Tags);

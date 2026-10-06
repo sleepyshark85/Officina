@@ -1,5 +1,4 @@
 using System.Text.Json;
-using Sleepyshark.Officina.Testing;
 using static Sleepyshark.Officina.Claude.Tests.StreamTests;
 
 namespace Sleepyshark.Officina.Claude.Tests;

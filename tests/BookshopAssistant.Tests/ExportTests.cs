@@ -3,7 +3,6 @@ using DotNet.Testcontainers.Containers;
 using DotNet.Testcontainers.Images;
 using Microsoft.Extensions.DependencyInjection;
 using Sleepyshark.Officina.Mcp;
-using Sleepyshark.Officina.Testing;
 using static BookshopAssistant.Tests.ConsoleSession;
 
 namespace BookshopAssistant.Tests;

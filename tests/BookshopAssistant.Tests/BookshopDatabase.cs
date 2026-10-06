@@ -1,4 +1,3 @@
-using System.Runtime.CompilerServices;
 using Npgsql;
 using Testcontainers.PostgreSql;
 
@@ -120,17 +119,5 @@ public sealed class BookshopDatabase : IAsyncLifetime
             .Build();
         await started.StartAsync();
         return started;
-    }
-}
-
-/// <summary>A test against the database in Docker: skipped where <see cref="BookshopDatabase.Available"/> is false.</summary>
-public sealed class DatabaseFactAttribute : FactAttribute
-{
-    public DatabaseFactAttribute([CallerFilePath] string? sourceFilePath = null, [CallerLineNumber] int sourceLineNumber = -1)
-        : base(sourceFilePath, sourceLineNumber)
-    {
-        Skip = "Needs Linux and Docker.";
-        SkipUnless = nameof(BookshopDatabase.Available);
-        SkipType = typeof(BookshopDatabase);
     }
 }

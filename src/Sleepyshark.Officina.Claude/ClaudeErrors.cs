@@ -4,25 +4,6 @@ using Anthropic.Models;
 
 namespace Sleepyshark.Officina.Claude;
 
-/// <summary>What kind of failure a Claude call ended with, once retries are over or cannot help.</summary>
-public enum ClaudeFailure
-{
-    /// <summary>Rate limits, overload, server or network errors that persisted through every attempt.</summary>
-    Transient,
-
-    /// <summary>The API key is missing, wrong, or not allowed to do this.</summary>
-    Authentication,
-
-    /// <summary>The API rejected the request as it is; sending it again cannot help.</summary>
-    InvalidRequest,
-}
-
-/// <summary>A Claude call that failed, with its kind; the run fails with its message.</summary>
-public sealed class ClaudeException(ClaudeFailure failure, string message, Exception inner) : Exception(message, inner)
-{
-    public ClaudeFailure Failure { get; } = failure;
-}
-
 /// <summary>Classifies the SDK's failures by exception type, then by error type, which is all a mid-stream error has.</summary>
 internal static class ClaudeErrors
 {

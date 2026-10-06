@@ -45,6 +45,8 @@ provider, MCP client, test kit and spike findings (`docs/spikes/` there) are reu
 - **Tests are the agent's check on its own work.** Example tests say what should happen; property tests say what
   must never happen. Tests are fast and deterministic: a flaky test, or one slow enough to notice (over a second offline), is a bug to fix, never something to retry.
 - **Short design docs:** tables and diagrams over prose; cite requirement IDs instead of restating them.
+- **One class, record, struct, interface or enum per file**, named after it. Related types share a folder (in the
+  core: `Conversations`, `Models`, `Runs`, `Tools`, `Memory`, `Audit`…); the namespace stays the package's.
 - **Short code comments:** say what the code cannot, briefly; no requirement IDs or doc section numbers. Test names
   carry the IDs, and `docs/traceability.md` maps them.
 - **Who codes and reviews (when subagents are used):** Opus writes big or risky slices; Sonnet only small, well-bounded
