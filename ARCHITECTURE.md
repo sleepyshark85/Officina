@@ -114,7 +114,7 @@ core never depends on an adapter. Only the Claude adapter uses the provider's SD
 
 ## 4. Contracts at the boundaries
 
-Each contract is the only way the core reaches what is behind it; the test kit replaces each one (TEST-01).
+Each contract is the only way the core reaches what is behind it; tests replace each one (TEST-01).
 
 ### 4.1 Model
 

@@ -20,7 +20,7 @@ source; the `.svg` beside it is exported from it for this page.
 ![Officina core architecture](diagrams/officina-architecture.svg)
 
 The host calls one entry point, a run of an agent. The run engine sequences each run. Everything outside the core is
-reached through a contract the core owns and an adapter or the host implements.
+reached through a contract the core owns, implemented by an adapter, the host, or a built-in store the host picks.
 
 | Block | Responsibility | In the code |
 |---|---|---|
@@ -94,14 +94,14 @@ Every package references the core, and the core references nothing outside the .
 (TEST-05) fails if the core gains a package or project reference, or if any package but Claude references the
 Anthropic SDK. Package names in the diagram drop the `Sleepyshark.` prefix. The samples and tests also reference the
 core, Claude and MCP packages, and `BookshopAssistant.Tests` references the app; the graph draws only
-their edges to the two packages the app doesn't use.
+their edge to the test kit, the one package the app doesn't use.
 
 | Contract | Production | Test double | Notes |
 |---|---|---|---|
 | `IModel` | `ClaudeModel` (Claude) | `ScriptedModel` | Beta messages API, streaming, adaptive thinking, cache points, the native memory tool, and its own retries that honour `Retry-After`. The scripted model rejects role sequences the real API rejects. |
 | `IToolSource` | `McpToolSource` (MCP) | `FakeMcpServer` | Stdio or Streamable HTTP. It pins and filters the server's tool list once, so the prefix stays stable, and names tools `server__tool`. |
-| `IMemoryStore` | `FileMemoryStore` (core; the app uses it) | `InMemoryMemoryStore` (core) | Both are built in and used only when the host picks one. The file store keeps one hex-named directory per scope and refuses links and paths that leave the scope. |
-| `IAuditSink` | `JsonLinesAuditSink` (core, built in, used only when the host picks it), `AuditTable` (app) | recording sink in tests | Each write is flushed before it returns. The app keeps entries in PostgreSQL for its `/audit` view. |
+| `IMemoryStore` | `FileMemoryStore` (core) | `InMemoryMemoryStore` (core) | Built in; each runs only when the host picks it. The file store keeps one hex-named directory per scope and refuses links and paths that leave the scope; the in-memory store follows the same path rules. |
+| `IAuditSink` | `JsonLinesAuditSink` (core), `AuditTable` (app) | recording sink in tests | The JSON-lines sink is built in and runs only when the host picks it; each write is flushed before it returns. The app keeps entries in PostgreSQL for its `/audit` view. |
 | `IApprover` | `BookshopConsole` (app) | `ScriptedApprover` | The console answers from its own event loop: it prompts on `ApprovalAsked` and completes the approval it is waiting on. |
 | `Tool` | `BookshopTools`, the MCP export tools, the memory tool | plain delegates | Parameterized PostgreSQL queries; placing or cancelling an order is one transaction. |
 
@@ -165,7 +165,7 @@ or a transient failure on the last attempt, throws `ClaudeException`, and the ru
 | **SOLID** | | |
 | Single responsibility | `RunEngine` sequences, `Decide` decides, `ToolPipeline` runs calls; `AuditRecorder`, `Spending` and `Telemetry` each own one concern. `Agent` describes an agent and `RunOptions` carries per-run input. | Audit and telemetry calls sit inside the engine and pipeline rather than observing events, because a write must wait until its attempt is recorded. |
 | Open/closed | Tools, providers and stores plug in through contracts. The memory tool is an ordinary `Tool` using `ToolContext`; the pipeline has no special case for it. | A provider recognizes the memory tool through the `IsMemory` marker to map it to its native tool. |
-| Liskov substitution | Test doubles behave like the real thing: `ScriptedModel` rejects role sequences the Claude API rejects, and `InMemoryMemoryStore` enforces the same path rules as `FileMemoryStore`. | The test kit is a shipped package that must track the real adapters. |
+| Liskov substitution | Test doubles behave like the real thing: `ScriptedModel` rejects role sequences the Claude API rejects. | The test kit is a shipped package that must track the real adapters. |
 | Interface segregation | `IApprover` and `IAuditSink` have one method each, `IToolSource` three members, `IMemoryStore` five related file operations. | None found. |
 | Dependency inversion | The core owns every contract. The clock is an injected `TimeProvider`; telemetry uses platform primitives the host exports. | The host must configure an exporter to see telemetry. |
 | **Agent rules** | | |
