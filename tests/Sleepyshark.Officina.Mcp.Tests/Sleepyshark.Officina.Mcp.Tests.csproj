@@ -11,4 +11,9 @@
     <Compile Include="..\Sleepyshark.Officina.Tests\RecordingSink.cs" Link="RecordingSink.cs" />
   </ItemGroup>
 
+  <!-- Test only: a container, to check each package's registrations. -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+  </ItemGroup>
+
 </Project>

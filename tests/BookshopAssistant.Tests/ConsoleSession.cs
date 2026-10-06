@@ -1,5 +1,5 @@
 using System.Text.Json;
-using Microsoft.Extensions.Time.Testing;
+using Microsoft.Extensions.DependencyInjection;
 using Sleepyshark.Officina;
 using Sleepyshark.Officina.Claude;
 using Sleepyshark.Officina.Testing;
@@ -12,11 +12,11 @@ namespace BookshopAssistant.Tests;
 /// </summary>
 internal static class ConsoleSession
 {
-    /// <summary>Monday 5 October 2026, 08:00 UTC; the fake clock's local time zone is UTC.</summary>
-    public static readonly DateTimeOffset Start = new(2026, 10, 5, 8, 0, 0, TimeSpan.Zero);
+    /// <inheritdoc cref="TestServices.Start"/>
+    public static readonly DateTimeOffset Start = TestServices.Start;
 
-    /// <summary>Where the console links runs to their traces.</summary>
-    public static readonly Uri Dashboard = new("http://dashboard.test/");
+    /// <inheritdoc cref="TestServices.Dashboard"/>
+    public static readonly Uri Dashboard = TestServices.Dashboard;
 
     /// <summary>Opus 5.5's price, which the scripted model charges, as the console's budgets need one.</summary>
     public static readonly ModelPrice Price = ClaudePrices.Table["claude-opus-5-5"];
@@ -25,33 +25,49 @@ internal static class ConsoleSession
     public static ScriptedModel Model(string settings = "scripted") =>
         new() { Price = Price, Settings = settings, Capabilities = ModelCapabilities.Compaction | ModelCapabilities.ContextEditing };
 
-    /// <summary>Runs a session and returns its transcript.</summary>
+    /// <summary>Runs a session on the application's container and returns its transcript.</summary>
     /// <param name="database">The database the tools use.</param>
     /// <param name="model">A scripted model, or Claude in the live smoke test.</param>
     /// <param name="script">The staff member's input: each string is a typed line; each <see cref="Func{Task}"/> runs before the next line.</param>
-    /// <param name="time">The console's clock; by default a fake one stopped at <see cref="Start"/>, which the agent always uses for audit.</param>
+    /// <param name="time">The clock; by default a fake one stopped at <see cref="Start"/>.</param>
     /// <param name="cancelOn">When the transcript first contains this text, the reply is cancelled, as by Ctrl+C.</param>
     /// <param name="budgets">The console's budgets; by default its own.</param>
     /// <param name="summaries">The summarizer's scripted model; without one, sessions are not summarized.</param>
-    /// <param name="exportTools">The export server's tools; none by default.</param>
+    /// <param name="exports">The export server's endpoint; none by default.</param>
     /// <param name="demo">Whether the agent runs in demo mode.</param>
     /// <param name="memory">The memory store; by default an empty in-memory one.</param>
     public static async Task<string> RunAsync(
-        BookshopDatabase database, IModel model, IEnumerable<object> script, TimeProvider? time = null, string? cancelOn = null,
-        Budgets? budgets = null, ScriptedModel? summaries = null, IEnumerable<Tool>? exportTools = null, bool demo = false,
-        IMemoryStore? memory = null)
+        BookshopDatabase database, IModel model, IEnumerable<object> script, TimeProvider? time = null, string? cancelOn = null, Budgets? budgets = null,
+        ScriptedModel? summaries = null, Uri? exports = null, bool demo = false, IMemoryStore? memory = null)
     {
         var output = new Transcript(cancelOn);
-        var audit = new AuditTable(database.DataSource);
-        var clock = new FakeTimeProvider(Start);
-        memory ??= new InMemoryMemoryStore();
-        var console = new BookshopConsole(
-            new ScriptedInput(script), output, time ?? clock, echoInput: true, audit,
-            new SessionStore(database.DataSource), Dashboard, budgets: budgets, memory: memory);
+        var services = TestServices.Create(database, model, summaries, demo);
+        if (exports is not null)
+        {
+            await services.AddExportsAsync(exports, TestContext.Current.CancellationToken);
+        }
+
+        services.AddSingleton(new Terminal(new ScriptedInput(script), output, EchoInput: true));
+        if (time is not null)
+        {
+            services.AddSingleton(time);
+        }
+
+        if (budgets is not null)
+        {
+            services.AddSingleton(budgets);
+        }
+
+        if (memory is not null)
+        {
+            services.AddSingleton(memory);
+        }
+
+        await using var provider = services.Build();
+        var console = provider.GetRequiredService<BookshopConsole>();
         output.Console = console;
         await console.RunAsync(
-            BookshopAgent.Create(model, database.Tools, memory, console, audit, [BookshopDatabase.Password], clock, exportTools, demo),
-            summaries is null ? null : SessionSummarizer.Create(summaries, clock));
+            provider.GetRequiredKeyedService<Agent>(BookshopServices.Chat), provider.GetKeyedService<Agent>(BookshopServices.Summarizer));
         return output.ToString();
     }
 

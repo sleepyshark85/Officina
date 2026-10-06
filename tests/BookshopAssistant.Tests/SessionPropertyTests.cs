@@ -1,5 +1,6 @@
 using System.Text.Json;
 using CsCheck;
+using Microsoft.Extensions.DependencyInjection;
 using Sleepyshark.Officina;
 using Sleepyshark.Officina.Testing;
 using Sleepyshark.Officina.Tests;
@@ -55,7 +56,11 @@ public class SessionPropertyTests(BookshopDatabase database) : IClassFixture<Boo
 
             model.Reply([.. step.Thinking ? [new BlockReceived(new ContentBlock(null, """{ "type" : "thinking", "thinking": "", "signature" : "c2ln+/=" }"""))] : Array.Empty<ModelEvent>(),
                 new BlockReceived(ScriptedModel.TextBlock(step.Text)), new ModelStopped(ModelStopReason.End)]);
-            var agent = BookshopAgent.Create(model, database.Tools, new InMemoryMemoryStore(), new ScriptedApprover(), new AuditTable(database.DataSource), [], TimeProvider.System);
+            var services = TestServices.Create(database, model);
+            services.AddSingleton<TimeProvider>(TimeProvider.System);
+            services.AddSingleton<IApprover>(new ScriptedApprover());
+            await using var provider = services.Build();
+            var agent = provider.GetRequiredKeyedService<Agent>(BookshopServices.Chat);
             await foreach (var runEvent in agent.StreamAsync(conversation, $"Say {step.Text}", new() { Context = step.Context ? $"Context: {step.Text}" : null, MemoryScope = "sam" }, TestContext.Current.CancellationToken))
             {
                 if (runEvent is ConversationAppended)

@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Text;
 using Sleepyshark.Officina;
+using Sleepyshark.Officina.Claude;
 
 namespace BookshopAssistant;
 
@@ -20,6 +21,10 @@ public static class SessionSummarizer
 {
     /// <summary>The most characters of one tool result the transcript keeps.</summary>
     private const int ResultLength = 1_000;
+
+    /// <summary>The summarizer's model: a short, typed answer needs little effort.</summary>
+    public static ClaudeModel Model(string? apiKey = null) =>
+        new(apiKey) { Model = ClaudeModel.Opus55, Effort = ClaudeEffort.Low, MaxOutputTokens = 4_000 };
 
     public static Agent Create(IModel model, TimeProvider time) => new()
     {

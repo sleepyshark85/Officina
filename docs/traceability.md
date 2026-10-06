@@ -124,8 +124,8 @@ only a live run or inspection checks, noted in the last column.
 |---|---|---|
 | MCP-01 | Mcp: `MCP_01_a_stdio_server_s_tools_run_and_their_results_reach_the_model`, `MCP_01_an_http_server_s_tools_run_with_the_credential_the_host_gives`; Samples/BackgroundAgentTests (HTTP); App/ExportTests (HTTP) | |
 | MCP-02 | Mcp: `MCP_02_an_mcp_tool_goes_through_validation_approval_audit_truncation_and_events`, `MCP_02_MCP_03_only_allowed_tools_appear_…` | |
-| MCP-03 | Mcp: `MCP_02_MCP_03_only_allowed_tools_appear_named_by_server_and_tool_…`, `MCP_03_an_allowed_tool_the_server_lacks_fails_the_connection_clearly`, `MCP_03_CTX_04_the_tool_list_is_read_once_and_pinned_for_the_conversation` | |
-| MCP-04 | Mcp: `MCP_04_a_server_down_at_the_start_of_a_run_fails_it_clearly_and_the_next_run_reconnects`, `MCP_04_an_http_server_that_fails_mid_run_gives_error_results_…`, `MCP_04_a_stdio_server_that_exits_mid_run_…`, `MCP_04_a_stdio_server_that_cannot_start_fails_to_connect_clearly`, `MCP_04_a_connect_cancelled_while_the_server_starts_leaves_no_server_running` | |
+| MCP-03 | Mcp: `MCP_02_MCP_03_only_allowed_tools_appear_named_by_server_and_tool_…`, `MCP_03_an_allowed_tool_the_server_lacks_fails_the_connection_clearly`, `MCP_03_CTX_04_the_tool_list_is_read_once_and_pinned_for_the_conversation`, `MCP_03_a_registered_source_is_connected_with_its_pinned_tools_under_the_server_s_name` | |
+| MCP-04 | Mcp: `MCP_04_a_server_down_at_the_start_of_a_run_fails_it_clearly_and_the_next_run_reconnects`, `MCP_04_an_http_server_that_fails_mid_run_gives_error_results_…`, `MCP_04_a_stdio_server_that_exits_mid_run_…`, `MCP_04_a_stdio_server_that_cannot_start_fails_to_connect_clearly`, `MCP_04_a_connect_cancelled_while_the_server_starts_leaves_no_server_running`, `MCP_04_a_source_that_cannot_connect_is_not_registered` | |
 
 ## Output (OUT)
 

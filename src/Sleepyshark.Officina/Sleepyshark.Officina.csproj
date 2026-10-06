@@ -1,6 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- The core depends on the .NET base library only: no packages and no other projects (TEST-05). -->
+  <!-- The core depends on the .NET base library and the dependency injection abstractions only (TEST-05). -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+  </ItemGroup>
 
   <ItemGroup>
     <!-- TEST-08 compares the schema validator with an established one directly. -->

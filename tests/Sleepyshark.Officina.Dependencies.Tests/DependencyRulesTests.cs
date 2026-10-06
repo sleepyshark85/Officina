@@ -63,11 +63,19 @@ public sealed class DependencyRulesTests : IDisposable
     }
 
     [Fact]
-    public void The_core_referencing_any_package_fails()
+    public void The_core_may_reference_the_dependency_injection_abstractions()
     {
-        repository.AddProject(Core, ["Some.Library"]);
+        repository.AddProject(Core, [DependencyRules.DependencyInjection]);
 
-        Assert.Equal([$"{Core} must depend on the .NET base library only, but references Some.Library."], repository.Check());
+        Assert.Empty(repository.Check());
+    }
+
+    [Fact]
+    public void The_core_referencing_any_other_package_fails()
+    {
+        repository.AddProject(Core, [DependencyRules.DependencyInjection, "Some.Library"]);
+
+        Assert.Equal([$"{Core} must depend on the .NET base library and {DependencyRules.DependencyInjection} only, but references Some.Library."], repository.Check());
     }
 
     [Fact]
@@ -75,7 +83,7 @@ public sealed class DependencyRulesTests : IDisposable
     {
         repository.AddProject(Core, [Testing]);
 
-        Assert.Equal([$"{Core} must depend on the .NET base library only, but references {Testing}."], repository.Check());
+        Assert.Equal([$"{Core} must depend on the .NET base library and {DependencyRules.DependencyInjection} only, but references {Testing}."], repository.Check());
     }
 
     [Fact]

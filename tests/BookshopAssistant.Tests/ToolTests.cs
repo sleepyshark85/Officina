@@ -10,7 +10,7 @@ public class ToolTests(BookshopDatabase database) : IClassFixture<BookshopDataba
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
-    private BookshopTools Tools => database.Tools;
+    private BookshopTools Tools => new(database.DataSource);
 
     private static JsonElement Ok(ToolOutput output)
     {

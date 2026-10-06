@@ -109,8 +109,9 @@ flowchart TB
 | **Audit sinks** | Persist audit entries durably, in order; the core has a JSON-lines file sink, and a host may bring its own | Drop an entry silently |
 | **Test kit** | Scripted model, scripted approver, fake MCP server, prefix stability check | Replace anything inside the core |
 
-**Dependency rule:** the core depends on nothing outside the platform's base library (its tracing and metrics primitives included). Adapters depend on the core; the
-core never depends on an adapter. Only the Claude adapter uses the provider's SDK.
+**Dependency rule:** the core depends on nothing outside the platform's base library (its tracing and metrics primitives included), except the platform's
+dependency injection contracts, so that each package registers its own services. Adapters depend on the core; the core never depends on an adapter. Only the
+Claude adapter uses the provider's SDK.
 
 ## 4. Contracts at the boundaries
 

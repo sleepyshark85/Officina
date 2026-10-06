@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Microsoft.Extensions.DependencyInjection;
 using Sleepyshark.Officina.Testing;
 using Sleepyshark.Officina.Tests;
 
@@ -46,6 +47,28 @@ public sealed class McpToolSourceTests
 
     private static IEnumerable<string> SourceChanges(RecordingSink sink) =>
         sink.Entries.Where(entry => entry.Kind == AuditKind.ToolSource).Select(entry => $"{entry.Tool} {entry.Outcome}");
+
+    [Fact]
+    public async Task MCP_03_a_registered_source_is_connected_with_its_pinned_tools_under_the_server_s_name()
+    {
+        using var fake = HttpServer();
+        var registrations = await new ServiceCollection().AddMcpToolSourceAsync(HttpServerAt(fake), [new("upper")], TestContext.Current.CancellationToken);
+        await using var services = registrations.BuildServiceProvider();
+
+        Assert.Equal(["fake__upper"], services.GetRequiredKeyedService<McpToolSource>("fake").Tools.Select(tool => tool.Name));
+    }
+
+    [Fact]
+    public async Task MCP_04_a_source_that_cannot_connect_is_not_registered()
+    {
+        using var fake = HttpServer();
+        var registrations = new ServiceCollection();
+
+        await Assert.ThrowsAsync<IOException>(
+            () => registrations.AddMcpToolSourceAsync(HttpServerAt(fake, "wrong-token"), [new("upper")], TestContext.Current.CancellationToken));
+
+        Assert.Empty(registrations);
+    }
 
     [Fact]
     public async Task MCP_01_a_stdio_server_s_tools_run_and_their_results_reach_the_model()

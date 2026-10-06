@@ -90,11 +90,15 @@ reached through a contract the core owns, implemented by an adapter, the host, o
 
 ![Package dependencies](diagrams/officina-packages.svg)
 
-Every package references the core, and the core references nothing outside the .NET base library. A dependency test
-(TEST-05) fails if the core gains a package or project reference, or if any package but Claude references the
-Anthropic SDK. Package names in the diagram drop the `Sleepyshark.` prefix. The samples and tests also reference the
-core, Claude and MCP packages, and `BookshopAssistant.Tests` references the app; the graph draws only
-their edge to the test kit, the one package the app doesn't use.
+Every package references the core, and the core references nothing outside the .NET base library but
+`Microsoft.Extensions.DependencyInjection.Abstractions` (D15). A dependency test (TEST-05) fails if the core gains any
+other package or a project reference, or if any package but Claude references the Anthropic SDK. Each package registers
+its own services: `OfficinaServices` (`AddFileMemoryStore`, `AddInMemoryMemoryStore`), `ClaudeServices`
+(`AddClaudeModel`, keyed) and `McpServices` (`AddMcpToolSourceAsync`, which connects first and is keyed by the
+server's name); `BookshopServices` registers the app's own and composes them. Package names in the diagram drop the
+`Sleepyshark.` prefix. The samples and tests also reference the core, Claude and MCP packages, and
+`BookshopAssistant.Tests` references the app; the graph draws only their edge to the test kit, the one package the app
+doesn't use.
 
 | Contract | Production | Test double | Notes |
 |---|---|---|---|
@@ -159,7 +163,7 @@ or a transient failure on the last attempt, throws `ClaudeException`, and the ru
 | Principle | In the code | Trade-off |
 |---|---|---|
 | **Architecture** | | |
-| Ports and adapters | The core references the .NET base library only. Model, tool source, approver, memory store and audit sink are interfaces, and each adapter is its own package. A dependency test (TEST-05) fails if the core gains a reference or a package other than Claude references the Anthropic SDK. | The core carries its own JSON Schema subset validator (about 200 lines) instead of a library. |
+| Ports and adapters | The core references the .NET base library and the DI abstractions only. Model, tool source, approver, memory store and audit sink are interfaces, and each adapter is its own package. A dependency test (TEST-05) fails if the core gains another reference or a package other than Claude references the Anthropic SDK. | The core carries its own JSON Schema subset validator (about 200 lines) instead of a library. |
 | One primitive | A run of one agent is the only thing the core executes. The session summarizer is a second agent the host runs. | No built-in multi-agent orchestration; hosts compose runs. |
 | Purpose-neutral core | No domain, UI, storage or transport types in the core; bookshop concepts live only in the app. | Hosts write more wiring (telemetry, stores, MCP servers). |
 | **SOLID** | | |
