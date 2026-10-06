@@ -64,15 +64,16 @@ public sealed record BookshopSettings
             throw new InvalidDataException($"ReplyBudget must be a positive amount in US dollars, such as 0.01, not {settings.ReplyBudget}.");
         }
 
-        // The binder takes any text as a relative URI, such as one missing its scheme.
+        // The binder takes any text as a relative URI, such as one missing its scheme, and null or "" as null.
         foreach (var (name, url) in new[] { (nameof(OtlpEndpoint), settings.OtlpEndpoint), (nameof(DashboardUrl), settings.DashboardUrl), (nameof(ExportsUrl), settings.ExportsUrl) })
         {
-            if (!url.IsAbsoluteUri || url.Scheme is not ("http" or "https"))
+            if (url is null || !url.IsAbsoluteUri || url.Scheme is not ("http" or "https"))
             {
-                throw new InvalidDataException($"{name} must be an absolute http URL, such as http://localhost:18800/mcp, not \"{url.OriginalString}\".");
+                throw new InvalidDataException($"{name} must be an absolute http URL, such as http://localhost:18800/mcp, not \"{url?.OriginalString}\".");
             }
         }
 
-        return settings;
+        // An empty key would reach the SDK as a key; unset, the SDK finds credentials as usual.
+        return string.IsNullOrWhiteSpace(settings.AnthropicApiKey) ? settings with { AnthropicApiKey = null } : settings;
     }
 }

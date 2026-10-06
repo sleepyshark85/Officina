@@ -86,7 +86,7 @@ catch (Exception exception) when (exception is IOException or InvalidOperationEx
 {
     await Console.Error.WriteLineAsync(
         $"The export server at {settings.ExportsUrl} could not be reached: {exception.Message}\n"
-        + "Start it with ./start.sh (or pwsh -File start.ps1) in the application's folder, or change ExportsUrl in appsettings.json.");
+        + "Start it with ./start.sh (or pwsh -File start.ps1) in the application's folder, or change ExportsUrl in appsettings.Local.json.");
     return 1;
 }
 

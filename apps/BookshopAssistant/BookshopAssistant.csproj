@@ -23,4 +23,9 @@
     <None Update="appsettings.json;appsettings.Local.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
+  <!-- A deleted local settings file must not live on in the output, API key included. -->
+  <Target Name="RemoveStaleLocalSettings" AfterTargets="Build" Condition="!Exists('appsettings.Local.json')">
+    <Delete Files="$(OutDir)appsettings.Local.json" />
+  </Target>
+
 </Project>

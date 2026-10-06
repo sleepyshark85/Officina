@@ -1,7 +1,7 @@
 # Bookshop Assistant's database (APP-04), telemetry dashboard (APP-20, D11) and export server (APP-12). Start them with
-# ./start.sh (or start.ps1); the schema, seed, audit and sessions tables in database/ are created on the database's first start only.
+# ./start.sh (or pwsh -File start.ps1); the schema, seed, audit and sessions tables in database/ are created on the database's first start only.
 # If a port is taken, set another in a .env file beside this one (git ignores it), such as BOOKSHOP_DB_PORT=5433, and
-# change the matching setting in appsettings.json.
+# change the matching setting in appsettings.Local.json.
 # `docker compose down -v` deletes the data, so the next start seeds afresh.
 services:
   postgres:

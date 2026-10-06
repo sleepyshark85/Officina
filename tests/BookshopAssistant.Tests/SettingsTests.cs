@@ -32,12 +32,22 @@ public sealed class SettingsTests : IDisposable
         Assert.Equal(("Host=a", "key", "mine", 0.01m), (settings.Database, settings.AnthropicApiKey, settings.DataFolder, settings.ReplyBudget));
     }
 
+    [Fact]
+    public void An_empty_api_key_is_unset()
+    {
+        Write("appsettings.json", """{ "Database": "Host=a", "AnthropicApiKey": " " }""");
+
+        Assert.Null(BookshopSettings.Load(folder).AnthropicApiKey);
+    }
+
     [Theory]
     [InlineData("""{ "DataFolder": "data" }""", "Set Database")]
     [InlineData("""{ "Database": "Host=a", "ReplyBudget": 0 }""", "ReplyBudget must be a positive amount")]
     [InlineData("""{ "Database": "Host=a", "DashbordUrl": "http://localhost:1" }""", "DashbordUrl")]
     [InlineData("""{ "Database": "Host=a", "Demo": "sometimes" }""", "not valid")]
     [InlineData("""{ "Database": "Host=a", "ExportsUrl": "localhost:18800" }""", "ExportsUrl must be an absolute http URL")]
+    [InlineData("""{ "Database": "Host=a", "DashboardUrl": null }""", "DashboardUrl must be an absolute http URL")]
+    [InlineData("""{ "Database": "Host=a", "OtlpEndpoint": "" }""", "OtlpEndpoint must be an absolute http URL")]
     [InlineData("""{ "Database": """, "Failed to load configuration")]
     public void Settings_that_are_missing_misspelled_or_malformed_are_refused_with_the_reason(string json, string reason)
     {

@@ -60,7 +60,7 @@ dotnet run                         # add -- --demo to compact and clear early (A
 
 All settings are in `appsettings.json`, with a comment on each; `appsettings.Local.json` overrides any of them on this
 machine. If a port is taken, set another in a `.env` file beside `compose.yaml`, such as `BOOKSHOP_DB_PORT=5433`, and
-change the matching setting (here `Database`), as `compose.yaml` explains.
+change the matching setting (here `Database`) in `appsettings.Local.json`, as `compose.yaml` explains.
 
 Try: *Order the two cheapest fantasy books in stock for Alice Martin and tell me the total.* The demo script,
 [`docs/demo.md`](docs/demo.md), walks through every capability.
