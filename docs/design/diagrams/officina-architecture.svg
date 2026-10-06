@@ -40,8 +40,8 @@
       <rect x="432" y="412" width="40" height="12" rx="2" fill="#f5f5f5"/>
       <text x="452" y="421" fill="#7a8399" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">CALLS</text>
       <path d="M 640,256 H 752" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
-      <rect x="674" y="236" width="44" height="12" rx="2" fill="#f5f5f5"/>
-      <text x="696" y="245" fill="#7a8399" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">INVOKE</text>
+      <rect x="666" y="236" width="60" height="12" rx="2" fill="#f5f5f5"/>
+      <text x="696" y="245" fill="#7a8399" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">MCP CALLS</text>
       <path d="M 640,336 H 752" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
       <rect x="668" y="316" width="56" height="12" rx="2" fill="#f5f5f5"/>
       <text x="696" y="325" fill="#7a8399" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">APPROVE?</text>

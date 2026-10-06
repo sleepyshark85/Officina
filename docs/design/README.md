@@ -90,9 +90,10 @@ reached through a contract the core owns and an adapter or the host implements.
 ![Package dependencies](diagrams/officina-packages.svg)
 
 Every package references the core, and the core references nothing outside the .NET base library. A dependency test
-(TEST-05) enforces this, and that only the Claude package references the Anthropic SDK. Package names in the diagram
-drop the `Sleepyshark.` prefix. The samples and tests also reference the core, Claude, MCP and memory-files packages;
-the graph draws only their edges to the two packages the app doesn't use.
+(TEST-05) fails if the core gains a package or project reference, or if any package but Claude references the
+Anthropic SDK. Package names in the diagram drop the `Sleepyshark.` prefix. The samples and tests also reference the
+core, Claude, MCP and memory-files packages, and `BookshopAssistant.Tests` references the app; the graph draws only
+their edges to the two packages the app doesn't use.
 
 | Contract | Production | Test double | Notes |
 |---|---|---|---|
@@ -105,15 +106,16 @@ the graph draws only their edges to the two packages the app doesn't use.
 
 ## Chat flow
 
-A staff turn in the Bookshop Assistant, such as "Order two copies of Gaudy Night for Alice Martin": the model looks
-things up, asks to place the order (which needs approval), then answers.
+A staff turn in the Bookshop Assistant, such as "Order two copies of The Winter Archive for Alice Martin": the model
+looks things up, asks to place the order (which needs approval), then answers.
 
 ### One chat turn
 
 ![One chat turn](diagrams/officina-chat-turn.svg)
 
-1. The console builds `RunOptions`: the date and staff member as context, the staff member as memory scope, and the
-   lower of the reply budget and what is left of the session budget.
+1. The console builds `RunOptions`: the date and staff member as context (sent at the start of a session and again only
+   when it changes), the staff member as memory scope, and the lower of the reply budget and what is left of the
+   session budget.
 2. `StreamAsync` checks the options. The engine locks the conversation, starts the run span, records `RunStarted`,
    checks the prefix fingerprint (a mismatch fails the run), connects MCP sources and answers calls an interrupted run
    left without results.
@@ -130,9 +132,12 @@ things up, asks to place the order (which needs approval), then answers.
 
 ![A write call that needs approval](diagrams/officina-tool-calls.svg)
 
-The pipeline runs on its own task and writes events to a channel the engine relays, so the console sees
-`ApprovalAsked` before the approver is asked. Before this point the pipeline has parsed the input and validated it
-against the tool's schema. Read calls in the same reply run together; a write waits for the reads before it and runs
+The pipeline runs on its own task and writes events to a channel the engine relays, so `ApprovalAsked` follows
+everything that happened before it in the event stream. It does not arrive before `ApproveAsync` is called: the
+pipeline calls the approver straight after writing the event. The console prompts from its event loop and completes a
+per-call answer that `ApproveAsync` waits on, so the two meet in either order. A host whose approver answers from the
+event stream must do the same. The pipeline also records `ApprovalAsked` and `ApprovalAnswered` in the audit trail
+(left out of the diagram), and before all this it has parsed the input and validated it against the tool's schema. Read calls in the same reply run together; a write waits for the reads before it and runs
 alone. A denied or unattended approval, invalid input, an unknown tool, a thrown handler and a cancelled call each
 become an error result for the model, never an exception.
 
@@ -144,15 +149,15 @@ The request lists the tools sorted by name (the memory tool as Claude's `memory_
 cached system block, the tail gets an automatic cache point, an operator message becomes a mid-conversation system
 message, and stored blocks are sent as their raw JSON. A transient failure (rate limit, overload, 5xx, network) is
 retried up to 5 attempts, waiting for `Retry-After` (at most 30 s) or a backoff with jitter. The engine discards the
-text already streamed. "Prompt is too long" stops the run as `ContextFull`; an authentication or invalid-request error
-throws `ClaudeException`, and the run fails.
+text already streamed. "Prompt is too long" stops the run as `ContextFull`. An authentication or invalid-request error,
+or a transient failure on the last attempt, throws `ClaudeException`, and the run fails.
 
 ## Principles and trade-offs
 
 | Principle | In the code | Trade-off |
 |---|---|---|
 | **Architecture** | | |
-| Ports and adapters | The core references the .NET base library only. Model, tool source, approver, memory store and audit sink are interfaces, and each adapter is its own package. TEST-05 fails the build if this breaks. | The core carries its own JSON Schema subset validator (about 200 lines) instead of a library. |
+| Ports and adapters | The core references the .NET base library only. Model, tool source, approver, memory store and audit sink are interfaces, and each adapter is its own package. A dependency test (TEST-05) fails if the core gains a reference or a package other than Claude references the Anthropic SDK. | The core carries its own JSON Schema subset validator (about 200 lines) instead of a library. |
 | One primitive | A run of one agent is the only thing the core executes. The session summarizer is a second agent the host runs. | No built-in multi-agent orchestration; hosts compose runs. |
 | Purpose-neutral core | No domain, UI, storage or transport types in the core; bookshop concepts live only in the app. | Hosts write more wiring (telemetry, stores, MCP servers). |
 | **SOLID** | | |
@@ -164,7 +169,7 @@ throws `ClaudeException`, and the run fails.
 | **Agent rules** | | |
 | Append-only conversation | `Conversation.Append` is internal and only appends. Blocks keep the provider's raw JSON. The user message and context enter only with the reply that answers them. Compaction and clearing happen on the provider's side. | History can't be pruned on the client, so long sessions rely on provider features. Each append copies an immutable array. |
 | Stable prefix | Tools sorted, instructions frozen, model settings fixed. A SHA-256 fingerprint is bound on the first append and checked on every run. Per-run context goes after the prefix as an operator message. | Changing tools or instructions means a new conversation. |
-| Structured signals decide | Stop reasons and results are enums and a closed result hierarchy; `Decide` is a pure switch. The one place that reads error text is "prompt is too long" in `ClaudeErrors`, which has no error type of its own. | Hosts switch on result types; exceptions are kept for host mistakes. |
+| Structured signals decide | Stop reasons are enums and results are three sealed records; `Decide` is a pure switch. The one place that reads error text is "prompt is too long" in `ClaudeErrors`, which has no error type of its own. | Hosts switch on result types; exceptions are kept for host mistakes. |
 | Every run ends in a result | Model, tool and approval failures become values. Every tool call gets exactly one result, even when the run is cancelled. | A host that stops reading events abandons the run and gets no `RunEnded`. |
 | **Safety** | | |
 | Secure by default | Secrets are redacted from tool results, audit and telemetry. Unattended runs deny calls that need approval. A write runs only after its attempt is audited. Memory paths can't leave their scope or follow links. | Streamed text deltas and appended messages are not redacted (D13): redacting them would break byte-exact history or delay streaming. |
