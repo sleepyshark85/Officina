@@ -125,7 +125,7 @@ Its sessions do not resume in normal mode, nor the other way round.
 | `dotnet run -- --demo`, `Sam` | `Demo mode: compaction from 50,000 input tokens, and old tool results cleared above 12 tool calls.` Note the session id. |
 | `Run these four catalogue searches together, then just give me the four counts: every book priced at most £18 (up to 300 of them), the 250 cheapest books in stock or not, every book in stock priced at most £18 (up to 300), and every book priced at most £16 (up to 300).` ✓ | Four `> search_books` lines together (`{"maxPrice":18,"limit":300}`, `{"limit":250}`, `{"maxPrice":18,"inStock":true,"limit":300}`, `{"maxPrice":16,"limit":300}`), then `~ Conversation compacted: 52,255 tokens summarized into 3,068.` (as checked live; the numbers vary a little) and the counts 245, 250, 224 and 208. About $0.33. The compacting reply may come without text: `[The conversation was compacted and the reply has no text. Please ask again.]`; ask again. |
 | `Look up books 1 to 8 with get_book, then list their titles.` | Eight `> get_book` calls in parallel and the eight titles. No clearing yet. |
-| `Now look up books 9 to 16 with get_book, then list their titles.` | Eight more `> get_book` calls in parallel, then `~ Old tool results cleared: … tool calls, … tokens.`: the next request holds 16 or more tool calls, above 12, so the oldest results are cleared, and the 8 most recent (this turn's) stay. The model does not fetch books 9 to 16 again in bulk (live, it re-fetched one, as its memory note pushed the oldest of the 8 out of the window). |
+| `Now look up books 9 to 16 with get_book, then list their titles.` | Eight more `> get_book` calls in parallel, then `~ Old tool results cleared: … tool calls, … tokens.`: the next request holds 16 or more tool calls, above 12, so the oldest results are cleared, and the 10 most recent (this turn's lookups and a memory call or two) stay. The model does not fetch books 9 to 16 again. |
 | `/audit` | `Compacted` and `Cleared` entries with their numbers. |
 | `/quit`, then `dotnet run` (normal mode), `Sam`, `/resume <demo session id>` | `Session <id> was started with another version of the assistant, so it cannot go on. Type /new to start a new session.` (APP-10): its context management differs, so its prefix would not match. |
 
@@ -160,4 +160,5 @@ The first live run of step 13, with one search a turn, found that clearing after
 before they could compact: the model calls the memory tool once or twice a turn, and those calls count. Demo mode now
 clears above 12, and the demo asks for the four searches in one turn, as checked live. A second run, with 14 lookups in
 one turn, found that keeping only 2 results cleared what the turn had just fetched, so the model fetched it again. Demo
-mode now keeps the 8 most recent, and the demo looks up 8 books a turn.
+mode now keeps the 10 most recent, and the demo looks up 8 books a turn. A live run with 8 kept re-fetched one book, as
+a memory note pushed it out of the window; 10 leaves room for the model's memory calls (not rechecked live).

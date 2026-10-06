@@ -40,13 +40,14 @@ public static class BookshopAgent
     /// Demo mode (APP-17): compaction at Claude's minimum, which the demo script's four catalogue searches of 10–15k tokens
     /// reach, and clearing when a request holds more than 12 tool calls (the API clears above <c>After</c>, not at it).
     /// Clearing comes first and counts every tool call, the memory tool's too, which the model calls once or twice a
-    /// turn: at 4, it cleared the searches before they could compact. It keeps the 8 most recent results, so a turn of
-    /// 8 parallel lookups never loses what it just fetched (at 2, the model fetched them again).
+    /// turn: at 4, it cleared the searches before they could compact. It keeps the 10 most recent results, so a turn of
+    /// 8 parallel lookups plus a memory call or two never loses what it just fetched (at 2, the model fetched them
+    /// again; at 8, a memory note pushed one out).
     /// </summary>
     public static readonly ContextManagement Demo = new()
     {
         CompactAt = 50_000,
-        ClearToolResults = new ToolResultClearing(After: 12, Keep: 8),
+        ClearToolResults = new ToolResultClearing(After: 12, Keep: 10),
     };
 
     /// <summary>The chat agent's model, which the application and the live smoke test (TEST-04) share.</summary>
