@@ -80,7 +80,7 @@ public class ToolDefinitionTests
             _ => Tool.FromFunction("t", "T.", ToolKind.Read, () => Task.CompletedTask),
         };
 
-        var output = await tool.Handler(JsonDocument.Parse("{}").RootElement, Ct);
+        var output = await tool.Handler(JsonDocument.Parse("{}").RootElement, new ToolContext(null), Ct);
 
         Assert.Equal(
             kind switch

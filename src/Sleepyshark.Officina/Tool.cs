@@ -24,6 +24,10 @@ public sealed record ToolOutput(string Content, bool IsError = false)
     public string Content { get; } = Content ?? throw new ArgumentNullException(nameof(Content));
 }
 
+/// <summary>What a tool's handler knows of the run that calls it (ARCHITECTURE §4.2).</summary>
+/// <param name="MemoryScope">Whose memory the run sees (MEM-03); null for a run without one.</param>
+public sealed record ToolContext(string? MemoryScope);
+
 /// <summary>
 /// A tool the model may request (TOOL-01, ARCHITECTURE §4.2). Its name, description and input schema are part of the
 /// cached prefix; its kind and approval need are not sent to the model.
@@ -43,6 +47,14 @@ public sealed class Tool
     public Tool(
         string name, string description, string inputSchema, ToolKind kind,
         Func<JsonElement, CancellationToken, Task<ToolOutput>> handler, bool needsApproval = false)
+        : this(name, description, inputSchema, kind, Ignoring(handler), needsApproval)
+    {
+    }
+
+    /// <summary>A tool whose handler also gets the run's <see cref="ToolContext"/>; see the other constructor.</summary>
+    public Tool(
+        string name, string description, string inputSchema, ToolKind kind,
+        Func<JsonElement, ToolContext, CancellationToken, Task<ToolOutput>> handler, bool needsApproval = false)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         ArgumentNullException.ThrowIfNull(description);
@@ -80,15 +92,21 @@ public sealed class Tool
     /// <summary>The source the tool comes from, such as an MCP server; null for the application's own tools.</summary>
     public IToolSource? Source { get; init; }
 
-    /// <summary>Whether this is the memory tool (MEM-01), which a provider with a native memory tool presents as that tool.</summary>
-    public bool IsMemory => Memory is not null;
+    /// <summary>
+    /// Whether this is the memory tool (MEM-01), which a provider with a native memory tool presents as that tool, and
+    /// whose runs need a memory scope.
+    /// </summary>
+    public bool IsMemory { get; internal init; }
 
     internal JsonElement Schema { get; }
 
-    /// <summary>The memory tool's store; its calls run in the run's memory scope instead of through <see cref="Handler"/>.</summary>
-    internal IMemoryStore? Memory { get; init; }
+    internal Func<JsonElement, ToolContext, CancellationToken, Task<ToolOutput>> Handler { get; }
 
-    internal Func<JsonElement, CancellationToken, Task<ToolOutput>> Handler { get; }
+    /// <summary>Calls whose input this accepts never need approval, such as the memory tool's views; null exempts none.</summary>
+    internal Func<JsonElement, bool>? ExemptFromApproval { get; init; }
+
+    /// <summary>Whether a call with <paramref name="input"/> needs the approver's approval (TOOL-04).</summary>
+    internal bool NeedsApprovalFor(JsonElement input) => NeedsApproval && ExemptFromApproval?.Invoke(input) != true;
 
     /// <summary>
     /// Builds a tool from an ordinary typed function (TOOL-01). Each parameter is a property of the input, with its schema
@@ -176,6 +194,12 @@ public sealed class Tool
             return node;
         },
     };
+
+    private static Func<JsonElement, ToolContext, CancellationToken, Task<ToolOutput>> Ignoring(Func<JsonElement, CancellationToken, Task<ToolOutput>> handler)
+    {
+        ArgumentNullException.ThrowIfNull(handler);
+        return (input, _, cancellationToken) => handler(input, cancellationToken);
+    }
 
     private static void Describe(JsonNode? node, DescriptionAttribute? description)
     {
