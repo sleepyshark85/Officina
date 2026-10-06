@@ -36,9 +36,10 @@ provider, MCP client, test kit and spike findings (`docs/spikes/` there) are reu
   `quality`, branch up to date, review threads resolved); the owner has delegated that go-ahead.
   Branches: `slice/<id>-<slug>`, `docs/<topic>`, or `fix/`, `refactor/`, `chore/`, `test/` or `feature/` and a slug.
   Retarget a stacked PR before deleting the branch it is based on (deleting a base closes the PR).
-- **Hooks enforce the mechanical rules** (`.claude/settings.json`, scripts in `.claude/hooks/`): no push to `main`, no
-  commit on `main`, branch prefixes, the staged files shown before each commit, one type per `.cs` file named after it,
-  and no requirement IDs in code comments. A blocked action says why; fix the cause, never work around the hook.
+- **Claude Code hooks enforce the mechanical rules** (`.claude/settings.json`, scripts in `.claude/hooks/`): no push
+  to `main`, no commit on `main`, branch prefixes; before a commit that stages code, the format check and the Release
+  build, and the staged files shown; before a push of more than docs, the tests; one type per `.cs` file named after
+  it, and no requirement IDs in code comments. A blocked action says why; fix the cause, never work around the hook.
 - **The simplest thing that works.** Build only what the slice's acceptance criteria need: no abstraction without a
   current user, no setting without a known case (until then, a constant), no optimization without a measured target.
   Prefer a framework feature over custom code. Simplicity never at the cost of separation of concerns or clear design.
