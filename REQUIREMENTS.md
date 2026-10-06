@@ -35,7 +35,7 @@ every phase 1 capability in one place.
 | APP-09 | Multi-step requests work as one agentic loop of several turns, for example *"Order the two cheapest fantasy books in stock for Alice Martin and tell me the total"*: find the customer, search, check, place the order after approval, answer. |
 | APP-10 | Sessions (conversations) are stored in the database after every step of a reply (AGT-08) and survive a restart or a crash; `/resume` continues one with its cache intact. A session whose agent changed is refused, and a new session is offered. |
 | APP-11 | Memory per staff member (chosen at start): preferences and notes the assistant keeps across sessions, for example *"I prefer prices with tax"*. |
-| APP-12 | An MCP server (the reference filesystem server, in Docker, over stdio) lets the assistant export reports, for example an order history as CSV, into an `exports` folder. Its allow-list names only the tools the export needs (write a file, list the folder). Writing a file needs approval. |
+| APP-12 | An MCP server (the reference filesystem server, in Docker, over Streamable HTTP through a stdio bridge) lets the assistant export reports, for example an order history as CSV, into an `exports` folder. Its allow-list names only the tools the export needs (write a file, list the folder). Writing a file needs approval. |
 | APP-13 | Run context gives the date and the staff member's name, never in the instructions. It is appended at the start of a session and again only when it changes (a new day). |
 | APP-14 | After each reply a status line shows tokens, cache read share, the reply's cost and the session's cost. A per-reply and a per-session budget apply; reaching one stops the reply and says why. |
 | APP-15 | When a session is left (`/new`, `/resume`, `/quit`), a separate **stateless** agent with **typed output** writes the session's title, a summary and the changes made, which `/sessions` shows. A session left without one (a crash) is summarized the next time `/sessions` lists it. |
@@ -151,7 +151,7 @@ The core serves any agentic purpose, not only the reference application. These r
 
 | ID | Requirement |
 |---|---|
-| MCP-01 | Tools can come from MCP servers over stdio (Bookshop Assistant) and Streamable HTTP (the background agent sample, GEN-06), through Officina's own MCP client. |
+| MCP-01 | Tools can come from MCP servers over stdio and Streamable HTTP (Bookshop Assistant's export server, the background agent sample, GEN-06), through Officina's own MCP client. |
 | MCP-02 | MCP tools go through the same tool pipeline as any tool: validation, approval, truncation, events. Each server's tools are writes unless the host marks them read; a server's annotations are not trusted. |
 | MCP-03 | An MCP server's tool list is read once and pinned for the conversation (CTX-04), named `<server>__<tool>`, and filtered by an allow-list the host gives. |
 | MCP-04 | A server that is down at the start of a run fails the run with a clear error; one that fails mid-run returns error results for its calls. |

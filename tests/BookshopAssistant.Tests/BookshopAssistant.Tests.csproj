@@ -20,8 +20,8 @@
   <!-- The application's own schema and seed, so the tests run against the database the compose file creates. -->
   <ItemGroup>
     <None Include="..\..\apps\BookshopAssistant\database\*.sql" LinkBase="database" CopyToOutputDirectory="PreserveNewest" />
-    <!-- And its compose file, whose filesystem service the export tests start (APP-12). -->
-    <None Include="..\..\apps\BookshopAssistant\compose.yaml" Link="compose.yaml" CopyToOutputDirectory="PreserveNewest" />
+    <!-- And its export server's image, which the export tests build and start (APP-12). -->
+    <None Include="..\..\apps\BookshopAssistant\exports-server\*" LinkBase="exports-server" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

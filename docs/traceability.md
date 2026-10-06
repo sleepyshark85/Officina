@@ -24,7 +24,7 @@ only a live run or inspection checks, noted in the last column.
 |---|---|---|
 | APP-01 | App/EndToEndTests: `APP_01_the_reply_streams_with_the_text_between_tool_calls_and_each_tool_with_its_input_and_outcome` | |
 | APP-02 | App/SessionTests: `APP_02_help_lists_every_command_and_calls_no_model`, `APP_02_new_starts_a_session_of_its_own_and_resume_of_an_unknown_id_says_so`, `APP_14_the_status_line_and_cost_show_…` (`/cost`); App/SummaryTests: `APP_15_leaving_a_session_summarizes_it_and_sessions_shows_…` (`/sessions`); App/MemoryTests: `APP_11_memory_shows_what_is_remembered_…` (`/memory`); App/AuditTests: `APP_16_audit_shows_…`, `APP_16_audit_with_an_id_shows_an_earlier_session` (`/audit`); `/quit` ends every App console test | |
-| APP-03 | App/EndToEndTests: `APP_03_cancelling_stops_the_reply_and_the_session_goes_on`, `APP_03_cancelling_at_the_approval_prompt_stops_the_reply_at_once_and_the_change_is_not_made`; App/ExportTests: `APP_12_APP_03_the_server_runs_out_of_ctrl_c_s_reach_…` | |
+| APP-03 | App/EndToEndTests: `APP_03_cancelling_stops_the_reply_and_the_session_goes_on`, `APP_03_cancelling_at_the_approval_prompt_stops_the_reply_at_once_and_the_change_is_not_made` | |
 | APP-04 | App/ToolTests (all run against the seeded database in Docker) | Inspection: `compose.yaml`, `database/` |
 | APP-05 | App/EndToEndTests: `APP_05_the_read_tools_of_one_reply_all_answer_from_the_database`; App/ToolTests: `Search_…`, `Reads_find_customers_their_orders_books_and_orders`; Core/ToolLoopTests: `Reads_overlap_and_writes_run_alone_in_call_order` | |
 | APP-06 | App/EndToEndTests: `APP_06_a_write_shows_its_exact_input_for_approval_and_runs_only_if_approved`; App/ToolTests: `Add_customer_…`, `Place_order_…`, `Cancel_order_returns_the_copies_once`, `Restock_adds_copies`, `Concurrent_orders_never_take_more_copies_than_are_in_stock` | |
@@ -33,7 +33,7 @@ only a live run or inspection checks, noted in the last column.
 | APP-09 | App/EndToEndTests: `APP_09_a_multi_step_request_finds_searches_orders_after_approval_and_answers` | Live: App/LiveSmokeTests `APP_09_places_the_order_after_approval_and_reads_the_cache_from_the_second_call` (TEST-04) |
 | APP-10 | App/SessionTests: `APP_10_quit_restart_and_resume_continues_the_session_with_its_prefix_byte_identical`, `APP_10_a_crash_mid_reply_loses_at_most_the_step_in_flight_and_the_session_resumes`, `APP_10_a_session_whose_agent_changed_is_refused_and_a_new_one_is_offered`; App/SessionPropertyTests: `TEST_07_the_prefix_stays_byte_identical_…`; App/UnreadableSessionTests: `A_session_that_cannot_be_read_is_reported_…`; App/SessionConflictTests (both) | Cache reads after `/resume`: demo script |
 | APP-11 | App/MemoryTests: `APP_11_memory_shows_what_is_remembered_for_the_staff_member_at_the_counter`, `APP_11_a_preference_saved_in_one_session_is_applied_in_a_new_one` | |
-| APP-12 | App/ExportTests: `APP_12_the_allow_list_offers_only_writing_a_file_with_approval_and_listing_the_folder`, `APP_12_an_order_history_is_exported_as_csv_after_approval`, `APP_12_a_declined_export_writes_no_file`, `APP_12_APP_03_…` | |
+| APP-12 | App/ExportTests: `APP_12_the_allow_list_offers_only_writing_a_file_with_approval_and_listing_the_folder`, `APP_12_an_order_history_is_exported_as_csv_after_approval`, `APP_12_a_declined_export_writes_no_file` | |
 | APP-13 | App/EndToEndTests: `APP_13_the_run_context_names_the_date_and_staff_member_and_is_sent_again_only_on_a_new_day` | |
 | APP-14 | App/SessionTests: `APP_14_the_status_line_and_cost_show_the_tokens_cache_share_and_cost_of_the_reply_and_the_session`, `APP_14_a_reply_that_reaches_its_budget_stops_and_says_why_…`, `APP_14_a_session_that_reaches_its_budget_stops_the_next_reply_before_any_model_call` | |
 | APP-15 | App/SummaryTests: all five `APP_15_…` tests; App/SummaryCostTests: `Sessions_summarizes_at_most_three_stale_sessions_…` | |
@@ -122,7 +122,7 @@ only a live run or inspection checks, noted in the last column.
 
 | ID | Tests | Also checked by |
 |---|---|---|
-| MCP-01 | Mcp: `MCP_01_a_stdio_server_s_tools_run_and_their_results_reach_the_model`, `MCP_01_an_http_server_s_tools_run_with_the_credential_the_host_gives`; Samples/BackgroundAgentTests (HTTP); App/ExportTests (stdio) | |
+| MCP-01 | Mcp: `MCP_01_a_stdio_server_s_tools_run_and_their_results_reach_the_model`, `MCP_01_an_http_server_s_tools_run_with_the_credential_the_host_gives`; Samples/BackgroundAgentTests (HTTP); App/ExportTests (HTTP) | |
 | MCP-02 | Mcp: `MCP_02_an_mcp_tool_goes_through_validation_approval_audit_truncation_and_events`, `MCP_02_MCP_03_only_allowed_tools_appear_…` | |
 | MCP-03 | Mcp: `MCP_02_MCP_03_only_allowed_tools_appear_named_by_server_and_tool_…`, `MCP_03_an_allowed_tool_the_server_lacks_fails_the_connection_clearly`, `MCP_03_CTX_04_the_tool_list_is_read_once_and_pinned_for_the_conversation` | |
 | MCP-04 | Mcp: `MCP_04_a_server_down_at_the_start_of_a_run_fails_it_clearly_and_the_next_run_reconnects`, `MCP_04_an_http_server_that_fails_mid_run_gives_error_results_…`, `MCP_04_a_stdio_server_that_exits_mid_run_…`, `MCP_04_a_stdio_server_that_cannot_start_fails_to_connect_clearly`, `MCP_04_a_connect_cancelled_while_the_server_starts_leaves_no_server_running` | |
