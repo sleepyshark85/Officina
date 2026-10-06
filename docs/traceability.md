@@ -167,7 +167,7 @@ only a live run or inspection checks, noted in the last column.
 | ID | Tests | Also checked by |
 |---|---|---|
 | TEST-01 | Core/RunTests: `The_scripted_model_rejects_role_sequences_the_API_rejects`, `A_rejected_request_leaves_its_scripted_reply_for_the_next_one`; the scripted approver, in-memory store and fake MCP server in Core/ToolLoopTests, Core/MemoryTests and Mcp | |
-| TEST-02 | Core/PrefixTests: `The_prefix_is_stable_across_turns_and_across_save_restart_and_resume`, `The_stability_check_reports_each_kind_of_change`; App/SessionTests: `APP_10_quit_restart_and_resume_…`; App/SessionPropertyTests; Samples: `TEST_02_…` tests and the prefix checks of Samples/BackgroundAgentTests | |
+| TEST-02 | Core/PrefixTests: `The_prefix_is_stable_across_turns_and_across_save_restart_and_resume`, `The_stability_check_reports_each_kind_of_change`, `A_prefix_keeps_its_tools_sorted_however_it_is_built_and_is_equal_to_another_with_the_same_fingerprint`; App/SessionTests: `APP_10_quit_restart_and_resume_…`; App/SessionPropertyTests; Samples: `TEST_02_…` tests and the prefix checks of Samples/BackgroundAgentTests | |
 | TEST-03 | — | The CI workflow (`.github/workflows/ci.yml`): Linux and Windows, offline; Docker tests skip off Linux |
 | TEST-04 | App/LiveSmokeTests: `APP_09_places_the_order_after_approval_and_reads_the_cache_from_the_second_call`, `Demo_mode_compacts_after_the_demo_scripts_searches` | Live, on demand (`OFFICINA_LIVE_TESTS=1`, trait `Category=Live`); skipped by `dotnet test` and CI |
 | TEST-05 | Deps/DependencyRulesTests (all), Deps/RepositoryDependencyTests | |

@@ -50,8 +50,8 @@ public class MemoryTests(BookshopDatabase database) : IClassFixture<BookshopData
 
             // The run context names who is at the counter; memory never enters the instructions (MEM-05).
             Assert.Contains("The staff member using the assistant is sam.", second.Requests[0].Messages[1].Text, StringComparison.Ordinal);
-            Assert.All([.. first.Requests, .. second.Requests], request => Assert.Equal(first.Requests[0].Instructions, request.Instructions));
-            Assert.DoesNotContain("Show prices", first.Requests[0].Instructions, StringComparison.Ordinal);
+            Assert.All([.. first.Requests, .. second.Requests], request => Assert.Equal(first.Requests[0].Prefix.Instructions, request.Prefix.Instructions));
+            Assert.DoesNotContain("Show prices", first.Requests[0].Prefix.Instructions, StringComparison.Ordinal);
 
             // The write was audited before it ran, in Sam's scope (MEM-04, AUD-03).
             Assert.Equal("sam", await database.ScalarAsync<string>("select memory_scope from audit where call_id = $1 and kind = 'ToolStarted'", save));

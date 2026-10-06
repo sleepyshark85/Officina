@@ -24,16 +24,16 @@ internal static class ClaudeRequest
             Model = model.Model,
             MaxTokens = Math.Min(model.MaxOutputTokens, request.MaxOutputTokens ?? int.MaxValue),
             Thinking = new BetaThinkingConfigAdaptive(),
-            OutputConfig = request.OutputSchema is null
+            OutputConfig = request.Prefix.OutputSchema is null
                 ? new BetaOutputConfig { Effort = Effort(model.Effort) }
-                : new BetaOutputConfig { Effort = Effort(model.Effort), Format = new BetaJsonOutputFormat { Schema = OutputSchema.Adjust(request.OutputSchema) } },
+                : new BetaOutputConfig { Effort = Effort(model.Effort), Format = new BetaJsonOutputFormat { Schema = OutputSchema.Adjust(request.Prefix.OutputSchema) } },
             CacheControl = cache,
-            Tools = [.. request.Tools.OrderBy(tool => tool.Name, StringComparer.Ordinal).Select(Tool)],
-            System = new List<BetaTextBlockParam> { new() { Text = request.Instructions, CacheControl = cache } },
+            Tools = [.. request.Prefix.Tools.Select(Tool)],
+            System = new List<BetaTextBlockParam> { new() { Text = request.Prefix.Instructions, CacheControl = cache } },
             Messages = [],
         };
         // An empty setting asks for nothing, so the request has no context management.
-        if (request.ContextManagement is { } context && Edits(context) is { Count: > 0 } edits)
+        if (request.Prefix.ContextManagement is { } context && Edits(context) is { Count: > 0 } edits)
         {
             typed = typed with { Betas = Betas(context), ContextManagement = new BetaContextManagementConfig { Edits = edits } };
         }

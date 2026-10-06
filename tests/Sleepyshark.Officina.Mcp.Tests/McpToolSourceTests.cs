@@ -99,7 +99,7 @@ public sealed class McpToolSourceTests
         // The model is offered the allowed tools only, as the server lists them.
         var model = new ScriptedModel().Reply("Hello.");
         await AgentOf(model, source, server).RunAsync(new Conversation(), "Hi.", cancellationToken: TestContext.Current.CancellationToken);
-        var offered = Assert.Single(model.Requests).Tools;
+        var offered = Assert.Single(model.Requests).Prefix.Tools;
         Assert.Equal(["fake__echo", "fake__upper"], offered.Select(tool => tool.Name));
         Assert.Equal("The echo tool.", offered[0].Description);
         Assert.Equal("""{"type":"object","properties":{"text":{"type":"string"}}}""", offered[0].InputSchema);
@@ -137,7 +137,7 @@ public sealed class McpToolSourceTests
         await agent.RunAsync(conversation, "Third.", cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal(3, model.Requests.Count);
-        Assert.All(model.Requests, request => Assert.Equal("The echo tool.", Assert.Single(request.Tools).Description));
+        Assert.All(model.Requests, request => Assert.Equal("The echo tool.", Assert.Single(request.Prefix.Tools).Description));
         Assert.Empty(PrefixStability.Problems(model.Requests));
 
         // A source connected now reads the changed list: an agent built with it is another prefix, so it starts a new conversation.

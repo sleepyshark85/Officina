@@ -61,7 +61,7 @@ internal static class RunEngine
         RunScope run, string message, string? context, StrongBox<RunResult> result, [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         var (agent, conversation, audit, spending) = (run.Agent, run.Conversation, run.Audit, run.Spending);
-        var fingerprint = agent.Fingerprint();
+        var fingerprint = run.Prefix.Fingerprint;
         if (conversation.Fingerprint is { } bound && bound != fingerprint)
         {
             result.Value = new Failed(
@@ -196,7 +196,7 @@ internal static class RunEngine
         RunScope run, ImmutableArray<Message> messages, int? limit, ModelReply reply, [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         var agent = run.Agent;
-        var request = new ModelRequest(agent.Tools, agent.Instructions, messages, limit, agent.Output?.Schema, agent.ContextManagement);
+        var request = new ModelRequest(run.Prefix, messages, limit);
         var (started, span) = (agent.Time.GetTimestamp(), Telemetry.StartModelCall(agent, run.Span));
         var streamed = false;
         IAsyncEnumerator<ModelEvent>? stream = null;

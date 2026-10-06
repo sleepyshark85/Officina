@@ -7,7 +7,7 @@ public class StreamTests
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
-    internal static ModelRequest Hi => new([], "Answer briefly.", [Message.Of(Role.User, "Hi")]);
+    internal static ModelRequest Hi => new(new RequestPrefix("test", [], "Answer briefly."), [Message.Of(Role.User, "Hi")]);
 
     internal static ClaudeModel Model(FakeApi api, TimeProvider? time = null) =>
         new("test-key", api, time) { Model = "claude-opus-5-5", Effort = ClaudeEffort.Medium };

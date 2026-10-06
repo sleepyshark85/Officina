@@ -258,7 +258,7 @@ public sealed class MemoryTests : IDisposable
         await agent.RunAsync(conversation, "What do I prefer?", new() { MemoryScope = "sam" }, Ct);
         await agent.RunAsync(conversation, "Hi.", new() { MemoryScope = "sam" }, Ct);
 
-        Assert.All(model.Requests, request => Assert.Equal(Agents.Instructions, request.Instructions));
+        Assert.All(model.Requests, request => Assert.Equal(Agents.Instructions, request.Prefix.Instructions));
         Assert.Empty(PrefixStability.Problems(model.Requests));
         Assert.Contains("Prices with tax.", model.Requests[1].Messages[^1].Blocks[0].ToolResult!.Content, StringComparison.Ordinal);
         Assert.True(agent.CanContinue(conversation));

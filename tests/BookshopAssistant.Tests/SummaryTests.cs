@@ -31,8 +31,8 @@ public class SummaryTests(BookshopDatabase database) : IClassFixture<BookshopDat
 
         // The summarizer reads the transcript as plain text in one user message, with no tools and the output schema.
         var request = Assert.Single(summaries.Requests);
-        Assert.Equal((0, Role.User), (request.Tools.Length, Assert.Single(request.Messages).Role));
-        Assert.NotNull(request.OutputSchema);
+        Assert.Equal((0, Role.User), (request.Prefix.Tools.Length, Assert.Single(request.Messages).Role));
+        Assert.NotNull(request.Prefix.OutputSchema);
         InOrder(
             request.Messages[0].Text,
             "Staff: Restock book 320 with 2.\n",

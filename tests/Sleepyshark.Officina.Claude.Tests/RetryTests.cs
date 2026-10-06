@@ -66,7 +66,7 @@ public class RetryTests
         Task<List<ModelEvent>> Call(string name) => Task.Run(() =>
         {
             InstantTime.Caller.Value = name;
-            return CollectAsync(model, new([], "Answer briefly.", [Message.Of(Role.User, $"Call {name}")]));
+            return CollectAsync(model, new(new RequestPrefix("test", [], "Answer briefly."), [Message.Of(Role.User, $"Call {name}")]));
         }, Ct);
 
         var callA = Call("A");

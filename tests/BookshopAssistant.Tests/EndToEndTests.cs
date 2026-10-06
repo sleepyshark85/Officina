@@ -190,7 +190,7 @@ public class EndToEndTests(BookshopDatabase database) : IClassFixture<BookshopDa
             ],
             contexts);
         Assert.Equal([Role.User, Role.Operator, Role.Assistant, Role.User, Role.Assistant, Role.User, Role.Operator], model.Requests[^1].Messages.Select(message => message.Role));
-        Assert.DoesNotContain("Sam", model.Requests[0].Instructions, StringComparison.Ordinal);
+        Assert.DoesNotContain("Sam", model.Requests[0].Prefix.Instructions, StringComparison.Ordinal);
     }
 
     [DatabaseFact]

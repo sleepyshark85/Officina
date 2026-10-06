@@ -27,7 +27,7 @@ reached through a contract the core owns and an adapter or the host implements.
 | Agent | What an agent is: model, frozen instructions, sorted tools, optional output contract, context management, and host policy (approver, audit sink, secrets, clock). It validates a run's options and starts the run. | `Agent`, `RunOptions` |
 | Run engine | Sequences one run: lock the conversation, check the prefix fingerprint, connect tool sources, call the model, append, run tools, loop, and end in exactly one result. | `RunEngine`, `RunScope` |
 | Reply decision | A pure mapping from a model reply (error, stop reason, blocks, tool calls) to "append or not" and "end with this result or continue". | `RunEngine.Decide` |
-| Request composer | Builds every request in the same layout (sorted tools, instructions, history, pending messages). A hash of that prefix stops a conversation from continuing under other tools, instructions or settings. | `ModelRequest`, `Agent.Fingerprint` |
+| Request composer | Builds every request as the same prefix (model settings, sorted tools, instructions, output schema, context management) followed by the history and pending messages. The prefix's fingerprint stops a conversation from continuing under another prefix. | `RequestPrefix`, `ModelRequest` |
 | Tool pipeline | For each call: find, validate input, ask approval, audit the attempt, invoke, redact and truncate. Reads run together and writes run one at a time; every call gets exactly one result. | `ToolPipeline`, `ToolSources` |
 | Audit recorder | Turns important steps into numbered, redacted, truncated entries. With an audit sink, a write tool runs only once its attempt is recorded. | `AuditRecorder`, `AuditEntry` |
 | Schema validator | Validates JSON against the JSON Schema subset the core uses, and refuses schemas outside it when a tool or output contract is defined. | `SchemaValidator` |
@@ -56,6 +56,7 @@ reached through a contract the core owns and an adapter or the host implements.
 | **Built by the host** | |
 | `Agent` | Immutable, stateless record describing an agent, and the only entry point for runs. It keeps tools sorted and refuses duplicates. |
 | `RunOptions` | One run's context (sent as an operator message), memory scope and budget. Each value is validated when set. |
+| `RequestPrefix` | What stays the same in every request of a conversation, so the provider can cache it: model settings, tools sorted by name, instructions, output schema, context management. Its fingerprint identifies it, and two prefixes are equal when their fingerprints are. |
 | `Tool` | A tool the model may call: name, description, input schema, read or write, approval need, handler. `FromFunction` builds one from a typed delegate. |
 | `ToolContext` | What a handler learns about the run calling it: its memory scope. |
 | `OutputContract` | Typed output: a schema exported from an application type, and how to read the reply into it. |
@@ -169,7 +170,7 @@ or a transient failure on the last attempt, throws `ClaudeException`, and the ru
 | Dependency inversion | The core owns every contract. The clock is an injected `TimeProvider`; telemetry uses platform primitives the host exports. | The host must configure an exporter to see telemetry. |
 | **Agent rules** | | |
 | Append-only conversation | `Conversation.Append` is internal and only appends. Blocks keep the provider's raw JSON. The user message and context enter only with the reply that answers them. Compaction and clearing happen on the provider's side. | History can't be pruned on the client, so long sessions rely on provider features. Each append copies an immutable array. |
-| Stable prefix | Tools sorted, instructions frozen, model settings fixed. A SHA-256 fingerprint is bound on the first append and checked on every run. Per-run context goes after the prefix as an operator message. | Changing tools or instructions means a new conversation. |
+| Stable prefix | One `RequestPrefix` holds what stays fixed (tools sorted, instructions frozen, model settings, output schema, context management) and owns its SHA-256 fingerprint, which is bound on the first append and checked on every run. Per-run context goes after the prefix as an operator message. | Changing tools or instructions means a new conversation. |
 | Structured signals decide | Stop reasons are enums and results are three sealed records; `Decide` is a pure switch. The one place that reads error text is "prompt is too long" in `ClaudeErrors`, which has no error type of its own. | Hosts switch on result types; exceptions are kept for host mistakes. |
 | Every run ends in a result | Model, tool and approval failures become values. Every tool call gets exactly one result, even when the run is cancelled. | A host that stops reading events abandons the run and gets no `RunEnded`. |
 | **Safety** | | |
