@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 880 904" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="officina-tool-call-title officina-tool-call-desc">
+      <title id="officina-tool-call-title">One tool call</title>
+      <desc id="officina-tool-call-desc">Flowchart showing one tool call being validated, approved when it needs approval, recorded in the audit trail before it runs, run, and finished with redaction and truncation; every refusal becomes an error result for the model.</desc>
+      <defs>
+        <style>@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&amp;family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@400;500;600&amp;family=Noto+Sans+KR:wght@400;500;600&amp;family=Noto+Serif+KR:wght@400&amp;family=Noto+Sans+TC:wght@400;500;600&amp;family=Noto+Serif+TC:wght@400&amp;display=swap');</style>
+        <marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#4f5d75"/></marker>
+        <marker id="arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#eb6c36"/></marker>
+        <marker id="arrow-link" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#2e5aa8"/></marker>
+      </defs>
+      <rect width="100%" height="100%" fill="#f5f5f5"/>
+      <path d="M 300,96 L 300,128" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <path d="M 300,216 L 300,248" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <path d="M 400,292 L 460,292" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <path d="M 300,336 L 300,368" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <path d="M 560,336 L 560,392 Q 560,400 552,400 L 440,400" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <path d="M 300,432 L 300,464" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <path d="M 300,552 L 300,584" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <path d="M 300,648 L 300,680" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <path d="M 300,744 L 300,776" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <path d="M 400,172 L 792,172 Q 800,172 800,180 L 800,720 Q 800,728 792,728 L 440,728" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <path d="M 660,292 L 752,292 Q 760,292 760,300 L 760,704 Q 760,712 752,712 L 440,712" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <path d="M 400,508 L 712,508 Q 720,508 720,516 L 720,688 Q 720,696 712,696 L 440,696" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <rect x="320.0" y="227" width="24.8" height="12" rx="2" fill="#f5f5f5"/>
+      <text x="324.0" y="236" fill="#7a8399" font-size="8" font-family="'Geist Mono', monospace" text-anchor="start" letter-spacing="0.06em">YES</text>
+      <rect x="417.6" y="275" width="24.8" height="12" rx="2" fill="#f5f5f5"/>
+      <text x="430.0" y="284" fill="#7a8399" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">YES</text>
+      <rect x="320.0" y="347" width="19.2" height="12" rx="2" fill="#f5f5f5"/>
+      <text x="324.0" y="356" fill="#7a8399" font-size="8" font-family="'Geist Mono', monospace" text-anchor="start" letter-spacing="0.06em">NO</text>
+      <rect x="568.0" y="355" width="24.8" height="12" rx="2" fill="#f5f5f5"/>
+      <text x="572.0" y="364" fill="#7a8399" font-size="8" font-family="'Geist Mono', monospace" text-anchor="start" letter-spacing="0.06em">YES</text>
+      <rect x="320.0" y="563" width="24.8" height="12" rx="2" fill="#f5f5f5"/>
+      <text x="324.0" y="572" fill="#7a8399" font-size="8" font-family="'Geist Mono', monospace" text-anchor="start" letter-spacing="0.06em">YES</text>
+      <rect x="528.0" y="155" width="64.0" height="12" rx="2" fill="#f5f5f5"/>
+      <text x="560.0" y="164" fill="#7a8399" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">NO · ERROR</text>
+      <rect x="700.4" y="275" width="19.2" height="12" rx="2" fill="#f5f5f5"/>
+      <text x="710.0" y="284" fill="#7a8399" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">NO</text>
+      <rect x="522.4" y="491" width="75.2" height="12" rx="2" fill="#f5f5f5"/>
+      <text x="560.0" y="500" fill="#7a8399" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">NO · NOT RUN</text>
+      <rect x="160" y="40" width="280" height="56" rx="20" fill="#f5f5f5"/>
+      <rect x="160" y="40" width="280" height="56" rx="20" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+      <text x="300.0" y="60.0" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Each call, in call order</text>
+      <text x="300.0" y="75.0" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">reads run together · a write waits</text>
+      <text x="300.0" y="87.0" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">for them and runs alone</text>
+      <polygon points="300,128.0 400.0,172 300,216.0 200.0,172" fill="#f5f5f5"/>
+      <polygon points="300,128.0 400.0,172 300,216.0 200.0,172" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+      <text x="300" y="170" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Known tool, valid input?</text>
+      <text x="300" y="185" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">JSON · schema</text>
+      <polygon points="300,248.0 400.0,292 300,336.0 200.0,292" fill="#f5f5f5"/>
+      <polygon points="300,248.0 400.0,292 300,336.0 200.0,292" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+      <text x="300" y="290" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Needs approval?</text>
+      <text x="300" y="305" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">per tool, per input</text>
+      <polygon points="560,248.0 660.0,292 560,336.0 460.0,292" fill="#f5f5f5"/>
+      <polygon points="560,248.0 660.0,292 560,336.0 460.0,292" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+      <text x="560" y="290" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Approved?</text>
+      <text x="560" y="305" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">denied if unattended</text>
+      <rect x="160" y="368" width="280" height="64" rx="6" fill="#f5f5f5"/>
+      <rect x="160" y="368" width="280" height="64" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+      <rect x="168" y="374" width="35" height="12" rx="2" fill="none" stroke="#2d3142" stroke-opacity="0.4" stroke-width="0.8"/>
+      <text x="185.5" y="383" fill="#2d3142" fill-opacity="0.8" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">AUDIT</text>
+      <text x="300.0" y="398.0" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Record the attempt</text>
+      <text x="300.0" y="413.0" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">audit ToolStarted, before it runs</text>
+      <polygon points="300,464.0 400.0,508 300,552.0 200.0,508" fill="#f5f5f5"/>
+      <polygon points="300,464.0 400.0,508 300,552.0 200.0,508" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+      <text x="300" y="506" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Recorded?</text>
+      <text x="300" y="521" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">required for writes</text>
+      <rect x="160" y="584" width="280" height="64" rx="6" fill="#f5f5f5"/>
+      <rect x="160" y="584" width="280" height="64" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+      <rect x="168" y="590" width="30" height="12" rx="2" fill="none" stroke="#2d3142" stroke-opacity="0.4" stroke-width="0.8"/>
+      <text x="183.0" y="599" fill="#2d3142" fill-opacity="0.8" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">TOOL</text>
+      <text x="300.0" y="614.0" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Run the handler</text>
+      <text x="300.0" y="629.0" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">a throw or cancel → error result</text>
+      <rect x="160" y="680" width="280" height="64" rx="6" fill="#f5f5f5"/>
+      <rect x="160" y="680" width="280" height="64" rx="6" fill="rgba(235,108,54,0.08)" stroke="#eb6c36" stroke-width="1"/>
+      <text x="300.0" y="704.0" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Finish the result</text>
+      <text x="300.0" y="719.0" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">redact secrets · cut at 64k chars</text>
+      <text x="300.0" y="731.0" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">audit ToolEnded · event + span</text>
+      <rect x="160" y="776" width="280" height="56" rx="20" fill="#f5f5f5"/>
+      <rect x="160" y="776" width="280" height="56" rx="20" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+      <text x="300.0" y="802.0" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Result returned</text>
+      <text x="300.0" y="817.0" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">one per call, error or not</text>
+      <line x1="40" y1="840" x2="840" y2="840" stroke="#2d3142" stroke-opacity="0.10" stroke-width="0.8"/>
+      <text x="40" y="856" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.18em">LEGEND</text>
+      <rect x="40" y="870" width="28" height="12" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+      <text x="76" y="880" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Start / end</text>
+      <rect x="156" y="870" width="28" height="12" rx="2" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+      <text x="192" y="880" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Step</text>
+      <polygon points="253,868 267,876 253,884 239,876" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+      <text x="275" y="880" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Decision on a structured signal</text>
+      <rect x="451" y="870" width="28" height="12" rx="2" fill="rgba(235,108,54,0.08)" stroke="#eb6c36" stroke-width="1"/>
+      <text x="487" y="880" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Every result passes here</text>
+
+    </svg>
