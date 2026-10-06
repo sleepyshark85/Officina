@@ -116,7 +116,7 @@ if (Environment.GetEnvironmentVariable("BOOKSHOP_TELEMETRY_CONTENT") == "1")
 
 if (demo)
 {
-    await Console.Out.WriteLineAsync("Demo mode: compaction from 50,000 input tokens, and old tool results cleared after 12 tool calls.");
+    await Console.Out.WriteLineAsync("Demo mode: compaction from 50,000 input tokens, and old tool results cleared above 12 tool calls.");
 }
 
 await console.RunAsync(agent, SessionSummarizer.Create(summaryModel, TimeProvider.System));
