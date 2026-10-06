@@ -39,6 +39,26 @@ minute, and prints each search's median time; each must stay under 50 ms:
 OFFICINA_BENCHMARK=1 dotnet test tests/BookshopAssistant.Tests --filter Category=Benchmark --logger "console;verbosity=detailed"
 ```
 
+Mutation testing (Stryker.NET) checks that the tests catch changes to the library packages. Each package has a
+`stryker-config.json`; run it from the package's folder, and open the HTML report under `StrykerOutput/`:
+
+```sh
+dotnet tool restore
+cd src/Sleepyshark.Officina
+dotnet stryker               # every mutant: about 4 minutes
+dotnet stryker --since:main  # or only the files changed since main, as pull requests do
+```
+
+| Package | Baseline score (2026-10-07) | A pull request fails below |
+|---|---|---|
+| `Sleepyshark.Officina` | 73% | 68% |
+| `Sleepyshark.Officina.Claude` | 83% | 78% |
+| `Sleepyshark.Officina.Mcp` | 55% | 50% |
+
+The MCP score leaves out `McpConnection.RequestAsync`, `StdioConnection.Start` and `StdioConnection.ReadAsync`: their
+mutants do not compile (an unassigned local), so Stryker drops them. The `mutation` workflow runs this on every pull
+request, weekly and on demand, and keeps the reports as an artifact.
+
 | Path | Holds |
 |---|---|
 | `src/Sleepyshark.Officina` | The core, with built-in file and in-memory memory stores and a JSON-lines audit sink, used only when the host picks them; depends on the .NET base library and the DI abstractions only |
