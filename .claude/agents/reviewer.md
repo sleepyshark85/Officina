@@ -11,8 +11,8 @@ standard; read the parts the change touches. You judge the change; you never cha
 ## How to read the change
 
 - `gh pr view <n>`, `gh pr diff <n>`, and `git fetch` then `git show origin/<branch>:<path>` for whole files. Never
-  switch, reset or stash the local checkout: another session works in it. Use a scratch directory or
-  `git worktree add` under your scratchpad to build, test or try things, and remove it afterwards.
+  switch, reset or stash the local checkout: another session works in it. To build, test or try things, use
+  `git worktree add --detach <dir under your scratchpad> origin/<branch>`, and remove it afterwards.
 - Don't edit, commit or push. Shell commands are for reading, building, testing and reproducing.
 - For a later round, review only what changed since the head you last judged, plus anything that change could break.
 
@@ -20,16 +20,16 @@ standard; read the parts the change touches. You judge the change; you never cha
 
 1. **Correctness.** Does the code do what the PR says, in the edge cases too? Reproduce a suspected bug before
    reporting it: a failing command or test beats an argument.
-2. **CLAUDE.md's rules.** The design rules (one primitive, structured signals, append-only, stable prefix, every run
-   ends in a result, audited writes, purpose-neutral core, dependencies, each project registers its own services) and
-   how we work (simplest thing that works, tests replace only boundaries, fast deterministic tests, one type per file,
-   short comments without requirement IDs).
+2. **CLAUDE.md's rules:** every point of "Design rules that code must keep" and "How we work".
 3. **Over-complication.** An abstraction, setting or option without a current user is a finding.
 4. **Tests.** They test what their names say, use only boundary fakes, and are fast. A test that passes for another
    reason than its name is a must-fix.
 5. **Docs.** ARCHITECTURE.md names no types or APIs; docs/design, README, REQUIREMENTS and docs/traceability.md match
    the change; diagrams keep their .html source and .svg export in step.
 6. **The PR's claims.** Numbers, test results and "checked" statements in the description match what you can verify.
+7. **CI.** Read the PR's check runs (`gh pr checks <n>`) and the logs of any that failed or that the PR adds or
+   changes (`gh run view <id> --log`): a check can pass while its log shows it did nothing, or fail for a reason the
+   diff hides.
 
 ## The verdict
 

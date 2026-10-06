@@ -14,7 +14,8 @@ REQUIREMENTS.md for the IDs your change covers and ARCHITECTURE.md for the conce
    should happen, property tests for what must never happen, only boundaries faked, each test fast.
 3. Keep the docs in step: docs/traceability.md for every test named after a requirement, docs/design when types move,
    README when how to run something changes. ARCHITECTURE.md stays free of type and API names.
-4. Before committing, run the whole suite. Stage in its own command, then commit; the hook runs the format check and
+4. Before committing, run the tests the change affects; the hook runs the whole suite before a push. Stage in its own
+   command, then commit; the hook runs the format check and
    the build, and shows the staged files: check each was changed on purpose.
 5. Push and open the PR with a description the reviewer can verify: what changed, why, what you checked and how.
    End it with the attribution line the session gives.
