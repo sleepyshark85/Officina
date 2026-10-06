@@ -53,7 +53,7 @@ Needs Docker and `ANTHROPIC_API_KEY`.
 
 ```sh
 cd apps/BookshopAssistant
-./start.sh                         # or start.ps1; BOOKSHOP_DB_PORT=5433 if port 5432 is taken
+./start.sh                         # or pwsh -File start.ps1; BOOKSHOP_DB_PORT=5433 if port 5432 is taken
 export BOOKSHOP_CONNECTION_STRING="Host=localhost;Port=5432;Username=bookshop;Password=shelf-demo-41;Database=bookshop"
 dotnet run                         # add -- --demo (or BOOKSHOP_DEMO=1) to compact and clear early (APP-17); sessions of one mode don't resume in the other
 ```

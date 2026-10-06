@@ -1,11 +1,12 @@
 # Starts what Bookshop Assistant needs, or leaves it running if it already is: the database, the telemetry dashboard and
 # the export server, from compose.yaml beside this script. Another port if one is taken: see compose.yaml.
-$ErrorActionPreference = 'Stop'
+# No $ErrorActionPreference = 'Stop': Windows PowerShell would then stop at any line docker writes to stderr.
 Set-Location $PSScriptRoot
 
 docker info *> $null
 if ($LASTEXITCODE -ne 0) {
-    Write-Error 'Docker is not running, or this user cannot reach it.'
+    Write-Host 'Docker is not running, or this user cannot reach it.' -ForegroundColor Red
+    exit 1
 }
 
 # --build rebuilds the export server's image only when its Dockerfile changed.
