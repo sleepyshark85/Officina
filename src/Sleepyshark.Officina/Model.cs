@@ -10,9 +10,9 @@ namespace Sleepyshark.Officina;
 public interface IModel
 {
     /// <summary>
-/// The model and every setting that shapes its requests, as text that changes when any of them does: it is part of the
-/// prefix fingerprint.
-/// </summary>
+    /// The model and every setting that shapes its requests, as text that changes when any of them does: it is part of the
+    /// prefix fingerprint.
+    /// </summary>
     string Settings { get; }
 
     /// <summary>The provider, as telemetry names it (<c>gen_ai.provider.name</c>), such as <c>anthropic</c>.</summary>

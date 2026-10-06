@@ -291,7 +291,7 @@ internal static class RunEngine
     /// <remarks>
     /// A reply cut off before its stop reason is not appended, nor is one without content, nor one that asked for tools but
     /// stopped for another reason: its calls do not run, as its last input may be cut short, and calls without results are
-/// rejected by the provider.
+    /// rejected by the provider.
     /// An end with calls fails, as a completed run would report an answer the history does not hold.
     /// </remarks>
     private static (bool Append, RunResult? End) Decide(Agent agent, ModelReply reply, bool hasCalls, Usage usage, string? budgetCut) =>
