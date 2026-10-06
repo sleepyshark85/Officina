@@ -10,18 +10,18 @@ namespace Sleepyshark.Officina.Claude;
 /// </summary>
 internal static class ClaudeReply
 {
+    private const string ToolInput = "input";
+
     public static async Task<IReadOnlyList<ModelEvent>> ReadAsync(IReadOnlyList<BetaRawMessageStreamEvent> events)
     {
         var message = await Replay(events).Aggregate().ConfigureAwait(false);
         var read = new List<ModelEvent>();
         foreach (var block in message.Content)
         {
-            var (json, type) = (block.Json, block.Json.GetProperty("type").GetString());
-            var text = type == "text" ? json.GetProperty("text").GetString() : null;
-            var call = type == "tool_use"
-                ? new ToolCall(json.GetProperty("id").GetString()!, json.GetProperty("name").GetString()!, json.GetProperty("input").GetRawText())
-                : null;
-            read.Add(new BlockReceived(new ContentBlock(text, json.GetRawText(), call)));
+            var text = block.TryPickText(out var said) ? said.Text : null;
+            // The input stays as received: re-serializing it would escape its non-ASCII text.
+            var call = block.TryPickToolUse(out var use) ? new ToolCall(use.ID, use.Name, block.Json.GetProperty(ToolInput).GetRawText()) : null;
+            read.Add(new BlockReceived(new ContentBlock(text, block.Json.GetRawText(), call)));
         }
 
         read.AddRange(ContextEdits(message));
@@ -36,58 +36,56 @@ internal static class ClaudeReply
     /// </summary>
     private static IEnumerable<ModelEvent> ContextEdits(BetaMessage message)
     {
-        foreach (var iteration in Iterations(message.Usage).Where(iteration => Word(iteration, "type") == "compaction"))
+        foreach (var iteration in message.Usage.Iterations ?? [])
         {
-            yield return new CompactionReported(
-                Tokens(iteration, "input_tokens") + Tokens(iteration, "cache_read_input_tokens") + Tokens(iteration, "cache_creation_input_tokens"),
-                Tokens(iteration, "output_tokens"));
+            if (iteration.TryPickBetaCompactionIterationUsage(out var compaction))
+            {
+                yield return new CompactionReported(
+                    compaction.InputTokens + compaction.CacheReadInputTokens + compaction.CacheCreationInputTokens, compaction.OutputTokens);
+            }
         }
 
-        if (message.RawData.TryGetValue("context_management", out var context) && context.ValueKind == JsonValueKind.Object
-            && context.TryGetProperty("applied_edits", out var edits) && edits.ValueKind == JsonValueKind.Array)
+        foreach (var edit in message.ContextManagement?.AppliedEdits ?? [])
         {
-            foreach (var edit in edits.EnumerateArray().Where(edit => Word(edit, "type") == "clear_tool_uses_20250919"))
+            if (edit.TryPickBetaClearToolUses20250919EditResponse(out var clearing))
             {
-                yield return new ClearingReported(Tokens(edit, "cleared_input_tokens"), (int)Tokens(edit, "cleared_tool_uses"));
+                yield return new ClearingReported(clearing.ClearedInputTokens, (int)clearing.ClearedToolUses);
             }
         }
     }
 
-    /// <summary>The stop reason, by its raw word, so a reason added later keeps its word as the detail.</summary>
-    private static ModelStopped Stop(BetaMessage message)
+    /// <summary>The stop reason; one the SDK does not know keeps its raw word as the detail.</summary>
+    private static ModelStopped Stop(BetaMessage message) => message.StopReason?.Value() switch
     {
-        var reason = message.StopReason?.Raw();
-        return reason switch
-        {
-            "end_turn" => new ModelStopped(ModelStopReason.End),
-            "tool_use" => new ModelStopped(ModelStopReason.ToolUse),
-            "max_tokens" => new ModelStopped(ModelStopReason.MaxTokens),
-            "model_context_window_exceeded" => new ModelStopped(ModelStopReason.ContextFull),
-            "refusal" => new ModelStopped(ModelStopReason.Refusal, Category(message)),
-            _ => new ModelStopped(ModelStopReason.Unknown, reason),
-        };
-    }
-
-    private static string? Category(BetaMessage message) => message.StopDetails?.Category?.Raw();
+        BetaStopReason.EndTurn => new ModelStopped(ModelStopReason.End),
+        BetaStopReason.ToolUse => new ModelStopped(ModelStopReason.ToolUse),
+        BetaStopReason.MaxTokens => new ModelStopped(ModelStopReason.MaxTokens),
+        BetaStopReason.ModelContextWindowExceeded => new ModelStopped(ModelStopReason.ContextFull),
+        BetaStopReason.Refusal => new ModelStopped(ModelStopReason.Refusal, message.StopDetails?.Category?.Raw()),
+        _ => new ModelStopped(ModelStopReason.Unknown, message.StopReason?.Raw()),
+    };
 
     /// <summary>
     /// The call's tokens, with hour-long cache writes apart, as they cost more. When a call runs several iterations (such as
     /// a compaction, then the reply), the totals count only the last, so the iterations are added up instead.
     /// </summary>
-    private static Usage Usage(BetaUsage usage)
-    {
-        if (Iterations(usage) is { Count: > 0 } iterations)
-        {
-            return iterations.Aggregate(default(Usage), (sum, iteration) => sum + new Usage(
-                Tokens(iteration, "input_tokens"), Tokens(iteration, "output_tokens"),
-                Tokens(iteration, "cache_read_input_tokens"), Tokens(iteration, "cache_creation_input_tokens"),
-                iteration.TryGetProperty("cache_creation", out var written) && written.ValueKind == JsonValueKind.Object ? Tokens(written, "ephemeral_1h_input_tokens") : 0));
-        }
-
-        return new Usage(
+    private static Usage Usage(BetaUsage usage) => usage.Iterations is { Count: > 0 } iterations
+        ? iterations.Aggregate(default(Usage), (sum, iteration) => sum + Usage(iteration))
+        : new Usage(
             usage.InputTokens, usage.OutputTokens, usage.CacheReadInputTokens ?? 0, usage.CacheCreationInputTokens ?? 0,
             usage.CacheCreation?.Ephemeral1hInputTokens ?? 0);
-    }
+
+    /// <summary>One iteration's tokens; an iteration of a kind the SDK does not know counts none.</summary>
+    private static Usage Usage(BetaUsageIteration iteration) =>
+        iteration.TryPickBetaMessageIterationUsage(out var reply)
+            ? new Usage(reply.InputTokens, reply.OutputTokens, reply.CacheReadInputTokens, reply.CacheCreationInputTokens, reply.CacheCreation?.Ephemeral1hInputTokens ?? 0)
+        : iteration.TryPickBetaCompactionIterationUsage(out var compaction)
+            ? new Usage(compaction.InputTokens, compaction.OutputTokens, compaction.CacheReadInputTokens, compaction.CacheCreationInputTokens, compaction.CacheCreation?.Ephemeral1hInputTokens ?? 0)
+        : iteration.TryPickBetaAdvisorMessageIterationUsage(out var advisor)
+            ? new Usage(advisor.InputTokens, advisor.OutputTokens, advisor.CacheReadInputTokens, advisor.CacheCreationInputTokens, advisor.CacheCreation?.Ephemeral1hInputTokens ?? 0)
+        : iteration.TryPickBetaFallbackMessageIterationUsage(out var fallback)
+            ? new Usage(fallback.InputTokens, fallback.OutputTokens, fallback.CacheReadInputTokens, fallback.CacheCreationInputTokens, fallback.CacheCreation?.Ephemeral1hInputTokens ?? 0)
+        : default;
 
     /// <summary>
     /// The tokens an attempt reported before it failed mid-stream: its start's usage, updated by later deltas, whose counts
@@ -113,16 +111,6 @@ internal static class ClaudeReply
 
         return usage;
     }
-
-    /// <summary>The call's iterations, such as a compaction and then the reply; none when the call reports none.</summary>
-    private static List<JsonElement> Iterations(BetaUsage usage) =>
-        usage.RawData.TryGetValue("iterations", out var iterations) && iterations.ValueKind == JsonValueKind.Array ? [.. iterations.EnumerateArray()] : [];
-
-    private static string? Word(JsonElement element, string name) =>
-        element.TryGetProperty(name, out var word) && word.ValueKind == JsonValueKind.String ? word.GetString() : null;
-
-    private static long Tokens(JsonElement iteration, string name) =>
-        iteration.TryGetProperty(name, out var count) && count.ValueKind == JsonValueKind.Number ? count.GetInt64() : 0;
 
     private static async IAsyncEnumerable<BetaRawMessageStreamEvent> Replay(IReadOnlyList<BetaRawMessageStreamEvent> events)
     {

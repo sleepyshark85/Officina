@@ -49,7 +49,9 @@ internal static class ClaudeErrors
     /// so; this is the one place the adapter reads an error's text.
     /// </summary>
     public static bool IsPromptTooLong(Exception exception) =>
-        exception is AnthropicBadRequestException bad && bad.Message.Contains("prompt is too long", StringComparison.OrdinalIgnoreCase);
+        exception is AnthropicBadRequestException bad && bad.Message.Contains(PromptTooLong, StringComparison.OrdinalIgnoreCase);
+
+    private const string PromptTooLong = "prompt is too long";
 
     /// <summary>The failure to throw, or null for one that is not the API's (such as the caller's cancellation).</summary>
     public static ClaudeException? Classify(Exception exception, CancellationToken cancellationToken)

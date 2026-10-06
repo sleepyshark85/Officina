@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using Anthropic;
+using Anthropic.Core;
 using Anthropic.Models.Beta.Messages;
 
 namespace Sleepyshark.Officina.Claude;
@@ -42,7 +43,10 @@ public sealed class ClaudeModel : IModel, IDisposable
             : new AnthropicClient { HttpClient = httpClient, MaxRetries = 0, ApiKey = apiKey };
     }
 
-    /// <summary>The model's identifier, such as <c>claude-opus-5-5</c>.</summary>
+    /// <summary>Claude Opus 5.5's identifier.</summary>
+    public static string Opus55 { get; } = ((ApiEnum<string, Anthropic.Models.Messages.Model>)Anthropic.Models.Messages.Model.ClaudeOpus5_5).Raw();
+
+    /// <summary>The model's identifier, such as <see cref="Opus55"/>.</summary>
     public required string Model { get; init; }
 
     public required ClaudeEffort Effort { get; init; }
@@ -68,7 +72,7 @@ public sealed class ClaudeModel : IModel, IDisposable
     public string Name => Model;
 
     public string Settings =>
-        $"claude model={Model} effort={ClaudeRequest.EffortWord(Effort)} max_tokens={MaxOutputTokens} cache={(CacheLifetime == CacheLifetime.OneHour ? "1h" : "5m")} thinking=adaptive";
+        $"claude model={Model} effort={ClaudeRequest.EffortWord(Effort)} max_tokens={MaxOutputTokens} cache={ClaudeRequest.CacheWord(CacheLifetime)} thinking=adaptive";
 
     public async IAsyncEnumerable<ModelEvent> StreamAsync(ModelRequest request, [EnumeratorCancellation] CancellationToken cancellationToken)
     {

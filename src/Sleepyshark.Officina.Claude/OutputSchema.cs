@@ -12,7 +12,21 @@ namespace Sleepyshark.Officina.Claude;
 /// </summary>
 internal static class OutputSchema
 {
-    private static readonly string[] Unsupported = ["minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum", "multipleOf", "maxItems"];
+    private const string Minimum = "minimum";
+    private const string Maximum = "maximum";
+    private const string ExclusiveMinimum = "exclusiveMinimum";
+    private const string ExclusiveMaximum = "exclusiveMaximum";
+    private const string MultipleOf = "multipleOf";
+    private const string MaxItems = "maxItems";
+    private const string MinItems = "minItems";
+    private const string AdditionalProperties = "additionalProperties";
+    private const string Type = "type";
+    private const string Properties = "properties";
+    private const string Items = "items";
+    private const string AnyOf = "anyOf";
+    private const string ObjectType = "object";
+
+    private static readonly string[] Unsupported = [Minimum, Maximum, ExclusiveMinimum, ExclusiveMaximum, MultipleOf, MaxItems];
 
     public static Dictionary<string, JsonElement> Adjust(string schema)
     {
@@ -34,30 +48,30 @@ internal static class OutputSchema
             schema.Remove(keyword);
         }
 
-        if (schema["minItems"] is JsonValue minItems && minItems.GetValue<int>() > 1)
+        if (schema[MinItems] is JsonValue minItems && minItems.GetValue<int>() > 1)
         {
-            schema.Remove("minItems");
+            schema.Remove(MinItems);
         }
 
-        if (schema["additionalProperties"] is { } additional && additional.GetValueKind() != JsonValueKind.False)
+        if (schema[AdditionalProperties] is { } additional && additional.GetValueKind() != JsonValueKind.False)
         {
             throw new ArgumentException("The output schema has an open object, which structured output cannot express.");
         }
 
-        var type = schema["type"];
-        if (schema.ContainsKey("properties") || type is JsonValue { } single && single.GetValue<string>() == "object"
-            || type is JsonArray types && types.Any(each => each?.GetValue<string>() == "object"))
+        var type = schema[Type];
+        if (schema.ContainsKey(Properties) || type is JsonValue { } single && single.GetValue<string>() == ObjectType
+            || type is JsonArray types && types.Any(each => each?.GetValue<string>() == ObjectType))
         {
-            schema["additionalProperties"] = false;
+            schema[AdditionalProperties] = false;
         }
 
-        foreach (var property in schema["properties"] as JsonObject ?? [])
+        foreach (var property in schema[Properties] as JsonObject ?? [])
         {
             Adjust(property.Value);
         }
 
-        Adjust(schema["items"]);
-        foreach (var option in schema["anyOf"] as JsonArray ?? [])
+        Adjust(schema[Items]);
+        foreach (var option in schema[AnyOf] as JsonArray ?? [])
         {
             Adjust(option);
         }

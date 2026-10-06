@@ -51,7 +51,7 @@ public static class BookshopAgent
     /// <summary>The chat agent's model, shared by the app and the live smoke test.</summary>
     public static ClaudeModel Model(bool demo) => new()
     {
-        Model = "claude-opus-5-5",
+        Model = ClaudeModel.Opus55,
         Effort = ClaudeEffort.Medium,
         MaxOutputTokens = 16_000,
 
