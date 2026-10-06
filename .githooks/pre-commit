@@ -1,0 +1,16 @@
+#!/bin/sh
+# The local gate before a commit: the format check and the build, which CI would otherwise fail later. A commit
+# that stages no code or build file skips it.
+git diff --cached --name-only | grep -qE '\.(cs|csproj|props|targets|slnx|editorconfig)$|(^|/)global\.json$' || exit 0
+
+echo "pre-commit: checking the format..." >&2
+if ! dotnet format --verify-no-changes >&2; then
+    echo "pre-commit: run 'dotnet format', then commit again." >&2
+    exit 1
+fi
+
+echo "pre-commit: building (warnings are errors)..." >&2
+if ! dotnet build --configuration Release --no-restore --nologo --verbosity quiet >&2; then
+    echo "pre-commit: the build fails; fix it, then commit again." >&2
+    exit 1
+fi
