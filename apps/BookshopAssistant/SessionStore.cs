@@ -20,6 +20,7 @@ public sealed class SessionStore(NpgsqlDataSource database)
     private const string CreateSql = """
         insert into sessions (id, staff_member, conversation, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, cost, updated)
         values ($1, $2, $3, $4, $5, $6, $7, $8, now())
+        on conflict (id) do nothing
         """;
 
     private const string SaveSql = """
@@ -28,6 +29,8 @@ public sealed class SessionStore(NpgsqlDataSource database)
             updated = case when conversation is distinct from $3 then now() else updated end
         where id = $1 and staff_member = $2 and conversation = $9
         """;
+
+    private const string StoredSql = "select conversation from sessions where id = $1";
 
     private const string LoadSql = """
         select conversation, staff_member, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, cost
@@ -51,35 +54,64 @@ public sealed class SessionStore(NpgsqlDataSource database)
         """;
 
     /// <summary>
-    /// Saves the session as it is now, and returns the text it is stored as. <paramref name="usage"/> and
-    /// <paramref name="cost"/> replace the stored totals, so a failed or missing save loses nothing for good. Without
-    /// <paramref name="previous"/> the session is inserted, and an id already taken throws rather than overwriting. With
-    /// it, the session is updated only if it is still stored as <paramref name="previous"/>: one that another console
-    /// changed since throws, rather than losing that console's messages. The database stamps the time, moving it only when
-    /// the conversation changed, so a summary stays current through a save of the totals alone.
+    /// Saves the session as it is now, and returns the text it is stored as. <paramref name="previous"/> is the text this
+    /// console last saved or loaded, null for a new session. A save never loses messages: if the stored conversation is
+    /// no longer <paramref name="previous"/>, the session is saved only if the stored one is an earlier state of this one,
+    /// as when a save landed but its answer was lost; otherwise another console changed it, or the id is another
+    /// session's, and the save throws <see cref="InvalidOperationException"/>. <paramref name="usage"/> and
+    /// <paramref name="cost"/> replace the stored totals, so a failed save loses nothing for good, but a summary cost that
+    /// another console added since is lost. The database stamps the time, moving it only when the conversation changed,
+    /// so a summary stays current through a save of the totals alone.
     /// </summary>
     public async Task<string> SaveAsync(
         Conversation conversation, string staffMember, Usage usage, decimal cost, string? previous, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(conversation);
         var saved = JsonSerializer.Serialize(conversation);
-        await using var command = database.CreateCommand(previous is null ? CreateSql : SaveSql);
-        object[] values =
-        [
-            conversation.Id, staffMember, saved, usage.Input, usage.Output, usage.CacheRead, usage.CacheWrite, cost, .. previous is null ? [] : new object[] { previous },
-        ];
-        foreach (var value in values)
+        if (await WriteAsync(previous) || (await StoredAsync(conversation.Id, cancellationToken) is { } stored && IsEarlier(stored, conversation) && await WriteAsync(stored)))
         {
-            command.Parameters.Add(new NpgsqlParameter { Value = value });
+            return saved;
         }
 
-        if (await command.ExecuteNonQueryAsync(cancellationToken) == 0)
-        {
-            throw new InvalidOperationException(
-                $"session {conversation.Id} changed elsewhere since this console last saved it, so it was not overwritten. Type /resume {conversation.Id} to go on from what was saved.");
-        }
+        throw new InvalidOperationException($"Session {conversation.Id} changed elsewhere since it was last saved here, so it was not overwritten.");
 
-        return saved;
+        async Task<bool> WriteAsync(string? expected)
+        {
+            await using var command = database.CreateCommand(expected is null ? CreateSql : SaveSql);
+            object[] values =
+            [
+                conversation.Id, staffMember, saved, usage.Input, usage.Output, usage.CacheRead, usage.CacheWrite, cost, .. expected is null ? [] : new object[] { expected },
+            ];
+            foreach (var value in values)
+            {
+                command.Parameters.Add(new NpgsqlParameter { Value = value });
+            }
+
+            return await command.ExecuteNonQueryAsync(cancellationToken) == 1;
+        }
+    }
+
+    /// <summary>The text session <paramref name="id"/> is stored as; null when there is none.</summary>
+    private async Task<string?> StoredAsync(string id, CancellationToken cancellationToken)
+    {
+        await using var command = database.CreateCommand(StoredSql);
+        command.Parameters.Add(new NpgsqlParameter { Value = id });
+        return (string?)await command.ExecuteScalarAsync(cancellationToken);
+    }
+
+    /// <summary>Whether <paramref name="stored"/> holds the first messages of <paramref name="conversation"/>, and no others.</summary>
+    private static bool IsEarlier(string stored, Conversation conversation)
+    {
+        try
+        {
+            var earlier = JsonSerializer.Deserialize<Conversation>(stored);
+            return earlier is not null && earlier.Messages.Length <= conversation.Messages.Length
+                && earlier.Messages.SequenceEqual(conversation.Messages.Take(earlier.Messages.Length));
+        }
+        catch (Exception exception) when (exception is JsonException or ArgumentException or NotSupportedException)
+        {
+            return false;
+        }
     }
 
     /// <summary>
@@ -101,6 +133,10 @@ public sealed class SessionStore(NpgsqlDataSource database)
         try
         {
             conversation = JsonSerializer.Deserialize<Conversation>(saved) ?? throw new JsonException("The conversation is null.");
+            if (conversation.Messages.Any(message => message is null))
+            {
+                throw new JsonException("A message is null.");
+            }
         }
         catch (Exception exception) when (exception is JsonException or ArgumentException or NotSupportedException)
         {

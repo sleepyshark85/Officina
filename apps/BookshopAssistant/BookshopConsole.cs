@@ -524,7 +524,9 @@ public sealed partial class BookshopConsole(
             LogSaveFailed(logger, session.Id, exception.Message);
             if (!told)
             {
-                await WriteLineAsync($"[The session could not be saved: {exception.Message}]");
+                await WriteLineAsync(exception is InvalidOperationException
+                    ? $"[The session could not be saved: {exception.Message} Type /resume {session.Id} to go on from what was saved.]"
+                    : $"[The session could not be saved: {exception.Message}]");
             }
 
             return false;
