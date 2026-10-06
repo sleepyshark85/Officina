@@ -29,7 +29,7 @@ public class RunTests
 
         // Each request carries the whole conversation so far, and the agent's instructions.
         Assert.Equal([1, 3, 5], model.Requests.Select(request => request.Messages.Length));
-        Assert.All(model.Requests, request => Assert.Equal(Agents.Instructions, request.Instructions));
+        Assert.All(model.Requests, request => Assert.Equal(Agents.Instructions, request.Prefix.Instructions));
     }
 
     [Fact]
@@ -79,7 +79,7 @@ public class RunTests
         Assert.Equal(
             [(Role.User, "Hi"), (Role.Operator, "Date: 2026-10-05. Staff: Ana.")],
             model.Requests[0].Messages.Select(message => (message.Role, message.Text)));
-        Assert.Equal(Agents.Instructions, model.Requests[0].Instructions);
+        Assert.Equal(Agents.Instructions, model.Requests[0].Prefix.Instructions);
     }
 
     [Fact]
@@ -208,7 +208,7 @@ public class RunTests
     [Fact]
     public async Task The_scripted_model_rejects_role_sequences_the_API_rejects()
     {
-        ModelRequest Request(params Role[] roles) => new([], "A", [.. roles.Select(role => Message.Of(role, "x"))]);
+        ModelRequest Request(params Role[] roles) => new(new RequestPrefix("test", [], "A"), [.. roles.Select(role => Message.Of(role, "x"))]);
         var model = new ScriptedModel();
 
         foreach (var request in new[]
@@ -232,7 +232,7 @@ public class RunTests
         var model = new ScriptedModel().Reply("Hello.");
         await Assert.ThrowsAsync<InvalidOperationException>(async () =>
         {
-            await foreach (var _ in model.StreamAsync(new([], "A", [Message.Of(Role.Assistant, "x")]), Ct))
+            await foreach (var _ in model.StreamAsync(new(new RequestPrefix("test", [], "A"), [Message.Of(Role.Assistant, "x")]), Ct))
             {
             }
         });

@@ -27,8 +27,8 @@ public class ExtractionTests
         Assert.Equal(2, model.Requests.Count);
         Assert.All(model.Requests, request =>
         {
-            Assert.Empty(request.Tools);
-            Assert.Equal(agent.Output!.Schema, request.OutputSchema);
+            Assert.Empty(request.Prefix.Tools);
+            Assert.Equal(agent.Output!.Schema, request.Prefix.OutputSchema);
             Assert.Equal([Role.User], request.Messages.Select(message => message.Role));
         });
     }

@@ -30,7 +30,7 @@ public class OutputTests
          "required":["count"]}
         """;
 
-    private static ModelRequest Typed(string schema) => Hi with { OutputSchema = schema };
+    private static ModelRequest Typed(string schema) => Hi with { Prefix = Hi.Prefix with { OutputSchema = schema } };
 
     private static ClaudeModel Offline() => new("test-key") { Model = "claude-opus-5-5", Effort = ClaudeEffort.Low };
 

@@ -34,22 +34,14 @@ public interface IModel
     IAsyncEnumerable<ModelEvent> StreamAsync(ModelRequest request, CancellationToken cancellationToken);
 }
 
-/// <summary>One request in the fixed layout of CTX-01: tools sorted by name, frozen instructions, then the conversation.</summary>
-/// <param name="Tools">The tools, sorted by name.</param>
-/// <param name="Instructions">The frozen instructions.</param>
+/// <summary>One request in the fixed layout of CTX-01: the prefix that stays the same for the conversation, then the conversation.</summary>
+/// <param name="Prefix">Model settings, tools sorted by name, frozen instructions, output schema and context management.</param>
 /// <param name="Messages">The conversation, with the run's pending messages.</param>
 /// <param name="MaxOutputTokens">
 /// The most output tokens the remaining budget allows (BUD-01), when it limits them: the model uses this or its own
 /// limit, whichever is lower. It is not part of the prefix.
 /// </param>
-/// <param name="OutputSchema">
-/// The JSON schema the reply must match, when the agent requires typed output (OUT-01): the provider sends it as its
-/// structured output format, adjusted to what it accepts.
-/// </param>
-/// <param name="ContextManagement">How the provider shortens the conversation on its side, if at all (HIST-01, HIST-02).</param>
-public sealed record ModelRequest(
-    ImmutableArray<Tool> Tools, string Instructions, ImmutableArray<Message> Messages, int? MaxOutputTokens = null, string? OutputSchema = null,
-    ContextManagement? ContextManagement = null);
+public sealed record ModelRequest(RequestPrefix Prefix, ImmutableArray<Message> Messages, int? MaxOutputTokens = null);
 
 /// <summary>Something the model streams while it replies.</summary>
 public abstract record ModelEvent;

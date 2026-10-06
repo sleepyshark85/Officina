@@ -3,9 +3,9 @@ using System.Text.Json;
 namespace Sleepyshark.Officina.Testing;
 
 /// <summary>
-/// The prefix stability check of TEST-02: each request's tools, instructions, output schema and earlier messages are
-/// byte-identical to the previous request's. Pass the requests of a scripted run, or of several runs, saves and resumes,
-/// in the order they were sent.
+/// The prefix stability check of TEST-02: each request's prefix (model settings, tools, instructions, output schema and
+/// context management) and earlier messages are byte-identical to the previous request's. Pass the requests of a scripted
+/// run, or of several runs, saves and resumes, in the order they were sent.
 /// </summary>
 public static class PrefixStability
 {
@@ -18,19 +18,9 @@ public static class PrefixStability
         for (var index = 1; index < sent.Count; index++)
         {
             var (previous, next, number) = (sent[index - 1], sent[index], index + 1);
-            if (JsonSerializer.Serialize(previous.Tools) != JsonSerializer.Serialize(next.Tools))
+            foreach (var part in previous.Prefix.Differences(next.Prefix))
             {
-                problems.Add($"Request {number}: the tools differ from request {index}'s.");
-            }
-
-            if (previous.Instructions != next.Instructions)
-            {
-                problems.Add($"Request {number}: the instructions differ from request {index}'s.");
-            }
-
-            if (previous.OutputSchema != next.OutputSchema)
-            {
-                problems.Add($"Request {number}: the output schema differs from request {index}'s.");
+                problems.Add($"Request {number}: the {part} {(part.EndsWith('s') ? "differ" : "differs")} from request {index}'s.");
             }
 
             if (next.Messages.Length < previous.Messages.Length)

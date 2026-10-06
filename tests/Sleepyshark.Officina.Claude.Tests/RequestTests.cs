@@ -16,11 +16,13 @@ public class RequestTests
     private static readonly ContentBlock Text = new("Looking up «Café Libro».", ReadRaw("text"));
 
     private static ModelRequest Request => new(
-        [
-            new Tool("search", "Searches the catalogue.", """{"type":"object","properties":{"query":{"type":"string"}},"required":["query"]}""", ToolKind.Read, NoHandler),
-            new Tool("add_to_cart", "Adds a book to the cart.", """{"type":"object","properties":{"isbn":{"type":"string"},"copies":{"type":"integer"}},"required":["isbn"]}""", ToolKind.Write, NoHandler),
-        ],
-        "You are the assistant of a bookshop.",
+        new RequestPrefix(
+            "test",
+            [
+                new Tool("search", "Searches the catalogue.", """{"type":"object","properties":{"query":{"type":"string"}},"required":["query"]}""", ToolKind.Read, NoHandler),
+                new Tool("add_to_cart", "Adds a book to the cart.", """{"type":"object","properties":{"isbn":{"type":"string"},"copies":{"type":"integer"}},"required":["isbn"]}""", ToolKind.Write, NoHandler),
+            ],
+            "You are the assistant of a bookshop."),
         [
             Message.Of(Role.User, "Is Gaudy Night in stock?"),
             Message.Of(Role.Operator, "Today is 2026-10-05."),
@@ -88,7 +90,7 @@ public class RequestTests
     {
         using var model = new ClaudeModel("test-key") { Model = "claude-opus-5-5", Effort = ClaudeEffort.Medium };
         var call = new ContentBlock(null, """{"type":"tool_use","id":"toolu_01","name":"search","input":{"query":"x"}}""", new ToolCall("toolu_01", "search", """{"query":"x"}"""));
-        var request = new ModelRequest([], "Help.",
+        var request = new ModelRequest(new RequestPrefix("test", [], "Help."),
         [
             Message.Of(Role.User, "Find x."),
             new Message(Role.Assistant, [call]),

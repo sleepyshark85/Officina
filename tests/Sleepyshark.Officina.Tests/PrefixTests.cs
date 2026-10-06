@@ -45,7 +45,7 @@ public class PrefixTests
         var result = await Agents.With(model, tools: [.. tools.Reverse()]).RunAsync(conversation, "Again", cancellationToken: Ct);
 
         Assert.IsType<Completed>(result);
-        Assert.All(model.Requests, request => Assert.Equal(["order", "search"], request.Tools.Select(tool => tool.Name)));
+        Assert.All(model.Requests, request => Assert.Equal(["order", "search"], request.Prefix.Tools.Select(tool => tool.Name)));
     }
 
     [Fact]
@@ -80,16 +80,22 @@ public class PrefixTests
     {
         var hi = Message.Of(Role.User, "Hi");
         var hello = new Message(Role.Assistant, [ScriptedModel.TextBlock("Hello.")]);
-        var first = new ModelRequest([Agents.SearchTool()], "A", [hi]);
+        var prefix = new RequestPrefix("scripted", [Agents.SearchTool()], "A");
+        var changedTools = prefix with { Tools = [Agents.SearchTool("Changed.")] };
+        var changedInstructions = changedTools with { Instructions = "B" };
+        var typed = changedInstructions with { OutputSchema = """{"type":"string"}""" };
+        var managed = typed with { ContextManagement = new ContextManagement { CompactAt = 50_000 } };
         ModelRequest[] requests =
         [
-            first,
-            first with { Messages = [hi, hello] },
-            first with { Tools = [Agents.SearchTool("Changed.")], Messages = [hi, hello] },
-            first with { Tools = [Agents.SearchTool("Changed.")], Instructions = "B", Messages = [hi, hello] },
-            first with { Tools = [Agents.SearchTool("Changed.")], Instructions = "B", Messages = [hi, new Message(Role.Assistant, [ScriptedModel.TextBlock("Hi.")])] },
-            first with { Tools = [Agents.SearchTool("Changed.")], Instructions = "B", Messages = ImmutableArray<Message>.Empty },
-            first with { Tools = [Agents.SearchTool("Changed.")], Instructions = "B", Messages = ImmutableArray<Message>.Empty, OutputSchema = """{"type":"string"}""" },
+            new(prefix, [hi]),
+            new(prefix, [hi, hello]),
+            new(changedTools, [hi, hello]),
+            new(changedInstructions, [hi, hello]),
+            new(changedInstructions, [hi, new Message(Role.Assistant, [ScriptedModel.TextBlock("Hi.")])]),
+            new(changedInstructions, []),
+            new(typed, []),
+            new(managed, []),
+            new(managed with { ModelSettings = "other" }, []),
         ];
 
         Assert.Equal(
@@ -99,7 +105,24 @@ public class PrefixTests
                 "Request 5: message 2 differs from request 4's.",
                 "Request 6: has 0 messages, fewer than request 5's 2.",
                 "Request 7: the output schema differs from request 6's.",
+                "Request 8: the context management differs from request 7's.",
+                "Request 9: the model settings differ from request 8's.",
             ],
             PrefixStability.Problems(requests));
+    }
+
+    [Fact]
+    public void A_prefix_keeps_its_tools_sorted_however_it_is_built_and_is_equal_to_another_with_the_same_fingerprint()
+    {
+        var (order, search) = (Agents.Tool("order"), Agents.SearchTool());
+        var sorted = new RequestPrefix("m", [order, search], "I");
+        var reversed = new RequestPrefix("m", [search, order], "I");
+        var copied = new RequestPrefix("m", [], "I") with { Tools = [search, order] };
+
+        Assert.All([sorted, reversed, copied], prefix => Assert.Equal(["order", "search"], prefix.Tools.Select(tool => tool.Name)));
+        Assert.Equal(sorted, reversed);
+        Assert.Equal(sorted.Fingerprint, copied.Fingerprint);
+        Assert.NotEqual(sorted, sorted with { Instructions = "J" });
+        Assert.Empty(sorted.Differences(reversed));
     }
 }

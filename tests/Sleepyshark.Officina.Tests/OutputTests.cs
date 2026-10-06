@@ -38,7 +38,7 @@ public class OutputTests
         var completed = Assert.IsType<Completed>(result);
         var summary = Assert.IsType<Summary>(completed.Output);
         Assert.Equal(("Restock", "Book 320: +2 copies", null), (summary.Title, Assert.Single(summary.Changes), summary.Score));
-        Assert.Equal(agent.Output!.Schema, Assert.Single(model.Requests).OutputSchema);
+        Assert.Equal(agent.Output!.Schema, Assert.Single(model.Requests).Prefix.OutputSchema);
         Assert.Contains("\"additionalProperties\":false", agent.Output.Schema, StringComparison.Ordinal);
     }
 

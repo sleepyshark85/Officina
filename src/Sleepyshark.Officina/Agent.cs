@@ -1,5 +1,4 @@
 using System.Collections.Immutable;
-using System.Security.Cryptography;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 
@@ -32,19 +31,7 @@ public sealed record Agent
     public ImmutableArray<Tool> Tools
     {
         get;
-        init
-        {
-            var sorted = value.IsDefault ? [] : value.Sort((left, right) => string.CompareOrdinal(left.Name, right.Name));
-            for (var index = 1; index < sorted.Length; index++)
-            {
-                if (sorted[index].Name == sorted[index - 1].Name)
-                {
-                    throw new ArgumentException($"Two tools are named '{sorted[index].Name}'.", nameof(value));
-                }
-            }
-
-            field = sorted;
-        }
+        init => field = RequestPrefix.Sorted(value);
     } = [];
 
     /// <summary>The typed output the agent requires, if any (OUT-01); without one, a run's result is its text (GEN-05).</summary>
@@ -142,12 +129,12 @@ public sealed record Agent
 
     /// <summary>
     /// Whether this agent can run on <paramref name="conversation"/>: true for a new conversation or one started with
-    /// the same tools, instructions and model settings; a run on any other fails with a prefix mismatch (CTX-04).
+    /// the same request prefix (<see cref="RequestPrefix"/>); a run on any other fails with a prefix mismatch (CTX-04).
     /// </summary>
     public bool CanContinue(Conversation conversation)
     {
         ArgumentNullException.ThrowIfNull(conversation);
-        return conversation.Fingerprint is null || conversation.Fingerprint == Fingerprint();
+        return conversation.Fingerprint is null || conversation.Fingerprint == Prefix().Fingerprint;
     }
 
     /// <summary>
@@ -163,55 +150,6 @@ public sealed record Agent
         })
         .Aggregate(text, (redacted, secret) => redacted.Replace(secret, "[redacted]", StringComparison.Ordinal));
 
-    /// <summary>A hash of everything in the cached prefix: model settings, instructions, tools and output schema (CTX-04).</summary>
-    internal string Fingerprint()
-    {
-        using var buffer = new MemoryStream();
-        using (var writer = new Utf8JsonWriter(buffer))
-        {
-            writer.WriteStartObject();
-            writer.WriteString("model", Model.Settings);
-            writer.WriteString("instructions", Instructions);
-            writer.WriteStartArray("tools");
-            foreach (var tool in Tools)
-            {
-                writer.WriteStartObject();
-                writer.WriteString("name", tool.Name);
-                writer.WriteString("description", tool.Description);
-                writer.WritePropertyName("inputSchema");
-                writer.WriteRawValue(tool.InputSchema);
-                writer.WriteEndObject();
-            }
-
-            writer.WriteEndArray();
-            if (Output is not null)
-            {
-                writer.WritePropertyName("output");
-                writer.WriteRawValue(Output.Schema);
-            }
-
-            // An empty setting asks for nothing, so it leaves the fingerprint as no setting does.
-            if (ContextManagement is { } context && (context.CompactAt is not null || context.ClearToolResults is not null))
-            {
-                writer.WriteStartObject("contextManagement");
-                if (context.CompactAt is { } compactAt)
-                {
-                    writer.WriteNumber("compactAt", compactAt);
-                }
-
-                if (context.ClearToolResults is { } clearing)
-                {
-                    writer.WriteNumber("clearAfter", clearing.After);
-                    writer.WriteNumber("clearKeep", clearing.Keep);
-                    writer.WriteNumber("clearAtLeastTokens", clearing.AtLeastTokens);
-                }
-
-                writer.WriteEndObject();
-            }
-
-            writer.WriteEndObject();
-        }
-
-        return Convert.ToHexStringLower(SHA256.HashData(buffer.ToArray()));
-    }
+    /// <summary>The part of every request that stays the same for a conversation, which identifies it (CTX-01, CTX-04).</summary>
+    internal RequestPrefix Prefix() => new(Model.Settings, Tools, Instructions, Output?.Schema, ContextManagement);
 }

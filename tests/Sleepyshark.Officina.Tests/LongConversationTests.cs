@@ -53,7 +53,7 @@ public class LongConversationTests
 
         var events = await Agents.CollectAsync(agent.StreamAsync(conversation, "Which shelf?", cancellationToken: Ct));
 
-        Assert.Equal(Both, Assert.Single(model.Requests).ContextManagement);
+        Assert.Equal(Both, Assert.Single(model.Requests).Prefix.ContextManagement);
         Assert.Equal(
             [new ConversationCompacted(52_753, 578), new ToolResultsCleared(4_892, 2)],
             events.Where(runEvent => runEvent is ConversationCompacted or ToolResultsCleared));
@@ -76,7 +76,7 @@ public class LongConversationTests
     {
         var model = Capable();
         var conversation = new Conversation();
-        conversation.Bind((Agents.With(model) with { ContextManagement = Both }).Fingerprint());
+        conversation.Bind((Agents.With(model) with { ContextManagement = Both }).Prefix().Fingerprint);
 
         Assert.True((Agents.With(model) with { ContextManagement = Both with { } }).CanContinue(conversation));
         Assert.False((Agents.With(model) with { ContextManagement = Both with { CompactAt = 60_000 } }).CanContinue(conversation));
@@ -93,7 +93,7 @@ public class LongConversationTests
     {
         var agent = Agents.With(new ScriptedModel(), tools: Agents.SearchTool());
 
-        Assert.Equal("b4e28e3b1737858911d2b39b69bef5f10afe9dc44e2351e44211a6c874ba9279", agent.Fingerprint());
+        Assert.Equal("b4e28e3b1737858911d2b39b69bef5f10afe9dc44e2351e44211a6c874ba9279", agent.Prefix().Fingerprint);
     }
 
     [Fact]
@@ -101,7 +101,7 @@ public class LongConversationTests
     {
         var model = Capable();
 
-        Assert.Equal(Agents.With(model).Fingerprint(), (Agents.With(model) with { ContextManagement = new ContextManagement() }).Fingerprint());
+        Assert.Equal(Agents.With(model).Prefix().Fingerprint, (Agents.With(model) with { ContextManagement = new ContextManagement() }).Prefix().Fingerprint);
     }
 
     [Fact]

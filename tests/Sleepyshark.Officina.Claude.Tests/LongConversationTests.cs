@@ -23,7 +23,7 @@ public class LongConversationTests
     {
         using var model = Model(new FakeApi());
 
-        var built = ClaudeRequest.Build(model, Hi with { ContextManagement = Both });
+        var built = ClaudeRequest.Build(model, Hi with { Prefix = Hi.Prefix with { ContextManagement = Both } });
 
         Assert.Equal(
             """{"edits":[{"type":"clear_tool_uses_20250919","trigger":{"type":"tool_uses","value":3},"keep":{"type":"tool_uses","value":1},"clear_at_least":{"type":"input_tokens","value":5000}},"""
@@ -37,9 +37,9 @@ public class LongConversationTests
     {
         using var model = Model(new FakeApi());
 
-        var built = ClaudeRequest.Build(model, Hi with { ContextManagement = new ContextManagement { CompactAt = 60_000 } });
+        var built = ClaudeRequest.Build(model, Hi with { Prefix = Hi.Prefix with { ContextManagement = new ContextManagement { CompactAt = 60_000 } } });
         var plain = ClaudeRequest.Build(model, Hi);
-        var empty = ClaudeRequest.Build(model, Hi with { ContextManagement = new ContextManagement() });
+        var empty = ClaudeRequest.Build(model, Hi with { Prefix = Hi.Prefix with { ContextManagement = new ContextManagement() } });
 
         Assert.Equal(["compact-2026-01-12"], built.Betas!.Select(beta => beta.Raw()));
         Assert.All([plain, empty], request => Assert.DoesNotContain("context_management", request.RawBodyData.Keys));

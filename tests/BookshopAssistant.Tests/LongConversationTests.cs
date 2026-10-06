@@ -19,7 +19,7 @@ public class LongConversationTests(BookshopDatabase database) : IClassFixture<Bo
 
         var transcript = await RunAsync(database, model, ["Sam", "Find Winter books.", "/audit", "/quit"], demo: true);
 
-        Assert.All(model.Requests, request => Assert.Equal(BookshopAgent.Demo, request.ContextManagement));
+        Assert.All(model.Requests, request => Assert.Equal(BookshopAgent.Demo, request.Prefix.ContextManagement));
         Assert.Equal(50_000, BookshopAgent.Demo.CompactAt);
         Assert.Equal(12, BookshopAgent.Demo.ClearToolResults!.After);
         Assert.Equal(10, BookshopAgent.Demo.ClearToolResults!.Keep);
@@ -80,7 +80,7 @@ public class LongConversationTests(BookshopDatabase database) : IClassFixture<Bo
 
         await RunAsync(database, model, ["Sam", "Hi.", "/quit"]);
 
-        var settings = Assert.Single(model.Requests).ContextManagement!;
+        var settings = Assert.Single(model.Requests).Prefix.ContextManagement!;
         Assert.Equal(BookshopAgent.LongConversations, settings);
         Assert.True(settings.CompactAt > BookshopAgent.Demo.CompactAt);
         Assert.True(settings.ClearToolResults!.After > BookshopAgent.Demo.ClearToolResults!.After);

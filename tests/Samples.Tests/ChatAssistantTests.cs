@@ -91,6 +91,6 @@ public class ChatAssistantTests
         Assert.Empty(await memory.ListAsync("ben", Ct));
 
         // Memory is a tool the model calls, never part of the instructions (MEM-05).
-        Assert.DoesNotContain("Fahrenheit.", later.Requests[0].Instructions, StringComparison.Ordinal);
+        Assert.DoesNotContain("Fahrenheit.", later.Requests[0].Prefix.Instructions, StringComparison.Ordinal);
     }
 }
