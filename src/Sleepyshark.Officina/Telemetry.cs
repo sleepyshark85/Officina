@@ -196,14 +196,13 @@ public static class Telemetry
     }
 
     /// <summary>
-    /// Ends a tool call's span and records its metrics. <paramref name="outcome"/> is <c>ok</c>, <c>error</c>, or
-    /// <c>blocked</c> for a write whose attempt could not be audited (AUD-06); <paramref name="length"/> is the result's
-    /// length before truncation.
+    /// Ends a tool call's span and records its metrics. <paramref name="length"/> is the result's length before
+    /// truncation.
     /// </summary>
     internal static void EndToolCall(
-        Activity? activity, AgentDefinition agent, ToolCall call, long started, string outcome, TimeSpan? ran, int length, bool truncated, string result)
+        Activity? activity, AgentDefinition agent, ToolCall call, long started, ToolOutcome outcome, TimeSpan? ran, int length, bool truncated, string result)
     {
-        KeyValuePair<string, object?>[] dimensions = [.. Dimensions(agent), new("gen_ai.tool.name", call.Name), new("officina.tool.outcome", outcome)];
+        KeyValuePair<string, object?>[] dimensions = [.. Dimensions(agent), new("gen_ai.tool.name", call.Name), new("officina.tool.outcome", Word(outcome))];
         ToolCalls.Add(1, dimensions);
         ToolDuration.Record(agent.Time.GetElapsedTime(started).TotalSeconds, dimensions);
         if (activity is null)
@@ -211,12 +210,17 @@ public static class Telemetry
             return;
         }
 
-        activity.SetTag("officina.tool.outcome", outcome);
+        activity.SetTag("officina.tool.outcome", Word(outcome));
         activity.SetTag("officina.tool.ran", ran?.TotalSeconds);
         activity.SetTag("officina.tool.truncated", truncated);
         activity.SetTag("officina.tool.result_length", length);
         SetContent(activity, agent, "gen_ai.tool.call.result", () => result);
-        Stop(activity, agent, outcome == "ok" ? null : (outcome == "blocked" ? "audit_unavailable" : "tool_error", null));
+        Stop(activity, agent, outcome switch
+        {
+            ToolOutcome.Ok => null,
+            ToolOutcome.Blocked => ("audit_unavailable", null),
+            _ => ("tool_error", null),
+        });
     }
 
     /// <summary>Counts an audit entry the sink failed to write, and marks the span of the step it recorded (AUD-06).</summary>
@@ -285,4 +289,14 @@ public static class Telemetry
         string.Concat(value.ToString().Select((letter, index) => char.IsUpper(letter)
             ? (index > 0 ? "_" : "") + char.ToLower(letter, CultureInfo.InvariantCulture)
             : letter.ToString()));
+}
+
+/// <summary>How a tool call ended, as its span and metrics name it.</summary>
+internal enum ToolOutcome
+{
+    Ok,
+    Error,
+
+    /// <summary>A write that did not run, as its attempt could not be audited (AUD-06).</summary>
+    Blocked,
 }

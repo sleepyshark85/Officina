@@ -203,7 +203,7 @@ public static class MemoryTool
                 var numbered = Numbered(lines, from, to);
                 var view = numbered.Length <= MaxViewLength ? numbered
                     : numbered.LastIndexOf('\n', MaxViewLength) is var end and >= MaxViewLength / 2 ? numbered[..end]
-                    : AgentDefinition.Cut(numbered, MaxViewLength);
+                    : Strings.Cut(numbered, MaxViewLength);
                 return new($"Here's the content of {path} with line numbers:\n{(view.Length == numbered.Length ? view
                     : $"{view}\n[Truncated at {MaxViewLength} characters: view the rest with view_range.]")}");
             }
