@@ -21,6 +21,16 @@ def requirement_ids(root):
     return re.compile(r"\b(?:" + "|".join(prefixes) + r")-\d+\b") if prefixes else None
 
 
+def comment_of(line):
+    """The line's // comment, whole-line or trailing; a // inside a string literal is not one."""
+    at = 0
+    while (at := line.find("//", at)) >= 0:
+        if line[:at].count('"') % 2 == 0:
+            return line[at:]
+        at += 2
+    return None
+
+
 def main():
     payload = json.load(sys.stdin)
     path = payload.get("tool_input", {}).get("file_path") or ""
@@ -39,8 +49,8 @@ def main():
     ids = requirement_ids(root)
     if ids:
         for number, line in enumerate(text.split("\n"), 1):
-            if line.lstrip().startswith("//") and ids.search(line):
-                problems.append(f"line {number}: a code comment cites a requirement ID ({ids.search(line).group(0)}); "
+            if (comment := comment_of(line)) and (found := ids.search(comment)):
+                problems.append(f"line {number}: a code comment cites a requirement ID ({found.group(0)}); "
                                 "test names carry the IDs instead.")
     if problems:
         print(f"{path} breaks CLAUDE.md:\n- " + "\n- ".join(problems), file=sys.stderr)
