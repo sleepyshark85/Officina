@@ -109,11 +109,11 @@ internal sealed class AuditRecorder(AgentDefinition agent, Conversation conversa
 
     /// <summary>
     /// Records an entry of the step whose span is <paramref name="step"/>, or else of the run; returns whether it was
-    /// recorded. A failed write shows in telemetry (AUD-06); only a write tool's attempt depends on it.
+    /// recorded. The recorder fills in when, which run, conversation, agent, scope and span, and the kind;
+    /// <paramref name="details"/> adds the rest to that entry, such as its tool and outcome. A failed write shows in
+    /// telemetry (AUD-06); only a write tool's attempt depends on it.
     /// </summary>
-    public async Task<bool> RecordAsync(
-        AuditKind kind, Activity? step = null, string? tool = null, string? callId = null, string? input = null, string? outcome = null,
-        string? detail = null, TimeSpan? duration = null, Usage? usage = null, decimal? cost = null)
+    public async Task<bool> RecordAsync(AuditKind kind, Func<AuditEntry, AuditEntry>? details = null, Activity? step = null)
     {
         if (agent.AuditSink is not { } sink)
         {
@@ -124,28 +124,20 @@ internal sealed class AuditRecorder(AgentDefinition agent, Conversation conversa
         await gate.WaitAsync(CancellationToken.None).ConfigureAwait(false);
         try
         {
-            await sink.WriteAsync(
-                new AuditEntry
-                {
-                    Time = agent.Time.GetUtcNow(),
-                    Sequence = ++sequence,
-                    Run = Run,
-                    Conversation = conversation.Id,
-                    Agent = agent.Name,
-                    MemoryScope = memoryScope,
-                    TraceId = (step ?? runSpan)?.TraceId.ToHexString(),
-                    SpanId = (step ?? runSpan)?.SpanId.ToHexString(),
-                    Kind = kind,
-                    Tool = tool,
-                    CallId = callId,
-                    Input = Clean(input),
-                    Outcome = outcome,
-                    Detail = Clean(detail),
-                    Duration = duration,
-                    Usage = usage,
-                    Cost = cost,
-                },
-                CancellationToken.None).ConfigureAwait(false);
+            var entry = new AuditEntry
+            {
+                Time = agent.Time.GetUtcNow(),
+                Sequence = ++sequence,
+                Run = Run,
+                Conversation = conversation.Id,
+                Agent = agent.Name,
+                MemoryScope = memoryScope,
+                TraceId = (step ?? runSpan)?.TraceId.ToHexString(),
+                SpanId = (step ?? runSpan)?.SpanId.ToHexString(),
+                Kind = kind,
+            };
+            entry = details?.Invoke(entry) ?? entry;
+            await sink.WriteAsync(entry with { Input = Clean(entry.Input), Detail = Clean(entry.Detail) }, CancellationToken.None).ConfigureAwait(false);
             return true;
         }
 #pragma warning disable CA1031 // A sink may fail in any way; the caller decides what a missing entry means.

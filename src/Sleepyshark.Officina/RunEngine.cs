@@ -1,5 +1,4 @@
 using System.Collections.Immutable;
-using System.Diagnostics;
 using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Threading.Channels;
@@ -15,23 +14,22 @@ internal static class RunEngine
     public static async IAsyncEnumerable<RunEvent> StreamAsync(
         AgentDefinition agent, Conversation conversation, string message, RunOptions options, [EnumeratorCancellation] CancellationToken cancellationToken)
     {
-        var (context, memoryScope) = (options.Context, options.MemoryScope);
         conversation.StartRun();
         var span = Telemetry.StartRun(agent, conversation, message);
         var ended = false;
         try
         {
-            using var audit = new AuditRecorder(agent, conversation, span, memoryScope);
-            span?.SetTag("officina.run.id", audit.Run);
-            span?.SetTag("officina.memory.scope", memoryScope);
-            await audit.RecordAsync(AuditKind.RunStarted).ConfigureAwait(false);
-            var (result, spending) = (new StrongBox<RunResult>(), new Spending(agent, options.Budget));
-            await foreach (var runEvent in LoopAsync(agent, conversation, message, context, memoryScope, audit, span, spending, result, cancellationToken).ConfigureAwait(false))
+            using var run = new RunScope(agent, conversation, span, options);
+            span?.SetTag("officina.run.id", run.Audit.Run);
+            span?.SetTag("officina.memory.scope", options.MemoryScope);
+            await run.Audit.RecordAsync(AuditKind.RunStarted).ConfigureAwait(false);
+            var result = new StrongBox<RunResult>();
+            await foreach (var runEvent in LoopAsync(run, message, options.Context, result, cancellationToken).ConfigureAwait(false))
             {
                 yield return runEvent;
             }
 
-            result.Value = spending.Report(result.Value!);
+            result.Value = run.Spending.Report(result.Value!);
 
             var (outcome, detail) = result.Value switch
             {
@@ -39,7 +37,9 @@ internal static class RunEngine
                 Failed failed => ($"Failed: {failed.Reason}", failed.Error),
                 _ => ("Completed", null),
             };
-            await audit.RecordAsync(AuditKind.RunEnded, outcome: outcome, detail: detail, usage: result.Value.Usage, cost: result.Value.Cost).ConfigureAwait(false);
+            var ending = result.Value;
+            await run.Audit.RecordAsync(AuditKind.RunEnded, entry => entry with { Outcome = outcome, Detail = detail, Usage = ending.Usage, Cost = ending.Cost })
+                .ConfigureAwait(false);
             Telemetry.EndRun(span, agent, result.Value);
             ended = true;
             yield return new RunEnded(result.Value);
@@ -58,9 +58,9 @@ internal static class RunEngine
 
     /// <summary>Calls the model and runs the tools it asks for, until a stop that ends the run; leaves the run's result in <paramref name="result"/>.</summary>
     private static async IAsyncEnumerable<RunEvent> LoopAsync(
-        AgentDefinition agent, Conversation conversation, string message, string? context, string? memoryScope, AuditRecorder audit, Activity? span,
-        Spending spending, StrongBox<RunResult> result, [EnumeratorCancellation] CancellationToken cancellationToken)
+        RunScope run, string message, string? context, StrongBox<RunResult> result, [EnumeratorCancellation] CancellationToken cancellationToken)
     {
+        var (agent, conversation, audit, spending) = (run.Agent, run.Conversation, run.Audit, run.Spending);
         var fingerprint = agent.Fingerprint();
         if (conversation.Fingerprint is { } bound && bound != fingerprint)
         {
@@ -99,9 +99,9 @@ internal static class RunEngine
                 yield break;
             }
 
-            var reply = new Reply();
+            var reply = new ModelReply();
             var limit = spending.OutputLimit();
-            await foreach (var runEvent in CallModelAsync(agent, conversation.Messages.AddRange(pending), limit, span, reply, cancellationToken).ConfigureAwait(false))
+            await foreach (var runEvent in CallModelAsync(run, conversation.Messages.AddRange(pending), limit, reply, cancellationToken).ConfigureAwait(false))
             {
                 yield return runEvent;
             }
@@ -109,7 +109,7 @@ internal static class RunEngine
             spending.AddCall(reply.Usage);
             foreach (var (kind, detail) in reply.ContextEdits)
             {
-                await audit.RecordAsync(kind, detail: detail).ConfigureAwait(false);
+                await audit.RecordAsync(kind, entry => entry with { Detail = detail }).ConfigureAwait(false);
             }
 
             var usage = spending.Usage;
@@ -143,7 +143,7 @@ internal static class RunEngine
             // cancelled, and the run waits for them, so none runs on after it, nor on a conversation another run may take.
             var events = Channel.CreateUnbounded<RunEvent>(new UnboundedChannelOptions { SingleReader = true });
             using var tools = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            var running = RunToolsAsync(new ToolPipeline(agent, audit, span, events.Writer, memoryScope), toolCalls, events.Writer, tools.Token);
+            var running = RunToolsAsync(new ToolPipeline(run, events.Writer), toolCalls, events.Writer, tools.Token);
             var relayed = false;
             try
             {
@@ -191,32 +191,13 @@ internal static class RunEngine
         }
     }
 
-    /// <summary>What one model call returned.</summary>
-    private sealed class Reply
-    {
-        public ImmutableArray<ContentBlock>.Builder Blocks { get; } = ImmutableArray.CreateBuilder<ContentBlock>();
-
-        public Usage Usage { get; set; }
-
-        public ModelStopped? Stop { get; set; }
-
-        public string? Error { get; set; }
-
-        /// <summary>What the provider did to shorten the conversation for this call, for the audit trail (HIST-04).</summary>
-        public List<(AuditKind Kind, string Detail)> ContextEdits { get; } = [];
-
-        public int Retries { get; set; }
-
-        /// <summary>How long the first text took to arrive, if any did.</summary>
-        public TimeSpan? FirstText { get; set; }
-    }
-
     /// <summary>Makes one model call, streaming its events, and leaves what it returned in <paramref name="reply"/>.</summary>
     private static async IAsyncEnumerable<RunEvent> CallModelAsync(
-        AgentDefinition agent, ImmutableArray<Message> messages, int? limit, Activity? run, Reply reply, [EnumeratorCancellation] CancellationToken cancellationToken)
+        RunScope run, ImmutableArray<Message> messages, int? limit, ModelReply reply, [EnumeratorCancellation] CancellationToken cancellationToken)
     {
+        var agent = run.Agent;
         var request = new ModelRequest(agent.Tools, agent.Instructions, messages, limit, agent.Output?.Schema, agent.ContextManagement);
-        var (started, span) = (agent.Time.GetTimestamp(), Telemetry.StartModelCall(agent, run));
+        var (started, span) = (agent.Time.GetTimestamp(), Telemetry.StartModelCall(agent, run.Span));
         var streamed = false;
         IAsyncEnumerator<ModelEvent>? stream = null;
         try
@@ -300,9 +281,7 @@ internal static class RunEngine
                 await TryAsync(async () => await stream.DisposeAsync().ConfigureAwait(false), cancellationToken).ConfigureAwait(false);
             }
 
-            Telemetry.EndModelCall(
-                span, agent, started, reply.Usage, agent.Model.Price?.Cost(reply.Usage) ?? 0, reply.Stop, reply.Error, reply.Retries, reply.FirstText,
-                () => string.Concat(reply.Blocks.Select(block => block.Text)));
+            Telemetry.EndModelCall(span, agent, started, reply);
         }
     }
 
@@ -317,7 +296,7 @@ internal static class RunEngine
     /// without results, which the provider rejects. An end with calls fails, as a completed run would report an answer
     /// the history does not hold.
     /// </remarks>
-    private static (bool Append, RunResult? End) Decide(AgentDefinition agent, Reply reply, bool hasCalls, Usage usage, string? budgetCut) =>
+    private static (bool Append, RunResult? End) Decide(AgentDefinition agent, ModelReply reply, bool hasCalls, Usage usage, string? budgetCut) =>
         (reply.Error, reply.Stop, reply.Blocks.Count > 0, hasCalls) switch
         {
             ({ } error, _, _, _) => (false, new Failed(FailureReason.ModelError, agent.Redact(error), usage)),
@@ -356,7 +335,9 @@ internal static class RunEngine
 
         foreach (var call in unanswered)
         {
-            await audit.RecordAsync(AuditKind.ToolEnded, tool: call.Name, callId: call.Id, input: call.Input, outcome: "interrupted", detail: Interrupted).ConfigureAwait(false);
+            await audit.RecordAsync(
+                AuditKind.ToolEnded, entry => entry with { Tool = call.Name, CallId = call.Id, Input = call.Input, Outcome = "interrupted", Detail = Interrupted })
+                .ConfigureAwait(false);
         }
 
         var interrupted = new Message(Role.User, [.. unanswered.Select(call => new ContentBlock(new ToolResult(call.Id, Interrupted, IsError: true)))]);

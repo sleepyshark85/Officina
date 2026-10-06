@@ -12,15 +12,16 @@ namespace Sleepyshark.Officina;
 /// needed → record the attempt → invoke → truncate. Read calls run concurrently, a write call waits for the calls before
 /// it and runs alone (TOOL-03); approvals are asked one at a time, in call order. Every call gets exactly one result,
 /// in call order (CTX-06), and every failure is an error result, never an exception (TOOL-05). What happens is written
-/// to <paramref name="events"/> as it happens (EVT-01). Each call that starts gets a span under <paramref name="run"/> (EVT-02).
+/// to <paramref name="events"/> as it happens (EVT-01). Each call that starts gets a span under the run's (EVT-02).
 /// Each handler gets the run's <see cref="ToolContext"/>, its memory scope included (MEM-03).
 /// </summary>
-internal sealed class ToolPipeline(AgentDefinition agent, AuditRecorder audit, Activity? run, ChannelWriter<RunEvent> events, string? memoryScope)
+internal sealed class ToolPipeline(RunScope run, ChannelWriter<RunEvent> events)
 {
     /// <summary>The longest result the model gets, in characters (TOOL-06): about 16k tokens.</summary>
     internal const int MaxResultLength = 64_000;
 
-    private readonly ToolContext context = new(memoryScope);
+    private readonly AgentDefinition agent = run.Agent;
+    private readonly AuditRecorder audit = run.Audit;
 
     public async Task<ImmutableArray<ToolResult>> RunAsync(IReadOnlyList<ToolCall> calls, CancellationToken cancellationToken)
     {
@@ -37,7 +38,7 @@ internal sealed class ToolPipeline(AgentDefinition agent, AuditRecorder audit, A
                 reads.Clear();
             }
 
-            var step = new Step(Telemetry.StartToolCall(agent, run, tool, call), agent.Time.GetTimestamp());
+            var step = new Step(Telemetry.StartToolCall(agent, run.Span, tool, call), agent.Time.GetTimestamp());
             steps[at] = step;
             events.TryWrite(new ToolCallStarted(Shown(call)));
 
@@ -122,7 +123,8 @@ internal sealed class ToolPipeline(AgentDefinition agent, AuditRecorder audit, A
             return (default, new ToolOutput("The call needs approval, and this run is unattended, so it was denied.", true));
         }
 
-        await audit.RecordAsync(AuditKind.ApprovalAsked, step.Span, tool.Name, call.Id, call.Input).ConfigureAwait(false);
+        await audit.RecordAsync(AuditKind.ApprovalAsked, entry => entry with { Tool = tool.Name, CallId = call.Id, Input = call.Input }, step.Span)
+            .ConfigureAwait(false);
         events.TryWrite(new ApprovalAsked(Shown(call)));
         var asked = agent.Time.GetTimestamp();
         Approval approval;
@@ -144,8 +146,10 @@ internal sealed class ToolPipeline(AgentDefinition agent, AuditRecorder audit, A
         }
 
         Telemetry.Approved(step.Span, agent, call, approval.Approved, agent.Time.GetElapsedTime(asked));
-        await audit.RecordAsync(AuditKind.ApprovalAnswered, step.Span, tool.Name, call.Id, outcome: approval.Approved ? "approved" : "denied", detail: approval.Reason)
-            .ConfigureAwait(false);
+        await audit.RecordAsync(
+            AuditKind.ApprovalAnswered,
+            entry => entry with { Tool = tool.Name, CallId = call.Id, Outcome = approval.Approved ? "approved" : "denied", Detail = approval.Reason },
+            step.Span).ConfigureAwait(false);
         events.TryWrite(new ApprovalAnswered(Shown(call), approval.Approved));
         return approval.Approved
             ? (input, null)
@@ -155,7 +159,9 @@ internal sealed class ToolPipeline(AgentDefinition agent, AuditRecorder audit, A
     private async Task<ToolResult> InvokeAsync(Tool tool, ToolCall call, Step step, JsonElement input, CancellationToken cancellationToken)
     {
         var started = agent.Time.GetTimestamp();
-        if (!await audit.RecordAsync(AuditKind.ToolStarted, step.Span, tool.Name, call.Id, call.Input).ConfigureAwait(false) && tool.Kind == ToolKind.Write)
+        var recorded = await audit.RecordAsync(AuditKind.ToolStarted, entry => entry with { Tool = tool.Name, CallId = call.Id, Input = call.Input }, step.Span)
+            .ConfigureAwait(false);
+        if (!recorded && tool.Kind == ToolKind.Write)
         {
             var blocked = new ToolOutput("The call was not run: its attempt could not be recorded in the audit trail.", true);
             return await EndAsync(call, step, blocked, null, blocked: true).ConfigureAwait(false);
@@ -164,7 +170,7 @@ internal sealed class ToolPipeline(AgentDefinition agent, AuditRecorder audit, A
         ToolOutput output;
         try
         {
-            output = await tool.Handler(input, context, cancellationToken).ConfigureAwait(false)
+            output = await tool.Handler(input, run.Tools, cancellationToken).ConfigureAwait(false)
                 ?? throw new InvalidOperationException("The tool returned no output.");
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -195,8 +201,10 @@ internal sealed class ToolPipeline(AgentDefinition agent, AuditRecorder audit, A
             : string.Create(
                 CultureInfo.InvariantCulture,
                 $"{Strings.Cut(content, MaxResultLength)}\n[Truncated: the result had {content.Length} characters; only the first {MaxResultLength} are shown.]");
-        await audit.RecordAsync(AuditKind.ToolEnded, step?.Span, call.Name, call.Id, call.Input, output.IsError ? "error" : "ok", content, duration)
-            .ConfigureAwait(false);
+        await audit.RecordAsync(
+            AuditKind.ToolEnded,
+            entry => entry with { Tool = call.Name, CallId = call.Id, Input = call.Input, Outcome = output.IsError ? "error" : "ok", Detail = content, Duration = duration },
+            step?.Span).ConfigureAwait(false);
         if (step is { } started)
         {
             Telemetry.EndToolCall(
