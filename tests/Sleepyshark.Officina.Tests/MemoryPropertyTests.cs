@@ -81,7 +81,7 @@ public class MemoryPropertyTests
             });
 
             var outputs = new List<string>();
-            await Try(async () => outputs.Add((await MemoryTool.RunAsync(store, "sam", input, Ct)).Content));
+            await Try(async () => outputs.Add((await MemoryTool.Create(store).Handler(input, new ToolContext("sam"), Ct)).Content));
             var relative = path.StartsWith("/memories/", StringComparison.Ordinal) ? path["/memories/".Length..] : path;
             await Try(async () => outputs.Add(await store.ReadAsync("sam", relative, Ct) ?? ""));
             await Try(() => store.WriteAsync("sam", relative, "x", Ct));

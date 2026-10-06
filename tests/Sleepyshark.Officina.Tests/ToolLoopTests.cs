@@ -31,6 +31,24 @@ public class ToolLoopTests
     }
 
     [Fact]
+    public async Task A_tool_handler_gets_the_runs_memory_scope()
+    {
+        var scopes = new ConcurrentQueue<string?>();
+        var whoami = new Tool("whoami", "Says whose run it is.", """{"type":"object"}""", ToolKind.Read, (_, context, _) =>
+        {
+            scopes.Enqueue(context.MemoryScope);
+            return Task.FromResult(new ToolOutput("ok"));
+        });
+        var model = new ScriptedModel().CallTools(new ToolCall("c1", "whoami", "{}")).Reply("Sam.").CallTools(new ToolCall("c2", "whoami", "{}")).Reply("Nobody.");
+        var agent = Agents.With(model, tools: whoami);
+
+        await agent.RunAsync(new Conversation(), "Who am I?", null, "sam", Ct);
+        await agent.RunAsync("Who am I?", cancellationToken: Ct);
+
+        Assert.Equal(["sam", null], scopes);
+    }
+
+    [Fact]
     public async Task GEN_05_a_run_whose_work_is_its_side_effect_ends_after_its_write_tool()
     {
         var restocked = new ConcurrentQueue<string>();

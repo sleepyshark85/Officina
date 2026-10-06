@@ -87,9 +87,13 @@ public static class MemoryTool
     public static Tool Create(IMemoryStore store, bool needsApproval = false)
     {
         ArgumentNullException.ThrowIfNull(store);
-        return new Tool(Name, Description, Schema, ToolKind.Write, (_, _) => throw new InvalidOperationException("The memory tool runs in a run's scope."), needsApproval)
+        return new Tool(
+            Name, Description, Schema, ToolKind.Write,
+            (input, context, cancellationToken) => RunAsync(store, context.MemoryScope ?? throw new InvalidOperationException("The run has no memory scope."), input, cancellationToken),
+            needsApproval)
         {
-            Memory = store,
+            IsMemory = true,
+            ExemptFromApproval = Views,
         };
     }
 
@@ -106,10 +110,10 @@ public static class MemoryTool
         """;
 
     /// <summary>Whether the call only views memory, and so is never asked approval for.</summary>
-    internal static bool Views(JsonElement input) => Text(input, "command") == "view";
+    private static bool Views(JsonElement input) => Text(input, "command") == "view";
 
     /// <summary>Runs one command in <paramref name="scope"/>: every outcome but the store's failures is a result.</summary>
-    internal static async Task<ToolOutput> RunAsync(IMemoryStore store, string scope, JsonElement input, CancellationToken cancellationToken)
+    private static async Task<ToolOutput> RunAsync(IMemoryStore store, string scope, JsonElement input, CancellationToken cancellationToken)
     {
         var command = Text(input, "command");
         var paths = command == "rename" ? new[] { Text(input, "old_path"), Text(input, "new_path") } : [Text(input, "path")];
