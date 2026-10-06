@@ -215,6 +215,75 @@ public class AuditTests
             sink.Entries.Where(entry => entry.Kind == AuditKind.ToolSource).Select(entry => (entry.Tool, entry.Outcome, entry.Detail)).Distinct());
     }
 
+    [Fact]
+    public async Task A_denied_approval_is_audited_as_denied_with_its_reason()
+    {
+        var sink = new RecordingSink();
+        var model = new ScriptedModel().CallTools(new ToolCall("c1", "order", "{}")).Reply("Not ordered.");
+        var order = Agents.Tool("order", kind: ToolKind.Write, needsApproval: true);
+        var agent = Agents.With(model, tools: order) with { AuditSink = sink, Approver = new ScriptedApprover().Answer(Approval.Denied("too expensive")) };
+
+        await agent.RunAsync(new Conversation(), "Order x.", cancellationToken: Ct);
+
+        Assert.Equal(
+            [("denied", "too expensive")],
+            sink.Entries.Where(entry => entry.Kind == AuditKind.ApprovalAnswered).Select(entry => (entry.Outcome, entry.Detail)));
+    }
+
+    [Fact]
+    public async Task A_tool_source_that_cannot_connect_fails_the_run_before_the_next_source_is_connected()
+    {
+        // Sources connect in the order of their tools, which an agent keeps sorted by name.
+        var (down, next) = (new CountingSource("down", fail: true), new CountingSource("next"));
+        var tools = new[] { down, next }.Select(source => new Tool(source.Name, "A tool.", """{"type":"object"}""", ToolKind.Read, (_, _) => Task.FromResult(new ToolOutput("ok"))) { Source = source });
+        var model = new ScriptedModel().Reply("Unused.");
+
+        var result = await Agents.With(model, tools: [.. tools]).RunAsync(new Conversation(), "Go.", cancellationToken: Ct);
+
+        Assert.Equal(FailureReason.ToolSourceUnavailable, Assert.IsType<Failed>(result).Reason);
+        Assert.Equal((1, 0), (down.Connects, next.Connects));
+        Assert.Empty(model.Requests);
+    }
+
+    [Fact]
+    public async Task A_run_cancelled_while_a_tool_source_connects_connects_no_further_source()
+    {
+        using var cancellation = new CancellationTokenSource();
+        // Sources connect in the order of their tools, which an agent keeps sorted by name.
+        var (first, second) = (new CountingSource("first", cancel: cancellation), new CountingSource("second"));
+        var tools = new[] { first, second }.Select(source => new Tool(source.Name, "A tool.", """{"type":"object"}""", ToolKind.Read, (_, _) => Task.FromResult(new ToolOutput("ok"))) { Source = source });
+
+        var result = await Agents.With(new ScriptedModel().Reply("Unused."), tools: [.. tools]).RunAsync(new Conversation(), "Go.", cancellationToken: cancellation.Token);
+
+        Assert.Equal(StopReason.Cancelled, Assert.IsType<Stopped>(result).Reason);
+        Assert.Equal((1, 0), (first.Connects, second.Connects));
+    }
+
+    /// <summary>A tool source that counts its connects; it can fail, or cancel the run, while connecting.</summary>
+    private sealed class CountingSource(string name, bool fail = false, CancellationTokenSource? cancel = null) : IToolSource
+    {
+        public string Name => name;
+
+        public int Connects { get; private set; }
+
+        public async Task ConnectAsync(CancellationToken cancellationToken)
+        {
+            Connects++;
+            if (cancel is not null)
+            {
+                await cancel.CancelAsync();
+                cancellationToken.ThrowIfCancellationRequested();
+            }
+
+            if (fail)
+            {
+                throw new IOException("The server is down.");
+            }
+        }
+
+        public IReadOnlyList<ToolSourceChange> TakeChanges() => [];
+    }
+
     /// <summary>A tool source, such as an MCP server, that connects but fails whenever asked for its changes.</summary>
     private sealed class SilentSource : IToolSource
     {

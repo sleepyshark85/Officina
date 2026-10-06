@@ -514,4 +514,98 @@ public class ToolLoopTests
         Assert.Equal(conversation.Id, restored.Id);
         Assert.Empty(PrefixStability.Problems(model.Requests));
     }
+
+    [Fact]
+    public async Task A_result_exactly_at_the_size_limit_is_kept_whole_and_not_reported_as_truncated()
+    {
+        using var telemetry = new TelemetryCollector();
+        var model = new ScriptedModel().CallTools(Search("c1")).Reply("Long.");
+        var tool = Agents.Tool("search", schema: Agents.SearchSchema, handler: (_, _) => Task.FromResult(new ToolOutput(new string('a', ToolPipeline.MaxResultLength))));
+        var agent = Agents.With(model, tools: tool) with { Name = "exact-limit" };
+        var conversation = new Conversation();
+
+        await agent.RunAsync(conversation, "Go.", cancellationToken: Ct);
+
+        Assert.Equal(new string('a', ToolPipeline.MaxResultLength), Results(conversation, 2)[0].Content);
+        Assert.Equal(false, telemetry.Spans("exact-limit").Single(span => span.GetTagItem("officina.tool.truncated") is not null).GetTagItem("officina.tool.truncated"));
+    }
+
+    [Fact]
+    public async Task A_denial_without_a_reason_tells_the_model_only_that_the_call_was_denied()
+    {
+        var model = new ScriptedModel().CallTools(new ToolCall("c1", "save", "{}")).Reply("Not saved.");
+        var save = Agents.Tool("save", kind: ToolKind.Write, needsApproval: true);
+        var conversation = new Conversation();
+
+        await (Agents.With(model, tools: save) with { Approver = new ScriptedApprover().Answer(new Approval(false)) }).RunAsync(conversation, "Save.", cancellationToken: Ct);
+
+        Assert.Equal(("The call was denied.", true), (Results(conversation, 2)[0].Content, Results(conversation, 2)[0].IsError));
+    }
+
+    [Fact]
+    public async Task Input_that_is_not_json_is_an_error_result_and_the_tool_does_not_run()
+    {
+        var ran = false;
+        // As a provider reports input that arrived malformed; the block's raw form stays valid for replay.
+        var broken = new ContentBlock(null, """{"type":"tool_use","id":"c1","name":"search","input":{}}""", new ToolCall("c1", "search", "{not json"));
+        var model = new ScriptedModel().Reply(new BlockReceived(broken), new ModelStopped(ModelStopReason.ToolUse)).Reply("Retrying.");
+        var tool = Agents.Tool("search", schema: Agents.SearchSchema, handler: (_, _) =>
+        {
+            ran = true;
+            return Task.FromResult(new ToolOutput("ok"));
+        });
+        var conversation = new Conversation();
+
+        await Agents.With(model, tools: tool).RunAsync(conversation, "Go.", cancellationToken: Ct);
+
+        var result = Results(conversation, 2)[0];
+        Assert.StartsWith("The input is not valid JSON: ", result.Content, StringComparison.Ordinal);
+        Assert.True(result.IsError);
+        Assert.False(ran);
+    }
+
+    [Fact]
+    public async Task An_approver_that_throws_denies_the_call_with_the_reason()
+    {
+        var model = new ScriptedModel().CallTools(new ToolCall("c1", "save", "{}")).Reply("Not saved.");
+        var save = Agents.Tool("save", kind: ToolKind.Write, needsApproval: true);
+        var conversation = new Conversation();
+
+        await (Agents.With(model, tools: save) with { Approver = new ThrowingApprover() }).RunAsync(conversation, "Save.", cancellationToken: Ct);
+
+        Assert.Equal(("The call was denied: asking for approval failed: The console is gone.", true), (Results(conversation, 2)[0].Content, Results(conversation, 2)[0].IsError));
+    }
+
+    [Fact]
+    public async Task A_run_cancelled_while_waiting_for_approval_answers_the_call_as_cancelled()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var model = new ScriptedModel().CallTools(new ToolCall("c1", "save", "{}")).Reply("Unused.");
+        var save = Agents.Tool("save", kind: ToolKind.Write, needsApproval: true);
+        var conversation = new Conversation();
+
+        var result = await (Agents.With(model, tools: save) with { Approver = new UnansweredApprover(cancellation) })
+            .RunAsync(conversation, "Save.", cancellationToken: cancellation.Token);
+
+        Assert.Equal(StopReason.Cancelled, Assert.IsType<Stopped>(result).Reason);
+        Assert.Equal(("The call was cancelled while waiting for approval.", true), (Results(conversation, 2)[0].Content, Results(conversation, 2)[0].IsError));
+    }
+
+    /// <summary>An approver that fails, as a console that has gone away would.</summary>
+    private sealed class ThrowingApprover : IApprover
+    {
+        public Task<Approval> ApproveAsync(Tool tool, ToolCall toolCall, CancellationToken cancellationToken) =>
+            throw new InvalidOperationException("The console is gone.");
+    }
+
+    /// <summary>Waits for an answer that never comes, while the host cancels the run.</summary>
+    private sealed class UnansweredApprover(CancellationTokenSource cancellation) : IApprover
+    {
+        public async Task<Approval> ApproveAsync(Tool tool, ToolCall toolCall, CancellationToken cancellationToken)
+        {
+            await cancellation.CancelAsync();
+            await Task.Delay(Timeout.Infinite, cancellationToken);
+            return Approval.Granted;
+        }
+    }
 }

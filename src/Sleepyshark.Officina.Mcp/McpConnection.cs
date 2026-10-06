@@ -120,16 +120,7 @@ internal abstract class McpConnection(McpServer server, Action<string> lost) : I
             request["params"] = parameters;
         }
 
-        JsonElement response;
-        try
-        {
-            response = (await SendAsync(request, id, cancellationToken).ConfigureAwait(false))!.Value;
-        }
-        catch (Exception exception) when (exception is IOException or HttpRequestException or JsonException && !cancellationToken.IsCancellationRequested)
-        {
-            throw Lose($"The MCP server '{server.Name}' could not be reached: {exception.Message}");
-        }
-
+        var response = await ExchangeAsync(request, id, cancellationToken).ConfigureAwait(false);
         if (response.TryGetProperty("error", out var error))
         {
             var message = error.TryGetProperty("message", out var text) ? text.GetString() : error.GetRawText();
@@ -137,5 +128,18 @@ internal abstract class McpConnection(McpServer server, Action<string> lost) : I
         }
 
         return response.GetProperty("result");
+    }
+
+    /// <summary>Sends a request and returns its response; a transport failure loses the connection.</summary>
+    private async Task<JsonElement> ExchangeAsync(JsonObject request, int id, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return (await SendAsync(request, id, cancellationToken).ConfigureAwait(false))!.Value;
+        }
+        catch (Exception exception) when (exception is IOException or HttpRequestException or JsonException && !cancellationToken.IsCancellationRequested)
+        {
+            throw Lose($"The MCP server '{server.Name}' could not be reached: {exception.Message}");
+        }
     }
 }

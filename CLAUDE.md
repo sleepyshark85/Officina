@@ -33,7 +33,7 @@ provider, MCP client, test kit and spike findings (`docs/spikes/` there) are reu
 
 - **Every change goes through a branch and a pull request** to `main`, docs included. Never push to `main`. Merge
   only when the Opus reviewer has approved and the required checks pass (`ubuntu-latest`, `windows-latest`,
-  `quality`, branch up to date, review threads resolved); the owner has delegated that go-ahead.
+  `quality`, `mutation`, branch up to date, review threads resolved); the owner has delegated that go-ahead.
   Branches: `slice/<id>-<slug>`, `docs/<topic>`, or `fix/`, `refactor/`, `chore/`, `test/` or `feature/` and a slug.
   Retarget a stacked PR before deleting the branch it is based on (deleting a base closes the PR).
 - **Claude Code hooks enforce the mechanical rules** (`.claude/settings.json`, scripts in `.claude/hooks/`): no push
