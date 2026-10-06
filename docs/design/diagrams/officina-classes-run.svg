@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 980 764" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="officina-classes-run-title officina-classes-run-desc">
+      <title id="officina-classes-run-title">Definition, run and result</title>
+      <desc id="officina-classes-run-desc">Class diagram showing AgentDefinition aggregating its tools, taking RunOptions and returning a RunResult, which Completed, Stopped and Failed extend.</desc>
+      <defs>
+        <style>@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&amp;family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@400;500;600&amp;family=Noto+Sans+KR:wght@400;500;600&amp;family=Noto+Serif+KR:wght@400&amp;family=Noto+Sans+TC:wght@400;500;600&amp;family=Noto+Serif+TC:wght@400&amp;display=swap');</style>
+        <marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#4f5d75"/></marker>
+        <marker id="arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#eb6c36"/></marker>
+        <marker id="arrow-link" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#2e5aa8"/></marker>
+        <marker id="arrow-open" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polyline points="0 0, 8 3, 0 6" fill="none" stroke="#4f5d75" stroke-width="1.2"/></marker>
+        <marker id="uml-triangle" markerWidth="16" markerHeight="12" refX="15" refY="6" orient="auto" markerUnits="userSpaceOnUse"><polygon points="0 0, 16 6, 0 12" fill="#f5f5f5" stroke="#2d3142" stroke-width="1"/></marker>
+        <marker id="uml-triangle-accent" markerWidth="16" markerHeight="12" refX="15" refY="6" orient="auto" markerUnits="userSpaceOnUse"><polygon points="0 0, 16 6, 0 12" fill="#f5f5f5" stroke="#eb6c36" stroke-width="1"/></marker>
+        <marker id="uml-diamond-filled" markerWidth="18" markerHeight="10" refX="0" refY="5" orient="auto" markerUnits="userSpaceOnUse"><polygon points="0 5, 9 0, 18 5, 9 10" fill="#2d3142"/></marker>
+        <marker id="uml-diamond-hollow" markerWidth="18" markerHeight="10" refX="0" refY="5" orient="auto" markerUnits="userSpaceOnUse"><polygon points="0 5, 9 0, 18 5, 9 10" fill="#f5f5f5" stroke="#2d3142" stroke-width="1"/></marker>
+        <marker id="uml-open" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L9,4 L0,8" fill="none" stroke="#4f5d75" stroke-width="1"/></marker>
+      </defs>
+      <rect width="100%" height="100%" fill="#f5f5f5"/>
+      <path d="M 280,144 H 220" fill="none" stroke="#4f5d75" stroke-width="1" stroke-dasharray="5,4" marker-end="url(#uml-open)"/>
+      <rect x="230" y="124" width="40" height="12" rx="2" fill="#f5f5f5"/>
+      <text x="250" y="133" fill="#7a8399" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">TAKES</text>
+      <path d="M 640,144 H 700" fill="none" stroke="#2d3142" stroke-width="1" marker-start="url(#uml-diamond-hollow)"/>
+      <rect x="666" y="131" width="28" height="12" rx="2" fill="#f5f5f5"/>
+      <text x="680" y="140" fill="#2d3142" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" font-weight="600">0..*</text>
+      <path d="M 460,284 V 344" fill="none" stroke="#4f5d75" stroke-width="1" stroke-dasharray="5,4" marker-end="url(#uml-open)"/>
+      <rect x="468" y="310" width="52" height="12" rx="2" fill="#f5f5f5"/>
+      <text x="494" y="319" fill="#7a8399" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">RETURNS</text>
+      <path d="M 460,568 V 504" fill="none" stroke="#eb6c36" stroke-width="1" marker-end="url(#uml-triangle-accent)"/>
+      <path d="M 220,568 V 540 Q 220,532 228,532 H 412 Q 420,532 420,524 V 504" fill="none" stroke="#eb6c36" stroke-width="1" marker-end="url(#uml-triangle-accent)"/>
+      <path d="M 700,568 V 540 Q 700,532 692,532 H 508 Q 500,532 500,524 V 504" fill="none" stroke="#eb6c36" stroke-width="1" marker-end="url(#uml-triangle-accent)"/>
+      <rect x="280" y="40" width="360" height="244" rx="6" fill="#f5f5f5"/>
+      <rect x="280" y="40" width="360" height="244" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+      <text x="460" y="66" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">AgentDefinition</text>
+      <line x1="280" y1="80" x2="640" y2="80" stroke="#2d3142" stroke-opacity="0.22" stroke-width="1"/>
+      <text x="296" y="100" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ Model: IModel</text>
+      <text x="296" y="120" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ Instructions: string</text>
+      <text x="296" y="140" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ Tools: ImmutableArray&lt;Tool&gt;</text>
+      <text x="296" y="160" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ Approver: IApprover?</text>
+      <text x="296" y="180" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ AuditSink: IAuditSink?</text>
+      <text x="296" y="200" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">…</text>
+      <line x1="280" y1="212" x2="640" y2="212" stroke="#2d3142" stroke-opacity="0.22" stroke-width="1"/>
+      <text x="296" y="232" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ StreamAsync(conversation, message, options): events</text>
+      <text x="296" y="252" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ RunAsync(conversation, message, options): RunResult</text>
+      <text x="296" y="272" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ CanContinue(conversation): bool</text>
+      <rect x="40" y="88" width="180" height="112" rx="6" fill="#f5f5f5"/>
+      <rect x="40" y="88" width="180" height="112" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+      <text x="130" y="114" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">RunOptions</text>
+      <line x1="40" y1="128" x2="220" y2="128" stroke="#2d3142" stroke-opacity="0.22" stroke-width="1"/>
+      <text x="56" y="148" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ Context: string?</text>
+      <text x="56" y="168" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ MemoryScope: string?</text>
+      <text x="56" y="188" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ Budget: Budget?</text>
+      <rect x="700" y="40" width="240" height="204" rx="6" fill="#f5f5f5"/>
+      <rect x="700" y="40" width="240" height="204" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+      <text x="820" y="66" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Tool</text>
+      <line x1="700" y1="80" x2="940" y2="80" stroke="#2d3142" stroke-opacity="0.22" stroke-width="1"/>
+      <text x="716" y="100" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ Name: string</text>
+      <text x="716" y="120" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ InputSchema: string</text>
+      <text x="716" y="140" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ Kind: ToolKind</text>
+      <text x="716" y="160" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ NeedsApproval: bool</text>
+      <text x="716" y="180" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ Source: IToolSource?</text>
+      <text x="716" y="200" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">…</text>
+      <line x1="700" y1="212" x2="940" y2="212" stroke="#2d3142" stroke-opacity="0.22" stroke-width="1"/>
+      <text x="716" y="232" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ FromFunction(…): Tool</text>
+      <rect x="360" y="344" width="200" height="160" rx="6" fill="#f5f5f5"/>
+      <rect x="360" y="344" width="200" height="160" rx="6" fill="#eb6c36" fill-opacity="0.04" stroke="#eb6c36" stroke-width="1"/>
+      <rect x="360" y="344" width="200" height="48" rx="6" fill="#eb6c36" fill-opacity="0.10"/>
+      <rect x="360" y="384" width="200" height="8" fill="#eb6c36" fill-opacity="0.10"/>
+      <text x="460" y="362" fill="#eb6c36" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">«abstract»</text>
+      <text x="460" y="378" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle" font-style="italic">RunResult</text>
+      <line x1="360" y1="392" x2="560" y2="392" stroke="#eb6c36" stroke-opacity="0.40" stroke-width="1"/>
+      <text x="376" y="412" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ Usage: Usage</text>
+      <text x="376" y="432" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ Cost: decimal</text>
+      <text x="376" y="452" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ ModelCalls: int</text>
+      <text x="376" y="472" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ ToolCalls: int</text>
+      <text x="376" y="492" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ Duration: TimeSpan</text>
+      <rect x="120" y="568" width="200" height="92" rx="6" fill="#f5f5f5"/>
+      <rect x="120" y="568" width="200" height="92" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+      <text x="220" y="594" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Completed</text>
+      <line x1="120" y1="608" x2="320" y2="608" stroke="#2d3142" stroke-opacity="0.22" stroke-width="1"/>
+      <text x="136" y="628" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ Text: string</text>
+      <text x="136" y="648" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ Output: object?</text>
+      <rect x="360" y="568" width="200" height="92" rx="6" fill="#f5f5f5"/>
+      <rect x="360" y="568" width="200" height="92" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+      <text x="460" y="594" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Stopped</text>
+      <line x1="360" y1="608" x2="560" y2="608" stroke="#2d3142" stroke-opacity="0.22" stroke-width="1"/>
+      <text x="376" y="628" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ Reason: StopReason</text>
+      <text x="376" y="648" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ Detail: string?</text>
+      <rect x="600" y="568" width="200" height="92" rx="6" fill="#f5f5f5"/>
+      <rect x="600" y="568" width="200" height="92" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+      <text x="700" y="594" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Failed</text>
+      <line x1="600" y1="608" x2="800" y2="608" stroke="#2d3142" stroke-opacity="0.22" stroke-width="1"/>
+      <text x="616" y="628" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ Reason: FailureReason</text>
+      <text x="616" y="648" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ Error: string</text>
+      <line x1="40" y1="700" x2="940" y2="700" stroke="#2d3142" stroke-opacity="0.10" stroke-width="0.8"/>
+      <text x="40" y="716" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.18em">LEGEND · RELATIONSHIPS</text>
+      <line x1="40" y1="736" x2="68" y2="736" stroke="#2d3142" stroke-width="1.2" marker-end="url(#uml-triangle)"/>
+      <text x="76" y="740" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Inheritance</text>
+      <line x1="156" y1="736" x2="184" y2="736" stroke="#2d3142" stroke-width="1.2" stroke-dasharray="5,4" marker-end="url(#uml-triangle)"/>
+      <text x="192" y="740" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Realization</text>
+      <line x1="272" y1="736" x2="300" y2="736" stroke="#2d3142" stroke-width="1.2" marker-start="url(#uml-diamond-filled)"/>
+      <text x="308" y="740" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Composition · owns</text>
+      <line x1="420" y1="736" x2="448" y2="736" stroke="#2d3142" stroke-width="1.2" marker-start="url(#uml-diamond-hollow)"/>
+      <text x="456" y="740" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Aggregation · has</text>
+      <line x1="564" y1="736" x2="592" y2="736" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#uml-open)"/>
+      <text x="600" y="740" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Association</text>
+      <line x1="680" y1="736" x2="708" y2="736" stroke="#4f5d75" stroke-width="1.2" stroke-dasharray="5,4" marker-end="url(#uml-open)"/>
+      <text x="716" y="740" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Dependency · uses</text>
+
+    </svg>
