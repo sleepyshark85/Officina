@@ -12,6 +12,9 @@ provider, MCP client, test kit and spike findings (`docs/spikes/` there) are reu
 - `REQUIREMENTS.md`: what to build (IDs such as `TOOL-03`), phase 1 and north star, with decisions in §7.
 - `ARCHITECTURE.md`: concepts, components, contracts and flows. **It holds no code, type names or API names;** keep it
   that way. Implementation detail goes in code and its comments.
+- `docs/design/`: the type-level view (class, package and sequence diagrams, principles and trade-offs). Unlike
+  ARCHITECTURE.md it names types, so update it when a change moves what it shows. Each diagram's `.html` is the source;
+  the `.svg` beside it is exported from it.
 
 ## Start here (not done yet)
 
