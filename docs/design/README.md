@@ -174,23 +174,26 @@ structured signal ends it. Nothing in the reply's text decides anything. Each wa
 | Tool sources | An `IToolSource` cannot connect | `Failed(ToolSourceUnavailable)`; cancelled meanwhile: `Stopped(Cancelled)` |
 | Budget check, before each call | `Spending.Reached()`: model calls, time, tokens or cost | `Stopped(Budget)`, with which limit as the detail |
 | Budget check | The 25 model calls a run may make are used up | `Stopped(IterationLimit)` |
-| Model call | An exception after the provider's retries | `Failed(ModelError)` |
+| Model call | An exception after the provider's retries, or a stream that ends without a stop reason | `Failed(ModelError)` |
 | Model call | Cancelled before the stop reason arrived | `Stopped(Cancelled)` |
 | Stop reason | `End` with no tool calls | `Completed`; with typed output, `Failed(InvalidOutput)` when the reply does not read |
-| Stop reason | `End` but the reply asked for tools | `Failed(UnexpectedStop)` |
+| Stop reason | `End` but the reply asked for tools; `ToolUse` with no calls; a stop reason the run cannot act on | `Failed(UnexpectedStop)` |
 | Stop reason | `MaxTokens` | `Stopped(OutputLimit)`, or `Stopped(Budget)` when the budget lowered the limit |
 | Stop reason | `Refusal`, `ContextFull` | `Stopped(Refusal)`, `Stopped(ContextFull)` |
 | Stop reason | `ToolUse` with calls | The loop goes on: the reply and the turn's input are appended, then the tools run |
 | After the tools | The host cancelled while they ran | `Stopped(Cancelled)`, after every call's result is appended |
 
 The user's message and the run context are held back and appended only together with the reply that answers them, so a
-run that ends without a reply leaves the conversation valid for the next one. A reply that did not finish (an error, a
-cancel, a cut-off stop with tool calls) is not appended. The run then ends with a `RunEnded` event, a `RunEnded` audit
+run that ends without a reply leaves the conversation valid for the next one. A reply is not appended when the call
+failed or was cancelled, when it has no content, or when it asked for tools but stopped for anything other than
+`ToolUse` (`End`, `MaxTokens`, `Refusal`, `ContextFull`), as its last input may be cut short and calls without results
+are rejected. Calls a crash left unanswered get error results once the run has passed its prefix and tool-source
+checks, before the first model call. The run then ends with a `RunEnded` event, a `RunEnded` audit
 entry and the run span, whichever way it ended; a run the host abandons still ends its span and frees the conversation.
 
 ### One tool call
 
-![One tool call](diagrams/officina-tool-call.svg)
+![One tool call](diagrams/officina-tool-call-flow.svg)
 
 `ToolPipeline` runs one reply's calls in call order. Read calls run together; a write waits for the calls before it
 and runs alone, and approvals are asked one at a time. Every refusal is an error result the model reads, never an
