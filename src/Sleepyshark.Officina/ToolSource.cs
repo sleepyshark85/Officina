@@ -76,7 +76,19 @@ internal static class ToolSources
     {
         foreach (var source in Of(agent))
         {
-            foreach (var change in source.TakeChanges())
+            IReadOnlyList<ToolSourceChange> changes;
+            try
+            {
+                changes = source.TakeChanges();
+            }
+#pragma warning disable CA1031 // A source that fails to report its changes must not end the run (principle 8); it is recorded instead.
+            catch (Exception exception)
+#pragma warning restore CA1031
+            {
+                changes = [new ToolSourceChange(ToolSourceState.Failed, agent.Redact($"The tool source '{source.Name}' could not report its connection changes: {exception.Message}"))];
+            }
+
+            foreach (var change in changes)
             {
                 var outcome = change.State switch
                 {

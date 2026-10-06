@@ -155,7 +155,7 @@ only a live run or inspection checks, noted in the last column.
 
 | ID | Tests | Also checked by |
 |---|---|---|
-| AUD-01 | Core/AuditTests: `A_run_records_its_start_its_tool_calls_its_approvals_and_its_end_in_sequence`, `Refusals_failures_prefix_mismatches_and_budget_stops_are_recorded_as_the_run_ends`; Core/MemoryTests: `MEM_04_…`; Core/LongConversationTests: `Compaction_and_clearing_are_events_audit_entries_…`; Mcp: `MCP_04_a_server_down_at_the_start_…` (connected, failed, disconnected) | |
+| AUD-01 | Core/AuditTests: `A_run_records_its_start_its_tool_calls_its_approvals_and_its_end_in_sequence`, `Refusals_failures_prefix_mismatches_and_budget_stops_are_recorded_as_the_run_ends`, `A_tool_source_that_cannot_report_its_changes_is_audited_as_failed_and_the_run_still_ends`; Core/MemoryTests: `MEM_04_…`; Core/LongConversationTests: `Compaction_and_clearing_are_events_audit_entries_…`; Mcp: `MCP_04_a_server_down_at_the_start_…` (connected, failed, disconnected) | |
 | AUD-02 | Core/AuditTests: `A_write_runs_only_after_its_attempt_is_recorded`, `A_write_whose_attempt_cannot_be_audited_never_runs_…`; Core/ConversationPropertyTests: `Any_sequence_of_runs_keeps_the_conversation_valid_and_every_write_audited_first` | |
 | AUD-03 | Core/TelemetryTests: `A_run_is_one_trace_…_and_its_audit_entries_point_into_it`; Core/MemoryTests: `AUD_03_every_audit_entry_of_a_run_names_its_memory_scope`; Core/AuditTests: `An_entry_the_sink_failed_to_write_leaves_a_gap_in_the_sequence`; App/AuditTests: `The_table_keeps_every_field_…` | |
 | AUD-04 | Core/AuditTests: `The_JSON_lines_sink_appends_one_entry_per_line`, `The_JSON_lines_sink_reports_a_failed_write`; Samples/BackgroundAgentTests: `An_unattended_job_…` | |

@@ -163,13 +163,11 @@ public sealed class McpToolSource : IToolSource, IAsyncDisposable
             throw new InvalidOperationException($"The MCP server '{Name}' has no tool '{allowed.Name}'. It has: {string.Join(", ", listed.Keys.Order(StringComparer.Ordinal))}.");
         }
 
-        var readOnly = tool.TryGetProperty("annotations", out var annotations) && annotations.ValueKind == JsonValueKind.Object
-            && annotations.TryGetProperty("readOnlyHint", out var hint) && hint.ValueKind == JsonValueKind.True;
         var description = tool.TryGetProperty("description", out var text) ? text.GetString() ?? "" : "";
         try
         {
             return new Tool(
-                $"{Name}__{allowed.Name}", description, tool.GetProperty("inputSchema").GetRawText(), allowed.Kind ?? (readOnly ? ToolKind.Read : ToolKind.Write),
+                $"{Name}__{allowed.Name}", description, tool.GetProperty("inputSchema").GetRawText(), allowed.Kind,
                 (input, cancellationToken) => CallAsync(allowed.Name, input, cancellationToken), allowed.NeedsApproval)
             { Source = this };
         }

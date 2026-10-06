@@ -152,7 +152,7 @@ The core serves any agentic purpose, not only the reference application. These r
 | ID | Requirement |
 |---|---|
 | MCP-01 | Tools can come from MCP servers over stdio (Bookshop Assistant) and Streamable HTTP (the background agent sample, GEN-06), through Officina's own MCP client. |
-| MCP-02 | MCP tools go through the same tool pipeline as any tool: validation, approval, truncation, events. Each server's tools are marked read or write by the host (MCP annotations as a default). |
+| MCP-02 | MCP tools go through the same tool pipeline as any tool: validation, approval, truncation, events. Each server's tools are writes unless the host marks them read; a server's annotations are not trusted. |
 | MCP-03 | An MCP server's tool list is read once and pinned for the conversation (CTX-04), named `<server>__<tool>`, and filtered by an allow-list the host gives. |
 | MCP-04 | A server that is down at the start of a run fails the run with a clear error; one that fails mid-run returns error results for its calls. |
 
@@ -188,7 +188,7 @@ the fact.
 | ID | Requirement |
 |---|---|
 | AUD-01 | Important events are written to an audit trail: run started and ended (result, usage, cost); every tool call (tool, input, outcome, duration); approvals asked and answered; memory writes; budget stops; refusals; compactions; provider failures; prefix mismatches; MCP servers connected, failed or disconnected. |
-| AUD-02 | A write tool's attempt is recorded **before** it runs and its outcome after. If the attempt cannot be recorded, the tool does not run and the model gets an error result. |
+| AUD-02 | When the agent has an audit sink, a write tool's attempt is recorded **before** it runs and its outcome after. If the attempt cannot be recorded, the tool does not run and the model gets an error result. Without a sink there is no trail (GEN-02). |
 | AUD-03 | Each entry carries the time, a sequence number, the run, the conversation, the agent, the memory scope and the trace and span of the step it records (EVT-02), so a run can be reconstructed and each entry opened as its trace. Entries are never changed or removed by the core. |
 | AUD-04 | The audit trail is written through an audit sink contract the host chooses; a JSON-lines file sink ships (used by the background agent sample, GEN-06). |
 | AUD-05 | Secrets never reach the audit trail, and large inputs and results are truncated with their size noted. |

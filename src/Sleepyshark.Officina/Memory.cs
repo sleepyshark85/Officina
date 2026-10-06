@@ -219,7 +219,7 @@ public static class MemoryTool
             foreach (var file in Under(at))
             {
                 var parts = file.Path[(at.Length == 0 ? 0 : at.Length + 1)..].Split('/');
-                for (var depth = 1; depth <= Math.Min(2, parts.Length) && !parts[depth - 1].StartsWith('.') && parts[depth - 1] != "node_modules"; depth++)
+                for (var depth = 1; depth <= Math.Min(2, parts.Length) && !parts[depth - 1].StartsWith('.'); depth++)
                 {
                     var entry = $"{shown}/{string.Join('/', parts[..depth])}";
                     entries[entry] = entries.GetValueOrDefault(entry) + file.Size;
@@ -227,7 +227,7 @@ public static class MemoryTool
             }
 
             var listing = entries.Select(entry => $"{Size(entry.Value)}\t{entry.Key}").Prepend($"{Size(Under(at).Sum(file => file.Size))}\t{shown}");
-            return new($"Here're the files and directories up to 2 levels deep in {shown}, excluding hidden items and node_modules:\n{string.Join('\n', listing)}");
+            return new($"Here're the files and directories up to 2 levels deep in {shown}, excluding hidden items:\n{string.Join('\n', listing)}");
         }
 
         public async Task<ToolOutput> CreateAsync(string path, string at, string? text)

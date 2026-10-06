@@ -199,4 +199,30 @@ public class AuditTests
 
         await Assert.ThrowsAsync<DirectoryNotFoundException>(() => sink.WriteAsync(entry, Ct));
     }
+
+    [Fact]
+    public async Task A_tool_source_that_cannot_report_its_changes_is_audited_as_failed_and_the_run_still_ends()
+    {
+        var sink = new RecordingSink();
+        var source = new SilentSource();
+        var lookup = new Tool("lookup", "Looks up.", """{"type":"object"}""", ToolKind.Read, (_, _) => Task.FromResult(new ToolOutput("found"))) { Source = source };
+        var model = new ScriptedModel().CallTools(new ToolCall("c1", "lookup", "{}")).Reply("Found it.");
+
+        var result = await (Agents.With(model, tools: lookup) with { AuditSink = sink }).RunAsync("Find it.", cancellationToken: Ct);
+
+        Assert.Equal("Found it.", Assert.IsType<Completed>(result).Text);
+        Assert.Equal(
+            [("silent", "failed", "The tool source 'silent' could not report its connection changes: The change log is unreadable.")],
+            sink.Entries.Where(entry => entry.Kind == AuditKind.ToolSource).Select(entry => (entry.Tool, entry.Outcome, entry.Detail)).Distinct());
+    }
+
+    /// <summary>A tool source, such as an MCP server, that connects but fails whenever it is asked for its changes.</summary>
+    private sealed class SilentSource : IToolSource
+    {
+        public string Name => "silent";
+
+        public Task ConnectAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
+        public IReadOnlyList<ToolSourceChange> TakeChanges() => throw new InvalidOperationException("The change log is unreadable.");
+    }
 }

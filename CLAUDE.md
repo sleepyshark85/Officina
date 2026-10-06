@@ -61,7 +61,8 @@ provider, MCP client, test kit and spike findings (`docs/spikes/` there) are reu
   enforced by a fingerprint. Per-run context is appended after the prefix as an operator message, never put into the
   instructions. Memory is a tool, never part of the instructions.
 - **Every run ends in a result:** completed, stopped (with a reason) or failed. Tool errors go back to the model.
-- **A write tool never runs unaudited:** its attempt is recorded before it runs.
+- **A write tool never runs unaudited** when the agent has an audit sink: its attempt is recorded before it runs, and
+  it does not run if that fails. Without a sink there is no trail at all (GEN-02).
 - **Purpose-neutral core:** no domain concepts, UI, storage technology or transport in the core; everything except
   model and instructions is optional.
 - **Dependencies:** no Microsoft Agent Framework or `Microsoft.Extensions.AI`. The Anthropic C# SDK is used only in the
