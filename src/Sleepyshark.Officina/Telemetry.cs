@@ -108,13 +108,13 @@ public static class Telemetry
         ]);
 
     /// <summary>
-    /// Ends a model call's span and records its metrics. <paramref name="stop"/> is null when the call failed (then
-    /// <paramref name="error"/> says why) or was cancelled.
+    /// Ends a model call's span and records its metrics. The reply's stop reason is null when the call failed (then its
+    /// error says why) or was cancelled.
     /// </summary>
-    internal static void EndModelCall(
-        Activity? activity, AgentDefinition agent, long started, Usage usage, decimal cost, ModelStopped? stop, string? error, int retries,
-        TimeSpan? firstText, Func<string> text)
+    internal static void EndModelCall(Activity? activity, AgentDefinition agent, long started, ModelReply reply)
     {
+        var (usage, stop, error) = (reply.Usage, reply.Stop, reply.Error);
+        var cost = agent.Model.Price?.Cost(usage) ?? 0;
         var dimensions = Dimensions(agent);
         var input = usage.Input + usage.CacheRead + usage.CacheWrite;
 
@@ -141,18 +141,18 @@ public static class Telemetry
         }
 
         SetUsage(activity, usage, cost);
-        activity.SetTag("officina.model.retries", retries);
+        activity.SetTag("officina.model.retries", reply.Retries);
         if (stop is not null)
         {
             activity.SetTag("gen_ai.response.finish_reasons", new[] { stop.Reason == ModelStopReason.Unknown ? stop.Detail ?? "unknown" : Word(stop.Reason) });
         }
 
-        if (firstText is { } first)
+        if (reply.FirstText is { } first)
         {
             activity.SetTag("officina.model.time_to_first_token", first.TotalSeconds);
         }
 
-        SetContent(activity, agent, "gen_ai.output.messages", () => Messages("assistant", text()));
+        SetContent(activity, agent, "gen_ai.output.messages", () => Messages("assistant", string.Concat(reply.Blocks.Select(block => block.Text))));
         Stop(activity, agent, error is null ? null : ("model_error", error));
     }
 

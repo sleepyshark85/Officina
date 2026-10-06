@@ -84,7 +84,7 @@ internal static class ToolSources
                     ToolSourceState.Failed => "failed",
                     _ => "disconnected",
                 };
-                await audit.RecordAsync(AuditKind.ToolSource, tool: source.Name, outcome: outcome, detail: change.Detail).ConfigureAwait(false);
+                await audit.RecordAsync(AuditKind.ToolSource, entry => entry with { Tool = source.Name, Outcome = outcome, Detail = change.Detail }).ConfigureAwait(false);
             }
         }
     }
