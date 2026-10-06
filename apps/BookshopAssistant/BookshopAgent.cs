@@ -55,8 +55,10 @@ public static class BookshopAgent
         Effort = ClaudeEffort.Medium,
         MaxOutputTokens = 16_000,
 
-        // A demo is one sitting, and its large searches would cost 60% more to cache for an hour.
-        CacheLifetime = demo ? CacheLifetime.FiveMinutes : CacheLifetime.OneHour,
+        // Staff reply minutes apart, and the prefix serves every session. A demo is one sitting, and its large searches
+        // would cost 60% more to cache for an hour.
+        PrefixCacheLifetime = demo ? CacheLifetime.FiveMinutes : CacheLifetime.OneHour,
+        ConversationCacheLifetime = demo ? CacheLifetime.FiveMinutes : CacheLifetime.OneHour,
     };
 
     /// <summary>The run context: today's date and who is at the counter.</summary>

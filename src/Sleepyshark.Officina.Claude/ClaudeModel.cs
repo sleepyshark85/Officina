@@ -37,8 +37,14 @@ public sealed class ClaudeModel : IModel, IDisposable
     /// <summary>The longest reply, in tokens. Every request streams, so a long reply does not time out.</summary>
     public int MaxOutputTokens { get; init; } = 64_000;
 
-    /// <summary>The lifetime of both cache points: the instructions' and the conversation tail's.</summary>
-    public CacheLifetime CacheLifetime { get; init; } = CacheLifetime.FiveMinutes;
+    /// <summary>
+    /// The lifetime of the cached prefix: tools and instructions, the same for every conversation of an agent. It may not
+    /// be shorter than <see cref="ConversationCacheLifetime"/>, as the API requires longer-lived entries first.
+    /// </summary>
+    public CacheLifetime PrefixCacheLifetime { get; init; } = CacheLifetime.FiveMinutes;
+
+    /// <summary>The lifetime of the cached conversation, which only the conversation's next call reads.</summary>
+    public CacheLifetime ConversationCacheLifetime { get; init; } = CacheLifetime.FiveMinutes;
 
     /// <summary>What the model's tokens cost; by default its row of <see cref="ClaudePrices.Table"/>, if any.</summary>
     public ModelPrice? Price
@@ -55,7 +61,7 @@ public sealed class ClaudeModel : IModel, IDisposable
     public string Name => Model;
 
     public string Settings =>
-        $"claude model={Model} effort={ClaudeRequest.EffortWord(Effort)} max_tokens={MaxOutputTokens} cache={ClaudeRequest.CacheWord(CacheLifetime)} thinking=adaptive";
+        $"claude model={Model} effort={ClaudeRequest.EffortWord(Effort)} max_tokens={MaxOutputTokens} cache={ClaudeRequest.CacheWords(this)} thinking=adaptive";
 
     public async IAsyncEnumerable<ModelEvent> StreamAsync(ModelRequest request, [EnumeratorCancellation] CancellationToken cancellationToken)
     {

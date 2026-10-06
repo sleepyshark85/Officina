@@ -83,7 +83,7 @@ only a live run or inspection checks, noted in the last column.
 |---|---|---|
 | CTX-01 | Claude/RequestTests: `The_request_body_matches_the_golden_layout`; Core/PrefixTests: `Tools_given_in_another_order_are_the_same_prefix` | |
 | CTX-02 | Core/RunTests: `Run_context_is_appended_as_an_operator_message_after_the_user_message`; Claude/RequestTests: `The_request_body_matches_the_golden_layout`; App/EndToEndTests: `APP_13_…` | |
-| CTX-03 | Claude/RequestTests: `The_request_body_matches_the_golden_layout`, `Stored_blocks_reach_the_wire_…`; Claude/StreamTests: `Cache_writes_kept_for_an_hour_are_counted_apart_as_they_cost_more` | |
+| CTX-03 | Claude/RequestTests: `The_request_body_matches_the_golden_layout`, `A_prefix_cached_for_less_time_than_the_conversation_is_refused`, `Stored_blocks_reach_the_wire_…`; Claude/StreamTests: `The_settings_name_every_setting_that_shapes_a_request`; Claude/StreamTests: `Cache_writes_kept_for_an_hour_are_counted_apart_as_they_cost_more` | |
 | CTX-04 | Core/PrefixTests: `A_changed_prefix_fails_the_run_with_a_prefix_mismatch_before_any_model_call`; Mcp: `MCP_03_CTX_04_the_tool_list_is_read_once_and_pinned_for_the_conversation`; Core/LongConversationTests: `Context_management_is_part_of_the_prefix`; Core/OutputTests: `The_output_schema_is_part_of_the_prefix_fingerprint` | |
 | CTX-05 | Claude/StreamTests: `Usage_adds_up_every_iteration_of_the_call_and_a_compaction_block_is_kept_raw`; Core/TelemetryTests: `Metrics_count_tokens_by_type_cost_the_cache_hit_ratio_…` | |
 | CTX-06 | Core/ToolLoopTests: `Results_of_one_reply_return_in_one_message_in_call_order_whichever_finishes_first`; Claude/RequestTests: `Tool_results_go_back_as_one_user_message_in_call_order_with_is_error_on_failures` | |
