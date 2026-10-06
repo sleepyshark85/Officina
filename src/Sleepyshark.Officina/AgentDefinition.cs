@@ -163,13 +163,6 @@ public sealed record AgentDefinition
         })
         .Aggregate(text, (redacted, secret) => redacted.Replace(secret, "[redacted]", StringComparison.Ordinal));
 
-    /// <summary>
-    /// <paramref name="text"/> cut to at most <paramref name="length"/> characters, never between the two halves of a
-    /// surrogate pair.
-    /// </summary>
-    internal static string Cut(string text, int length) =>
-        text.Length <= length ? text : text[..(char.IsHighSurrogate(text[length - 1]) ? length - 1 : length)];
-
     /// <summary>A hash of everything in the cached prefix: model settings, instructions, tools and output schema (CTX-04).</summary>
     internal string Fingerprint()
     {

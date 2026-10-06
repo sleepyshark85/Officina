@@ -17,7 +17,11 @@ public interface IToolSource
     /// </summary>
     Task ConnectAsync(CancellationToken cancellationToken);
 
-    /// <summary>What happened to the connection since the last call, oldest first; each change is taken once.</summary>
+    /// <summary>
+    /// What happened to the connection since the last call, oldest first; each change is taken once. Runs take changes
+    /// when they connect and after each batch of tool calls, so a source that several runs share has each change
+    /// recorded in the audit trail of the run that takes it first, which may not be the run whose call met it.
+    /// </summary>
     IReadOnlyList<ToolSourceChange> TakeChanges();
 }
 

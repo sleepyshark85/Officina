@@ -194,13 +194,13 @@ internal sealed class ToolPipeline(AgentDefinition agent, AuditRecorder audit, A
             ? content
             : string.Create(
                 CultureInfo.InvariantCulture,
-                $"{AgentDefinition.Cut(content, MaxResultLength)}\n[Truncated: the result had {content.Length} characters; only the first {MaxResultLength} are shown.]");
+                $"{Strings.Cut(content, MaxResultLength)}\n[Truncated: the result had {content.Length} characters; only the first {MaxResultLength} are shown.]");
         await audit.RecordAsync(AuditKind.ToolEnded, step?.Span, call.Name, call.Id, call.Input, output.IsError ? "error" : "ok", content, duration)
             .ConfigureAwait(false);
         if (step is { } started)
         {
             Telemetry.EndToolCall(
-                started.Span, agent, call, started.Started, blocked ? "blocked" : output.IsError ? "error" : "ok", duration,
+                started.Span, agent, call, started.Started, blocked ? ToolOutcome.Blocked : output.IsError ? ToolOutcome.Error : ToolOutcome.Ok, duration,
                 length, length > MaxResultLength, content);
         }
 

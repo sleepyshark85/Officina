@@ -30,7 +30,10 @@ public enum AuditKind
 
     ApprovalAnswered,
 
-    /// <summary>A tool source connected, failed to connect, or lost its connection; the entry's tool names the source (AUD-01).</summary>
+    /// <summary>
+    /// A tool source connected, failed to connect, or lost its connection; the entry's tool names the source (AUD-01). It
+    /// is recorded by the run that noticed it: with a shared source, not always the run whose call met it.
+    /// </summary>
     ToolSource,
 
     /// <summary>The provider compacted the conversation during a model call (HIST-04): the detail says how much.</summary>
@@ -170,6 +173,6 @@ internal sealed class AuditRecorder(AgentDefinition agent, Conversation conversa
         text = agent.Redact(text);
         return text.Length <= MaxTextLength
             ? text
-            : string.Create(CultureInfo.InvariantCulture, $"{AgentDefinition.Cut(text, MaxTextLength)}… [truncated: {text.Length} characters]");
+            : string.Create(CultureInfo.InvariantCulture, $"{Strings.Cut(text, MaxTextLength)}… [truncated: {text.Length} characters]");
     }
 }

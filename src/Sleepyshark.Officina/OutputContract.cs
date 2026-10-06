@@ -37,7 +37,7 @@ public sealed class OutputContract
     public static OutputContract For(Type type)
     {
         ArgumentNullException.ThrowIfNull(type);
-        var schema = JsonSerializer.SerializeToElement(Tool.Json.GetJsonSchemaAsNode(type, Tool.Exporter));
+        var schema = JsonSerializer.SerializeToElement(TypedJson.Options.GetJsonSchemaAsNode(type, TypedJson.Exporter));
         SchemaValidator.CheckSubset(schema);
         RequireClosed(schema, "");
         return new OutputContract(type, schema);
@@ -54,7 +54,7 @@ public sealed class OutputContract
             var problems = SchemaValidator.Validate(Parsed, reply.RootElement);
             return problems.Count > 0
                 ? (null, $"The output does not match its schema: {string.Join("; ", problems)}")
-                : (reply.RootElement.Deserialize(Type, Tool.Json), null);
+                : (reply.RootElement.Deserialize(Type, TypedJson.Options), null);
         }
 #pragma warning disable CA1031 // Whatever the type's deserialization throws, its constructor's exceptions included, fails the run (principle 8).
         catch (Exception exception)

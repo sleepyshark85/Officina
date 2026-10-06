@@ -3,8 +3,6 @@ using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Schema;
-using System.Text.Json.Serialization;
-using System.Text.Json.Serialization.Metadata;
 
 namespace Sleepyshark.Officina;
 
@@ -126,8 +124,8 @@ public sealed class Tool
         var required = new JsonArray();
         foreach (var parameter in parameters.Where(parameter => parameter.ParameterType != typeof(CancellationToken)))
         {
-            properties[parameter.Name!] = Json.GetJsonSchemaAsNode(parameter.ParameterType, Exporter);
-            Describe(properties[parameter.Name!], parameter.GetCustomAttribute<DescriptionAttribute>());
+            properties[parameter.Name!] = TypedJson.Options.GetJsonSchemaAsNode(parameter.ParameterType, TypedJson.Exporter);
+            TypedJson.Describe(properties[parameter.Name!], parameter.GetCustomAttribute<DescriptionAttribute>());
             if (!parameter.HasDefaultValue)
             {
                 required.Add(parameter.Name);
@@ -141,7 +139,7 @@ public sealed class Tool
         {
             var arguments = parameters.Select(parameter =>
                 parameter.ParameterType == typeof(CancellationToken) ? cancellationToken
-                : input.TryGetProperty(parameter.Name!, out var value) ? value.Deserialize(parameter.ParameterType, Json)
+                : input.TryGetProperty(parameter.Name!, out var value) ? value.Deserialize(parameter.ParameterType, TypedJson.Options)
                 : parameter.HasDefaultValue ? parameter.DefaultValue
                 : null).ToArray();
             var returned = function.Method.Invoke(function.Target, BindingFlags.DoNotWrapExceptions, null, arguments, null);
@@ -165,48 +163,15 @@ public sealed class Tool
                 ToolOutput output => output,
                 string text => new ToolOutput(text),
                 null => new ToolOutput(""),
-                _ => new ToolOutput(JsonSerializer.Serialize(returned, returned.GetType(), Json)),
+                _ => new ToolOutput(JsonSerializer.Serialize(returned, returned.GetType(), TypedJson.Options)),
             };
         }
     }
-
-    /// <summary>
-    /// How typed functions read their input and write their output, and how typed output is read (OUT-01): members in camel case,
-    /// numbers never read from strings, nullable annotations and required members respected, unknown properties refused, enums by name.
-    /// </summary>
-    internal static readonly JsonSerializerOptions Json = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        RespectNullableAnnotations = true,
-        RespectRequiredConstructorParameters = true,
-        UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow,
-        Converters = { new JsonStringEnumConverter() },
-        TypeInfoResolver = new DefaultJsonTypeInfoResolver(),
-    };
-
-    internal static readonly JsonSchemaExporterOptions Exporter = new()
-    {
-        TreatNullObliviousAsNonNullable = true,
-        TransformSchemaNode = (context, node) =>
-        {
-            var provider = context.PropertyInfo?.AttributeProvider ?? (context.PropertyInfo is null ? context.TypeInfo.Type : null);
-            Describe(node, provider?.GetCustomAttributes(typeof(DescriptionAttribute), inherit: false).OfType<DescriptionAttribute>().FirstOrDefault());
-            return node;
-        },
-    };
 
     private static Func<JsonElement, ToolContext, CancellationToken, Task<ToolOutput>> Ignoring(Func<JsonElement, CancellationToken, Task<ToolOutput>> handler)
     {
         ArgumentNullException.ThrowIfNull(handler);
         return (input, _, cancellationToken) => handler(input, cancellationToken);
-    }
-
-    private static void Describe(JsonNode? node, DescriptionAttribute? description)
-    {
-        if (node is JsonObject schema && description is not null)
-        {
-            schema.Insert(0, "description", description.Description);
-        }
     }
 }
 
