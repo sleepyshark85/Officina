@@ -4,8 +4,8 @@ using Sleepyshark.Officina;
 
 namespace BookshopAssistant;
 
-/// <summary>A stored session: its conversation, who started it, and what its replies used.</summary>
-public sealed record StoredSession(Conversation Conversation, string StaffMember, Usage Usage, decimal Cost);
+/// <summary>A stored session: its conversation, who started it, what its replies used, and the text it was stored as.</summary>
+public sealed record StoredSession(Conversation Conversation, string StaffMember, Usage Usage, decimal Cost, string Saved);
 
 /// <summary>A session as <c>/sessions</c> lists it; <paramref name="Stale"/> when it has no summary, or changed since.</summary>
 public sealed record SessionListing(
@@ -26,7 +26,7 @@ public sealed class SessionStore(NpgsqlDataSource database)
         update sessions
         set conversation = $3, input_tokens = $4, output_tokens = $5, cache_read_tokens = $6, cache_write_tokens = $7, cost = $8,
             updated = case when conversation is distinct from $3 then now() else updated end
-        where id = $1 and staff_member = $2
+        where id = $1 and staff_member = $2 and conversation = $9
         """;
 
     private const string LoadSql = """
@@ -43,24 +43,30 @@ public sealed class SessionStore(NpgsqlDataSource database)
         """;
 
     private const string SummarySql = """
-        update sessions set title = $2, summary = $3, changes = $4, summarized = now()
+        update sessions
+        set title = $2, summary = $3, changes = $4, summarized = now(), input_tokens = input_tokens + $5,
+            output_tokens = output_tokens + $6, cache_read_tokens = cache_read_tokens + $7, cache_write_tokens = cache_write_tokens + $8,
+            cost = cost + $9
         where id = $1
         """;
 
     /// <summary>
-    /// Saves the session as it is now. <paramref name="usage"/> and <paramref name="cost"/> replace the stored totals, so a
-    /// failed or missing save loses nothing for good. A <paramref name="created"/> session is updated; a new one is inserted,
-    /// and an id already taken throws rather than overwriting. The database stamps the time, moving it only when the
-    /// conversation changed, so a summary stays current through a save of the totals alone.
+    /// Saves the session as it is now, and returns the text it is stored as. <paramref name="usage"/> and
+    /// <paramref name="cost"/> replace the stored totals, so a failed or missing save loses nothing for good. Without
+    /// <paramref name="previous"/> the session is inserted, and an id already taken throws rather than overwriting. With
+    /// it, the session is updated only if it is still stored as <paramref name="previous"/>: one that another console
+    /// changed since throws, rather than losing that console's messages. The database stamps the time, moving it only when
+    /// the conversation changed, so a summary stays current through a save of the totals alone.
     /// </summary>
-    public async Task SaveAsync(
-        Conversation conversation, string staffMember, Usage usage, decimal cost, bool created, CancellationToken cancellationToken)
+    public async Task<string> SaveAsync(
+        Conversation conversation, string staffMember, Usage usage, decimal cost, string? previous, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(conversation);
-        await using var command = database.CreateCommand(created ? SaveSql : CreateSql);
+        var saved = JsonSerializer.Serialize(conversation);
+        await using var command = database.CreateCommand(previous is null ? CreateSql : SaveSql);
         object[] values =
         [
-            conversation.Id, staffMember, JsonSerializer.Serialize(conversation), usage.Input, usage.Output, usage.CacheRead, usage.CacheWrite, cost,
+            conversation.Id, staffMember, saved, usage.Input, usage.Output, usage.CacheRead, usage.CacheWrite, cost, .. previous is null ? [] : new object[] { previous },
         ];
         foreach (var value in values)
         {
@@ -69,11 +75,17 @@ public sealed class SessionStore(NpgsqlDataSource database)
 
         if (await command.ExecuteNonQueryAsync(cancellationToken) == 0)
         {
-            throw new InvalidOperationException($"Session {conversation.Id} of {staffMember} is not stored.");
+            throw new InvalidOperationException(
+                $"session {conversation.Id} changed elsewhere since this console last saved it, so it was not overwritten. Type /resume {conversation.Id} to go on from what was saved.");
         }
+
+        return saved;
     }
 
-    /// <summary>The session with <paramref name="id"/>, or null when there is none.</summary>
+    /// <summary>
+    /// The session with <paramref name="id"/>, or null when there is none. Throws <see cref="InvalidDataException"/> when its
+    /// conversation cannot be read.
+    /// </summary>
     public async Task<StoredSession?> LoadAsync(string id, CancellationToken cancellationToken)
     {
         await using var command = database.CreateCommand(LoadSql);
@@ -84,11 +96,20 @@ public sealed class SessionStore(NpgsqlDataSource database)
             return null;
         }
 
+        var saved = reader.GetString(0);
+        Conversation conversation;
+        try
+        {
+            conversation = JsonSerializer.Deserialize<Conversation>(saved) ?? throw new JsonException("The conversation is null.");
+        }
+        catch (Exception exception) when (exception is JsonException or ArgumentException or NotSupportedException)
+        {
+            throw new InvalidDataException($"Session {id} cannot be read: {exception.Message}", exception);
+        }
+
         return new StoredSession(
-            JsonSerializer.Deserialize<Conversation>(reader.GetString(0))!,
-            reader.GetString(1),
-            new Usage(reader.GetInt64(2), reader.GetInt64(3), reader.GetInt64(4), reader.GetInt64(5)),
-            reader.GetDecimal(6));
+            conversation, reader.GetString(1), new Usage(reader.GetInt64(2), reader.GetInt64(3), reader.GetInt64(4), reader.GetInt64(5)),
+            reader.GetDecimal(6), saved);
     }
 
     /// <summary>The <paramref name="count"/> sessions updated last, most recent first.</summary>
@@ -108,12 +129,12 @@ public sealed class SessionStore(NpgsqlDataSource database)
         return sessions;
     }
 
-    /// <summary>Stores the summary of session <paramref name="id"/>, as of now.</summary>
-    public async Task SaveSummaryAsync(string id, SessionSummary summary, CancellationToken cancellationToken)
+    /// <summary>Stores the summary of session <paramref name="id"/>, as of now, and adds what it cost to the session's totals.</summary>
+    public async Task SaveSummaryAsync(string id, SessionSummary summary, Usage usage, decimal cost, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(summary);
         await using var command = database.CreateCommand(SummarySql);
-        foreach (var value in new object[] { id, summary.Title, summary.Summary, summary.Changes.ToArray() })
+        foreach (var value in new object[] { id, summary.Title, summary.Summary, summary.Changes.ToArray(), usage.Input, usage.Output, usage.CacheRead, usage.CacheWrite, cost })
         {
             command.Parameters.Add(new NpgsqlParameter { Value = value });
         }

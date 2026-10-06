@@ -49,6 +49,9 @@ public sealed partial class BookshopConsole(
     /// <summary>How many sessions <c>/sessions</c> lists.</summary>
     private const int Listed = 20;
 
+    /// <summary>How many sessions left without a summary one <c>/sessions</c> summarizes; later listings do the rest.</summary>
+    private const int SummariesPerListing = 3;
+
     private readonly ILogger logger = logger ?? NullLogger.Instance;
     private readonly Budgets budgets = budgets ?? Budgets.Default;
 
@@ -203,14 +206,29 @@ public sealed partial class BookshopConsole(
             var listed = await sessions.ListAsync(Listed, CancellationToken.None);
             var summaries = new Dictionary<string, SessionSummary>();
             var stale = listed.Where(each => each.Stale && each.Id != current.Id && summarizer is not null && !unsummarized.Contains(each.Id)).ToList();
-            if (stale.Count > 0)
+            var summarizing = stale.Take(SummariesPerListing).ToList();
+            if (summarizing.Count > 0)
             {
-                await output.WriteLineAsync($"Summarizing {stale.Count} session{(stale.Count == 1 ? "" : "s")} left without a summary…");
+                await output.WriteLineAsync(stale.Count > summarizing.Count
+                    ? $"Summarizing {summarizing.Count} of {stale.Count} sessions left without a summary; /sessions again does more…"
+                    : $"Summarizing {stale.Count} session{(stale.Count == 1 ? "" : "s")} left without a summary…");
             }
 
-            foreach (var left in stale)
+            foreach (var left in summarizing)
             {
-                if (await sessions.LoadAsync(left.Id, CancellationToken.None) is { } stored && await SummarizeAsync(left.Id, stored.Conversation) is { } summary)
+                StoredSession? stored;
+                try
+                {
+                    stored = await sessions.LoadAsync(left.Id, CancellationToken.None);
+                }
+                catch (InvalidDataException exception)
+                {
+                    unsummarized.Add(left.Id);
+                    await output.WriteLineAsync($"[{exception.Message}]");
+                    continue;
+                }
+
+                if (stored is not null && await SummarizeAsync(left.Id, stored.Conversation) is { } summary)
                 {
                     summaries[left.Id] = summary;
                 }
@@ -259,7 +277,7 @@ public sealed partial class BookshopConsole(
         {
             stored = await sessions.LoadAsync(id, CancellationToken.None);
         }
-        catch (Exception exception) when (exception is Npgsql.NpgsqlException or TimeoutException)
+        catch (Exception exception) when (exception is Npgsql.NpgsqlException or TimeoutException or InvalidDataException)
         {
             await output.WriteLineAsync($"The session could not be read: {exception.Message}");
             return null;
@@ -281,7 +299,7 @@ public sealed partial class BookshopConsole(
             CultureInfo.InvariantCulture, $"Resumed session {id}: {stored.Conversation.Messages.Length} messages, ${stored.Cost:0.0000} so far."));
         return new Session(stored.Conversation, stored.StaffMember)
         {
-            Stored = true,
+            Saved = stored.Saved,
             Usage = stored.Usage,
             Cost = stored.Cost,
             Context = stored.Conversation.Messages.LastOrDefault(message => message.Role == Role.Operator)?.Text,
@@ -297,7 +315,10 @@ public sealed partial class BookshopConsole(
         }
     }
 
-    /// <summary>Summarizes a session's conversation and stores the summary; returns it, or null (and says so) on failure.</summary>
+    /// <summary>
+    /// Summarizes a session's conversation and stores the summary, adding its cost to the session's; returns it, or null
+    /// (and says so) on failure.
+    /// </summary>
     private async Task<SessionSummary?> SummarizeAsync(string id, Conversation conversation)
     {
         var result = await summarizer!.RunAsync(SessionSummarizer.Transcript(conversation), SessionSummarizer.Options);
@@ -317,7 +338,7 @@ public sealed partial class BookshopConsole(
 
         try
         {
-            await sessions.SaveSummaryAsync(id, summary, CancellationToken.None);
+            await sessions.SaveSummaryAsync(id, summary, result.Usage, result.Cost, CancellationToken.None);
         }
         catch (Exception exception) when (exception is Npgsql.NpgsqlException or TimeoutException)
         {
@@ -495,8 +516,7 @@ public sealed partial class BookshopConsole(
     {
         try
         {
-            await sessions.SaveAsync(session.Conversation, session.StaffMember, usage, cost, session.Stored, CancellationToken.None);
-            session.Stored = true;
+            session.Saved = await sessions.SaveAsync(session.Conversation, session.StaffMember, usage, cost, session.Saved, CancellationToken.None);
             return true;
         }
         catch (Exception exception) when (exception is Npgsql.NpgsqlException or TimeoutException or InvalidOperationException)
@@ -639,8 +659,8 @@ public sealed partial class BookshopConsole(
         /// <summary>How many tool calls the last clearing line named, so a clearing the provider repeats is shown once.</summary>
         public int? ClearedToolCalls { get; set; }
 
-        /// <summary>Whether the session has a row in the store yet.</summary>
-        public bool Stored { get; set; }
+        /// <summary>The text the session was last stored as; null before its first save.</summary>
+        public string? Saved { get; set; }
 
         /// <summary>Whether the conversation grew since this console took it up, so leaving it needs a new summary.</summary>
         public bool Changed { get; set; }
