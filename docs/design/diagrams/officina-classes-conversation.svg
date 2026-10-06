@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 1000 496" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="officina-classes-conversation-title officina-classes-conversation-desc">
+      <title id="officina-classes-conversation-title">Conversation, messages and events</title>
+      <desc id="officina-classes-conversation-desc">Class diagram showing a Conversation composed of Messages, each composed of ContentBlocks that may hold a ToolCall or ToolResult, and the ConversationAppended run event that hands each appended message to the host.</desc>
+      <defs>
+        <style>@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&amp;family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@400;500;600&amp;family=Noto+Sans+KR:wght@400;500;600&amp;family=Noto+Serif+KR:wght@400&amp;family=Noto+Sans+TC:wght@400;500;600&amp;family=Noto+Serif+TC:wght@400&amp;display=swap');</style>
+        <marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#4f5d75"/></marker>
+        <marker id="arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#eb6c36"/></marker>
+        <marker id="arrow-link" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#2e5aa8"/></marker>
+        <marker id="arrow-open" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polyline points="0 0, 8 3, 0 6" fill="none" stroke="#4f5d75" stroke-width="1.2"/></marker>
+        <marker id="uml-triangle" markerWidth="16" markerHeight="12" refX="15" refY="6" orient="auto" markerUnits="userSpaceOnUse"><polygon points="0 0, 16 6, 0 12" fill="#f5f5f5" stroke="#2d3142" stroke-width="1"/></marker>
+        <marker id="uml-triangle-accent" markerWidth="16" markerHeight="12" refX="15" refY="6" orient="auto" markerUnits="userSpaceOnUse"><polygon points="0 0, 16 6, 0 12" fill="#f5f5f5" stroke="#eb6c36" stroke-width="1"/></marker>
+        <marker id="uml-diamond-filled" markerWidth="18" markerHeight="10" refX="0" refY="5" orient="auto" markerUnits="userSpaceOnUse"><polygon points="0 5, 9 0, 18 5, 9 10" fill="#2d3142"/></marker>
+        <marker id="uml-diamond-hollow" markerWidth="18" markerHeight="10" refX="0" refY="5" orient="auto" markerUnits="userSpaceOnUse"><polygon points="0 5, 9 0, 18 5, 9 10" fill="#f5f5f5" stroke="#2d3142" stroke-width="1"/></marker>
+        <marker id="uml-open" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L9,4 L0,8" fill="none" stroke="#4f5d75" stroke-width="1"/></marker>
+      </defs>
+      <rect width="100%" height="100%" fill="#f5f5f5"/>
+      <path d="M 300,112 H 360" fill="none" stroke="#2d3142" stroke-width="1" marker-start="url(#uml-diamond-filled)"/>
+      <rect x="326" y="99" width="28" height="12" rx="2" fill="#f5f5f5"/>
+      <text x="340" y="108" fill="#2d3142" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" font-weight="600">0..*</text>
+      <path d="M 640,112 H 700" fill="none" stroke="#2d3142" stroke-width="1" marker-start="url(#uml-diamond-filled)"/>
+      <rect x="666" y="99" width="28" height="12" rx="2" fill="#f5f5f5"/>
+      <text x="680" y="108" fill="#2d3142" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" font-weight="600">1..*</text>
+      <path d="M 740,172 V 260" fill="none" stroke="#2d3142" stroke-width="1" marker-start="url(#uml-diamond-filled)"/>
+      <rect x="726" y="239" width="28" height="12" rx="2" fill="#f5f5f5"/>
+      <text x="740" y="248" fill="#2d3142" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" font-weight="600">0..1</text>
+      <path d="M 900,172 V 260" fill="none" stroke="#2d3142" stroke-width="1" marker-start="url(#uml-diamond-filled)"/>
+      <rect x="886" y="239" width="28" height="12" rx="2" fill="#f5f5f5"/>
+      <text x="900" y="248" fill="#2d3142" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" font-weight="600">0..1</text>
+      <path d="M 120,300 V 204" fill="none" stroke="#4f5d75" stroke-width="1" marker-end="url(#uml-open)"/>
+      <rect x="112" y="213" width="16" height="12" rx="2" fill="#f5f5f5"/>
+      <text x="120" y="222" fill="#2d3142" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" font-weight="600">1</text>
+      <path d="M 220,300 V 260 Q 220,252 228,252 H 492 Q 500,252 500,244 V 184" fill="none" stroke="#4f5d75" stroke-width="1" marker-end="url(#uml-open)"/>
+      <rect x="492" y="205" width="16" height="12" rx="2" fill="#f5f5f5"/>
+      <text x="500" y="214" fill="#2d3142" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" font-weight="600">1</text>
+      <path d="M 300,344 H 360" fill="none" stroke="#eb6c36" stroke-width="1" marker-end="url(#uml-triangle-accent)"/>
+      <rect x="40" y="40" width="260" height="164" rx="6" fill="#f5f5f5"/>
+      <rect x="40" y="40" width="260" height="164" rx="6" fill="#eb6c36" fill-opacity="0.04" stroke="#eb6c36" stroke-width="1"/>
+      <rect x="40" y="40" width="260" height="40" rx="6" fill="#eb6c36" fill-opacity="0.10"/>
+      <rect x="40" y="72" width="260" height="8" fill="#eb6c36" fill-opacity="0.10"/>
+      <text x="170" y="66" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Conversation</text>
+      <line x1="40" y1="80" x2="300" y2="80" stroke="#eb6c36" stroke-opacity="0.40" stroke-width="1"/>
+      <text x="56" y="100" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ Id: string</text>
+      <text x="56" y="120" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ Fingerprint: string?</text>
+      <text x="56" y="140" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ Messages: ImmutableArray&lt;Message&gt;</text>
+      <line x1="40" y1="152" x2="300" y2="152" stroke="#eb6c36" stroke-opacity="0.40" stroke-width="1"/>
+      <text x="56" y="172" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">~ Append(message): void</text>
+      <text x="56" y="192" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">~ Bind(fingerprint): void</text>
+      <rect x="360" y="40" width="280" height="144" rx="6" fill="#f5f5f5"/>
+      <rect x="360" y="40" width="280" height="144" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+      <text x="500" y="66" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Message</text>
+      <line x1="360" y1="80" x2="640" y2="80" stroke="#2d3142" stroke-opacity="0.22" stroke-width="1"/>
+      <text x="376" y="100" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ Role: Role</text>
+      <text x="376" y="120" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ Blocks: ImmutableArray&lt;ContentBlock&gt;</text>
+      <text x="376" y="140" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ Text: string</text>
+      <line x1="360" y1="152" x2="640" y2="152" stroke="#2d3142" stroke-opacity="0.22" stroke-width="1"/>
+      <text x="376" y="172" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ Of(role, text): Message</text>
+      <rect x="700" y="40" width="240" height="132" rx="6" fill="#f5f5f5"/>
+      <rect x="700" y="40" width="240" height="132" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+      <text x="820" y="66" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">ContentBlock</text>
+      <line x1="700" y1="80" x2="940" y2="80" stroke="#2d3142" stroke-opacity="0.22" stroke-width="1"/>
+      <text x="716" y="100" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ Text: string?</text>
+      <text x="716" y="120" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ Raw: string?</text>
+      <text x="716" y="140" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ ToolCall: ToolCall?</text>
+      <text x="716" y="160" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ ToolResult: ToolResult?</text>
+      <rect x="670" y="260" width="140" height="112" rx="6" fill="#f5f5f5"/>
+      <rect x="670" y="260" width="140" height="112" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+      <text x="740" y="286" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">ToolCall</text>
+      <line x1="670" y1="300" x2="810" y2="300" stroke="#2d3142" stroke-opacity="0.22" stroke-width="1"/>
+      <text x="686" y="320" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ Id: string</text>
+      <text x="686" y="340" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ Name: string</text>
+      <text x="686" y="360" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ Input: string</text>
+      <rect x="830" y="260" width="140" height="112" rx="6" fill="#f5f5f5"/>
+      <rect x="830" y="260" width="140" height="112" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+      <text x="900" y="286" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">ToolResult</text>
+      <line x1="830" y1="300" x2="970" y2="300" stroke="#2d3142" stroke-opacity="0.22" stroke-width="1"/>
+      <text x="846" y="320" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ CallId: string</text>
+      <text x="846" y="340" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ Content: string</text>
+      <text x="846" y="360" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ IsError: bool</text>
+      <rect x="40" y="300" width="260" height="92" rx="6" fill="#f5f5f5"/>
+      <rect x="40" y="300" width="260" height="92" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+      <text x="170" y="326" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">ConversationAppended</text>
+      <line x1="40" y1="340" x2="300" y2="340" stroke="#2d3142" stroke-opacity="0.22" stroke-width="1"/>
+      <text x="56" y="360" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ Conversation: Conversation</text>
+      <text x="56" y="380" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ Message: Message</text>
+      <rect x="360" y="320" width="200" height="48" rx="6" fill="#f5f5f5"/>
+      <rect x="360" y="320" width="200" height="48" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+      <text x="460" y="338" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">«abstract» · 11 kinds</text>
+      <text x="460" y="354" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle" font-style="italic">RunEvent</text>
+      <line x1="40" y1="432" x2="960" y2="432" stroke="#2d3142" stroke-opacity="0.10" stroke-width="0.8"/>
+      <text x="40" y="448" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.18em">LEGEND · RELATIONSHIPS</text>
+      <line x1="40" y1="468" x2="68" y2="468" stroke="#2d3142" stroke-width="1.2" marker-end="url(#uml-triangle)"/>
+      <text x="76" y="472" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Inheritance</text>
+      <line x1="156" y1="468" x2="184" y2="468" stroke="#2d3142" stroke-width="1.2" stroke-dasharray="5,4" marker-end="url(#uml-triangle)"/>
+      <text x="192" y="472" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Realization</text>
+      <line x1="272" y1="468" x2="300" y2="468" stroke="#2d3142" stroke-width="1.2" marker-start="url(#uml-diamond-filled)"/>
+      <text x="308" y="472" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Composition · owns</text>
+      <line x1="420" y1="468" x2="448" y2="468" stroke="#2d3142" stroke-width="1.2" marker-start="url(#uml-diamond-hollow)"/>
+      <text x="456" y="472" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Aggregation · has</text>
+      <line x1="564" y1="468" x2="592" y2="468" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#uml-open)"/>
+      <text x="600" y="472" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Association</text>
+      <line x1="680" y1="468" x2="708" y2="468" stroke="#4f5d75" stroke-width="1.2" stroke-dasharray="5,4" marker-end="url(#uml-open)"/>
+      <text x="716" y="472" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Dependency · uses</text>
+
+    </svg>
