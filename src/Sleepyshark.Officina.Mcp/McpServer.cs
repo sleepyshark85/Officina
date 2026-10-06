@@ -63,11 +63,12 @@ public sealed class McpServer
 }
 
 /// <summary>
-/// A tool of an MCP server that the host allows the agent (MCP-03), and how it runs (MCP-02): read or write, by default
-/// as the server's <c>readOnlyHint</c> annotation says (a write when it says nothing), and whether each call needs approval.
-/// Annotations are hints the server gives, not guarantees: for a server it does not trust, the host sets the kind itself.
+/// A tool of an MCP server that the host allows the agent (MCP-03), and how it runs (MCP-02): read or write, and whether
+/// each call needs approval. A tool is a write unless the host marks it read: the server's <c>readOnlyHint</c> annotation
+/// is a hint, not a guarantee, and a server that wrongly calls a write read-only would let it run alongside other calls,
+/// and even when its attempt could not be audited.
 /// </summary>
 /// <param name="Name">The tool's name on the server.</param>
-/// <param name="Kind">Read or write; null to follow the server's annotation.</param>
+/// <param name="Kind">Read or write; a write unless the host says otherwise.</param>
 /// <param name="NeedsApproval">Whether each call needs the approver's approval (TOOL-04).</param>
-public sealed record AllowedTool(string Name, ToolKind? Kind = null, bool NeedsApproval = false);
+public sealed record AllowedTool(string Name, ToolKind Kind = ToolKind.Write, bool NeedsApproval = false);

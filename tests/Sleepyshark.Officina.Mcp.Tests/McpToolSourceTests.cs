@@ -80,7 +80,7 @@ public sealed class McpToolSourceTests
     }
 
     [Fact]
-    public async Task MCP_02_MCP_03_only_allowed_tools_appear_named_by_server_and_tool_and_marked_by_the_host_or_the_annotations()
+    public async Task MCP_02_MCP_03_only_allowed_tools_appear_named_by_server_and_tool_and_are_writes_unless_the_host_marks_them_read()
     {
         using var fake = HttpServer(new FakeMcpTool("delete_everything", _ => "gone"));
         var server = HttpServerAt(fake);
@@ -90,7 +90,8 @@ public sealed class McpToolSourceTests
             server, [new("echo", ToolKind.Write, NeedsApproval: true), new("upper", ToolKind.Read)], TestContext.Current.CancellationToken);
 
         Assert.Equal(["fake__echo", "fake__upper"], source.Tools.Select(tool => tool.Name));
-        Assert.Equal([ToolKind.Read, ToolKind.Write], source.Tools.Select(tool => tool.Kind));
+        // The fake server marks echo read-only; the annotation is not trusted.
+        Assert.Equal([ToolKind.Write, ToolKind.Write], source.Tools.Select(tool => tool.Kind));
         Assert.Equal([ToolKind.Write, ToolKind.Read], overridden.Tools.Select(tool => tool.Kind));
         Assert.Equal([true, false], overridden.Tools.Select(tool => tool.NeedsApproval));
         Assert.All(source.Tools, tool => Assert.Same(source, tool.Source));
@@ -150,7 +151,7 @@ public sealed class McpToolSourceTests
     [Fact]
     public async Task MCP_02_an_mcp_tool_goes_through_validation_approval_audit_truncation_and_events()
     {
-        using var fake = HttpServer(new FakeMcpTool("big", _ => new string('x', 70_000)) { ReadOnly = true });
+        using var fake = HttpServer(new FakeMcpTool("big", _ => new string('x', 70_000)));
         var server = HttpServerAt(fake);
         await using var source = await McpToolSource.ConnectAsync(
             server, [new("upper", NeedsApproval: true), new("big")], TestContext.Current.CancellationToken);

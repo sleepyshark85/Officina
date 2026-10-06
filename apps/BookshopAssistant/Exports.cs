@@ -6,8 +6,8 @@ namespace BookshopAssistant;
 /// <summary>
 /// The export tools (APP-12): the reference filesystem MCP server, run in Docker over stdio by the compose file's
 /// <c>filesystem</c> service, which sees only the <c>exports</c> folder. The allow-list holds what an export needs:
-/// writing a file, which needs approval, and listing the folder. MCP annotations are only hints from the server, so the
-/// application sets each tool's kind itself, as a host should for any server it does not trust.
+/// writing a file, which needs approval, and listing the folder. MCP annotations are not trusted (MCP-02): every tool is a
+/// write unless the host marks it read, so the application marks the listing read.
 /// </summary>
 public static class Exports
 {

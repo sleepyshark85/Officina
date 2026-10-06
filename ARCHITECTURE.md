@@ -12,7 +12,7 @@ contracts and flows only; how they are coded is left to the implementation.
 | **Cache-stable** | The request's prefix never changes within a conversation, and history is append-only. | CTX, HIST |
 | **Structured control** | Stop reasons, tool calls and validated output decide what happens next, never free text. | AGT-03 |
 | **Host owns state and policy** | The core persists nothing and decides no policy on its own; the host supplies storage, approval and limits. | AGT-06, GEN-01 |
-| **Accountable** | Every important action leaves a durable audit entry; a write never happens unrecorded. | AUD |
+| **Accountable** | Every important action leaves a durable audit entry; with an audit sink, a write never happens unrecorded. | AUD |
 | **Observable** | Every run is a trace, every model and tool call a span, with tokens, cache use, cost and outcome; audit entries point to their trace. | EVT, AUD-03 |
 | **Opt-in parts** | Tools, memory, MCP, typed output, approval and budgets are each optional and cost nothing when absent. | GEN-02 |
 
@@ -254,7 +254,7 @@ Writes are write-tool calls, so they are logged and can need approval. Where the
 model is trained on, the adapter presents memory as that tool.
 
 **MCP.** An MCP tool source connects to a server, reads its tool list once, filters it by the host's allow-list, names
-each tool by server and tool, and marks it read or write. MCP tools then go through the same pipeline as any tool. A
+each tool by server and tool, and marks it a write unless the host marks it read. MCP tools then go through the same pipeline as any tool. A
 server that fails mid-run returns error results; one that is down at the start fails the run.
 
 **Observability.** Two views of the same run, for two purposes, joined by the trace:

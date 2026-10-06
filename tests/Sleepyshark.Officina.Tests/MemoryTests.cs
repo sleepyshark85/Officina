@@ -65,7 +65,7 @@ public sealed class MemoryTests : IDisposable
 
         Assert.Equal(
             [
-                "Here're the files and directories up to 2 levels deep in /memories, excluding hidden items and node_modules:\n0B\t/memories",
+                "Here're the files and directories up to 2 levels deep in /memories, excluding hidden items:\n0B\t/memories",
                 "File created successfully at: /memories/prefs.md",
                 "The memory file has been edited. A snippet of /memories/prefs.md with line numbers:\n     1\tPrices: with tax.\n     2\tTone: brief.\n     3\t",
                 "The file /memories/prefs.md has been edited.",
@@ -73,7 +73,7 @@ public sealed class MemoryTests : IDisposable
                 "Here's the content of /memories/prefs.md with line numbers:\n     2\tPrices: with tax.\n     3\tTone: brief.",
                 "File created successfully at: /memories/customers/ana/notes.md",
                 "Successfully renamed /memories/customers to /memories/people",
-                "Here're the files and directories up to 2 levels deep in /memories, excluding hidden items and node_modules:\n" +
+                "Here're the files and directories up to 2 levels deep in /memories, excluding hidden items:\n" +
                 "49B\t/memories\n12B\t/memories/people\n12B\t/memories/people/ana\n37B\t/memories/prefs.md",
                 "Successfully deleted /memories/people",
                 "The path /memories/people/ana/notes.md does not exist. Please provide a valid path.",
