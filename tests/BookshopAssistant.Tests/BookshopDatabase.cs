@@ -22,8 +22,8 @@ public sealed class BookshopDatabase : IAsyncLifetime
     public const string Password = "shelf-demo-41";
 
     /// <summary>
-    /// Whether the database tests run here: on Linux, always in CI (where missing Docker fails them rather than skipping
-    /// silently), elsewhere when Docker is found.
+    /// Whether the database tests run here: only on Linux; in CI always (where missing Docker fails them rather than
+    /// skipping silently), elsewhere on Linux when Docker is found.
     /// </summary>
     public static bool Available =>
         OperatingSystem.IsLinux()

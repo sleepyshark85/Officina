@@ -11,7 +11,8 @@ namespace Sleepyshark.Officina;
 /// Runs one reply's tool calls: find the tool, validate the input, ask approval if needed, record the attempt, invoke,
 /// truncate. Reads run concurrently; a write waits for the calls before it and runs alone; approvals are asked one at a
 /// time, in call order. Every call gets exactly one result, in call order, and every failure is an error result, never
-/// an exception. Events go to <paramref name="events"/> as they happen, and each started call gets a span.
+/// an exception. Events go to <paramref name="events"/> as they happen; each started call gets a span under the run's,
+/// and each handler gets the run's <see cref="ToolContext"/>.
 /// </summary>
 internal sealed class ToolPipeline(RunScope run, ChannelWriter<RunEvent> events)
 {

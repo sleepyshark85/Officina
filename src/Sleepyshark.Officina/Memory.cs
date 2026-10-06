@@ -80,7 +80,7 @@ public static class MemoryTool
     /// <summary>The most characters a memory file may hold; a command that would exceed it is refused.</summary>
     public const int MaxFileLength = 50_000;
 
-    /// <summary>The most characters a <c>view</c> shows; ranges show the rest.</summary>
+    /// <summary>The most characters a <c>view</c> shows, as the model's tool description says; ranges show the rest.</summary>
     internal const int MaxViewLength = 16_000;
 
     /// <summary>The memory tool over <paramref name="store"/>; runs that have it need a memory scope.</summary>

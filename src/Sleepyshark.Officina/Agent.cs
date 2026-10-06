@@ -4,7 +4,7 @@ using System.Text.Json;
 
 namespace Sleepyshark.Officina;
 
-/// <summary>What an agent is: a model and instructions, and optionally tools. Immutable, so runs may share it.</summary>
+/// <summary>What an agent is: a model and instructions, and optionally tools. Immutable, so runs may share it at once.</summary>
 public sealed record Agent
 {
     public required IModel Model
@@ -40,7 +40,7 @@ public sealed record Agent
     /// <summary>Answers approval requests; without one, runs are unattended and calls needing approval are denied.</summary>
     public IApprover? Approver { get; init; }
 
-    /// <summary>Where the audit trail goes; without one there is no trail.</summary>
+    /// <summary>Where the audit trail goes; without one there is no trail, and nothing else changes.</summary>
     public IAuditSink? AuditSink { get; init; }
 
     /// <summary>

@@ -7,8 +7,8 @@ namespace Sleepyshark.Officina.Tests;
 /// shrunk, and the failure reports the shrunk case and its seed.
 /// </summary>
 /// <remarks>
-/// To replay one case, set <c>OFFICINA_SEED</c> to the seed a failure reports. CsCheck's own <c>CsCheck_Seed</c> does not
-/// apply, as each case passes its seed explicitly.
+/// To replay one case, set <c>OFFICINA_SEED</c> to the seed a failure reports: only that case runs. CsCheck's own
+/// <c>CsCheck_Seed</c> does not apply, as each case passes its seed explicitly.
 /// </remarks>
 internal static class Property
 {

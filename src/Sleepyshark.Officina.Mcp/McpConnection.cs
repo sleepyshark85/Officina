@@ -5,8 +5,8 @@ namespace Sleepyshark.Officina.Mcp;
 
 /// <summary>
 /// A connection to one MCP server: JSON-RPC 2.0 over a transport, with only what a tool source needs: <c>initialize</c>,
-/// <c>ping</c>, <c>tools/list</c> and <c>tools/call</c>. A transport failure loses the connection for good; the source
-/// connects anew at the next run.
+/// <c>ping</c>, <c>tools/list</c> and <c>tools/call</c>. A transport failure loses the connection for good: every later
+/// request fails, and the source connects anew at the next run.
 /// </summary>
 internal abstract class McpConnection(McpServer server, Action<string> lost) : IAsyncDisposable
 {

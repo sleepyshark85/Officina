@@ -9,10 +9,10 @@ namespace Sleepyshark.Officina;
 /// </summary>
 public sealed record Budget
 {
-    /// <summary>The most the run may spend, in US dollars; needs a model with a price.</summary>
+    /// <summary>The most the run may spend, in US dollars at the model's price; needs a model with a price.</summary>
     public decimal? Cost { get; init; }
 
-    /// <summary>The most tokens the run may use, of every kind.</summary>
+    /// <summary>The most tokens the run may use: input, output, cache reads and writes.</summary>
     public long? Tokens { get; init; }
 
     public int? ModelCalls { get; init; }

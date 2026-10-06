@@ -9,7 +9,10 @@ namespace Sleepyshark.Officina;
 /// </summary>
 public interface IModel
 {
-    /// <summary>The model and every setting that shapes its requests, as text that changes when any of them does.</summary>
+    /// <summary>
+/// The model and every setting that shapes its requests, as text that changes when any of them does: it is part of the
+/// prefix fingerprint.
+/// </summary>
     string Settings { get; }
 
     /// <summary>The provider, as telemetry names it (<c>gen_ai.provider.name</c>), such as <c>anthropic</c>.</summary>
@@ -36,6 +39,7 @@ public interface IModel
 /// <param name="Messages">The conversation, with the run's pending messages.</param>
 /// <param name="MaxOutputTokens">
 /// The most output tokens the remaining budget allows, if it limits them; the model uses the lower of this and its own.
+/// Not part of the prefix.
 /// </param>
 public sealed record ModelRequest(RequestPrefix Prefix, ImmutableArray<Message> Messages, int? MaxOutputTokens = null);
 
