@@ -12,10 +12,15 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Configuration.Json" />
     <PackageReference Include="Npgsql" />
     <!-- The exporter is the host's choice (EVT-02): OpenTelemetry to the dashboard in compose.yaml (APP-20). -->
     <PackageReference Include="OpenTelemetry" />
     <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="appsettings.json;appsettings.Local.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

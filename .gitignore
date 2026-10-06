@@ -5,3 +5,5 @@ TestResults/
 .vs/
 .claude/
 data/
+appsettings.Local.json
+.env

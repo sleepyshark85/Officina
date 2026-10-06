@@ -16,12 +16,12 @@ offline tests (TEST-09): see [What was checked live](#what-was-checked-live).
 |---|---|---|
 | 0.1 | `cd apps/BookshopAssistant` then `./start.sh` (or `pwsh -File start.ps1`) | `postgres`, `dashboard` and `filesystem` (the export server, APP-12) healthy, and their addresses. The schema and seed (480 books, 40 customers, 80 orders) are created on first start; `docker compose down -v` resets them. |
 | 0.2 | Open http://localhost:18888 | The telemetry dashboard (APP-20): Traces, Metrics and Structured logs, empty for now. |
-| 0.3 | `export BOOKSHOP_CONNECTION_STRING="Host=localhost;Port=5432;Username=bookshop;Password=shelf-demo-41;Database=bookshop"` and `export ANTHROPIC_API_KEY=…` | |
+| 0.3 | Put the API key in `appsettings.Local.json` beside `appsettings.json`: `{ "AnthropicApiKey": "sk-ant-…" }`, or run `ant auth login` | |
 | 0.4 | `dotnet run` | `Bookshop Assistant. Type /help for commands.` and `Who is using the assistant? Your name:` |
 
-If a port is taken, set `BOOKSHOP_DB_PORT` (and the connection string), `BOOKSHOP_DASHBOARD_PORT` with
-`BOOKSHOP_DASHBOARD_URL`, `BOOKSHOP_OTLP_PORT` with `OTEL_EXPORTER_OTLP_ENDPOINT`, or `BOOKSHOP_EXPORTS_PORT` with
-`BOOKSHOP_EXPORTS_URL`, as `compose.yaml` explains.
+If a port is taken, set another in a `.env` file beside `compose.yaml` (`BOOKSHOP_DB_PORT`, `BOOKSHOP_DASHBOARD_PORT`,
+`BOOKSHOP_OTLP_PORT` or `BOOKSHOP_EXPORTS_PORT`) and change the matching setting (`Database`, `DashboardUrl`,
+`OtlpEndpoint` or `ExportsUrl`) in `appsettings.Local.json`, as `compose.yaml` explains.
 
 ## 1. Run context ✓ (APP-13)
 
@@ -112,7 +112,7 @@ If a port is taken, set `BOOKSHOP_DB_PORT` (and the connection string), `BOOKSHO
 | `What was the total of the order you placed for Alice?` | £13.20, from the conversation; the status line shows most of the input read from the cache (94% when checked live). |
 | `Cancel order 81.` then `y` | `? cancel_order needs your approval.` with `{"orderId":81}`, then `< cancel_order: ok`: the order is cancelled and its copies go back to stock, which undoes step 3. |
 | `/new` | `Session <id> summarized: …` for the session left, then `New session <id>.` |
-| `/quit`, then `BOOKSHOP_REPLY_BUDGET=0.01 dotnet run`, `Sam` | `Reply budget: $0.01.` Each reply may now spend one cent. An invalid value stops the start with a message. |
+| `/quit`, set `"ReplyBudget": 0.01` in `appsettings.Local.json`, then `dotnet run`, `Sam` | `Reply budget: $0.01.` Each reply may now spend one cent. An invalid value stops the start with a message. Remove the setting after this step. |
 | `Compare the average price of fantasy and mystery books in stock.` | A step or two, then `[Stopped: this reply has reached its budget of $0.01.]` and the status line. The session goes on; `/quit`. |
 
 ## 13. Long conversations in demo mode (APP-17, HIST-01…04, APP-10)

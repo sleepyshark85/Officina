@@ -13,10 +13,9 @@ if ($LASTEXITCODE -ne 0) {
 docker compose up --detach --wait --build
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-$db = if ($env:BOOKSHOP_DB_PORT) { $env:BOOKSHOP_DB_PORT } else { 5432 }
-$dashboard = if ($env:BOOKSHOP_DASHBOARD_PORT) { $env:BOOKSHOP_DASHBOARD_PORT } else { 18888 }
-$exports = if ($env:BOOKSHOP_EXPORTS_PORT) { $env:BOOKSHOP_EXPORTS_PORT } else { 18800 }
+# The host port each service got, as compose.yaml and .env set it.
+function Port($service, $port) { ((docker compose port $service $port) -split ':')[-1] }
 Write-Host ''
-Write-Host "Database:      localhost:$db"
-Write-Host "Dashboard:     http://localhost:$dashboard"
-Write-Host "Export server: http://localhost:$exports/mcp"
+Write-Host "Database:      localhost:$(Port postgres 5432)"
+Write-Host "Dashboard:     http://localhost:$(Port dashboard 18888)"
+Write-Host "Export server: http://localhost:$(Port filesystem 8000)/mcp"

@@ -12,7 +12,9 @@ fi
 # --build rebuilds the export server's image only when its Dockerfile changed.
 docker compose up --detach --wait --build
 
+# The host port each service got, as compose.yaml and .env set it.
+port() { address=$(docker compose port "$1" "$2"); echo "${address##*:}"; }
 echo
-echo "Database:      localhost:${BOOKSHOP_DB_PORT:-5432}"
-echo "Dashboard:     http://localhost:${BOOKSHOP_DASHBOARD_PORT:-18888}"
-echo "Export server: http://localhost:${BOOKSHOP_EXPORTS_PORT:-18800}/mcp"
+echo "Database:      localhost:$(port postgres 5432)"
+echo "Dashboard:     http://localhost:$(port dashboard 18888)"
+echo "Export server: http://localhost:$(port filesystem 8000)/mcp"

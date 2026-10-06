@@ -1,11 +1,6 @@
 // Bookshop Assistant, the reference application: a console chatbot for bookshop staff over the PostgreSQL database in
-// compose.yaml. Needs BOOKSHOP_CONNECTION_STRING and ANTHROPIC_API_KEY. Telemetry goes over OTLP to the compose file's
-// dashboard (OTEL_EXPORTER_OTLP_ENDPOINT, default http://localhost:4317); /audit links to BOOKSHOP_DASHBOARD_URL
-// (default http://localhost:18888). Exports go to the exports folder through the compose file's filesystem MCP server
-// (BOOKSHOP_EXPORTS_URL, default http://localhost:18800/mcp). start.sh starts all three.
-// Options: --demo or BOOKSHOP_DEMO=1 compacts and clears early enough to see in a short session; BOOKSHOP_DATA holds
-// each staff member's memory (default ./data); BOOKSHOP_TELEMETRY_CONTENT=1 puts message text and tool inputs and
-// results in traces, for debugging; BOOKSHOP_REPLY_BUDGET (US dollars) lowers each reply's budget, to show a budget stop.
+// compose.yaml, with telemetry to the compose file's dashboard and exports through its filesystem MCP server; start.sh
+// starts all three. Its settings are in appsettings.json. --demo compacts and clears early enough to see in a short session.
 using System.Globalization;
 using BookshopAssistant;
 using Microsoft.Extensions.Logging;
@@ -19,56 +14,52 @@ using Sleepyshark.Officina;
 using Sleepyshark.Officina.Claude;
 using Sleepyshark.Officina.Mcp;
 
-var connectionString = Environment.GetEnvironmentVariable("BOOKSHOP_CONNECTION_STRING");
-if (string.IsNullOrWhiteSpace(connectionString))
+BookshopSettings settings;
+try
 {
-    await Console.Error.WriteLineAsync(
-        "Set BOOKSHOP_CONNECTION_STRING, for the compose database: Host=localhost;Port=5432;Username=bookshop;Password=shelf-demo-41;Database=bookshop");
+    settings = BookshopSettings.Load(AppContext.BaseDirectory);
+}
+catch (InvalidDataException exception)
+{
+    await Console.Error.WriteLineAsync(exception.Message);
     return 1;
 }
 
-// A lower budget per reply, in US dollars, to show a budget stop.
-decimal? replyBudget = null;
-if (Environment.GetEnvironmentVariable("BOOKSHOP_REPLY_BUDGET") is { Length: > 0 } budgetText)
+if (settings.ReplyBudget is { } replyBudget)
 {
-    if (!decimal.TryParse(budgetText, NumberStyles.Number, CultureInfo.InvariantCulture, out var budget) || budget <= 0)
-    {
-        await Console.Error.WriteLineAsync($"BOOKSHOP_REPLY_BUDGET must be a positive amount in US dollars, such as 0.01, not \"{budgetText}\".");
-        return 1;
-    }
-
-    replyBudget = budget;
-    await Console.Out.WriteLineAsync(string.Create(CultureInfo.InvariantCulture, $"Reply budget: ${budget}."));
+    await Console.Out.WriteLineAsync(string.Create(CultureInfo.InvariantCulture, $"Reply budget: ${replyBudget}."));
 }
 
-var dashboard = new Uri(Environment.GetEnvironmentVariable("BOOKSHOP_DASHBOARD_URL") is { Length: > 0 } url ? url : "http://localhost:18888");
 var resource = ResourceBuilder.CreateDefault().AddService("bookshop-assistant");
 using var tracing = Sdk.CreateTracerProviderBuilder()
     .SetResourceBuilder(resource)
     .AddSource(Telemetry.SourceName, BookshopConsole.SourceName)
-    .AddOtlpExporter()
+    .AddOtlpExporter(options => options.Endpoint = settings.OtlpEndpoint)
     .Build();
 using var metrics = Sdk.CreateMeterProviderBuilder()
     .SetResourceBuilder(resource)
     .AddMeter(Telemetry.SourceName)
-    .AddOtlpExporter((_, reader) => reader.PeriodicExportingMetricReaderOptions.ExportIntervalMilliseconds = 5_000)
+    .AddOtlpExporter((exporter, reader) =>
+    {
+        exporter.Endpoint = settings.OtlpEndpoint;
+        reader.PeriodicExportingMetricReaderOptions.ExportIntervalMilliseconds = 5_000;
+    })
     .Build();
 using var logging = LoggerFactory.Create(builder => builder.AddOpenTelemetry(options =>
 {
     options.SetResourceBuilder(resource);
-    options.AddOtlpExporter();
+    options.AddOtlpExporter(exporter => exporter.Endpoint = settings.OtlpEndpoint);
 }));
 
-var demo = args.Contains("--demo") || Environment.GetEnvironmentVariable("BOOKSHOP_DEMO") == "1";
-await using var database = NpgsqlDataSource.Create(connectionString);
-using var model = BookshopAgent.Model(demo);
-using var summaryModel = new ClaudeModel { Model = ClaudeModel.Opus55, Effort = ClaudeEffort.Low, MaxOutputTokens = 4_000 };
+var demo = args.Contains("--demo") || settings.Demo;
+await using var database = NpgsqlDataSource.Create(settings.Database);
+using var model = BookshopAgent.Model(demo, settings.AnthropicApiKey);
+using var summaryModel = new ClaudeModel(settings.AnthropicApiKey) { Model = ClaudeModel.Opus55, Effort = ClaudeEffort.Low, MaxOutputTokens = 4_000 };
 var audit = new AuditTable(database);
-var data = Environment.GetEnvironmentVariable("BOOKSHOP_DATA") is { Length: > 0 } folder ? folder : "data";
-var memory = new FileMemoryStore(Path.Combine(data, "memory"));
+var memory = new FileMemoryStore(Path.Combine(settings.DataFolder, "memory"));
 var console = new BookshopConsole(
-    Console.In, Console.Out, TimeProvider.System, echoInput: Console.IsInputRedirected, audit, new SessionStore(database), dashboard,
-    logging.CreateLogger<BookshopConsole>(), replyBudget is { } reply ? Budgets.Default with { Reply = reply } : null, memory);
+    Console.In, Console.Out, TimeProvider.System, echoInput: Console.IsInputRedirected, audit, new SessionStore(database), settings.DashboardUrl,
+    logging.CreateLogger<BookshopConsole>(), settings.ReplyBudget is { } reply ? Budgets.Default with { Reply = reply } : null, memory);
 
 // Ctrl+C stops the reply in progress and the session goes on; with no reply in progress, it quits. No exception may
 // escape here, as it would end the process.
@@ -86,27 +77,25 @@ Console.CancelKeyPress += (_, press) =>
     }
 };
 
-// The export server, which start.sh runs from the compose file.
-var exportsUrl = new Uri(Environment.GetEnvironmentVariable("BOOKSHOP_EXPORTS_URL") is { Length: > 0 } exportsText ? exportsText : "http://localhost:18800/mcp");
 McpToolSource exports;
 try
 {
-    exports = await Exports.ConnectAsync(Exports.Server(exportsUrl), CancellationToken.None);
+    exports = await Exports.ConnectAsync(Exports.Server(settings.ExportsUrl), CancellationToken.None);
 }
 catch (Exception exception) when (exception is IOException or InvalidOperationException)
 {
     await Console.Error.WriteLineAsync(
-        $"The export server at {exportsUrl} could not be reached: {exception.Message}\n"
-        + "Start it with ./start.sh (or start.ps1) in the application's folder, or set BOOKSHOP_EXPORTS_URL.");
+        $"The export server at {settings.ExportsUrl} could not be reached: {exception.Message}\n"
+        + "Start it with ./start.sh (or pwsh -File start.ps1) in the application's folder, or change ExportsUrl in appsettings.json.");
     return 1;
 }
 
 await using var stopExports = exports;
 
-var password = new NpgsqlConnectionStringBuilder(connectionString).Password;
+var password = new NpgsqlConnectionStringBuilder(settings.Database).Password;
 var agent = BookshopAgent.Create(
     model, new BookshopTools(database), memory, console, audit, password is null ? [] : [password], TimeProvider.System, exports.Tools, demo);
-if (Environment.GetEnvironmentVariable("BOOKSHOP_TELEMETRY_CONTENT") == "1")
+if (settings.TelemetryContent)
 {
     agent = agent with { TelemetryContent = true };
 }

@@ -1,5 +1,7 @@
 # Bookshop Assistant's database (APP-04), telemetry dashboard (APP-20, D11) and export server (APP-12). Start them with
 # ./start.sh (or start.ps1); the schema, seed, audit and sessions tables in database/ are created on the database's first start only.
+# If a port is taken, set another in a .env file beside this one (git ignores it), such as BOOKSHOP_DB_PORT=5433, and
+# change the matching setting in appsettings.json.
 # `docker compose down -v` deletes the data, so the next start seeds afresh.
 services:
   postgres:
@@ -10,7 +12,6 @@ services:
       POSTGRES_PASSWORD: shelf-demo-41
       POSTGRES_DB: bookshop
     ports:
-      # Another port if 5432 is taken: BOOKSHOP_DB_PORT=5433 docker compose up -d --wait
       - "${BOOKSHOP_DB_PORT:-5432}:5432"
     volumes:
       - ./database:/docker-entrypoint-initdb.d:ro
@@ -22,8 +23,7 @@ services:
       retries: 15
 
   # The standalone .NET Aspire dashboard: traces, metrics and logs, kept in memory while it runs. Open
-  # http://localhost:18888; the application sends OTLP to localhost:4317. Other ports if these are taken:
-  # BOOKSHOP_DASHBOARD_PORT, BOOKSHOP_OTLP_PORT, and then BOOKSHOP_DASHBOARD_URL and OTEL_EXPORTER_OTLP_ENDPOINT for the app.
+  # http://localhost:18888; the application sends OTLP to localhost:4317. Ports: BOOKSHOP_DASHBOARD_PORT, BOOKSHOP_OTLP_PORT.
   dashboard:
     image: mcr.microsoft.com/dotnet/aspire-dashboard:13.6
     environment:
@@ -34,8 +34,7 @@ services:
       - "${BOOKSHOP_OTLP_PORT:-4317}:18889"
 
   # The reference filesystem MCP server (APP-12), over Streamable HTTP at http://localhost:18800/mcp, which sees only
-  # the exports folder. It has no sign-in, so it listens on this machine only. Another port if this one is taken:
-  # BOOKSHOP_EXPORTS_PORT, and then BOOKSHOP_EXPORTS_URL for the app.
+  # the exports folder. It has no sign-in, so it listens on this machine only. Port: BOOKSHOP_EXPORTS_PORT.
   filesystem:
     build: ./exports-server
     ports:
