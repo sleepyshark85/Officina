@@ -53,6 +53,16 @@ public class ToolTests(BookshopDatabase database) : IClassFixture<BookshopDataba
     }
 
     [DatabaseFact]
+    public async Task Search_text_is_taken_literally_so_a_wildcard_or_backslash_matches_only_itself()
+    {
+        Assert.Empty(Ok(await Tools.SearchBooksAsync(title: "_", cancellationToken: Ct)).EnumerateArray());
+        Assert.Empty(Ok(await Tools.SearchBooksAsync(author: "%", cancellationToken: Ct)).EnumerateArray());
+        Assert.Empty(Ok(await Tools.FindCustomerAsync("_", Ct)).EnumerateArray());
+        Assert.Empty(Ok(await Tools.FindCustomerAsync(@"alice\", Ct)).EnumerateArray());
+        Assert.Single(Ok(await Tools.FindCustomerAsync("MARTIN@example", Ct)).EnumerateArray());
+    }
+
+    [DatabaseFact]
     public async Task A_broad_search_returns_10_to_15k_tokens_within_the_result_limit()
     {
         var output = await Tools.SearchBooksAsync(limit: BookshopTools.MaxSearchResults, cancellationToken: Ct);

@@ -32,6 +32,13 @@ compaction, against its own database in Docker; it needs `ANTHROPIC_API_KEY` and
 OFFICINA_LIVE_TESTS=1 dotnet test tests/BookshopAssistant.Tests --filter Category=Live --logger "console;verbosity=detailed"
 ```
 
+The search benchmark is skipped too. It loads a million books and 200,000 customers into its own database, about a
+minute, and prints each search's median time; each must stay under 50 ms:
+
+```sh
+OFFICINA_BENCHMARK=1 dotnet test tests/BookshopAssistant.Tests --filter Category=Benchmark --logger "console;verbosity=detailed"
+```
+
 | Path | Holds |
 |---|---|
 | `src/Sleepyshark.Officina` | The core, with built-in file and in-memory memory stores and a JSON-lines audit sink, used only when the host picks them; depends on the .NET base library and the DI abstractions only |

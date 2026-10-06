@@ -1,5 +1,8 @@
 -- The bookshop schema (APP-04). PostgreSQL runs this on the container's first start, before 02-seed.sql.
 
+-- Trigram indexes let the substring searches (LIKE '%text%') use an index.
+create extension if not exists pg_trgm;
+
 create table genres (
     id   integer generated always as identity primary key,
     name text not null unique
@@ -50,3 +53,12 @@ create table order_lines (
 create index on books (genre_id);
 create index on books (author_id);
 create index on orders (customer_id);
+
+-- The book search's order, so a search stops at its first matches instead of sorting every book.
+create index books_by_price on books (price, title);
+
+-- The book and customer searches' text filters.
+create index books_title_trigrams on books using gin (lower(title) gin_trgm_ops);
+create index authors_name_trigrams on authors using gin (lower(name) gin_trgm_ops);
+create index customers_name_trigrams on customers using gin (lower(name) gin_trgm_ops);
+create index customers_email_trigrams on customers using gin (lower(email) gin_trgm_ops);

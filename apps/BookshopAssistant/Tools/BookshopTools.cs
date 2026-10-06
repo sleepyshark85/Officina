@@ -47,8 +47,8 @@ public sealed class BookshopTools(NpgsqlDataSource database)
         join authors a on a.id = b.author_id
         join genres g on g.id = b.genre_id
         join stock s on s.book_id = b.id
-        where (@title is null or strpos(lower(b.title), lower(@title)) > 0)
-          and (@author is null or strpos(lower(a.name), lower(@author)) > 0)
+        where (@title is null or lower(b.title) like lower(@title))
+          and (@author is null or lower(a.name) like lower(@author))
           and (@genre is null or lower(g.name) = lower(@genre))
           and (@max_price is null or b.price <= @max_price)
           and (not @in_stock or s.quantity > 0)
@@ -66,8 +66,8 @@ public sealed class BookshopTools(NpgsqlDataSource database)
         CancellationToken cancellationToken = default)
     {
         await using var command = database.CreateCommand(SearchBooksSql);
-        command.Parameters.Add(Text("title", title));
-        command.Parameters.Add(Text("author", author));
+        command.Parameters.Add(Text("title", Containing(title)));
+        command.Parameters.Add(Text("author", Containing(author)));
         command.Parameters.Add(Text("genre", genre));
         command.Parameters.Add(new NpgsqlParameter("max_price", NpgsqlDbType.Numeric) { Value = (object?)maxPrice ?? DBNull.Value });
         command.Parameters.AddWithValue("in_stock", inStock);
@@ -104,7 +104,7 @@ public sealed class BookshopTools(NpgsqlDataSource database)
     private const string FindCustomerSql = """
         select id, name, email
         from customers
-        where strpos(lower(name), lower(@text)) > 0 or strpos(lower(email), lower(@text)) > 0
+        where lower(name) like lower(@text) or lower(email) like lower(@text)
         order by name, id
         limit 20
         """;
@@ -113,7 +113,7 @@ public sealed class BookshopTools(NpgsqlDataSource database)
         [Description("Part of the customer's name or email.")] string nameOrEmail, CancellationToken cancellationToken = default)
     {
         await using var command = database.CreateCommand(FindCustomerSql);
-        command.Parameters.AddWithValue("text", nameOrEmail);
+        command.Parameters.Add(Text("text", Containing(nameOrEmail)));
         var customers = new List<object>();
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
@@ -412,6 +412,12 @@ public sealed class BookshopTools(NpgsqlDataSource database)
 
     private static NpgsqlParameter Text(string name, string? value) =>
         new(name, NpgsqlDbType.Text) { Value = string.IsNullOrWhiteSpace(value) ? DBNull.Value : value };
+
+    /// <summary>A LIKE pattern matching text that contains <paramref name="part"/>, its wildcards taken literally.</summary>
+    private static string? Containing(string? part) =>
+        string.IsNullOrWhiteSpace(part)
+            ? part
+            : $"%{part.Replace(@"\", @"\\", StringComparison.Ordinal).Replace("%", @"\%", StringComparison.Ordinal).Replace("_", @"\_", StringComparison.Ordinal)}%";
 
     private static ToolOutput Ok(object value) => new(JsonSerializer.Serialize(value, Json));
 
