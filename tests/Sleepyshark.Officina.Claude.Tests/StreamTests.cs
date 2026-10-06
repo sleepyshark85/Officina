@@ -77,6 +77,21 @@ public class StreamTests
     }
 
     [Fact]
+    public async Task An_iteration_of_a_kind_the_SDK_does_not_know_still_counts_its_tokens()
+    {
+        var delta = """{"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"input_tokens":2,"output_tokens":5,"iterations":["""
+            + """{"type":"a_kind_from_the_future","input_tokens":30,"cache_read_input_tokens":10,"cache_creation_input_tokens":0,"output_tokens":20},"""
+            + """{"type":"message","input_tokens":2,"cache_read_input_tokens":0,"cache_creation_input_tokens":0,"output_tokens":5}]}}""";
+        var sse = Sse.Text().Replace(
+            """{"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"output_tokens":5}}""", delta, StringComparison.Ordinal);
+        using var model = Model(new FakeApi().Stream(sse));
+
+        var events = await CollectAsync(model, Hi);
+
+        Assert.Equal(new Usage(32, 25, 10, 0), Assert.Single(events.OfType<UsageReceived>()).Usage);
+    }
+
+    [Fact]
     public void Opus_5_5_is_priced_by_default_and_a_host_may_give_another_price()
     {
         using var listed = new ClaudeModel("test-key") { Model = "claude-opus-5-5", Effort = ClaudeEffort.Medium };

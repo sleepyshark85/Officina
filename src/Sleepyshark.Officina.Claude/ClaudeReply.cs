@@ -75,17 +75,10 @@ internal static class ClaudeReply
             usage.InputTokens, usage.OutputTokens, usage.CacheReadInputTokens ?? 0, usage.CacheCreationInputTokens ?? 0,
             usage.CacheCreation?.Ephemeral1hInputTokens ?? 0);
 
-    /// <summary>One iteration's tokens; an iteration of a kind the SDK does not know counts none.</summary>
-    private static Usage Usage(BetaUsageIteration iteration) =>
-        iteration.TryPickBetaMessageIterationUsage(out var reply)
-            ? new Usage(reply.InputTokens, reply.OutputTokens, reply.CacheReadInputTokens, reply.CacheCreationInputTokens, reply.CacheCreation?.Ephemeral1hInputTokens ?? 0)
-        : iteration.TryPickBetaCompactionIterationUsage(out var compaction)
-            ? new Usage(compaction.InputTokens, compaction.OutputTokens, compaction.CacheReadInputTokens, compaction.CacheCreationInputTokens, compaction.CacheCreation?.Ephemeral1hInputTokens ?? 0)
-        : iteration.TryPickBetaAdvisorMessageIterationUsage(out var advisor)
-            ? new Usage(advisor.InputTokens, advisor.OutputTokens, advisor.CacheReadInputTokens, advisor.CacheCreationInputTokens, advisor.CacheCreation?.Ephemeral1hInputTokens ?? 0)
-        : iteration.TryPickBetaFallbackMessageIterationUsage(out var fallback)
-            ? new Usage(fallback.InputTokens, fallback.OutputTokens, fallback.CacheReadInputTokens, fallback.CacheCreationInputTokens, fallback.CacheCreation?.Ephemeral1hInputTokens ?? 0)
-        : default;
+    /// <summary>One iteration's tokens, whatever its kind, so a kind the SDK does not know still counts.</summary>
+    private static Usage Usage(BetaUsageIteration iteration) => new(
+        iteration.InputTokens, iteration.OutputTokens, iteration.CacheReadInputTokens, iteration.CacheCreationInputTokens,
+        iteration.CacheCreation?.Ephemeral1hInputTokens ?? 0);
 
     /// <summary>
     /// The tokens an attempt reported before it failed mid-stream: its start's usage, updated by later deltas, whose counts

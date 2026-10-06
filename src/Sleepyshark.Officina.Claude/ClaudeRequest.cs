@@ -18,7 +18,7 @@ internal static class ClaudeRequest
 {
     public static MessageCreateParams Build(ClaudeModel model, ModelRequest request)
     {
-        var cache = new BetaCacheControlEphemeral { Ttl = Ttl(model.CacheLifetime) };
+        var cache = new BetaCacheControlEphemeral { Ttl = CacheTtl(model.CacheLifetime) };
         var typed = new MessageCreateParams
         {
             Model = model.Model,
@@ -74,9 +74,9 @@ internal static class ClaudeRequest
     public static string EffortWord(ClaudeEffort effort) => ((ApiEnum<string, Effort>)Effort(effort)).Raw();
 
     /// <summary>The cache lifetime as the API names it.</summary>
-    public static string CacheWord(CacheLifetime lifetime) => ((ApiEnum<string, Ttl>)Ttl(lifetime)).Raw();
+    public static string CacheWord(CacheLifetime lifetime) => ((ApiEnum<string, Ttl>)CacheTtl(lifetime)).Raw();
 
-    private static Ttl Ttl(CacheLifetime lifetime) => lifetime == CacheLifetime.OneHour ? Anthropic.Models.Beta.Messages.Ttl.Ttl1h : Anthropic.Models.Beta.Messages.Ttl.Ttl5m;
+    private static Ttl CacheTtl(CacheLifetime lifetime) => lifetime == CacheLifetime.OneHour ? Ttl.Ttl1h : Ttl.Ttl5m;
 
     private static Effort Effort(ClaudeEffort effort) => effort switch
     {
