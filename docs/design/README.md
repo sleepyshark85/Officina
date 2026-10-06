@@ -133,13 +133,14 @@ looks things up, asks to place the order (which needs approval), then answers.
 ![A write call that needs approval](diagrams/officina-tool-calls.svg)
 
 The pipeline runs on its own task and writes events to a channel the engine relays, so `ApprovalAsked` follows
-everything that happened before it in the event stream. It does not arrive before `ApproveAsync` is called: the
-pipeline calls the approver straight after writing the event. The console prompts from its event loop and completes a
-per-call answer that `ApproveAsync` waits on, so the two meet in either order. A host whose approver answers from the
-event stream must do the same. The pipeline also records `ApprovalAsked` and `ApprovalAnswered` in the audit trail
-(left out of the diagram), and before all this it has parsed the input and validated it against the tool's schema. Read calls in the same reply run together; a write waits for the reads before it and runs
-alone. A denied or unattended approval, invalid input, an unknown tool, a thrown handler and a cancelled call each
-become an error result for the model, never an exception.
+everything that happened before it in the event stream. It may reach the console before or after `ApproveAsync` is
+called, as the pipeline calls the approver straight after writing the event. The console prompts from its event loop
+and completes a per-call answer that `ApproveAsync` waits on, so the two meet in either order. A host whose approver
+answers from the event stream must do the same. The pipeline also records `ApprovalAsked` and `ApprovalAnswered` in
+the audit trail (left out of the diagram), and before all this it has parsed the input and validated it against the
+tool's schema. Read calls in the same reply run together; a write waits for the reads before it and runs alone. A
+denied or unattended approval, invalid input, an unknown tool, a thrown handler and a cancelled call each become an
+error result for the model, never an exception.
 
 ### One model call
 
