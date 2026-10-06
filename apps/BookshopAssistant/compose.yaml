@@ -1,5 +1,5 @@
-# Bookshop Assistant's database (APP-04), telemetry dashboard (APP-20, D11) and export server (APP-12). Run `docker compose up -d --wait` in
-# this folder; the schema, seed, audit and sessions tables in database/ are created on the database's first start only.
+# Bookshop Assistant's database (APP-04), telemetry dashboard (APP-20, D11) and export server (APP-12). Start them with
+# ./start.sh (or start.ps1); the schema, seed, audit and sessions tables in database/ are created on the database's first start only.
 # `docker compose down -v` deletes the data, so the next start seeds afresh.
 services:
   postgres:
@@ -33,15 +33,20 @@ services:
       - "${BOOKSHOP_DASHBOARD_PORT:-18888}:18888"
       - "${BOOKSHOP_OTLP_PORT:-4317}:18889"
 
-  # The reference filesystem MCP server (APP-12), which sees only the exports folder. The application starts it itself,
-  # over stdio, with `docker compose run --rm --no-TTY filesystem`; the profile keeps `docker compose up` from starting it.
+  # The reference filesystem MCP server (APP-12), over Streamable HTTP at http://localhost:18800/mcp, which sees only
+  # the exports folder. It has no sign-in, so it listens on this machine only. Another port if this one is taken:
+  # BOOKSHOP_EXPORTS_PORT, and then BOOKSHOP_EXPORTS_URL for the app.
   filesystem:
-    image: mcp/filesystem@sha256:35fcf0217ca0d5bf7b0a5bd68fb3b89e08174676c0e0b4f431604512cf7b3f67
-    profiles: [mcp]
-    stdin_open: true
+    build: ./exports-server
+    ports:
+      - "127.0.0.1:${BOOKSHOP_EXPORTS_PORT:-18800}:8000"
     volumes:
       - ./exports:/projects/exports
-    command: ["/projects/exports"]
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:8000/healthz"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
 
 volumes:
   bookshop-data:

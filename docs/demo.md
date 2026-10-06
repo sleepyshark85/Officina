@@ -14,14 +14,14 @@ offline tests (TEST-09): see [What was checked live](#what-was-checked-live).
 
 | # | Do | Expect |
 |---|---|---|
-| 0.1 | `cd apps/BookshopAssistant` then `docker compose up -d --wait` | `postgres` and `dashboard` healthy. The schema and seed (480 books, 40 customers, 80 orders) are created on first start; `docker compose down -v` resets them. |
-| 0.2 | `docker compose --profile mcp pull` | The filesystem MCP server's image (APP-12). The application starts it itself; `up` does not. |
-| 0.3 | Open http://localhost:18888 | The telemetry dashboard (APP-20): Traces, Metrics and Structured logs, empty for now. |
-| 0.4 | `export BOOKSHOP_CONNECTION_STRING="Host=localhost;Port=5432;Username=bookshop;Password=shelf-demo-41;Database=bookshop"` and `export ANTHROPIC_API_KEY=…` | |
-| 0.5 | `dotnet run` | `Bookshop Assistant. Type /help for commands.` and `Who is using the assistant? Your name:` |
+| 0.1 | `cd apps/BookshopAssistant` then `./start.sh` (or `pwsh -File start.ps1`) | `postgres`, `dashboard` and `filesystem` (the export server, APP-12) healthy, and their addresses. The schema and seed (480 books, 40 customers, 80 orders) are created on first start; `docker compose down -v` resets them. |
+| 0.2 | Open http://localhost:18888 | The telemetry dashboard (APP-20): Traces, Metrics and Structured logs, empty for now. |
+| 0.3 | `export BOOKSHOP_CONNECTION_STRING="Host=localhost;Port=5432;Username=bookshop;Password=shelf-demo-41;Database=bookshop"` and `export ANTHROPIC_API_KEY=…` | |
+| 0.4 | `dotnet run` | `Bookshop Assistant. Type /help for commands.` and `Who is using the assistant? Your name:` |
 
 If a port is taken, set `BOOKSHOP_DB_PORT` (and the connection string), `BOOKSHOP_DASHBOARD_PORT` with
-`BOOKSHOP_DASHBOARD_URL`, or `BOOKSHOP_OTLP_PORT` with `OTEL_EXPORTER_OTLP_ENDPOINT`, as `compose.yaml` explains.
+`BOOKSHOP_DASHBOARD_URL`, `BOOKSHOP_OTLP_PORT` with `OTEL_EXPORTER_OTLP_ENDPOINT`, or `BOOKSHOP_EXPORTS_PORT` with
+`BOOKSHOP_EXPORTS_URL`, as `compose.yaml` explains.
 
 ## 1. Run context ✓ (APP-13)
 

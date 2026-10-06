@@ -53,8 +53,7 @@ Needs Docker and `ANTHROPIC_API_KEY`.
 
 ```sh
 cd apps/BookshopAssistant
-docker compose up -d --wait        # BOOKSHOP_DB_PORT=5433 if port 5432 is taken
-docker compose --profile mcp pull  # the export server's image, which the application starts itself
+./start.sh                         # or pwsh -File start.ps1; BOOKSHOP_DB_PORT=5433 if port 5432 is taken
 export BOOKSHOP_CONNECTION_STRING="Host=localhost;Port=5432;Username=bookshop;Password=shelf-demo-41;Database=bookshop"
 dotnet run                         # add -- --demo (or BOOKSHOP_DEMO=1) to compact and clear early (APP-17); sessions of one mode don't resume in the other
 ```
@@ -62,8 +61,11 @@ dotnet run                         # add -- --demo (or BOOKSHOP_DEMO=1) to compa
 Try: *Order the two cheapest fantasy books in stock for Alice Martin and tell me the total.* The demo script,
 [`docs/demo.md`](docs/demo.md), walks through every capability.
 
-Exports (APP-12) go to `exports/`, through the reference filesystem MCP server, which the application starts in Docker
-with `docker compose run`. Try: *Export Alice Martin's order history as CSV.* The server runs as root in its container,
+`start.sh` starts the database, the telemetry dashboard and the export server in Docker, and leaves them running if
+they already are.
+
+Exports (APP-12) go to `exports/`, through the reference filesystem MCP server, which runs in Docker behind a bridge
+that serves it over Streamable HTTP. Try: *Export Alice Martin's order history as CSV.* The server runs as root in its container,
 so on Linux the exported files are owned by root: readable, and deletable from the folder, but not editable in place.
 
 The assistant remembers each staff member's preferences across sessions, under `data/memory` (or `$BOOKSHOP_DATA/memory`);

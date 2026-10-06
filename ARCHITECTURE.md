@@ -449,7 +449,7 @@ flowchart LR
 | Telemetry exporter | Exports the core's traces and metrics and the application's logs to the dashboard | Host (telemetry) |
 | Telemetry dashboard | One container in the compose file; shows traces, metrics and logs | None: outside the application |
 | File memory store | One scope per staff member | Memory store |
-| MCP filesystem server | Exports reports to a mounted folder; its write tool needs approval | MCP tool source |
+| MCP filesystem server | Exports reports to a mounted folder, over Streamable HTTP through a bridge, as the server speaks stdio only; its write tool needs approval | MCP tool source |
 
 ### 12.2 What each part demonstrates
 

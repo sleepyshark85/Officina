@@ -1,7 +1,8 @@
 // Bookshop Assistant, the reference application: a console chatbot for bookshop staff over the PostgreSQL database in
 // compose.yaml. Needs BOOKSHOP_CONNECTION_STRING and ANTHROPIC_API_KEY. Telemetry goes over OTLP to the compose file's
 // dashboard (OTEL_EXPORTER_OTLP_ENDPOINT, default http://localhost:4317); /audit links to BOOKSHOP_DASHBOARD_URL
-// (default http://localhost:18888). Exports go to the exports folder through the compose file's filesystem MCP server.
+// (default http://localhost:18888). Exports go to the exports folder through the compose file's filesystem MCP server
+// (BOOKSHOP_EXPORTS_URL, default http://localhost:18800/mcp). start.sh starts all three.
 // Options: --demo or BOOKSHOP_DEMO=1 compacts and clears early enough to see in a short session; BOOKSHOP_DATA holds
 // each staff member's memory (default ./data); BOOKSHOP_TELEMETRY_CONTENT=1 puts message text and tool inputs and
 // results in traces, for debugging; BOOKSHOP_REPLY_BUDGET (US dollars) lowers each reply's budget, to show a budget stop.
@@ -85,19 +86,18 @@ Console.CancelKeyPress += (_, press) =>
     }
 };
 
-// The export server, from the compose file in the current folder, or BOOKSHOP_COMPOSE_FILE.
-var composeFile = Environment.GetEnvironmentVariable("BOOKSHOP_COMPOSE_FILE") is { Length: > 0 } file ? file : "compose.yaml";
+// The export server, which start.sh runs from the compose file.
+var exportsUrl = new Uri(Environment.GetEnvironmentVariable("BOOKSHOP_EXPORTS_URL") is { Length: > 0 } exportsText ? exportsText : "http://localhost:18800/mcp");
 McpToolSource exports;
 try
 {
-    exports = await Exports.ConnectAsync(Exports.Server(composeFile), CancellationToken.None);
+    exports = await Exports.ConnectAsync(Exports.Server(exportsUrl), CancellationToken.None);
 }
 catch (Exception exception) when (exception is IOException or InvalidOperationException)
 {
     await Console.Error.WriteLineAsync(
-        $"The export server (the filesystem service of {composeFile}) could not be started: {exception.Message}\n"
-        + "It runs in Docker: check that Docker is running, that its image is pulled (docker compose --profile mcp pull), "
-        + "and that this is the folder of compose.yaml, or set BOOKSHOP_COMPOSE_FILE.");
+        $"The export server at {exportsUrl} could not be reached: {exception.Message}\n"
+        + "Start it with ./start.sh (or start.ps1) in the application's folder, or set BOOKSHOP_EXPORTS_URL.");
     return 1;
 }
 

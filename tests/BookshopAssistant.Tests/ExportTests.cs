@@ -1,3 +1,6 @@
+using DotNet.Testcontainers.Builders;
+using DotNet.Testcontainers.Containers;
+using DotNet.Testcontainers.Images;
 using Sleepyshark.Officina.Mcp;
 using Sleepyshark.Officina.Testing;
 using static BookshopAssistant.Tests.ConsoleSession;
@@ -5,21 +8,44 @@ using static BookshopAssistant.Tests.ConsoleSession;
 namespace BookshopAssistant.Tests;
 
 /// <summary>
-/// The console exports a customer's order history as CSV through the real filesystem MCP server, started by the compose
-/// file's service in Docker and writing into the test's own folder. Only the model and the staff member are scripted.
+/// The console exports a customer's order history as CSV through the real filesystem MCP server, built from the
+/// application's <c>exports-server</c> image in Docker, over HTTP, writing into the test's own folder. Only the model and
+/// the staff member are scripted.
 /// </summary>
 public sealed class ExportTests(BookshopDatabase database) : IClassFixture<BookshopDatabase>, IAsyncLifetime
 {
     private const string FilePath = "/projects/exports/order-history-alice-martin.csv";
+    private const int Port = 8000;
+
+    // Built once per test run under a fixed name and kept, so later runs reuse Docker's layer cache.
+    private static readonly Lazy<Task<IFutureDockerImage>> Image = new(async () =>
+    {
+        var image = new ImageFromDockerfileBuilder()
+            .WithDockerfileDirectory(Path.Combine(AppContext.BaseDirectory, "exports-server"))
+            .WithName("bookshop-exports-server:test")
+            .WithDeleteIfExists(false)
+            .WithCleanUp(false)
+            .Build();
+        await image.CreateAsync();
+        return image;
+    });
 
     private readonly string folder = Directory.CreateTempSubdirectory("bookshop-exports-").FullName;
+    private IContainer? server;
     private McpToolSource? exports;
 
     public async ValueTask InitializeAsync()
     {
         if (BookshopDatabase.Available)
         {
-            exports = await Exports.ConnectAsync(Exports.Server(Path.Combine(AppContext.BaseDirectory, "compose.yaml"), folder), TestContext.Current.CancellationToken);
+            server = new ContainerBuilder(await Image.Value)
+                .WithPortBinding(Port, assignRandomHostPort: true)
+                .WithBindMount(folder, "/projects/exports")
+                .WithWaitStrategy(Wait.ForUnixContainer().UntilHttpRequestIsSucceeded(request => request.ForPort(Port).ForPath("/healthz")))
+                .Build();
+            await server.StartAsync(TestContext.Current.CancellationToken);
+            var url = new UriBuilder("http", server.Hostname, server.GetMappedPublicPort(Port), "/mcp").Uri;
+            exports = await Exports.ConnectAsync(Exports.Server(url), TestContext.Current.CancellationToken);
         }
     }
 
@@ -28,6 +54,11 @@ public sealed class ExportTests(BookshopDatabase database) : IClassFixture<Books
         if (exports is not null)
         {
             await exports.DisposeAsync();
+        }
+
+        if (server is not null)
+        {
+            await server.DisposeAsync();
         }
 
         Directory.Delete(folder, recursive: true);
@@ -76,79 +107,6 @@ public sealed class ExportTests(BookshopDatabase database) : IClassFixture<Books
 
         InOrder(transcript, "    Approve? [y/N] n", "  < filesystem__write_file: error: The call was denied: the staff member declined", "Understood, no file.");
         Assert.Empty(Directory.EnumerateFileSystemEntries(folder));
-    }
-
-    [DatabaseFact]
-    public async Task APP_12_APP_03_the_server_runs_out_of_ctrl_c_s_reach_and_a_reply_after_it_dies_starts_it_again()
-    {
-        var model = Model()
-            .Reply(SayThenCall("Checking.", Call("c1", "filesystem__list_directory", new { path = "/projects/exports" })))
-            .Reply("The folder is empty.")
-            .Reply(SayThenCall("Checking again.", Call("c2", "filesystem__list_directory", new { path = "/projects/exports" })))
-            .Reply("Still empty.");
-
-        // Between the replies, the server's process group gets the SIGINT a Ctrl+C sends to the terminal's foreground group.
-        var transcript = await RunAsync(database, model, ["Sam", "What is in the exports folder?", (Func<Task>)InterruptServerAsync, "And now?", "/quit"], exportTools: exports!.Tools);
-
-        InOrder(transcript, "  < filesystem__list_directory: ok", "The folder is empty.", "you> And now?", "  < filesystem__list_directory: ok", "Still empty.");
-        var session = SessionId(transcript);
-        var changes = (await new AuditTable(database.DataSource).ReadAsync(session, TestContext.Current.CancellationToken))
-            .Where(entry => entry.Kind == Sleepyshark.Officina.AuditKind.ToolSource).Select(entry => entry.Outcome);
-        Assert.Equal(["connected", "disconnected", "connected"], changes);
-    }
-
-    /// <summary>
-    /// Sends SIGINT to the server's process group, found by the test's folder in their command line, after checking they
-    /// are in another session than this process, which a Ctrl+C in this terminal would reach.
-    /// </summary>
-    private async Task InterruptServerAsync()
-    {
-        var own = Stat(Environment.ProcessId);
-        var server = Directory.EnumerateDirectories("/proc")
-            .Select(path => int.TryParse(Path.GetFileName(path), out var id) ? id : 0)
-            .Where(id => id > 0 && ReadOrEmpty($"/proc/{id}/cmdline").Contains(folder, StringComparison.Ordinal))
-            .ToList();
-        Assert.NotEmpty(server);
-        var group = Stat(server[0]).Group;
-        Assert.All(server, id => Assert.NotEqual(own.Session, Stat(id).Session));
-
-        using var kill = System.Diagnostics.Process.Start("kill", ["-INT", "--", $"-{group}"]);
-        await kill.WaitForExitAsync(TestContext.Current.CancellationToken);
-        var waited = System.Diagnostics.Stopwatch.StartNew();
-        while (server.Any(id => Directory.Exists($"/proc/{id}") && Stat(id).State != "Z"))
-        {
-            Assert.True(waited.Elapsed < TimeSpan.FromSeconds(10), "The server's processes were still running 10 s after the interrupt.");
-            await Task.Delay(50, TestContext.Current.CancellationToken);
-        }
-
-        static string ReadOrEmpty(string path)
-        {
-            try
-            {
-                return File.ReadAllText(path);
-            }
-            catch (IOException)
-            {
-                return "";
-            }
-        }
-    }
-
-    /// <summary>A process's state, process group and session, from <c>/proc/&lt;id&gt;/stat</c> after the command's closing parenthesis.</summary>
-    private static (string State, int Group, int Session) Stat(int processId)
-    {
-        string text;
-        try
-        {
-            text = File.ReadAllText($"/proc/{processId}/stat");
-        }
-        catch (IOException)
-        {
-            return ("Z", 0, 0);
-        }
-
-        var fields = text[(text.LastIndexOf(')') + 2)..].Split(' ');
-        return (fields[0], int.Parse(fields[2], System.Globalization.CultureInfo.InvariantCulture), int.Parse(fields[3], System.Globalization.CultureInfo.InvariantCulture));
     }
 
     /// <summary>The CSV the model would write from the customer's orders.</summary>
