@@ -8,7 +8,7 @@ public static class ClaudePrices
 {
     public static IReadOnlyDictionary<string, ModelPrice> Table { get; } = new Dictionary<string, ModelPrice>(StringComparer.Ordinal)
     {
-        ["claude-opus-5-5"] = Price(input: 4m, output: 20m, cacheRead: 0.20m),
+        [ClaudeModel.Opus55] = Price(input: 4m, output: 20m, cacheRead: 0.20m),
     };
 
     private static ModelPrice Price(decimal input, decimal output, decimal cacheRead) =>

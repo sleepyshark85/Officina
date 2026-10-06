@@ -65,8 +65,8 @@ public class StreamTests
     public async Task Cache_writes_kept_for_an_hour_are_counted_apart_in_every_iteration_of_a_compacting_call()
     {
         var delta = """{"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"input_tokens":2,"cache_creation_input_tokens":500,"output_tokens":5,"iterations":["""
-            + """{"type":"compaction","input_tokens":40,"cache_creation_input_tokens":1000,"cache_creation":{"ephemeral_5m_input_tokens":200,"ephemeral_1h_input_tokens":800},"output_tokens":300},"""
-            + """{"type":"message","input_tokens":2,"cache_creation_input_tokens":500,"cache_creation":{"ephemeral_5m_input_tokens":0,"ephemeral_1h_input_tokens":500},"output_tokens":5}]}}""";
+            + """{"type":"compaction","input_tokens":40,"cache_read_input_tokens":0,"cache_creation_input_tokens":1000,"cache_creation":{"ephemeral_5m_input_tokens":200,"ephemeral_1h_input_tokens":800},"output_tokens":300},"""
+            + """{"type":"message","input_tokens":2,"cache_read_input_tokens":0,"cache_creation_input_tokens":500,"cache_creation":{"ephemeral_5m_input_tokens":0,"ephemeral_1h_input_tokens":500},"output_tokens":5}]}}""";
         var sse = Sse.Text().Replace(
             """{"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"output_tokens":5}}""", delta, StringComparison.Ordinal);
         using var model = Model(new FakeApi().Stream(sse));
@@ -74,6 +74,21 @@ public class StreamTests
         var events = await CollectAsync(model, Hi);
 
         Assert.Equal(new Usage(42, 305, 0, 1_500, CacheWriteHour: 1_300), Assert.Single(events.OfType<UsageReceived>()).Usage);
+    }
+
+    [Fact]
+    public async Task An_iteration_of_a_kind_the_SDK_does_not_know_still_counts_its_tokens()
+    {
+        var delta = """{"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"input_tokens":2,"output_tokens":5,"iterations":["""
+            + """{"type":"a_kind_from_the_future","input_tokens":30,"cache_read_input_tokens":10,"cache_creation_input_tokens":0,"output_tokens":20},"""
+            + """{"type":"message","input_tokens":2,"cache_read_input_tokens":0,"cache_creation_input_tokens":0,"output_tokens":5}]}}""";
+        var sse = Sse.Text().Replace(
+            """{"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"output_tokens":5}}""", delta, StringComparison.Ordinal);
+        using var model = Model(new FakeApi().Stream(sse));
+
+        var events = await CollectAsync(model, Hi);
+
+        Assert.Equal(new Usage(32, 25, 10, 0), Assert.Single(events.OfType<UsageReceived>()).Usage);
     }
 
     [Fact]

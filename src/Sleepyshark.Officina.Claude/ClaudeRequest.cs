@@ -2,6 +2,7 @@ using System.Text.Json;
 using Anthropic.Core;
 using Anthropic.Models.Beta;
 using Anthropic.Models.Beta.Messages;
+using ApiRole = Anthropic.Models.Beta.Messages.Role;
 
 namespace Sleepyshark.Officina.Claude;
 
@@ -17,7 +18,7 @@ internal static class ClaudeRequest
 {
     public static MessageCreateParams Build(ClaudeModel model, ModelRequest request)
     {
-        var cache = new BetaCacheControlEphemeral { Ttl = model.CacheLifetime == CacheLifetime.OneHour ? Ttl.Ttl1h : Ttl.Ttl5m };
+        var cache = new BetaCacheControlEphemeral { Ttl = CacheTtl(model.CacheLifetime) };
         var typed = new MessageCreateParams
         {
             Model = model.Model,
@@ -29,7 +30,7 @@ internal static class ClaudeRequest
             CacheControl = cache,
             Tools = [.. request.Prefix.Tools.Select(Tool)],
             System = new List<BetaTextBlockParam> { new() { Text = request.Prefix.Instructions, CacheControl = cache } },
-            Messages = [],
+            Messages = [.. request.Messages.Select(Message)],
         };
         // An empty setting asks for nothing, so the request has no context management.
         if (request.Prefix.ContextManagement is { } context && Edits(context) is { Count: > 0 } edits)
@@ -37,15 +38,14 @@ internal static class ClaudeRequest
             typed = typed with { Betas = Betas(context), ContextManagement = new BetaContextManagementConfig { Edits = edits } };
         }
 
-        var body = new Dictionary<string, JsonElement>(typed.RawBodyData) { ["messages"] = Messages(request.Messages) };
-        return MessageCreateParams.FromRawUnchecked(typed.RawHeaderData, typed.RawQueryData, body);
+        return typed;
     }
 
     /// <summary>The beta features <paramref name="context"/> uses.</summary>
     private static List<ApiEnum<string, AnthropicBeta>> Betas(ContextManagement context) =>
     [
-        .. context.ClearToolResults is null ? [] : new ApiEnum<string, AnthropicBeta>[] { "context-management-2025-06-27" },
-        .. context.CompactAt is null ? [] : new ApiEnum<string, AnthropicBeta>[] { "compact-2026-01-12" },
+        .. context.ClearToolResults is null ? [] : new ApiEnum<string, AnthropicBeta>[] { AnthropicBeta.ContextManagement2025_06_27 },
+        .. context.CompactAt is null ? [] : new ApiEnum<string, AnthropicBeta>[] { AnthropicBeta.Compact2026_01_12 },
     ];
 
     /// <summary>Tool-result clearing, then threshold compaction, whose trigger must be at least 50,000 input tokens.</summary>
@@ -71,7 +71,12 @@ internal static class ClaudeRequest
     }
 
     /// <summary>The effort as the API names it.</summary>
-    public static string EffortWord(ClaudeEffort effort) => Effort(effort).ToString().ToLowerInvariant();
+    public static string EffortWord(ClaudeEffort effort) => ((ApiEnum<string, Effort>)Effort(effort)).Raw();
+
+    /// <summary>The cache lifetime as the API names it.</summary>
+    public static string CacheWord(CacheLifetime lifetime) => ((ApiEnum<string, Ttl>)CacheTtl(lifetime)).Raw();
+
+    private static Ttl CacheTtl(CacheLifetime lifetime) => lifetime == CacheLifetime.OneHour ? Ttl.Ttl1h : Ttl.Ttl5m;
 
     private static Effort Effort(ClaudeEffort effort) => effort switch
     {
@@ -101,67 +106,27 @@ internal static class ClaudeRequest
         };
     }
 
-    /// <summary>The messages as raw JSON, so stored blocks reach the wire exactly as received.</summary>
-    private static JsonElement Messages(IEnumerable<Message> messages)
+    /// <summary>A message as the API takes it: an operator message is a system message; stored blocks go as received.</summary>
+    private static BetaMessageParam Message(Message message) => message.Role == Role.Operator
+        ? new BetaMessageParam { Role = ApiRole.System, Content = message.Text }
+        : new BetaMessageParam { Role = message.Role == Role.User ? ApiRole.User : ApiRole.Assistant, Content = message.Blocks.Select(Block).ToList() };
+
+    private static BetaContentBlockParam Block(ContentBlock block)
     {
-        using var buffer = new MemoryStream();
-        using (var writer = new Utf8JsonWriter(buffer))
+        if (block.Raw is not null)
         {
-            writer.WriteStartArray();
-            foreach (var message in messages)
-            {
-                writer.WriteStartObject();
-                if (message.Role == Role.Operator)
-                {
-                    writer.WriteString("role", "system");
-                    writer.WriteString("content", message.Text);
-                }
-                else
-                {
-                    writer.WriteString("role", message.Role == Role.User ? "user" : "assistant");
-                    writer.WriteStartArray("content");
-                    foreach (var block in message.Blocks)
-                    {
-                        if (block.Raw is not null)
-                        {
-                            writer.WriteRawValue(block.Raw, skipInputValidation: true);
-                        }
-                        else if (block.ToolResult is { } result)
-                        {
-                            writer.WriteStartObject();
-                            writer.WriteString("type", "tool_result");
-                            writer.WriteString("tool_use_id", result.CallId);
-                            if (result.Content.Length > 0)
-                            {
-                                writer.WriteString("content", result.Content);
-                            }
-
-                            if (result.IsError)
-                            {
-                                writer.WriteBoolean("is_error", true);
-                            }
-
-                            writer.WriteEndObject();
-                        }
-                        else
-                        {
-                            writer.WriteStartObject();
-                            writer.WriteString("type", "text");
-                            writer.WriteString("text", block.Text);
-                            writer.WriteEndObject();
-                        }
-                    }
-
-                    writer.WriteEndArray();
-                }
-
-                writer.WriteEndObject();
-            }
-
-            writer.WriteEndArray();
+            using var raw = JsonDocument.Parse(block.Raw);
+            return new BetaContentBlockParam(raw.RootElement.Clone());
         }
 
-        using var document = JsonDocument.Parse(buffer.ToArray());
-        return document.RootElement.Clone();
+        if (block.ToolResult is not { } result)
+        {
+            return new BetaTextBlockParam { Text = block.Text! };
+        }
+
+        // Empty content and success are left out, as the API reads their absence that way.
+        var param = new BetaToolResultBlockParam { ToolUseID = result.CallId };
+        param = result.Content.Length > 0 ? param with { Content = result.Content } : param;
+        return result.IsError ? param with { IsError = true } : param;
     }
 }

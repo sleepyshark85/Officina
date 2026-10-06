@@ -62,7 +62,7 @@ using var logging = LoggerFactory.Create(builder => builder.AddOpenTelemetry(opt
 var demo = args.Contains("--demo") || Environment.GetEnvironmentVariable("BOOKSHOP_DEMO") == "1";
 await using var database = NpgsqlDataSource.Create(connectionString);
 using var model = BookshopAgent.Model(demo);
-using var summaryModel = new ClaudeModel { Model = "claude-opus-5-5", Effort = ClaudeEffort.Low, MaxOutputTokens = 4_000 };
+using var summaryModel = new ClaudeModel { Model = ClaudeModel.Opus55, Effort = ClaudeEffort.Low, MaxOutputTokens = 4_000 };
 var audit = new AuditTable(database);
 var data = Environment.GetEnvironmentVariable("BOOKSHOP_DATA") is { Length: > 0 } folder ? folder : "data";
 var memory = new FileMemoryStore(Path.Combine(data, "memory"));

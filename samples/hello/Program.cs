@@ -7,7 +7,7 @@ using Sleepyshark.Officina.Claude;
 
 using var model = new ClaudeModel
 {
-    Model = "claude-opus-5-5",
+    Model = ClaudeModel.Opus55,
     Effort = ClaudeEffort.Low,
     MaxOutputTokens = 2_000,
     CacheLifetime = CacheLifetime.OneHour,
