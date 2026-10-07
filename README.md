@@ -12,6 +12,8 @@ PostgreSQL in Docker.
 
 - [`docs/plan/phase-1.md`](docs/plan/phase-1.md): the phase 1 slices.
 - [`docs/traceability.md`](docs/traceability.md): each phase 1 requirement and its tests.
+- [`docs/test-report.md`](docs/test-report.md): a dated summary of the tests, coverage, mutation scores, gates and open
+  gaps.
 
 Status: phase 1 complete; see [`docs/demo.md`](docs/demo.md) and [`docs/traceability.md`](docs/traceability.md).
 
