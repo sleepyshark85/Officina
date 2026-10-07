@@ -55,13 +55,13 @@ Coverage shows code ran, not that a test checked it, so it is reported, not gate
 Stryker.NET changes the library code on purpose (a `>` to `>=`, a removed statement) and checks that a test fails.
 Full run [37519980740](https://github.com/sleepyshark85/officina/actions/runs/37519980740) on `14ab015`
 (`mutation-reports` artifact); no `src/` file changed between that commit and `c6fc554`. The score is (killed +
-timeout) ÷ (tested + no coverage).
+timeout) ÷ (tested + no coverage), where a mutant that crashed the test run (a runtime error) is not counted.
 
 | Package | Mutants tested | Killed | Timeout | Survived | No coverage | Score | A pull request fails below |
 |---|---|---|---|---|---|---|---|
 | Core | 1,262 | 978 | 7 | 277 | 37 | **75.8%** | 70% |
 | Claude | 167 | 144 | 1 | 22 | 7 | **83.3%** | 78% |
-| MCP | 205 | 148 | 9 | 47 | 23 | **69.2%** | 64% |
+| MCP | 205 (1 runtime error) | 148 | 9 | 47 | 23 | **69.2%** | 64% |
 
 A pull request mutates only the files it changes. The core is 98.6% covered but scores 75.8%: most of its lines run,
 but about a quarter of changes to them would go unnoticed. Part of that is expected (message wording, equivalent
