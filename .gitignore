@@ -12,3 +12,4 @@ data/
 appsettings.Local.json
 .env
 StrykerOutput/
+coverage/
