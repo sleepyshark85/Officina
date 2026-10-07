@@ -39,6 +39,10 @@ minute, and prints each search's median time; each must stay under 50 ms:
 OFFICINA_BENCHMARK=1 dotnet test tests/BookshopAssistant.Tests --filter Category=Benchmark --logger "console;verbosity=detailed"
 ```
 
+Coverage of Officina's own assemblies is measured on every CI run (Linux) and shown in the job summary, with the
+Cobertura file as the `coverage-report` artifact; it is a report, not a gate. Locally:
+`dotnet test --collect "Code Coverage" --settings coverage.runsettings --results-directory coverage`.
+
 Mutation testing (Stryker.NET) checks that the tests catch changes to the library packages. Each package has a
 `stryker-config.json`; run it from the package's folder, and open the HTML report under `StrykerOutput/`:
 

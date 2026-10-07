@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Line and branch coverage of Officina's own assemblies: the library packages and Bookshop Assistant, not the tests,
+     samples or third-party libraries the tests load. A report, not a gate: the mutation gate judges the tests. -->
+<RunSettings>
+  <DataCollectionRunSettings>
+    <DataCollectors>
+      <DataCollector friendlyName="Code Coverage">
+        <Configuration>
+          <Format>cobertura</Format>
+          <CodeCoverage>
+            <ModulePaths>
+              <Include>
+                <ModulePath>.*[\\/]Sleepyshark\.Officina(\.Claude|\.Mcp|\.Testing)?\.dll$</ModulePath>
+                <ModulePath>.*[\\/]BookshopAssistant\.dll$</ModulePath>
+              </Include>
+            </ModulePaths>
+          </CodeCoverage>
+        </Configuration>
+      </DataCollector>
+    </DataCollectors>
+  </DataCollectionRunSettings>
+</RunSettings>

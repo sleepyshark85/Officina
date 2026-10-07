@@ -39,8 +39,22 @@ jobs:
         run: dotnet build --no-restore --configuration Release
 
       - name: Test
-        # A hanging test fails the run with a dump instead of stalling CI.
-        run: dotnet test --no-build --configuration Release --blame-hang-timeout 2m
+        # A hanging test fails the run with a dump instead of stalling CI. Linux, which runs every test, also measures
+        # coverage of Officina's own assemblies (coverage.runsettings).
+        run: >-
+          dotnet test --no-build --configuration Release --blame-hang-timeout 2m
+          ${{ matrix.os == 'ubuntu-latest' && '--collect "Code Coverage" --settings coverage.runsettings --results-directory coverage' || '' }}
+
+      - name: Coverage summary
+        if: matrix.os == 'ubuntu-latest'
+        run: python3 .github/coverage-summary.py coverage >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload coverage
+        if: matrix.os == 'ubuntu-latest'
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-report
+          path: coverage/**/*.cobertura.xml
 
   # Checks that need one OS only: formatting and known-vulnerable packages.
   quality:
