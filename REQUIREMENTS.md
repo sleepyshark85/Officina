@@ -1,10 +1,11 @@
 # Officina — Requirements
 
-Status: draft 5 · 2026-10-05. Architecture: [`ARCHITECTURE.md`](ARCHITECTURE.md). Namespace: `Sleepyshark.Officina`.
+Status: draft 6 · 2026-10-09. Architecture: [`ARCHITECTURE.md`](ARCHITECTURE.md). This document names no language:
+every implementation meets it, and records its platform choices in [`docs/implementations/`](docs/implementations/).
 
 ## 1. Purpose
 
-Officina is a .NET library for building agentic applications: agents that call models, use tools and follow control
+Officina is a library for building agentic applications: agents that call models, use tools and follow control
 flow. It is generic, but it grows **from real applications**: each part enters the core when an application needs it,
 and takes its general shape when a second application needs it too.
 
@@ -63,7 +64,7 @@ every phase 1 capability in one place.
    a provider's native features (server-side compaction, its memory tool, caching) are used where they exist.
 10. **Tests replace only system boundaries:** model provider, network, tool back ends, MCP servers, clock, environment,
     storage back ends, the human.
-11. **Small core.** Phase 1's core is about 3,500 lines or less; the Claude and MCP packages are separate. Growing past
+11. **Small core.** Phase 1's core stays within the line budget its implementation sets (`docs/implementations/`); the Claude and MCP packages are separate. Growing past
     it needs a reason.
 
 ## 4. Phase 1 requirements
@@ -99,7 +100,7 @@ The core serves any agentic purpose, not only the reference application. These r
 | ID | Requirement |
 |---|---|
 | MDL-01 | The core reaches models only through its own model interface: streamed text, content blocks, usage and stop reason. |
-| MDL-02 | A Claude implementation ships, on the official Anthropic C# SDK, which is used in that package only. Requests are streamed. |
+| MDL-02 | A Claude implementation ships, on the official Anthropic SDK for the implementation's language, which is used in that package only. Requests are streamed. |
 | MDL-03 | Claude settings (model, effort, max output tokens) are set on the Claude model object and fixed for a conversation. Effort is set explicitly, never left to a model default. |
 | MDL-04 | Transient failures (rate limits, overload, network, including errors mid-stream) are retried with backoff, honouring `Retry-After`. What is left becomes `Failed`. |
 | MDL-05 | Every content block the model returns (text, reasoning, tool use, server tool results, compaction) is kept in the conversation exactly as received, and replayed unchanged. |
@@ -200,7 +201,7 @@ the fact.
 |---|---|
 | TEST-01 | A test kit ships with a scripted model (replies given in advance, requests recorded), a scripted approver and a fake MCP server; with the core's in-memory memory store, any agent runs offline and deterministically. |
 | TEST-02 | A **prefix stability** check: across the calls of a scripted multi-turn run, each request's tools, instructions and earlier messages are byte-identical to the previous request's. This also holds across a restart: a conversation saved to JSON and resumed with a freshly built agent produces the same prefix. It runs for the reference application and every GEN-06 sample. |
-| TEST-03 | The test suite needs no API key and no network; CI runs it on Linux and Windows. Tests that need the Docker database run on Linux only. |
+| TEST-03 | The test suite needs no API key and no network; CI runs it on Linux and on each other OS the implementation supports (D1). Tests that need the Docker database run on Linux only. |
 | TEST-04 | The reference application has a live smoke test against the Docker database, run on demand with an API key, which drives APP-09, asserts cache reads from the second call on, and forces a compaction (about $0.40 per run). |
 | TEST-05 | A dependency check, run as a test, fails if the Anthropic SDK is referenced outside the Claude package. |
 | TEST-06 | Telemetry is tested by collecting the spans and metrics of scripted runs in memory: span tree, attributes, and that no message text or secret appears by default (EVT-03, EVT-04). |
@@ -233,7 +234,7 @@ the architecture only keeps room for it.
 | NS-10 | **Configuration files** | Agents described in JSON with a schema | An application's agents are edited by non-developers or per tenant |
 | NS-11 | **Knowledge sources** | Retrieval as a first-class context source, not only as a tool | Two applications repeat the same retrieval plumbing |
 | NS-12 | **Evaluation** | Datasets, graders and regression runs against the live model | An application needs a quality bar checked over time |
-| NS-13 | **Hosting helpers** | ASP.NET Core integration: DI registration, streaming endpoints | Two applications repeat the same hosting code |
+| NS-13 | **Hosting helpers** | Integration with the platform's web framework: service wiring, streaming endpoints | Two applications repeat the same hosting code |
 | NS-14 | **Batch** | Many independent runs through the provider's batch API | An application processes work in bulk where latency does not matter |
 | NS-15 | **Large tool sets** | Tool search (deferred tool loading) and mid-conversation tool changes, so tools can grow without breaking the cache | An agent has more tools than fit usefully in every request |
 | NS-16 | **Programmatic tool calling** | The model calls tools from code execution, so large intermediate results never enter the context | An agent chains many tool calls over large data |
@@ -252,20 +253,20 @@ the architecture only keeps room for it.
 
 | # | Decision or question | Status |
 |---|---|---|
-| D1 | .NET 10, Linux and Windows. | Decided |
-| D2 | Own model interface, not `Microsoft.Extensions.AI`. **Reason:** phase 1 has one provider, the interface is small, and principle 9 needs Claude features used directly. Revisit at NS-08. | Decided for phase 1 |
+| D1 | Each implementation records its platform, supported OSes, packages and libraries in [`docs/implementations/`](docs/implementations/): .NET 10 (`dotnet.md`), Go (`go.md`). This document and the architecture stay language-agnostic. | Decided (owner) |
+| D2 | Own model interface, not a general AI abstraction library. **Reason:** phase 1 has one provider, the interface is small, and principle 9 needs Claude features used directly. Revisit at NS-08. | Decided for phase 1 |
 | D3 | The core stores no conversations; the host persists them (AGT-06). Memory has a store interface (MEM-02). | Decided |
 | D4 | History compaction, memory and MCP are in phase 1. | Decided (owner) |
 | D5 | Compaction is server-side only (HIST-03). **Reason:** client-side edits break the prompt cache and invalidate Claude's reasoning blocks, which new accounts enforce with a 400. | Decided |
 | D6 | MCP through Officina's own client, not Claude's MCP connector. **Reason:** the connector runs tools on Anthropic's side, outside the tool pipeline (no approval, no stdio servers). The connector may be added later for remote servers that need none of that. | Decided |
 | D7 | One reference application for phase 1: Bookshop Assistant, a console chatbot over PostgreSQL in Docker (§2). | Decided (owner) |
-| D8 | Namespace and package prefix: `Sleepyshark.Officina`. It takes over from `agentic-core`, which is archived. | Decided (owner) |
+| D8 | Name: Officina, owner prefix `Sleepyshark`, mapped to each platform's naming convention (`docs/implementations/`). It takes over from `agentic-core`, which is archived. | Decided (owner) |
 | D9 | Audit is separate from events: events stream to the host for display; audit is a durable trail through its own sink (AUD). | Decided |
 | D10 | No refusal fallback in phase 1. **Reason:** a fallback reply comes from another model, the API keeps routing the conversation there for a while, and after a mid-reply fallback the client must leave earlier blocks out when sending history back. That breaks CTX-04 and MDL-05. A refusal is `Stopped(Refusal)`; NS-19 brings the fallback back when needed. | Decided |
-| D11 | Telemetry is viewed in an OpenTelemetry dashboard run from the application's compose file (the standalone .NET Aspire dashboard: one container, receives traces, metrics and logs). The core only emits (EVT-02); exporting is the host's choice. | Decided (owner) |
+| D11 | Telemetry is viewed in an OpenTelemetry dashboard run from the application's compose file (the standalone Aspire dashboard: one container, receives traces, metrics and logs over OTLP from any language). The core only emits (EVT-02); exporting is the host's choice. | Decided (owner) |
 | D12 | Compaction is the provider's threshold compaction (HIST-01). The newer on-demand compaction (Claude: `compact-2026-09-04`, per the provider's docs; not tested in S02) is not used: it has the client drop the compacted messages from the front of the history, which principle 5 and HIST-03 forbid. | Proposed |
 | D13 | Secrets are redacted everywhere (EVT-03) except in two places, where one a person typed, or that the model repeated from them, can appear. (1) The conversation-appended event carries the assistant's blocks byte-exact, plus the host's and the user's own text (the run context and the user message). **Reason:** redacting history would break the append-only rule (principle 5) and the binding of reasoning blocks to their exact prefix (MDL-05). (2) Streamed text deltas. **Reason:** a secret can be split across chunks, so redacting deltas would need buffering that delays streaming. Everything else is redacted: tool calls in events, tool results and errors, run failures, the final text of a completed run, audit and telemetry. The model sees a secret only if a person gives it one, as tool results are redacted. | Decided |
 | D14 | The file and in-memory memory stores and the JSON-lines audit sink are built into the core, not separate packages. **Reason:** they need nothing beyond the base library, and a host should not need extra packages for local storage. Absent parts still default to none (GEN-02): the core never picks a store itself. | Decided (owner) |
-| D15 | The core may reference `Microsoft.Extensions.DependencyInjection.Abstractions`, and no other package, so each package registers its own services (`Add…` methods); the application composes them in one container. **Reason:** the owner wants every service made by a container and registered by the project that owns it. The abstractions are interfaces only. An MCP tool source is connected before the container is built, as connecting is asynchronous. | Decided (owner) |
-| Q1 | PostgreSQL client library: the plain provider (Npgsql), not an object mapper, as the queries are few and fixed. | Decided (owner) |
-| Q2 | JSON Schema validation under the core's no-dependency rule (D15 allows only the DI abstractions; the platform can export a schema from a type but not validate one): a small validator in the core for the subset the core itself produces (TOOL-01, OUT-01) and MCP servers commonly use; a full validator package only if a real schema needs it. | Decided (owner) |
+| D15 | Each package wires its own services and the application composes them in one place. **Reason:** the owner wants every service made in one composition root and registered by the package that owns it. The core depends on nothing outside its platform's base library except what makes this and telemetry possible: an interfaces-only dependency injection abstraction where the platform's convention is a container, and the platform's standard tracing and metrics API where the base library has none. Each implementation names the exact dependencies. An MCP tool source is connected before composition finishes, as connecting is asynchronous. | Decided (owner); each implementation's mechanism in `docs/implementations/` |
+| Q1 | PostgreSQL client library: the platform's plain driver, not an object mapper, as the queries are few and fixed. | Decided (owner) |
+| Q2 | JSON Schema validation under the core's no-dependency rule (D15; no platform's base library validates a schema): a small validator in the core for the subset the core itself produces (TOOL-01, OUT-01) and MCP servers commonly use; a full validator package only if a real schema needs it. | Decided (owner) |

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Before a Bash command: blocks pushing to main, committing on main and branches without an allowed prefix, as
-CLAUDE.md asks. Before a commit that stages code it runs the format check and the build, and shows the staged files so
+docs/conventions.md asks. Before a commit that stages code it runs the format check and the build, and shows the staged files so
 an unexpected one is caught; before a push of more than docs it runs the tests. CI runs the same checks; these find a
 failure before the commit or push instead of after it."""
 import json
@@ -110,7 +110,7 @@ def main():
     except ValueError:
         # Unbalanced quotes: the shell will reject it too, but never let a commit on main through unread.
         if git(cwd, "branch", "--show-current") == "main" and re.search(r"\bgit\b[^\n]*\bcommit\b", text):
-            block("Blocked: never commit on main (CLAUDE.md). Create a branch first.")
+            block("Blocked: never commit on main (docs/conventions.md). Create a branch first.")
         return
 
     for words in parsed:
@@ -134,12 +134,12 @@ def main():
 
         if verb == "push":
             if "--all" in rest or "--mirror" in rest:
-                block("Blocked: pushing every branch pushes main too (CLAUDE.md). Push the branch itself.")
+                block("Blocked: pushing every branch pushes main too (docs/conventions.md). Push the branch itself.")
             refspecs = positional[1:]
             targets = [spec.lstrip("+").split(":")[-1] for spec in refspecs] or [branch]
             targets = [branch if target in ("HEAD", "@") else target.removeprefix("refs/heads/") for target in targets]
             if "main" in targets:
-                block("Blocked: never push to main (CLAUDE.md). Push a branch and open a pull request.")
+                block("Blocked: never push to main (docs/conventions.md). Push a branch and open a pull request.")
             sources = [spec.lstrip("+").split(":")[0] for spec in refspecs]
             pushed = branch if not sources or sources[0] in ("", "HEAD", "@") else sources[0]
             checks.append(lambda here=here, pushed=pushed: before_push(here, pushed))
@@ -147,7 +147,7 @@ def main():
             staging = True
         elif verb == "commit":
             if branch == "main":
-                block("Blocked: never commit on main (CLAUDE.md). Create a branch first.")
+                block("Blocked: never commit on main (docs/conventions.md). Create a branch first.")
             # This hook runs before the whole line, so it sees the index only as it was before the line ran.
             if staging or stages_all(rest):
                 block("Blocked: stage files in their own command before committing (no add/rm/mv in the same line, "
@@ -172,7 +172,7 @@ def main():
         if new:
             # Resetting the local main to the remote's is normal; any other new branch needs a prefix.
             if new != "main" and not new.startswith(PREFIXES):
-                block(f"Blocked: branch '{new}' needs one of the prefixes {', '.join(PREFIXES)} (CLAUDE.md).")
+                block(f"Blocked: branch '{new}' needs one of the prefixes {', '.join(PREFIXES)} (docs/conventions.md).")
             if verb in ("switch", "checkout"):
                 branches[here] = new
 

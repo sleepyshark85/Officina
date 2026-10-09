@@ -1,6 +1,6 @@
 # Officina — Architecture
 
-Status: draft 5 · 2026-10-05. Packages are named under `Sleepyshark.Officina`. Implements [`REQUIREMENTS.md`](REQUIREMENTS.md). It describes concepts, components,
+Status: draft 6 · 2026-10-09. Names and packages per implementation (D8). Implements [`REQUIREMENTS.md`](REQUIREMENTS.md). It describes concepts, components,
 contracts and flows only; how they are coded is left to the implementation.
 
 ## 1. Design goals
@@ -109,8 +109,9 @@ flowchart TB
 | **Audit sinks** | Persist audit entries durably, in order; the core has a JSON-lines file sink, and a host may bring its own | Drop an entry silently |
 | **Test kit** | Scripted model, scripted approver, fake MCP server, prefix stability check | Replace anything inside the core |
 
-**Dependency rule:** the core depends on nothing outside the platform's base library (its tracing and metrics primitives included), except the platform's
-dependency injection contracts, so that each package registers its own services. Adapters depend on the core; the core never depends on an adapter. Only the
+**Dependency rule:** the core depends on nothing outside the platform's base library (its tracing and metrics primitives included), except what D15
+allows: dependency injection contracts where the platform composes services through a container, and the platform's standard tracing and metrics
+API where the base library has none. Adapters depend on the core; the core never depends on an adapter. Only the
 Claude adapter uses the provider's SDK.
 
 ## 4. Contracts at the boundaries
