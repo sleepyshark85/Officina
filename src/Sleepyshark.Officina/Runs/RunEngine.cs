@@ -64,6 +64,7 @@ internal static class RunEngine
         var fingerprint = run.Prefix.Fingerprint;
         if (conversation.Fingerprint is { } bound && bound != fingerprint)
         {
+            //Fingerprint mismatch should leads to a new conversation, but probably with the current conversation summarized attached. Let's improve that in the future
             result.Value = new Failed(
                 FailureReason.PrefixMismatch,
                 "The agent's tools, instructions or model settings differ from those this conversation was started with. Start a new conversation.",
@@ -71,6 +72,7 @@ internal static class RunEngine
             yield break;
         }
 
+        //Making sure all tools are up and running before start any model calls. We don't want to waste money to call model and end up failing because of tool calls.
         var unavailable = await ToolSources.ConnectAsync(agent, audit, cancellationToken).ConfigureAwait(false);
         if (unavailable is not null || cancellationToken.IsCancellationRequested)
         {
@@ -78,6 +80,7 @@ internal static class RunEngine
             yield break;
         }
 
+        //Patch the (resumed) conversation if the conversation is force stopped mid-way
         if (await AnswerInterruptedAsync(conversation, audit).ConfigureAwait(false) is { } interrupted)
         {
             yield return new ConversationAppended(conversation, interrupted);
