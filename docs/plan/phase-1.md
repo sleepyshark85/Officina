@@ -88,9 +88,10 @@ How each implementation realizes a slice, where it differs from the shared crite
 | S07 | Merged | Merged (#64) |
 | S08 | Merged | Merged (#68) |
 | S09 | Merged | Not started |
-| S10 | Merged | In review (#70) |
-| S11 | Merged | In review (#69) |
-| S12–S13 | Merged | Not started |
+| S10 | Merged | Merged (#70) |
+| S11 | Merged | Merged (#69) |
+| S12 | Merged | In review (#72) |
+| S13 | Merged | Not started |
 
 ## Team
 
