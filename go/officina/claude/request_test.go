@@ -67,6 +67,32 @@ func TestModel_CTX01_CTX02_CTX03_MDL02_MDL03_RequestMatchesTheSharedGoldenLayout
 	}
 }
 
+func TestModel_CTX01_ARequestWithoutToolsIsLaidOutAsDotNetsIs(t *testing.T) {
+	t.Parallel()
+	// What the .NET implementation sends for the same request, captured from its fake API: an empty tool list
+	// included.
+	const dotnet = `{"model":"claude-opus-5-5","max_tokens":64000,"thinking":{"type":"adaptive"},` +
+		`"output_config":{"effort":"medium"},"cache_control":{"type":"ephemeral","ttl":"5m"},"tools":[],` +
+		`"system":[{"type":"text","text":"Answer briefly.","cache_control":{"type":"ephemeral","ttl":"5m"}}],` +
+		`"messages":[{"role":"user","content":[{"type":"text","text":"Hi"}]}],"stream":true}`
+	api := serve(t, sse(textReply("end_turn")))
+
+	if _, err := collect(t.Context(), model(t, api, claude.Options{}), hi()); err != nil {
+		t.Fatalf("Stream() error = %v", err)
+	}
+
+	var want, got any
+	if err := json.Unmarshal([]byte(dotnet), &want); err != nil {
+		t.Fatalf("unmarshal .NET's request: %v", err)
+	}
+	if err := json.Unmarshal([]byte(api.Requests()[0]), &got); err != nil {
+		t.Fatalf("unmarshal the request: %v", err)
+	}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("request mismatch (-want +got):\n%s", diff)
+	}
+}
+
 func TestModel_MDL05_BlocksTheDotNetImplementationStoredReachTheWireByteForByte(t *testing.T) {
 	t.Parallel()
 	var c officina.Conversation

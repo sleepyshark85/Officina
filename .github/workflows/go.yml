@@ -41,10 +41,10 @@ jobs:
           EVENT: ${{ github.event_name }}
           BASE_REF: ${{ github.base_ref }}
         run: |
-          if [ "$EVENT" != pull_request ] || ! git diff --quiet "origin/$BASE_REF...HEAD" -- go .github/workflows/go.yml; then
+          if [ "$EVENT" != pull_request ] || ! git diff --quiet "origin/$BASE_REF...HEAD" -- go testdata .github/workflows/go.yml; then
             echo "go=true" >> "$GITHUB_OUTPUT"
           else
-            echo "Nothing under go/ changed; the Go jobs are skipped."
+            echo "Nothing under go/ or testdata/ changed; the Go jobs are skipped."
             echo "go=false" >> "$GITHUB_OUTPUT"
           fi
 

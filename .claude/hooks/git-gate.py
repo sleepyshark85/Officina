@@ -57,6 +57,11 @@ def is_go(path):
     return path.startswith("go/")
 
 
+def is_shared(path):
+    """Whether the path is test data every implementation reads, which both test suites must see."""
+    return path.startswith("testdata/")
+
+
 def require_dotnet():
     """Blocks when the .NET checks cannot run: a missing command would crash the hook, which lets the command through."""
     if not shutil.which("dotnet"):
@@ -106,7 +111,8 @@ def before_commit(here):
 
 
 def before_push(here, branch):
-    """The tests of each implementation the push's commits change beyond docs: .NET's outside go/, Go's under it."""
+    """The tests of each implementation the push's commits change beyond docs: .NET's outside go/, Go's under it, and
+    both for the shared testdata/."""
     base = git(here, "merge-base", "origin/main", branch or "HEAD")
     changed = git(here, "diff", "--no-renames", "--name-only", base, branch or "HEAD").splitlines() if base else ["?", "go/?"]
     code = [path for path in changed if not DOCS.search(path)]
@@ -115,7 +121,7 @@ def before_push(here, branch):
         require_dotnet()
         check(root, ["dotnet", "test", "--configuration", "Release", "--nologo",
               "--verbosity", "quiet", "--blame-hang-timeout", "2m"], "Blocked: the tests fail; fix them, then push again.")
-    if any(is_go(path) for path in code):
+    if any(is_go(path) or is_shared(path) for path in code):
         check(os.path.join(root, "go"), ["go", "test", "-race", "-shuffle=on", "./..."],
               "Blocked: the Go tests fail; fix them, then push again.", go_env())
 

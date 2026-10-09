@@ -88,8 +88,9 @@ func retryAfter(err error) time.Duration {
 		return 0
 	}
 	value := apiErr.Response.Header.Get("Retry-After")
-	if seconds, err := strconv.ParseFloat(value, 64); err == nil {
-		return time.Duration(seconds * float64(time.Second))
+	if seconds, err := strconv.ParseInt(value, 10, 64); err == nil {
+		// Capped before converting: a huge number of seconds overflows a Duration.
+		return time.Duration(min(seconds, int64(longestWait/time.Second))) * time.Second
 	}
 	if date, err := http.ParseTime(value); err == nil {
 		return time.Until(date)

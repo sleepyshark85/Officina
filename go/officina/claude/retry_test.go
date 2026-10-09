@@ -40,6 +40,8 @@ func TestModel_MDL04_ATransientFailureWaitsThenSucceeds(t *testing.T) {
 			30 * time.Second, 30 * time.Second},
 		{"a long Retry-After is capped",
 			[]response{apiError(429, "rate_limit_error", "Slow down.", "3600")}, 30 * time.Second, 30 * time.Second},
+		{"a Retry-After too long for a duration is capped too",
+			[]response{apiError(429, "rate_limit_error", "Slow down.", "10000000000")}, 30 * time.Second, 30 * time.Second},
 		{"an overload then a server error back off exponentially with jitter",
 			[]response{apiError(529, "overloaded_error", "Overloaded", ""), apiError(500, "api_error", "Oops", "")},
 			1500 * time.Millisecond, 3 * time.Second},
