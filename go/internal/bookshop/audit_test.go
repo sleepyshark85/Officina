@@ -146,7 +146,7 @@ func TestConsole_APP20_EVT03_TracesHoldTheMessageTextOnlyWhenTelemetryContentIsS
 			found := false
 			for _, s := range spans.GetSpans() {
 				for _, a := range s.Attributes {
-					found = found || a.Key == "gen_ai.output.messages" && strings.Contains(a.Value.Emit(), reply)
+					found = found || a.Key == "gen_ai.output.messages" && strings.Contains(a.Value.AsString(), reply)
 				}
 			}
 			if found != content {
