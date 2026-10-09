@@ -2,8 +2,8 @@
 
 Officina is a purpose-neutral library for building agentic applications. Phase 1 is accepted against one reference
 application, **Bookshop Assistant**: an interactive console chatbot over PostgreSQL in Docker. It has two
-implementations: **.NET 10** at the repository root (done), and **Go** in [`go/`](go/) (planned:
-[`docs/plan/go-port.md`](docs/plan/go-port.md)). Working in `go/` loads [`go/CLAUDE.md`](go/CLAUDE.md) as well.
+implementations: **.NET 10** at the repository root (done), and **Go** in [`go/`](go/) (in progress:
+[`docs/plan/phase-1.md`](docs/plan/phase-1.md)). Working in `go/` loads [`go/CLAUDE.md`](go/CLAUDE.md) as well.
 
 The conventions every implementation follows (workflow, tests, design rules, Claude API notes):
 
@@ -16,7 +16,8 @@ The conventions every implementation follows (workflow, tests, design rules, Cla
 - `ARCHITECTURE.md`: concepts, components, contracts and flows. **It holds no code, type names or API names;** keep it
   that way. Implementation detail goes in code and its comments.
 - `docs/implementations/`: each implementation's platform decisions (`dotnet.md`, `go.md`).
-- `docs/plan/`: `phase-1.md` (the .NET slices, done) and `go-port.md`.
+- `docs/plan/phase-1.md`: the phase 1 slices, shared by every implementation, with notes and progress per
+  implementation.
 
 ## The .NET implementation
 

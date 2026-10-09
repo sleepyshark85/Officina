@@ -1,7 +1,7 @@
 # Officina in Go — working rules
 
 Applies to everything under `go/`, on top of [`docs/conventions.md`](../docs/conventions.md). Decisions:
-[`docs/implementations/go.md`](../docs/implementations/go.md). Plan: [`docs/plan/go-port.md`](../docs/plan/go-port.md).
+[`docs/implementations/go.md`](../docs/implementations/go.md). Plan: [`docs/plan/phase-1.md`](../docs/plan/phase-1.md).
 
 **These rules are strict.** The reviewer treats a breach as must-fix, like a design-rule breach. The references, in
 order of precedence: [Effective Go](https://go.dev/doc/effective_go),
