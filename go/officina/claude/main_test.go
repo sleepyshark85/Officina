@@ -2,7 +2,9 @@ package claude_test
 
 import (
 	"context"
+	"encoding/json/jsontext"
 	"encoding/json/v2"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -118,6 +120,11 @@ func apiError(status int, kind, message, retryAfter string) response {
 		w.WriteHeader(status)
 		_, _ = fmt.Fprintf(w, `{"type":"error","error":{"type":%q,"message":%q}}`, kind, message)
 	}
+}
+
+// unused is the handler of a tool a test never calls.
+func unused(context.Context, jsontext.Value) (string, error) {
+	return "", errors.New("unused tool")
 }
 
 // fixture returns a file of the shared testdata, which the .NET implementation reads too.

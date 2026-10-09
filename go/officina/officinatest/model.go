@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json/jsontext"
 	"encoding/json/v2"
-	"errors"
 	"fmt"
 	"iter"
 	"slices"
@@ -41,9 +40,38 @@ func TextBlock(text string) officina.Block {
 	return officina.Block{Text: text, Raw: raw}
 }
 
+// ToolUseReply returns a reply that asks for the tool calls of blocks, made by ToolUseBlock, and stops for them.
+func ToolUseReply(blocks ...officina.Block) Reply {
+	var events []officina.ModelEvent
+	for _, b := range blocks {
+		events = append(events, officina.BlockReceived{Block: b})
+	}
+	return Reply{Events: append(events, officina.Finished{Reason: officina.FinishToolUse})}
+}
+
+// ToolUseBlock returns a block that calls tool name with input, a JSON object, as a provider adapter stores it. An
+// input that is not valid JSON is kept in the call as it is, as a model may write one.
+func ToolUseBlock(id, name, input string) officina.Block {
+	type use struct {
+		Type  string         `json:"type"`
+		ID    string         `json:"id"`
+		Name  string         `json:"name"`
+		Input jsontext.Value `json:"input"`
+	}
+	raw, err := json.Marshal(use{"tool_use", id, name, jsontext.Value(input)}, jsontext.EscapeForHTML(true))
+	if err != nil {
+		// The provider sends what it parsed, so its raw form of an invalid input holds an empty object.
+		raw, err = json.Marshal(use{"tool_use", id, name, jsontext.Value(`{}`)}, jsontext.EscapeForHTML(true))
+	}
+	if err != nil {
+		panic(fmt.Sprintf("officinatest: tool use block of invalid UTF-8: %v", err)) //nolint:forbidigo // A test kit misused.
+	}
+	return officina.Block{Raw: raw, ToolCall: &officina.ToolCall{ID: id, Name: name, Input: jsontext.Value(input)}}
+}
+
 // Model is a model that answers with replies scripted in advance, in order, and records every request. It needs no
-// network or API key, and many runs may use it at once. Like a provider's API, it rejects a request whose roles are
-// out of order, and then keeps its reply for the next request.
+// network or API key, and many runs may use it at once. Like a provider's API, it rejects a request that
+// CheckConversation rejects, and then keeps its reply for the next request.
 type Model struct {
 	settings string
 
@@ -97,7 +125,7 @@ func (m *Model) next(req officina.Request) (Reply, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.requests = append(m.requests, req)
-	if err := checkRoles(req.Messages); err != nil {
+	if err := CheckConversation(req.Messages); err != nil {
 		return Reply{}, fmt.Errorf("scripted model: request %d is invalid: %w", len(m.requests), err)
 	}
 	if len(m.replies) == 0 {
@@ -106,25 +134,4 @@ func (m *Model) next(req officina.Request) (Reply, error) {
 	reply := m.replies[0]
 	m.replies = m.replies[1:]
 	return reply, nil
-}
-
-// checkRoles checks the provider's rules for the order of roles: the conversation starts with a user message, no
-// two messages in a row have one role, and an operator message follows a user message and is last or followed by an
-// assistant message.
-func checkRoles(messages []officina.Message) error {
-	if len(messages) == 0 || messages[0].Role != officina.User {
-		return errors.New("the first message is not the user's")
-	}
-	for i := 1; i < len(messages); i++ {
-		previous, role := messages[i-1].Role, messages[i].Role
-		switch {
-		case role == previous:
-			return fmt.Errorf("messages %d and %d have one role, %s", i, i+1, role)
-		case role == officina.Operator && previous != officina.User:
-			return fmt.Errorf("operator message %d does not follow a user message", i+1)
-		case previous == officina.Operator && role != officina.Assistant:
-			return fmt.Errorf("operator message %d is followed by a %s message", i, role)
-		}
-	}
-	return nil
 }

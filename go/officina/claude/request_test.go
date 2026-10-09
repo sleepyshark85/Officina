@@ -24,9 +24,11 @@ func TestModel_CTX01_CTX02_CTX03_MDL02_MDL03_RequestMatchesTheSharedGoldenLayout
 	// The tools are given out of order: the request has them sorted.
 	a, err := officina.NewAgent(m, "You are the assistant of a bookshop.", officina.AgentOptions{Tools: []officina.Tool{
 		{Name: "search", Description: "Searches the catalogue.", InputSchema: jsontext.Value(
-			`{"type":"object","properties":{"query":{"type":"string"}},"required":["query"]}`)},
+			`{"type":"object","properties":{"query":{"type":"string"}},"required":["query"]}`),
+			Kind: officina.Read, Handler: unused},
 		{Name: "add_to_cart", Description: "Adds a book to the cart.", InputSchema: jsontext.Value(
-			`{"type":"object","properties":{"isbn":{"type":"string"},"copies":{"type":"integer"}},"required":["isbn"]}`)},
+			`{"type":"object","properties":{"isbn":{"type":"string"},"copies":{"type":"integer"}},"required":["isbn"]}`),
+			Kind: officina.Write, Handler: unused},
 	}})
 	if err != nil {
 		t.Fatalf("NewAgent() error = %v", err)
@@ -90,6 +92,43 @@ func TestModel_CTX01_ARequestWithoutToolsIsLaidOutAsDotNetsIs(t *testing.T) {
 	}
 	if diff := cmp.Diff(want, got); diff != "" {
 		t.Errorf("request mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestModel_CTX06_ToolResultsGoOutAsOneUserMessageOfToolResultBlocks(t *testing.T) {
+	t.Parallel()
+	use := `{"type":"tool_use","id":"toolu_01","name":"search","input":{"q":"Emma"}}`
+	req := hi()
+	req.Messages = append(req.Messages,
+		officina.Message{Role: officina.Assistant, Blocks: []officina.Block{{Raw: jsontext.Value(use), ToolCall: &officina.ToolCall{
+			ID: "toolu_01", Name: "search", Input: jsontext.Value(`{"q":"Emma"}`),
+		}}}},
+		officina.Message{Role: officina.User, Blocks: []officina.Block{
+			{ToolResult: &officina.ToolResult{CallID: "toolu_01", Content: "3 copies <new>"}},
+			{ToolResult: &officina.ToolResult{CallID: "toolu_02", Content: "failed", IsError: true}},
+		}})
+	api := serve(t, sse(textReply("end_turn")))
+
+	if _, err := collect(t.Context(), model(t, api, claude.Options{}), req); err != nil {
+		t.Fatalf("Stream() error = %v", err)
+	}
+
+	var sent struct {
+		Messages []jsontext.Value `json:"messages"`
+	}
+	if err := json.Unmarshal([]byte(api.Requests()[0]), &sent); err != nil {
+		t.Fatalf("unmarshal the request: %v", err)
+	}
+	var got any
+	if err := json.Unmarshal(sent.Messages[2], &got); err != nil {
+		t.Fatalf("unmarshal the message: %v", err)
+	}
+	want := map[string]any{"role": "user", "content": []any{
+		map[string]any{"type": "tool_result", "tool_use_id": "toolu_01", "content": "3 copies <new>"},
+		map[string]any{"type": "tool_result", "tool_use_id": "toolu_02", "content": "failed", "is_error": true},
+	}}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("results message mismatch (-want +got):\n%s", diff)
 	}
 }
 

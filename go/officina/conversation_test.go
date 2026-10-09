@@ -116,11 +116,12 @@ func TestConversation_AGT06_TheJSONFormIsPlainAndTheSameAsDotNets(t *testing.T) 
 	}
 }
 
-func TestConversation_AGT06_AToolCallIsKeptInDotNetsForm(t *testing.T) {
+func TestConversation_AGT06_AToolCallAndItsResultAreKeptInDotNetsForm(t *testing.T) {
 	t.Parallel()
 	const form = `{"id":"c1","messages":[{"role":"user","blocks":[{"text":"Find x."}]},{"role":"assistant","blocks":` +
 		`[{"raw":"{\"type\":\"tool_use\",\"id\":\"t1\",\"name\":\"search\",\"input\":{\"q\": \"x\"}}",` +
-		`"toolCall":{"id":"t1","name":"search","input":"{\"q\": \"x\"}"}}]}]}`
+		`"toolCall":{"id":"t1","name":"search","input":"{\"q\": \"x\"}"}}]},` +
+		`{"role":"user","blocks":[{"toolResult":{"callId":"t1","content":"none","isError":true}}]}]}`
 
 	var c officina.Conversation
 	if err := json.Unmarshal([]byte(form), &c); err != nil {
@@ -134,6 +135,10 @@ func TestConversation_AGT06_AToolCallIsKeptInDotNetsForm(t *testing.T) {
 	want := &officina.ToolCall{ID: "t1", Name: "search", Input: jsontext.Value(`{"q": "x"}`)}
 	if diff := cmp.Diff(want, c.Messages()[1].Blocks[0].ToolCall); diff != "" {
 		t.Errorf("tool call mismatch (-want +got):\n%s", diff)
+	}
+	wantResult := []officina.Block{{ToolResult: &officina.ToolResult{CallID: "t1", Content: "none", IsError: true}}}
+	if diff := cmp.Diff(wantResult, c.Messages()[2].Blocks); diff != "" {
+		t.Errorf("tool result mismatch (-want +got):\n%s", diff)
 	}
 	if string(got) != form {
 		t.Errorf("JSON = %s, want %s", got, form)
@@ -150,7 +155,7 @@ func TestConversation_AGT06_UnmarshalRejectsAnInvalidConversation(t *testing.T) 
 		{"not JSON", `{"messages":`, ""},
 		{"unknown role", `{"messages":[{"role":"system","blocks":[{"text":"x"}]}]}`, `message 1 has unknown role "system"`},
 		{"no blocks", `{"messages":[{"role":"user","blocks":[]}]}`, "message 1 has no blocks"},
-		{"empty block", `{"messages":[{"role":"user","blocks":[{}]}]}`, "block 1 of message 1 has neither text nor raw JSON"},
+		{"empty block", `{"messages":[{"role":"user","blocks":[{}]}]}`, "block 1 of message 1 has no text, raw JSON or tool result"},
 		{"invalid raw", `{"messages":[{"role":"assistant","blocks":[{"raw":"{x"}]}]}`, "block 1 of message 1 has invalid raw JSON"},
 		{"invalid tool input", `{"messages":[{"role":"assistant","blocks":[{"raw":"{}","toolCall":{"id":"t1",` +
 			`"name":"s","input":"{x"}}]}]}`, "block 1 of message 1 has invalid tool input"},

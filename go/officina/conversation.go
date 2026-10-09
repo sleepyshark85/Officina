@@ -23,7 +23,7 @@ const (
 
 // Block is one piece of a message. A block the model produced keeps the provider's JSON in Raw, stored and replayed
 // byte for byte; the core reads only its neutral views, Text and ToolCall. A block the core made, such as the user's
-// message, has no raw form: the provider adapter renders it.
+// message or a tool's result, has no raw form: the provider adapter renders it.
 type Block struct {
 	// Text is the text, for a text block; empty for any other.
 	Text string
@@ -31,6 +31,17 @@ type Block struct {
 	ToolCall *ToolCall
 	// Raw is the provider's JSON for the block, exactly as received; nil for a block the core made.
 	Raw jsontext.Value
+	// ToolResult is a call's result, for a block the core made to answer it; nil for any other.
+	ToolResult *ToolResult
+}
+
+// ToolResult is a tool call's result as the model gets it; any failure is an error result.
+type ToolResult struct {
+	// CallID is the ID of the call it answers.
+	CallID string `json:"callId"`
+	// Content is what the tool returned, or why the call failed.
+	Content string `json:"content"`
+	IsError bool   `json:"isError"`
 }
 
 // ToolCall is the neutral view of the model's request to run a tool.
@@ -102,9 +113,10 @@ type (
 		Blocks []blockJSON `json:"blocks"`
 	}
 	blockJSON struct {
-		Text     *string       `json:"text,omitzero"`
-		Raw      string        `json:"raw,omitzero"`
-		ToolCall *toolCallJSON `json:"toolCall,omitzero"`
+		Text       *string       `json:"text,omitzero"`
+		Raw        string        `json:"raw,omitzero"`
+		ToolCall   *toolCallJSON `json:"toolCall,omitzero"`
+		ToolResult *ToolResult   `json:"toolResult,omitzero"`
 	}
 	toolCallJSON struct {
 		ID    string `json:"id"`
@@ -119,11 +131,11 @@ func (c *Conversation) MarshalJSON() ([]byte, error) {
 	for i, m := range c.messages {
 		wire.Messages[i] = messageJSON{Role: m.Role, Blocks: make([]blockJSON, len(m.Blocks))}
 		for j, b := range m.Blocks {
-			wire.Messages[i].Blocks[j] = blockJSON{Raw: string(b.Raw)}
+			wire.Messages[i].Blocks[j] = blockJSON{Raw: string(b.Raw), ToolResult: b.ToolResult}
 			if call := b.ToolCall; call != nil {
 				wire.Messages[i].Blocks[j].ToolCall = &toolCallJSON{ID: call.ID, Name: call.Name, Input: string(call.Input)}
 			}
-			if b.Text != "" || b.Raw == nil {
+			if b.Text != "" || b.Raw == nil && b.ToolResult == nil {
 				wire.Messages[i].Blocks[j].Text = &b.Text
 			}
 		}
@@ -136,7 +148,7 @@ func (c *Conversation) MarshalJSON() ([]byte, error) {
 }
 
 // UnmarshalJSON reads a conversation from its JSON form. It checks each message has a known role and at least one
-// block, and each block has text or raw JSON, which must be valid, as must a tool call's input.
+// block, and each block has text, raw JSON or a tool result; raw JSON must be valid, as must a tool call's input.
 func (c *Conversation) UnmarshalJSON(data []byte) error {
 	var wire conversationJSON
 	if err := json.Unmarshal(data, &wire); err != nil {
@@ -152,7 +164,7 @@ func (c *Conversation) UnmarshalJSON(data []byte) error {
 		}
 		messages[i] = Message{Role: m.Role, Blocks: make([]Block, len(m.Blocks))}
 		for j, b := range m.Blocks {
-			var block Block
+			block := Block{ToolResult: b.ToolResult}
 			if b.Text != nil {
 				block.Text = *b.Text
 			}
@@ -168,8 +180,9 @@ func (c *Conversation) UnmarshalJSON(data []byte) error {
 					return fmt.Errorf("unmarshal conversation: block %d of message %d has invalid tool input", j+1, i+1)
 				}
 			}
-			if b.Text == nil && block.Raw == nil {
-				return fmt.Errorf("unmarshal conversation: block %d of message %d has neither text nor raw JSON", j+1, i+1)
+			if b.Text == nil && block.Raw == nil && block.ToolResult == nil {
+				return fmt.Errorf("unmarshal conversation: block %d of message %d has no text, raw JSON or tool result",
+					j+1, i+1)
 			}
 			messages[i].Blocks[j] = block
 		}

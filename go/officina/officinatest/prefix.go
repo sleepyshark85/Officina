@@ -45,6 +45,21 @@ func sameTool(a, b officina.Tool) bool {
 
 func sameMessage(a, b officina.Message) bool {
 	return a.Role == b.Role && slices.EqualFunc(a.Blocks, b.Blocks, func(x, y officina.Block) bool {
-		return x.Text == y.Text && bytes.Equal(x.Raw, y.Raw)
+		return x.Text == y.Text && bytes.Equal(x.Raw, y.Raw) && sameCall(x.ToolCall, y.ToolCall) &&
+			sameResult(x.ToolResult, y.ToolResult)
 	})
+}
+
+func sameCall(a, b *officina.ToolCall) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return a.ID == b.ID && a.Name == b.Name && bytes.Equal(a.Input, b.Input)
+}
+
+func sameResult(a, b *officina.ToolResult) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return *a == *b
 }

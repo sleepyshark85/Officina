@@ -68,7 +68,11 @@ jobs:
         # The race detector needs cgo on Windows (the runner's MinGW gcc); Officina's own code uses none.
         env:
           CGO_ENABLED: "1"
-        run: go test -race -shuffle=on ./...
+        # The property tests (rapid) run with a fixed seed here, so CI is deterministic; locally each run draws a new
+        # one, and a failure prints the seed that reproduces it. Only packages with property tests know the flag.
+        run: |
+          go test -race -shuffle=on $(go list ./... | grep -vx 'github.com/sleepyshark85/officina/go/officina')
+          go test -race -shuffle=on ./officina -rapid.seed=20261009 -rapid.nofailfile
 
   windows:
     name: go-windows
@@ -133,6 +137,8 @@ jobs:
 
       - name: Mutate
         # Every run mutates the core and the test kit whole: they are small, and `--diff` cannot work from go/ (its
-        # paths are relative to the repository, so it skipped every mutant). Reports only, with no threshold, until
-        # Go S05's baseline sets one. The default timeout counts most mutants as timed out, hence the coefficient.
-        run: gremlins unleash --coverpkg ./officina/... --timeout-coefficient 20 ./officina
+        # paths are relative to the repository, so it skipped every mutant). It fails below the thresholds Go S05's
+        # baseline set (G12). The default timeout counts most mutants as timed out, hence the coefficient.
+        run: >-
+          gremlins unleash --coverpkg ./officina/... --timeout-coefficient 20
+          --threshold-efficacy 90 --threshold-mcover 80 ./officina
