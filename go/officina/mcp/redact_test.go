@@ -47,7 +47,11 @@ func TestLines_MCP04_ALineLongerThanAMessageMayBeStopsTheServer(t *testing.T) {
 	if _, err := l.Write([]byte("12345678\n1234")); err != nil {
 		t.Fatalf("Write() of lines within the limit error = %v", err)
 	}
-	_, err := l.Write([]byte("56789"))
+	// A line of exactly the limit may still be on its way.
+	if _, err := l.Write([]byte("5678")); err != nil {
+		t.Fatalf("Write() up to the limit error = %v", err)
+	}
+	_, err := l.Write([]byte("9"))
 	_, again := l.Write([]byte("\n"))
 
 	if diff := cmp.Diff([]string{"12345678"}, got); diff != "" {

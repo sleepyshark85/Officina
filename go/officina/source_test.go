@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 
 	"github.com/sleepyshark85/officina/go/officina"
 	"github.com/sleepyshark85/officina/go/officina/officinatest"
@@ -106,7 +107,8 @@ func TestRun_MCP04_ASourceThatCannotConnectFailsTheRunBeforeAnyModelCall(t *test
 
 	want := officina.Result{Status: officina.Failed, Failure: officina.ToolSourceUnavailable,
 		Detail: `the tool source "files" is not available: refused with key [redacted]`}
-	if diff := cmp.Diff(want, res); diff != "" {
+	// How long the run took is not compared.
+	if diff := cmp.Diff(want, res, cmpopts.IgnoreFields(officina.Result{}, "Duration")); diff != "" {
 		t.Errorf("result mismatch (-want +got):\n%s", diff)
 	}
 	if len(model.Requests()) != 0 || len(c.Messages()) != 0 {

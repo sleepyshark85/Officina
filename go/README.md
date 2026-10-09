@@ -101,8 +101,8 @@ go mod tidy -diff
 govulncheck ./...
 ```
 
-Mutation testing, over the core, the test kit, the Claude package and the MCP client; `go-mutation` fails below the thresholds in
-[`.gremlins.yaml`](.gremlins.yaml) (G12):
+Mutation testing, over the core, the test kit, the Claude package and the MCP client; `go-mutation` fails below the
+thresholds in [`.gremlins.yaml`](.gremlins.yaml) (G12):
 
 ```sh
 go install github.com/go-gremlins/gremlins/cmd/gremlins@v0.6.0

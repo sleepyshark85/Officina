@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -35,6 +36,21 @@ func TestClose_MCP01_AServerThatIgnoresItsClosedInputIsStoppedWithEveryProcessIt
 
 	for _, pid := range pids {
 		waitExited(t, pid)
+	}
+}
+
+func TestClose_MCP01_AServerThatExitsOnceItsInputIsClosedIsLeftToFinish(t *testing.T) {
+	t.Parallel()
+	file := filepath.Join(t.TempDir(), "done")
+	source, err := mcp.Connect(t.Context(), stdioServer(t, "", "tidy", file), nil)
+	if err != nil {
+		t.Fatalf("Connect() error = %v", err)
+	}
+
+	source.Close()
+
+	if data, err := os.ReadFile(file); err != nil || string(data) != "done" {
+		t.Errorf("the server's last work = %q, %v; want it done before Close returned", data, err)
 	}
 }
 

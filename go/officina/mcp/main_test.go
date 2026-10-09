@@ -51,9 +51,16 @@ func TestMain(m *testing.M) {
 //   - silent <file>: writes its process id to the file and never answers, until its input ends;
 //   - stubborn <file> serve|silent: starts a child that shares its output (sleeper), writes its own and the child's
 //     process ids to the file, serves or stays silent, and never exits by itself, even once its input ends;
-//   - flood: reads the first request and answers with a line longer than a message may be.
+//   - flood: reads the first request and answers with a line longer than a message may be;
+//   - tidy <file>: serves no tools until its input ends, then takes a moment to write "done" to the file and exits.
 func fake(mode string, args []string) int {
 	switch mode {
+	case "tidy":
+		_ = officinatest.NewMCPServer().Serve(context.Background(), os.Stdin, os.Stdout) // Until the input ends.
+		time.Sleep(50 * time.Millisecond)
+		if writeFile(args[0], "done") != nil {
+			return 1
+		}
 	case "stubborn":
 		return stubborn(args[0], args[1] == "serve")
 	case "sleeper":
@@ -130,7 +137,12 @@ func writePIDs(file string, pids ...int) error {
 	for i, pid := range pids {
 		text[i] = strconv.Itoa(pid)
 	}
-	if err := os.WriteFile(file+".tmp", []byte(strings.Join(text, " ")), 0o600); err != nil {
+	return writeFile(file, strings.Join(text, " "))
+}
+
+// writeFile writes text to file aside and then moves it, so the test never reads it half written.
+func writeFile(file, text string) error {
+	if err := os.WriteFile(file+".tmp", []byte(text), 0o600); err != nil {
 		return err
 	}
 	return os.Rename(file+".tmp", file)
