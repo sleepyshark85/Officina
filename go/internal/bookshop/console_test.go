@@ -24,14 +24,21 @@ import (
 // progress is interrupted, as Ctrl+C does.
 func session(t *testing.T, d *database, model *officinatest.Model, cancelOn string, script ...any) string {
 	t.Helper()
+	return sessionOf(t, bookshop.Config{}, d, model, cancelOn, script...)
+}
+
+// sessionOf runs a session as session does, with the boundaries of cfg that session leaves out, such as telemetry.
+func sessionOf(t *testing.T, cfg bookshop.Config, d *database, model *officinatest.Model, cancelOn string,
+	script ...any,
+) string {
+	t.Helper()
 	out := &transcript{cancelOn: cancelOn}
-	app, err := bookshop.Build(t.Context(), bookshop.Config{
-		Database: d.url, Model: model, In: &input{t: t, script: script}, Out: out, Echo: true,
-		Interrupt: func(ctx context.Context) (context.Context, context.CancelFunc) {
-			ctx, out.interrupt = context.WithCancel(ctx)
-			return ctx, out.interrupt
-		},
-	})
+	cfg.Database, cfg.Model, cfg.In, cfg.Out, cfg.Echo = d.url, model, &input{t: t, script: script}, out, true
+	cfg.Interrupt = func(ctx context.Context) (context.Context, context.CancelFunc) {
+		ctx, out.interrupt = context.WithCancel(ctx)
+		return ctx, out.interrupt
+	}
+	app, err := bookshop.Build(t.Context(), cfg)
 	if err != nil {
 		t.Fatalf("Build() error = %v", err)
 	}
@@ -173,7 +180,9 @@ func TestConsole_APP02_HelpAndUnknownCommandsAreAnsweredAndQuitLeaves(t *testing
 		"Who is using the assistant? Your name: \n",
 		"Who is using the assistant? Your name:   \n",
 		"Who is using the assistant? Your name: Sam\n",
-		"you> /help\nCommands:\n  /help   Show this help.\n  /quit   Leave the assistant.\n",
+		"you> /help\nCommands:\n  /help          Show this help.\n",
+		"  /audit [<id>]  Show the audit trail of this session, or of the session with that id.\n",
+		"  /quit          Leave the assistant.\n",
 		"Ctrl+C stops a reply in progress.\n",
 		"you> \nyou> /sessions\nUnknown command /sessions. Type /help for commands.\n",
 		"you> /quit\n")

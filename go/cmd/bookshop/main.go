@@ -5,12 +5,21 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"sync"
+	"time"
+
+	"go.opentelemetry.io/otel"
 
 	"github.com/sleepyshark85/officina/go/internal/bookshop"
 )
 
-// composeDatabase is the database of the compose file in apps/BookshopAssistant, with its demo password.
-const composeDatabase = "postgres://bookshop:shelf-demo-41@localhost:5432/bookshop"
+// The compose file's services, in apps/BookshopAssistant: the database, with its demo password, and the telemetry
+// dashboard, with its OTLP endpoint.
+const (
+	composeDatabase  = "postgres://bookshop:shelf-demo-41@localhost:5432/bookshop"
+	composeDashboard = "http://localhost:18888"
+	composeOTLP      = "http://localhost:4317"
+)
 
 func main() {
 	os.Exit(run())
@@ -18,10 +27,23 @@ func main() {
 
 // run runs the application and returns its exit code.
 func run() int {
-	database := os.Getenv("BOOKSHOP_DATABASE")
-	if database == "" {
-		database = composeDatabase
+	ctx := context.Background()
+	telemetry, err := bookshop.NewTelemetry(ctx, setting("OTEL_EXPORTER_OTLP_ENDPOINT", composeOTLP))
+	if err != nil {
+		return fail(err)
 	}
+	defer func() {
+		ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		defer cancel()
+		// The session is over; telemetry the dashboard did not take is lost, as it would be on a crash.
+		_ = telemetry.Close(ctx)
+	}()
+	// An export that fails, as when the dashboard is not running, is told once, not on every export.
+	var once sync.Once
+	otel.SetErrorHandler(otel.ErrorHandlerFunc(func(err error) {
+		once.Do(func() { fmt.Fprintln(os.Stderr, "bookshop: telemetry not exported:", err) })
+	}))
+
 	model, err := bookshop.Model()
 	if err != nil {
 		return fail(err)
@@ -29,14 +51,15 @@ func run() int {
 	// Input that is not a terminal is not shown as it is typed, so the console writes each line after its prompt.
 	stdin, err := os.Stdin.Stat()
 	echo := err == nil && stdin.Mode()&os.ModeCharDevice == 0
-	ctx := context.Background()
 	app, err := bookshop.Build(ctx, bookshop.Config{
-		Database: database, Model: model, In: os.Stdin, Out: os.Stdout, Echo: echo,
+		Database: setting("BOOKSHOP_DATABASE", composeDatabase), Model: model, In: os.Stdin, Out: os.Stdout, Echo: echo,
 		// Ctrl+C stops the reply in progress and the session goes on. Between replies nothing listens for it, so it
 		// ends the application, as usual.
 		Interrupt: func(ctx context.Context) (context.Context, context.CancelFunc) {
 			return signal.NotifyContext(ctx, os.Interrupt)
 		},
+		TracerProvider: telemetry.Traces, MeterProvider: telemetry.Metrics, Logger: telemetry.Logger(),
+		Dashboard: setting("BOOKSHOP_DASHBOARD", composeDashboard),
 	})
 	if err != nil {
 		return fail(err)
@@ -46,6 +69,14 @@ func run() int {
 		return fail(err)
 	}
 	return 0
+}
+
+// setting returns the environment variable name, or fallback when it is empty.
+func setting(name, fallback string) string {
+	if v := os.Getenv(name); v != "" {
+		return v
+	}
+	return fallback
 }
 
 // fail reports err and returns the exit code of a failure.

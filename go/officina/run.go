@@ -9,6 +9,9 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
+
+	"go.opentelemetry.io/otel/attribute"
 )
 
 // RunOptions holds what one run gets besides its message, each optional. None of it is part of the prefix.
@@ -169,10 +172,13 @@ func (a *Agent) run(ctx context.Context, c *Conversation, message string, opts R
 	}
 	defer c.running.Store(false)
 
+	ctx, span := a.telemetry.startRun(ctx, c.ID, message)
 	audit := newRecorder(a, c.ID)
+	span.SetAttributes(attribute.String("officina.run.id", audit.run))
 	// A missing run entry blocks nothing: only a write's attempt depends on the trail.
 	_ = audit.record(ctx, AuditEntry{Kind: AuditRunStarted})
-	res := a.loop(ctx, c, message, opts, audit, yield)
+	var calls counts
+	res := a.loop(ctx, c, message, opts, audit, &calls, yield)
 	res.Text, res.Detail = a.redact(res.Text), a.redact(res.Detail)
 	outcome := res.Status.String()
 	switch res.Status {
@@ -181,13 +187,22 @@ func (a *Agent) run(ctx context.Context, c *Conversation, message string, opts R
 	case Failed:
 		outcome += ": " + res.Failure.String()
 	}
-	_ = audit.record(ctx, AuditEntry{Kind: AuditRunEnded, Outcome: outcome, Detail: res.Detail, Usage: res.Usage}) // As above.
+	_ = audit.record(ctx, AuditEntry{ // As above.
+		Kind: AuditRunEnded, Outcome: outcome, Detail: res.Detail, Usage: res.Usage,
+		Cost: a.telemetry.model.Price.cost(res.Usage),
+	})
+	a.telemetry.endRun(ctx, span, res, calls.model, calls.tool)
 	return res, nil
+}
+
+// counts are the calls a run made.
+type counts struct {
+	model, tool int
 }
 
 // loop calls the model and runs the tools it asks for until a reply ends the run.
 func (a *Agent) loop(ctx context.Context, c *Conversation, message string, opts RunOptions, audit *recorder,
-	yield func(RunEvent) bool,
+	calls *counts, yield func(RunEvent) bool,
 ) Result {
 	if c.fingerprint != "" && c.fingerprint != a.fingerprint {
 		return Result{Status: Failed, Failure: PrefixMismatch, Detail: "the agent's tools, instructions or model " +
@@ -209,25 +224,24 @@ func (a *Agent) loop(ctx context.Context, c *Conversation, message string, opts 
 	if opts.Context != "" {
 		pending = append(pending, textMessage(Operator, opts.Context))
 	}
-	for calls := 1; ; calls++ {
+	for {
 		switch {
 		case ctx.Err() != nil:
 			return Result{Status: Stopped, Stop: Cancelled, Usage: usage}
-		case calls > maxModelCalls:
+		case calls.model == maxModelCalls:
 			return Result{Status: Stopped, Stop: IterationLimit, Usage: usage}
 		}
 		req := Request{Tools: a.tools, Instructions: a.instructions, Messages: append(slices.Clip(c.messages), pending...)}
-		blocks, finished, used, failure := a.call(ctx, req, emit)
-		usage = usage.plus(used)
+		calls.model++
+		r := a.call(ctx, req, emit)
+		usage = usage.plus(r.usage)
+		blocks, finished := r.blocks, r.finished
 		switch {
-		case finished == nil && ctx.Err() != nil:
+		case finished == nil && r.failure == nil:
 			// Cut off mid-stream: nothing is appended, not even the message it would have answered.
 			return Result{Status: Stopped, Stop: Cancelled, Usage: usage}
-		case finished == nil && failure != nil:
-			return Result{Status: Failed, Failure: ModelError, Detail: failure.Error(), Usage: usage}
 		case finished == nil:
-			return Result{Status: Failed, Failure: ModelError, Detail: "the model's reply ended without a finish reason",
-				Usage: usage}
+			return Result{Status: Failed, Failure: ModelError, Detail: r.failure.Error(), Usage: usage}
 		}
 
 		end := finish(*finished, blocks, usage)
@@ -261,6 +275,7 @@ func (a *Agent) loop(ctx context.Context, c *Conversation, message string, opts 
 			return end
 		}
 
+		calls.tool += len(toolCalls)
 		results := a.runTools(ctx, toolCalls, audit, emit)
 		answer := Message{Role: User, Blocks: make([]Block, len(results))}
 		for i := range results {
@@ -271,36 +286,70 @@ func (a *Agent) loop(ctx context.Context, c *Conversation, message string, opts 
 	}
 }
 
-// call makes one model call, reporting its text and usage, and returns the reply's blocks, its finish (nil if it
-// did not finish) and usage, and the failure that ended it, if any.
-func (a *Agent) call(ctx context.Context, req Request, emit func(RunEvent)) (
-	blocks []Block, finished *Finished, usage Usage, failure error,
-) {
+// reply is what one model call returned.
+type reply struct {
+	blocks []Block
+	// finished is the reply's finish; nil if it did not finish.
+	finished *Finished
+	usage    Usage
+	// failure is why the call failed; nil if it finished or was cancelled.
+	failure error
+	retries int
+	// firstText is how long the call took to stream its first text, on the attempt that counts; negative if it
+	// streamed none.
+	firstText time.Duration
+}
+
+// errNoFinish is a reply that ended without saying why.
+var errNoFinish = errors.New("the model's reply ended without a finish reason")
+
+// call makes one model call, reporting its text and usage, and returns its reply.
+func (a *Agent) call(ctx context.Context, req Request, emit func(RunEvent)) (r reply) {
+	ctx, span := a.telemetry.startModelCall(ctx)
+	started := time.Now()
+	r.firstText = -1
+	defer func() {
+		switch {
+		case r.finished != nil:
+		case ctx.Err() != nil:
+			r.failure = nil
+		case r.failure == nil:
+			r.failure = errNoFinish
+		}
+		a.telemetry.endModelCall(ctx, span, started, r)
+	}()
 	streamed := false
 	for event, err := range a.model.Stream(ctx, req) {
 		if err != nil || ctx.Err() != nil {
-			return blocks, nil, usage, err
+			r.failure = err
+			return r
 		}
 		switch e := event.(type) {
 		case TextDelta:
+			if r.firstText < 0 {
+				r.firstText = time.Since(started)
+			}
 			streamed = true
 			emit(TextStreamed(e))
 		case Retried:
-			blocks = nil
+			r.blocks, r.firstText = nil, -1
+			r.retries++
+			a.telemetry.retried(ctx)
 			if streamed {
 				streamed = false
 				emit(ReplyRestarted{})
 			}
 		case BlockReceived:
-			blocks = append(blocks, e.Block)
+			r.blocks = append(r.blocks, e.Block)
 		case UsageReceived:
-			usage = usage.plus(e.Usage)
+			r.usage = r.usage.plus(e.Usage)
 			emit(UsageReported(e))
 		case Finished:
-			return blocks, &e, usage, nil
+			r.finished = &e
+			return r
 		}
 	}
-	return blocks, nil, usage, nil
+	return r
 }
 
 // runTools runs a reply's tool calls in the pipeline, on a goroutine of its own, and reports their events here, on

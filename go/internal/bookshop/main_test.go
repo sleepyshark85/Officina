@@ -5,9 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"runtime"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -41,10 +43,8 @@ var server struct { //nolint:gochecknoglobals // TestMain's container, shared by
 
 func TestMain(m *testing.M) {
 	code := runWithDatabase(m)
-	// The reaper's connection to Docker can outlive the container it watched, as it closes on its own time.
 	if code == 0 {
-		if err := goleak.Find(goleak.IgnoreAnyFunction(
-			"github.com/testcontainers/testcontainers-go.(*Reaper).connect.func1")); err != nil {
+		if err := goleak.Find(); err != nil {
 			fmt.Fprintln(os.Stderr, "goleak:", err)
 			code = 1
 		}
@@ -64,6 +64,12 @@ func runWithDatabase(m *testing.M) int {
 	case os.Getenv("CI") == "" && docker != nil && os.Getenv("DOCKER_HOST") == "":
 		server.skip = "the database tests need Docker, which was not found"
 		return m.Run()
+	}
+	// The container is removed here, also when the run is interrupted, so testcontainers' reaper, a container of
+	// its own pulled from Docker Hub, is not needed.
+	if err := os.Setenv("TESTCONTAINERS_RYUK_DISABLED", "true"); err != nil {
+		fmt.Fprintln(os.Stderr, "disable the reaper:", err)
+		return 1
 	}
 	ctx := context.Background()
 	files, err := filepath.Glob(filepath.Join(scripts, "*.sql"))
@@ -95,6 +101,27 @@ func runWithDatabase(m *testing.M) int {
 		fmt.Fprintln(os.Stderr, "start the database container:", err)
 		return 1
 	}
+	// An interrupted run removes the container before it exits; a run killed outright leaves it, labelled
+	// org.testcontainers, for docker container prune.
+	interrupted := make(chan os.Signal, 1)
+	signal.Notify(interrupted, os.Interrupt, syscall.SIGTERM)
+	done := make(chan struct{})
+	var watch sync.WaitGroup
+	watch.Go(func() {
+		select {
+		case <-interrupted:
+			if err := testcontainers.TerminateContainer(container); err != nil {
+				fmt.Fprintln(os.Stderr, "terminate the database container:", err)
+			}
+			os.Exit(1)
+		case <-done:
+		}
+	})
+	defer func() {
+		signal.Stop(interrupted)
+		close(done)
+		watch.Wait()
+	}()
 	if server.host, err = container.Host(ctx); err == nil {
 		var port interface{ Port() string }
 		port, err = container.MappedPort(ctx, "5432/tcp")

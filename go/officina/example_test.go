@@ -9,6 +9,9 @@ import (
 	"path/filepath"
 	"strings"
 
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
+
 	"github.com/sleepyshark85/officina/go/officina"
 	"github.com/sleepyshark85/officina/go/officina/officinatest"
 )
@@ -39,6 +42,34 @@ func ExampleAgent_Run() {
 	// Output:
 	// true Paris.
 	// 3 messages, true
+}
+
+// Telemetry: the host passes its providers, here the OpenTelemetry SDK's with an in-memory exporter; an
+// application passes ones with an OTLP exporter. Each run is a trace, with a span per model call and tool call.
+func Example_telemetry() {
+	spans := tracetest.NewInMemoryExporter()
+	traces := sdktrace.NewTracerProvider(sdktrace.WithSyncer(spans))
+	defer func() { _ = traces.Shutdown(context.Background()) }() // In memory, nothing to flush.
+	model := officinatest.NewModel("scripted", officinatest.TextReply("Hello!"))
+	agent, err := officina.NewAgent(model, "You are a helpful assistant.", officina.AgentOptions{
+		Name: "greeter", TracerProvider: traces,
+	})
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	if _, err := agent.Run(context.Background(), nil, "Hi", officina.RunOptions{}); err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	for _, s := range spans.GetSpans() {
+		fmt.Println(s.Name)
+	}
+	// Output:
+	// chat scripted
+	// invoke_agent greeter
 }
 
 // Streaming a run: text as it arrives, each append to save the conversation, then the result.

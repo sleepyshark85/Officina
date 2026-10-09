@@ -97,6 +97,7 @@ func usage(u anthropic.BetaUsage) officina.Usage {
 		return officina.Usage{
 			Input: u.InputTokens, Output: u.OutputTokens,
 			CacheRead: u.CacheReadInputTokens, CacheWrite: u.CacheCreationInputTokens,
+			CacheWriteHour: u.CacheCreation.Ephemeral1hInputTokens,
 		}
 	}
 	var sum officina.Usage
@@ -105,6 +106,7 @@ func usage(u anthropic.BetaUsage) officina.Usage {
 		sum.Output += it.OutputTokens
 		sum.CacheRead += it.CacheReadInputTokens
 		sum.CacheWrite += it.CacheCreationInputTokens
+		sum.CacheWriteHour += it.CacheCreation.Ephemeral1hInputTokens
 	}
 	return sum
 }

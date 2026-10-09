@@ -144,6 +144,8 @@ type funcModel func(ctx context.Context, req officina.Request) iter.Seq2[officin
 
 func (funcModel) Settings() string { return "func" }
 
+func (funcModel) Info() officina.ModelInfo { return officina.ModelInfo{Provider: "func", Name: "func"} }
+
 func (f funcModel) Stream(ctx context.Context, req officina.Request) iter.Seq2[officina.ModelEvent, error] {
 	return f(ctx, req)
 }

@@ -3,8 +3,9 @@
 The Go implementation of Officina: the same requirements ([`REQUIREMENTS.md`](../REQUIREMENTS.md)) and architecture
 ([`ARCHITECTURE.md`](../ARCHITECTURE.md)) as the .NET one at the repository root, written as idiomatic Go.
 
-Status: in progress. The core's run loop (Go S03), the Claude adapter (Go S04), tools and audit (Go S05) and the
-Bookshop Assistant console (Go S06) are in; telemetry, sessions, memory and MCP follow. See
+Status: in progress. The core's run loop (Go S03), the Claude adapter (Go S04), tools and audit (Go S05), the
+Bookshop Assistant console (Go S06) and telemetry with the audit view (Go S07) are in; sessions, memory and MCP
+follow. See
 [`docs/plan/phase-1.md`](../docs/plan/phase-1.md) for the slices (the Go column),
 [`docs/implementations/go.md`](../docs/implementations/go.md) for the decisions and
 [`docs/traceability.md`](docs/traceability.md) for the tests of each requirement.
@@ -48,13 +49,22 @@ from the compose file, schema and seed in [`apps/BookshopAssistant/`](../apps/Bo
 and `ANTHROPIC_API_KEY`; a reply costs a few cents.
 
 ```sh
-(cd ../apps/BookshopAssistant && docker compose up --detach --wait postgres)
+(cd ../apps/BookshopAssistant && docker compose up --detach --wait postgres dashboard)
 go run ./cmd/bookshop
 ```
 
 It asks your name, then takes messages, such as *Order the two cheapest fantasy books in stock for Alice Martin and
 tell me the total*. Replies stream with each tool call shown; a change asks for your approval with its exact input.
 Ctrl+C stops a reply in progress, and the session goes on; `/help` lists the commands, `/quit` leaves.
+`/audit` shows the session's audit trail, from the database's `audit` table, grouped by run: each entry's time,
+kind, tool and outcome, approvals, and each run's tokens and cost, with a link to the run's trace.
+
+The compose file's telemetry dashboard (the standalone Aspire dashboard, the same one .NET uses) shows each reply as a
+trace (the reply, the run, its model calls and tool calls, with tokens, cache reads, cost, approval wait and errors),
+the core's metrics (tokens, cost, cache hit ratio, latency, tool outcomes, approvals) and the application's logs. Open
+http://localhost:18888; the application sends OTLP/gRPC to http://localhost:4317. `OTEL_EXPORTER_OTLP_ENDPOINT` and
+`BOOKSHOP_DASHBOARD` name others, such as the ports a `.env` file beside the compose file chose. Telemetry holds no
+message text: the audit trail is the record.
 `BOOKSHOP_DATABASE`, a PostgreSQL connection string, names another database, such as one on another port:
 `postgres://bookshop:shelf-demo-41@localhost:5433/bookshop`. `docker compose down -v` deletes the data, so the next
 start seeds afresh.
@@ -70,11 +80,12 @@ go mod tidy -diff
 govulncheck ./...
 ```
 
-Mutation testing, report only until Go S05 sets a threshold:
+Mutation testing, over the core, the test kit and the Claude package; `go-mutation` fails below the thresholds in
+[`.gremlins.yaml`](.gremlins.yaml) (G12):
 
 ```sh
 go install github.com/go-gremlins/gremlins/cmd/gremlins@v0.6.0
-gremlins unleash .
+gremlins unleash --coverpkg ./officina/... --timeout-coefficient 20 ./officina
 ```
 
 CI is [`.github/workflows/go.yml`](../.github/workflows/go.yml), on every pull request: `go-ubuntu` and `go-windows`

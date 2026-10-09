@@ -2,6 +2,7 @@ package claude_test
 
 import (
 	"encoding/json/jsontext"
+	"strings"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -137,6 +138,20 @@ func TestModel_CTX05_UsageCountsCacheReadsAndWritesAndAddsUpEveryIteration(t *te
 			`{"type":"message","input_tokens":2,"cache_read_input_tokens":0,"cache_creation_input_tokens":0,`+
 			`"output_tokens":5}]}}`, `{"type":"message_stop"}`),
 			officina.Usage{Input: 32, Output: 25, CacheRead: 10}},
+		// The split of cache writes by lifetime comes with the message's start only.
+		{"cache writes for an hour", events(strings.Replace(start, `"usage":{`, `"usage":{"cache_creation":`+
+			`{"ephemeral_5m_input_tokens":100,"ephemeral_1h_input_tokens":200},`, 1),
+			`{"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"input_tokens":2,`+
+				`"output_tokens":5,"cache_creation_input_tokens":300}}`, `{"type":"message_stop"}`),
+			officina.Usage{Input: 2, Output: 5, CacheWrite: 300, CacheWriteHour: 200}},
+		{"cache writes for an hour in iterations", events(start, `{"type":"message_delta","delta":{"stop_reason":`+
+			`"end_turn","stop_sequence":null},"usage":{"input_tokens":2,"output_tokens":5,"iterations":[{"type":`+
+			`"compaction","input_tokens":30,"cache_read_input_tokens":0,"cache_creation_input_tokens":40,`+
+			`"cache_creation":{"ephemeral_5m_input_tokens":0,"ephemeral_1h_input_tokens":40},"output_tokens":20},`+
+			`{"type":"message","input_tokens":2,"cache_read_input_tokens":0,"cache_creation_input_tokens":7,`+
+			`"cache_creation":{"ephemeral_5m_input_tokens":0,"ephemeral_1h_input_tokens":7},"output_tokens":5}]}}`,
+			`{"type":"message_stop"}`),
+			officina.Usage{Input: 32, Output: 25, CacheWrite: 47, CacheWriteHour: 47}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

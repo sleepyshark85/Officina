@@ -12,6 +12,9 @@ import (
 	"strings"
 	"unicode/utf16"
 	"unicode/utf8"
+
+	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // Agent is what an agent is: a model and instructions, and optionally tools, an approver and an audit sink. It is
@@ -28,6 +31,7 @@ type Agent struct {
 	// secrets holds every form of each secret that is redacted.
 	secrets     []string
 	fingerprint string
+	telemetry   *telemetry
 }
 
 // AgentOptions holds an agent's optional parts; the zero value has none.
@@ -43,6 +47,13 @@ type AgentOptions struct {
 	// Secrets are values that must never reach events, tool results or the audit trail, such as a tool's database
 	// password. They are redacted there, as written and as escaped in a JSON string.
 	Secrets []string
+	// TracerProvider and MeterProvider receive the agent's traces and metrics; without them it emits none. The
+	// agent never uses the global providers.
+	TracerProvider trace.TracerProvider
+	MeterProvider  metric.MeterProvider
+	// TelemetryContent puts message text and tool inputs and results in the spans, with the secrets redacted. By
+	// default telemetry holds none: it is for operation, and the audit trail is for the record.
+	TelemetryContent bool
 }
 
 // NewAgent returns an agent of model and instructions. The instructions are frozen for every conversation: nothing
@@ -91,10 +102,16 @@ func NewAgent(model Model, instructions string, opts AgentOptions) (*Agent, erro
 	if err != nil {
 		return nil, fmt.Errorf("new agent: %w", err)
 	}
-	return &Agent{
+	a := &Agent{
 		model: model, instructions: instructions, tools: tools, schemas: schemas, approver: opts.Approver,
 		auditSink: opts.AuditSink, name: opts.Name, secrets: secretForms(opts.Secrets), fingerprint: fingerprint,
-	}, nil
+	}
+	a.telemetry, err = newTelemetry(opts.TracerProvider, opts.MeterProvider, opts.Name, model.Info(),
+		opts.TelemetryContent, a.redact)
+	if err != nil {
+		return nil, fmt.Errorf("new agent: %w", err)
+	}
+	return a, nil
 }
 
 // tool is one of an agent's tools with its compiled input schema.

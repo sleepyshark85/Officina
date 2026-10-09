@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"sync"
 	"time"
+
+	"go.opentelemetry.io/otel/trace"
 )
 
 // AuditSink is where an agent's audit trail goes. A run's entries arrive one at a time, in sequence order. A write
@@ -17,18 +19,23 @@ type AuditSink interface {
 	Write(ctx context.Context, e AuditEntry) error
 }
 
-// AuditEntry is one durable record of a run: when, in which order, of which run, conversation and agent, and what.
-// Its text is redacted of the agent's secrets and truncated with its size noted.
+// AuditEntry is one durable record of a run: when, in which order, of which run, conversation and agent, in which
+// trace and span, and what. Its text is redacted of the agent's secrets and truncated with its size noted.
 type AuditEntry struct {
 	Time time.Time `json:"time"`
 	// Sequence is the entry's place in its run, from 1. A gap is an entry the sink failed to write.
-	Sequence     int64     `json:"sequence"`
-	Run          string    `json:"run"`
-	Conversation string    `json:"conversation,omitzero"`
-	Agent        string    `json:"agent,omitzero"`
-	Kind         AuditKind `json:"kind"`
-	Tool         string    `json:"tool,omitzero"`
-	CallID       string    `json:"callId,omitzero"`
+	Sequence     int64  `json:"sequence"`
+	Run          string `json:"run"`
+	Conversation string `json:"conversation,omitzero"`
+	Agent        string `json:"agent,omitzero"`
+	// TraceID is the run's trace, in W3C hex form; empty when the run has no span, as without a tracer provider.
+	TraceID string `json:"traceId,omitzero"`
+	// SpanID is the span of the step the entry records: the run's for its start and end, the tool call's for the
+	// others.
+	SpanID string    `json:"spanId,omitzero"`
+	Kind   AuditKind `json:"kind"`
+	Tool   string    `json:"tool,omitzero"`
+	CallID string    `json:"callId,omitzero"`
 	// Input is a tool call's input, as JSON text.
 	Input string `json:"input,omitzero"`
 	// Outcome is a short word for how it went: a run's status and reason, a call's ok or error, an approval's
@@ -40,6 +47,8 @@ type AuditEntry struct {
 	Duration time.Duration `json:"duration,omitzero"`
 	// Usage is a run's tokens, on its end entry.
 	Usage Usage `json:"usage,omitzero"`
+	// Cost is what a run's tokens cost, in US dollars at the model's price, on its end entry.
+	Cost float64 `json:"cost,omitzero"`
 }
 
 // AuditKind is what an audit entry records.
@@ -76,9 +85,10 @@ func newRecorder(a *Agent, conversation string) *recorder {
 	return &recorder{agent: a, run: rand.Text(), conversation: conversation}
 }
 
-// record fills in e's time, sequence and identity, redacts and truncates its text, and writes it. The trail is
-// written even for a cancelled run, so ctx's cancellation does not reach the sink. A failure is returned only for
-// the caller to decide what a missing entry means: only a write tool's attempt depends on it.
+// record fills in e's time, sequence and identity, with the span in ctx (the step's), redacts and truncates its text,
+// and writes it. The trail is written even for a cancelled run, so ctx's cancellation does not reach the sink. A
+// failure shows in telemetry, and is returned only for the caller to decide what a missing entry means: only a
+// write tool's attempt depends on it.
 func (r *recorder) record(ctx context.Context, e AuditEntry) error {
 	sink := r.agent.auditSink
 	if sink == nil {
@@ -88,8 +98,12 @@ func (r *recorder) record(ctx context.Context, e AuditEntry) error {
 	defer r.mu.Unlock()
 	r.sequence++
 	e.Time, e.Sequence, e.Run, e.Conversation, e.Agent = time.Now(), r.sequence, r.run, r.conversation, r.agent.name
+	if span := trace.SpanContextFromContext(ctx); span.IsValid() {
+		e.TraceID, e.SpanID = span.TraceID().String(), span.SpanID().String()
+	}
 	e.Input, e.Detail = r.clean(e.Input), r.clean(e.Detail)
 	if err := sink.Write(context.WithoutCancel(ctx), e); err != nil {
+		r.agent.telemetry.auditFailed(ctx, e.Kind)
 		return fmt.Errorf("audit %s: %w", e.Kind, err)
 	}
 	return nil
