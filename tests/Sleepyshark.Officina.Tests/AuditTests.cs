@@ -143,6 +143,32 @@ public class AuditTests
         Assert.Equal(AuditRecorder.MaxTextLength - 1, kept.Length);
     }
 
+    [Theory]
+    [InlineData("abc", "abcdef")]
+    [InlineData("abcdef", "abc")]
+    [InlineData("abcd", "cdef")]
+    [InlineData("cdef", "abcd")]
+    [InlineData("bcd", "abcdef")]
+    public async Task Secrets_that_overlap_or_contain_each_other_are_redacted_whole_in_any_order(string first, string second)
+    {
+        var sink = new RecordingSink();
+        var model = new ScriptedModel().CallTools(new ToolCall("c1", "search", """{"query":"key=abcdef"}""")).Reply("Used abcdef.");
+
+        var result = await (Agents.With(model, tools: Agents.SearchTool()) with { AuditSink = sink, Secrets = [first, second] })
+            .RunAsync(new Conversation(), "Go.", cancellationToken: Ct);
+
+        Assert.Equal("""{"query":"key=[redacted]"}""", sink.Entries.Single(entry => entry.Kind == AuditKind.ToolStarted).Input);
+        Assert.Equal("Used [redacted].", Assert.IsType<Completed>(result).Text);
+    }
+
+    [Fact]
+    public void A_secret_s_escaped_form_overlapping_another_secret_is_redacted_whole()
+    {
+        var agent = Agents.With(new ScriptedModel()) with { Secrets = ["a\"b", "b-c"] };
+
+        Assert.Equal("""x=[redacted]""", agent.Redact("""x=a\"b-c"""));
+    }
+
     [Fact]
     public async Task Refusals_failures_prefix_mismatches_and_budget_stops_are_recorded_as_the_run_ends()
     {
