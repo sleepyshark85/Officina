@@ -84,7 +84,8 @@ func liveSession(t *testing.T, d *database, budget float64, script ...any) (stri
 	model := &metered{Model: claude}
 	out := &transcript{}
 	app, err := bookshop.Build(t.Context(), bookshop.Config{
-		Database: d.url, Model: model, In: &input{t: t, script: script}, Out: out, Echo: true, Demo: true,
+		Database: d.url, Model: model, Memory: &officina.MapMemoryStore{}, In: &input{t: t, script: script}, Out: out,
+		Echo: true, Demo: true,
 		Budgets: bookshop.Budgets{Reply: budget, Session: budget},
 	})
 	if err != nil {
