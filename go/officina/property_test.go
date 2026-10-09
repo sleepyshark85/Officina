@@ -118,10 +118,11 @@ func secretForm(t *rapid.T, s string) string {
 	}
 }
 
-func TestRun_TEST07_GeneratedSecretsNeverReachResultsEventsOrTheTrail(t *testing.T) {
+func TestRun_TEST07_EVT02_GeneratedSecretsNeverReachResultsEventsTelemetryOrTheTrail(t *testing.T) {
 	t.Parallel()
-	// The secrets' characters are none of "[redacted]"'s, so a replacement never makes a secret.
-	char := rapid.SampledFrom([]rune(`xyz/<"\é😀`))
+	// The secrets' characters are none of "[redacted]"'s, so a replacement never makes a secret, and no letter or
+	// digit, which the names, ids and numbers of telemetry hold.
+	char := rapid.SampledFrom([]rune(`/<"\é😀€`))
 	rapid.Check(t, func(t *rapid.T) {
 		secrets := rapid.SliceOfN(rapid.StringOfN(char, 1, 4, -1), 1, 4).Draw(t, "secrets")
 		// Secrets, each in some form, between fillers of characters no form of a secret holds: once each secret is
@@ -139,12 +140,27 @@ func TestRun_TEST07_GeneratedSecretsNeverReachResultsEventsOrTheTrail(t *testing
 		echo := handlerTool("echo", officina.Read, func(context.Context, jsontext.Value) (string, error) {
 			return text.String(), nil
 		})
-		model := officinatest.NewModel("scripted",
-			officinatest.ToolUseReply(officinatest.ToolUseBlock("c1", "echo", string(input))),
-			officinatest.TextReply(text.String()))
+		failing := handlerTool("fail", officina.Read, func(context.Context, jsontext.Value) (string, error) {
+			return "", errors.New(text.String())
+		})
+		denied := handlerTool("deny", officina.Write, ok)
+		denied.NeedsApproval = true
+		last := officinatest.TextReply(text.String())
+		modelFails := rapid.Bool().Draw(t, "model fails")
+		if modelFails {
+			last = officinatest.Reply{Err: errors.New(text.String())}
+		}
+		model := officinatest.NewModel("scripted", officinatest.ToolUseReply(
+			officinatest.ToolUseBlock("c1", "echo", string(input)), officinatest.ToolUseBlock("c2", "fail", string(input)),
+			officinatest.ToolUseBlock("c3", "deny", string(input))), last)
 		sink := &memorySink{}
+		telemetry := collect()
+		defer telemetry.shutdown(t)
 		agent, err := officina.NewAgent(model, instructions, officina.AgentOptions{
-			Tools: []officina.Tool{echo}, AuditSink: sink, Secrets: secrets,
+			Tools: []officina.Tool{echo, failing, denied}, AuditSink: sink, Secrets: secrets,
+			Approver:       officinatest.NewApprover(officina.Approval{Reason: text.String()}),
+			TracerProvider: telemetry.traces, MeterProvider: telemetry.meters,
+			TelemetryContent: rapid.Bool().Draw(t, "content"),
 		})
 		if err != nil {
 			t.Fatalf("NewAgent() error = %v", err)
@@ -165,10 +181,15 @@ func TestRun_TEST07_GeneratedSecretsNeverReachResultsEventsOrTheTrail(t *testing
 			t.Fatalf("result() error = %v", err)
 		}
 
-		redacted := []string{res.Text, results(c.Messages()[2])[0].Content}
+		redacted := []string{results(c.Messages()[2])[0].Content, results(c.Messages()[2])[1].Content}
+		if modelFails {
+			redacted = append(redacted, res.Detail)
+		} else {
+			redacted = append(redacted, res.Text)
+		}
 		for _, e := range sink.Entries() {
-			seen = append(seen, e.Input)
-			if e.Kind == officina.AuditToolEnded {
+			seen = append(seen, e.Input, e.Detail)
+			if e.Kind == officina.AuditToolEnded && e.CallID != "c3" {
 				redacted = append(redacted, e.Detail)
 			}
 		}
@@ -177,6 +198,7 @@ func TestRun_TEST07_GeneratedSecretsNeverReachResultsEventsOrTheTrail(t *testing
 				t.Fatalf("redacting %q left %q of %q, want only the fillers %q", text.String(), left, out, fillers.String())
 			}
 		}
+		seen = append(seen, telemetry.dump(t))
 		seen = append(seen, redacted...)
 		for _, s := range secrets {
 			quoted, err := json.Marshal(s)

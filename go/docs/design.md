@@ -1,7 +1,7 @@
 # Go design notes
 
 Choices in the Go core that the code alone does not explain. Concepts are in
-[`ARCHITECTURE.md`](../../ARCHITECTURE.md); decisions G1…G15 in [`go.md`](../../docs/implementations/go.md).
+[`ARCHITECTURE.md`](../../ARCHITECTURE.md); decisions G1…G16 in [`go.md`](../../docs/implementations/go.md).
 
 | Choice | Why |
 |---|---|
@@ -28,3 +28,7 @@ Choices in the Go core that the code alone does not explain. Concepts are in
 | Blocks are stored in the canonical form: the accumulated block's JSON, compacted with `jsontext.Value.Compact` (escapes kept), then `<` `>` `&` U+2028 U+2029 escaped with `encoding/json`'s `HTMLEscape` | The fixed point of the SDK's encoder (Go S02); a tool call's `Input` keeps the model's own text, from the union's raw `Input` |
 | Retries are the adapter's own (the SDK's are off): five attempts, `Retry-After` (seconds or a date) capped at 30 s, else 1 s doubling with jitter; any error without an API answer (network, a stream cut short) is transient | MDL-04 mid-stream too: the SDK does not retry a stream that failed after it began. The wait is a timer in the stream's own goroutine, so nothing outlives `Stream`; tests run it under `testing/synctest` |
 | Error classes are sentinel errors (`ErrTransient`, `ErrAuthentication`, `ErrInvalidRequest`) wrapping the SDK's error | `errors.Is` is how Go checks a class; the run reports the text in `Result.Detail` |
+| Telemetry is built once per agent from `AgentOptions.TracerProvider` and `MeterProvider`, the API's no-op providers when nil; spans are started from the run's context, so a run is a child of the host's span in `ctx` and its model and tool spans are children of the run's | G6: no global provider. Contexts carry the span the Go way, so a tool's handler and the model's stream see the step's span too. A test, or two agents, can each have their own providers |
+| An audit entry takes its trace and span from the context it is recorded with (`trace.SpanContextFromContext`): the tool call's for a call's entries, the run's for its start and end; a failed write marks that same span and counts `officina.audit.failures` | AUD-03, AUD-06, as .NET does it. Without a tracer provider a host's span in `ctx` still names the trace, as the no-op tracer passes its parent on; without either, the ids are empty |
+| `Model.Info()` gives the provider, model name and `Price` (dollars per million tokens, `float64`); `Usage.CacheWriteHour` counts the hour-long cache writes, which cost more | The span names, `gen_ai.provider.name` and `gen_ai.request.model` need them, and cost is on the run and model call spans, `officina.model.cost` and the run's end entry, as in .NET. Telemetry is `double` in .NET too; Go S08's budgets may still change how money is kept |
+| A host that stops reading ends the run as `Stopped(Cancelled)`, so Go has no "abandoned" run result in telemetry | G10: `break` cancels the run, which still returns its result; .NET's enumerator can be dropped without one |

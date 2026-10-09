@@ -5,9 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/sleepyshark85/officina/go/officina"
 	"github.com/sleepyshark85/officina/go/officina/claude"
@@ -27,6 +30,13 @@ type Config struct {
 	// Interrupt returns the context of one reply, which is cancelled when the staff member interrupts the reply, and
 	// a function that stops listening for that. Nil means nothing interrupts a reply.
 	Interrupt func(ctx context.Context) (context.Context, context.CancelFunc)
+	// TracerProvider and MeterProvider receive the traces and metrics of the core and the console; nil ones emit
+	// none. Logger takes the application's logs; nil drops them.
+	TracerProvider trace.TracerProvider
+	MeterProvider  metric.MeterProvider
+	Logger         *slog.Logger
+	// Dashboard is the telemetry dashboard's address, which /audit links each run's trace to.
+	Dashboard string
 }
 
 // App is Bookshop Assistant, wired: Run it, then Close it.
@@ -36,8 +46,8 @@ type App struct {
 	console *console
 }
 
-// Build wires the application: the database pool, the bookshop tools, the chat agent and the console, which is the
-// agent's approver. The application starts with the database down, as the pool connects when a tool first needs it.
+// Build wires the application: the database pool, the bookshop tools, the audit table, the chat agent and the
+// console, which is the agent's approver. The application starts with the database down, as the pool connects when a tool first needs it.
 func Build(ctx context.Context, cfg Config) (*App, error) {
 	if cfg.Model == nil || cfg.In == nil || cfg.Out == nil {
 		return nil, errors.New("build bookshop: a model, an input and an output are required")
@@ -51,11 +61,13 @@ func Build(ctx context.Context, cfg Config) (*App, error) {
 		db.Close()
 		return nil, fmt.Errorf("build bookshop: %w", err)
 	}
-	c := newConsole(cfg.In, cfg.Out, cfg.Echo, cfg.Interrupt)
+	trail := &auditTable{db: db}
+	c := newConsole(cfg, trail)
 	agent, err := officina.NewAgent(cfg.Model, instructions, officina.AgentOptions{
-		Tools: tools, Approver: c, Name: "bookshop",
+		Tools: tools, Approver: c, AuditSink: trail, Name: "bookshop",
 		// The database password is a secret; the rest of the connection string is not.
-		Secrets: []string{db.Config().ConnConfig.Password},
+		Secrets:        []string{db.Config().ConnConfig.Password},
+		TracerProvider: cfg.TracerProvider, MeterProvider: cfg.MeterProvider,
 	})
 	if err != nil {
 		db.Close()

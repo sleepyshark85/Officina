@@ -227,6 +227,32 @@ func TestNew_MDL03_SettingsNameEverySettingThatShapesARequest(t *testing.T) {
 	}
 }
 
+func TestModel_EVT02_InfoNamesTheProviderAndModelWithItsListPrice(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		want officina.ModelInfo
+	}{
+		{claude.Opus55, officina.ModelInfo{Provider: "anthropic", Name: claude.Opus55, Price: officina.Price{
+			Input: 4, Output: 20, CacheRead: 0.20, CacheWrite: 5, CacheWriteHour: 8,
+		}}},
+		{"claude-from-the-future", officina.ModelInfo{Provider: "anthropic", Name: "claude-from-the-future"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			m, err := claude.New(tt.name, claude.EffortLow, claude.Options{})
+			if err != nil {
+				t.Fatalf("New() error = %v", err)
+			}
+
+			if diff := cmp.Diff(tt.want, m.Info()); diff != "" {
+				t.Errorf("Info() mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
 func TestNew_MDL03_RejectsAnInvalidSetting(t *testing.T) {
 	t.Parallel()
 	tests := []struct {

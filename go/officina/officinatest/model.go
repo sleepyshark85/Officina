@@ -90,6 +90,12 @@ func (m *Model) Settings() string {
 	return m.settings
 }
 
+// Info returns the provider and name "scripted", and no price. To script another, embed the Model in a type of
+// your own with an Info method.
+func (m *Model) Info() officina.ModelInfo {
+	return officina.ModelInfo{Provider: "scripted", Name: "scripted"}
+}
+
 // Requests returns the requests received so far, in order.
 func (m *Model) Requests() []officina.Request {
 	m.mu.Lock()

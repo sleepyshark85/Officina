@@ -56,6 +56,7 @@ func TestDependencies_TEST05_FixturesBreakingTheRulesFail(t *testing.T) {
 				core + " imports " + anthropicSDK + onlySDK,
 				core + " imports " + anthropicSDK + onlyCore,
 				core + " imports go.opentelemetry.io/otel/sdk/trace" + onlyCore,
+				core + " imports go.opentelemetry.io/otel/semconv/v1.37.0" + onlyCore,
 				core + " imports go.opentelemetry.io/otel" + onlyCore,
 			},
 		},
@@ -103,14 +104,16 @@ func violations(t *testing.T, dir string, env []string) []string {
 }
 
 // allowedInCore reports whether the core may import the package: the standard library, whose import paths alone
-// have no dot in their first element, or the OpenTelemetry API's tracing, metrics and attributes. Never the
-// OpenTelemetry SDK or an exporter, nor the root otel package, which holds the global providers.
+// have no dot in their first element, or the OpenTelemetry API's tracing, metrics, attributes and status codes.
+// Never the OpenTelemetry SDK or an exporter, nor the root otel package, which holds the global providers, nor the
+// semantic convention packages: the core names its attributes as the .NET implementation does.
 func allowedInCore(path string) bool {
 	first, _, _ := strings.Cut(path, "/")
 	return !strings.Contains(first, ".") ||
 		within(path, "go.opentelemetry.io/otel/trace") ||
 		within(path, "go.opentelemetry.io/otel/metric") ||
-		within(path, "go.opentelemetry.io/otel/attribute")
+		within(path, "go.opentelemetry.io/otel/attribute") ||
+		within(path, "go.opentelemetry.io/otel/codes")
 }
 
 // within reports whether the import path is the given path or below it.

@@ -3,23 +3,33 @@ package bookshop
 import (
 	"bufio"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"strings"
 	"sync"
 	"time"
+
+	"go.opentelemetry.io/otel/trace"
+	"go.opentelemetry.io/otel/trace/noop"
 
 	"github.com/sleepyshark85/officina/go/officina"
 )
 
 const help = `Commands:
-  /help   Show this help.
-  /quit   Leave the assistant.
+  /help          Show this help.
+  /audit [<id>]  Show the audit trail of this session, or of the session with that id.
+  /quit          Leave the assistant.
 Anything else is a message to the assistant. Ctrl+C stops a reply in progress.`
 
 // console is the staff member's console: it asks who is using it, reads messages and commands, streams each reply
 // with its tool activity, asks approval for changes and stops a reply when interrupted.
+//
+// Each reply is a span, the parent of the run's trace, so the console's logs join it; /audit reads the audit table
+// and links each run to its trace on the dashboard.
 //
 // It is also the agent's approver. The run reports each approval request as an event, which the console handles
 // on the run's goroutine, in order with everything shown before it: it asks the staff member and hands the answer
@@ -29,6 +39,10 @@ type console struct {
 	out       io.Writer
 	echo      bool
 	interrupt func(ctx context.Context) (context.Context, context.CancelFunc)
+	tracer    trace.Tracer
+	logger    *slog.Logger
+	trail     *auditTable
+	dashboard string
 	// answers hands one approval from the console to Approve; one reply asks one approval at a time.
 	answers chan officina.Approval
 
@@ -48,16 +62,23 @@ type read struct {
 	err  error
 }
 
-func newConsole(in io.Reader, out io.Writer, echo bool,
-	interrupt func(context.Context) (context.Context, context.CancelFunc),
-) *console {
-	if interrupt == nil {
-		interrupt = context.WithCancel
+func newConsole(cfg Config, trail *auditTable) *console {
+	c := &console{
+		in: bufio.NewReader(cfg.In), out: cfg.Out, echo: cfg.Echo, interrupt: cfg.Interrupt, logger: cfg.Logger,
+		trail: trail, dashboard: cfg.Dashboard, answers: make(chan officina.Approval, 1), atLineStart: true,
 	}
-	return &console{
-		in: bufio.NewReader(in), out: out, echo: echo, interrupt: interrupt,
-		answers: make(chan officina.Approval, 1), atLineStart: true,
+	if c.interrupt == nil {
+		c.interrupt = context.WithCancel
 	}
+	tp := cfg.TracerProvider
+	if tp == nil {
+		tp = noop.NewTracerProvider()
+	}
+	c.tracer = tp.Tracer(scope)
+	if c.logger == nil {
+		c.logger = slog.New(slog.DiscardHandler)
+	}
+	return c
 }
 
 // run runs the session until /quit or the end of the input.
@@ -70,7 +91,8 @@ func (c *console) run(ctx context.Context, agent *officina.Agent) error {
 		return c.ended(err)
 	}
 	var (
-		conversation officina.Conversation
+		// A session's id is its conversation's, which the audit trail names.
+		conversation = officina.Conversation{ID: newSessionID()}
 		// sent is the run context the conversation last received.
 		sent string
 	)
@@ -86,6 +108,13 @@ func (c *console) run(ctx context.Context, agent *officina.Agent) error {
 			return c.err
 		case command == "/help":
 			c.writeLine(help)
+			continue
+		case command == "/audit" || strings.HasPrefix(command, "/audit "):
+			session := strings.TrimSpace(strings.TrimPrefix(command, "/audit"))
+			if session == "" {
+				session = conversation.ID
+			}
+			c.showAudit(ctx, session)
 			continue
 		case strings.HasPrefix(command, "/"):
 			c.writeLine("Unknown command " + command + ". Type /help for commands.")
@@ -132,11 +161,30 @@ func (c *console) askStaffMember(ctx context.Context) (string, error) {
 	}
 }
 
+// newSessionID returns a new session id: 32 random hex digits, as the .NET implementation makes them.
+func newSessionID() string {
+	id := make([]byte, 16)
+	_, _ = rand.Read(id) // It never fails: it crashes the program instead.
+	return hex.EncodeToString(id)
+}
+
+// showAudit shows the audit trail of session.
+func (c *console) showAudit(ctx context.Context, session string) {
+	entries, err := c.trail.entries(ctx, session)
+	if err != nil {
+		c.writeLine("The audit trail could not be read: " + err.Error())
+		return
+	}
+	c.writeLine(formatAudit(session, entries, c.dashboard, time.Local))
+}
+
 // reply streams one reply to message, with the run context newContext if it is not empty, and returns the run
 // context the conversation received, if it received one. Its error is the API misused, which is a bug.
 func (c *console) reply(ctx context.Context, agent *officina.Agent, conversation *officina.Conversation,
 	message, newContext string,
 ) (received string, err error) {
+	ctx, span := c.tracer.Start(ctx, "reply")
+	defer span.End()
 	ctx, stop := c.interrupt(ctx)
 	defer stop()
 	events, result := agent.Stream(ctx, conversation, message, officina.RunOptions{Context: newContext})
@@ -178,6 +226,9 @@ func (c *console) reply(ctx context.Context, agent *officina.Agent, conversation
 	if err != nil {
 		return "", fmt.Errorf("reply: %w", err)
 	}
+	u := res.Usage
+	c.logger.InfoContext(ctx, "reply ended", "conversation", conversation.ID, "result", res.Status.String(),
+		"input_tokens", u.Input+u.CacheRead+u.CacheWrite, "output_tokens", u.Output)
 	switch res.Status {
 	case officina.Completed:
 	case officina.Stopped:
@@ -187,6 +238,8 @@ func (c *console) reply(ctx context.Context, agent *officina.Agent, conversation
 			c.writeLine("[Stopped: " + res.Stop.String() + ".]")
 		}
 	case officina.Failed:
+		c.logger.ErrorContext(ctx, "reply failed", "conversation", conversation.ID, "reason", res.Failure.String(),
+			"error", res.Detail)
 		c.writeLine("[Failed: " + res.Detail + "]")
 	}
 	c.endLine()

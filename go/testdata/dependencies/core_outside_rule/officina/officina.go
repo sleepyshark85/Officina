@@ -9,4 +9,5 @@ import (
 	_ "github.com/anthropics/anthropic-sdk-go"
 	_ "go.opentelemetry.io/otel"
 	_ "go.opentelemetry.io/otel/sdk/trace"
+	_ "go.opentelemetry.io/otel/semconv/v1.37.0"
 )

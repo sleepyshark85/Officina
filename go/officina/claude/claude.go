@@ -129,6 +129,17 @@ func (m *Model) Settings() string {
 		m.name, m.effort, m.maxTokens, cache)
 }
 
+// Info returns the provider "anthropic", the model's name and its list price, in US dollars per million tokens;
+// the price is zero for a model this package does not know.
+func (m *Model) Info() officina.ModelInfo {
+	info := officina.ModelInfo{Provider: "anthropic", Name: m.name}
+	if m.name == Opus55 {
+		// Cache writes cost 1.25 times input for five minutes, twice input for an hour.
+		info.Price = officina.Price{Input: 4, Output: 20, CacheRead: 0.20, CacheWrite: 5, CacheWriteHour: 8}
+	}
+	return info
+}
+
 // The retry policy: attempts per call, the first included, and the bounds of the wait between them.
 const (
 	maxAttempts  = 5

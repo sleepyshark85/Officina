@@ -444,6 +444,8 @@ type goroutineModel struct {
 
 func (goroutineModel) Settings() string { return "goroutine" }
 
+func (goroutineModel) Info() officina.ModelInfo { return officina.ModelInfo{} }
+
 func (m goroutineModel) Stream(ctx context.Context, _ officina.Request) iter.Seq2[officina.ModelEvent, error] {
 	return func(yield func(officina.ModelEvent, error) bool) {
 		ctx, cancel := context.WithCancel(ctx)

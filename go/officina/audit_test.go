@@ -330,8 +330,9 @@ func TestJSONLinesSink_AUD04_WritesEveryFieldAndReportsAFailure(t *testing.T) {
 	dir := t.TempDir()
 	entry := officina.AuditEntry{
 		Time: time.Date(2026, 10, 9, 12, 0, 0, 0, time.UTC), Sequence: 3, Run: "r1", Conversation: "s1", Agent: "a",
-		Kind: officina.AuditToolEnded, Tool: "search", CallID: "c1", Input: `{}`, Outcome: "ok", Detail: "found",
-		Duration: 1500 * time.Millisecond, Usage: officina.Usage{Input: 1, Output: 2, CacheRead: 3, CacheWrite: 4},
+		TraceID: "t1", SpanID: "p1", Kind: officina.AuditToolEnded, Tool: "search", CallID: "c1", Input: `{}`,
+		Outcome: "ok", Detail: "found", Duration: 1500 * time.Millisecond,
+		Usage: officina.Usage{Input: 1, Output: 2, CacheRead: 3, CacheWrite: 4, CacheWriteHour: 1}, Cost: 0.25,
 	}
 
 	err := officina.NewJSONLinesSink(filepath.Join(dir, "audit.jsonl")).Write(t.Context(), entry)
@@ -344,9 +345,10 @@ func TestJSONLinesSink_AUD04_WritesEveryFieldAndReportsAFailure(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadFile() error = %v", err)
 	}
-	want := `{"time":"2026-10-09T12:00:00Z","sequence":3,"run":"r1","conversation":"s1","agent":"a","kind":"ToolEnded",` +
-		`"tool":"search","callId":"c1","input":"{}","outcome":"ok","detail":"found","duration":1500000000,` +
-		`"usage":{"input":1,"output":2,"cacheRead":3,"cacheWrite":4}}` + "\n"
+	want := `{"time":"2026-10-09T12:00:00Z","sequence":3,"run":"r1","conversation":"s1","agent":"a","traceId":"t1",` +
+		`"spanId":"p1","kind":"ToolEnded","tool":"search","callId":"c1","input":"{}","outcome":"ok","detail":"found",` +
+		`"duration":1500000000,"usage":{"input":1,"output":2,"cacheRead":3,"cacheWrite":4,"cacheWriteHour":1},` +
+		`"cost":0.25}` + "\n"
 	if diff := cmp.Diff(want, string(data)); diff != "" {
 		t.Errorf("file mismatch (-want +got):\n%s", diff)
 	}

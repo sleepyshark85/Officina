@@ -9,6 +9,8 @@ import (
 	"sync"
 	"time"
 	"unicode/utf8"
+
+	"go.opentelemetry.io/otel/trace"
 )
 
 // ToolCallStarted says the run began handling a tool call: its approval, if it needs one, then the tool.
@@ -56,10 +58,21 @@ type pipeline struct {
 	events chan<- RunEvent
 }
 
+// step is a call the pipeline started: its span and when it started.
+type step struct {
+	span    trace.Span
+	started time.Time
+}
+
+// notRun is the time a tool ran when it did not run.
+const notRun time.Duration = -1
+
 // run returns the calls' results, in call order. Once ctx is done, no further call starts; those get a cancelled
 // error result.
 func (p *pipeline) run(ctx context.Context, calls []ToolCall) []ToolResult {
 	results := make([]*ToolResult, len(calls))
+	// steps holds the calls started, so one cancelled before its tool ran still ends its span.
+	steps := make([]*step, len(calls))
 	var reads sync.WaitGroup
 	for i, call := range calls {
 		if ctx.Err() != nil {
@@ -69,10 +82,13 @@ func (p *pipeline) run(ctx context.Context, calls []ToolCall) []ToolResult {
 		if found && t.Kind == Write {
 			reads.Wait()
 		}
+		ctx, span := p.agent.telemetry.startToolCall(ctx, t, found, call)
+		s := &step{span: span, started: time.Now()}
+		steps[i] = s
 		p.events <- ToolCallStarted{Call: p.shown(call)}
 		rejected := p.prepare(ctx, t, found, call)
 		if rejected != "" {
-			results[i] = p.end(ctx, call, rejected, true, 0)
+			results[i] = p.end(ctx, s, call, rejected, toolError, notRun)
 			continue
 		}
 		// The host may have cancelled while the approver decided, or while this write waited for the reads.
@@ -81,14 +97,14 @@ func (p *pipeline) run(ctx context.Context, calls []ToolCall) []ToolResult {
 		}
 		err := p.audit.record(ctx, AuditEntry{Kind: AuditToolStarted, Tool: t.Name, CallID: call.ID, Input: string(call.Input)})
 		if err != nil && t.Kind == Write {
-			results[i] = p.end(ctx, call, "The call was not run: its attempt could not be recorded in the audit trail.",
-				true, 0)
+			results[i] = p.end(ctx, s, call, "The call was not run: its attempt could not be recorded in the audit trail.",
+				toolBlocked, notRun)
 			continue
 		}
 		if t.Kind == Write {
-			results[i] = p.invoke(ctx, t, call)
+			results[i] = p.invoke(ctx, s, t, call)
 		} else {
-			reads.Go(func() { results[i] = p.invoke(ctx, t, call) })
+			reads.Go(func() { results[i] = p.invoke(ctx, s, t, call) })
 		}
 	}
 	reads.Wait()
@@ -96,7 +112,7 @@ func (p *pipeline) run(ctx context.Context, calls []ToolCall) []ToolResult {
 	answered := make([]ToolResult, len(calls))
 	for i, r := range results {
 		if r == nil {
-			r = p.end(ctx, calls[i], "The call was cancelled before it started.", true, 0)
+			r = p.end(ctx, steps[i], calls[i], "The call was cancelled before it started.", toolError, notRun)
 		}
 		answered[i] = *r
 	}
@@ -125,12 +141,18 @@ func (p *pipeline) prepare(ctx context.Context, t tool, found bool, call ToolCal
 	// The trail records the question even when it cannot: only a write's attempt depends on the sink.
 	_ = p.audit.record(ctx, AuditEntry{Kind: AuditApprovalAsked, Tool: t.Name, CallID: call.ID, Input: string(call.Input)})
 	p.events <- ApprovalAsked{Call: p.shown(call)}
+	asked := time.Now()
 	approval, err := ask(ctx, approver, t.Tool, call)
 	switch {
 	case err != nil && ctx.Err() != nil:
+		// A cancelled run gave the approver no time to answer: only the wait is told.
+		p.agent.telemetry.waited(ctx, time.Since(asked))
 		approval = Approval{Reason: "the run was cancelled while waiting for approval"}
 	case err != nil:
 		approval = Approval{Reason: err.Error()}
+		p.agent.telemetry.approved(ctx, t.Name, false, time.Since(asked))
+	default:
+		p.agent.telemetry.approved(ctx, t.Name, approval.Approved, time.Since(asked))
 	}
 	outcome := "denied"
 	if approval.Approved {
@@ -166,7 +188,7 @@ func ask(ctx context.Context, approver Approver, t Tool, call ToolCall) (approva
 
 // invoke runs the tool on the call's input, already validated, and returns its result; a panic in the handler is an
 // error result.
-func (p *pipeline) invoke(ctx context.Context, t tool, call ToolCall) *ToolResult {
+func (p *pipeline) invoke(ctx context.Context, s *step, t tool, call ToolCall) *ToolResult {
 	started := time.Now()
 	content, failed := func() (content string, failed bool) {
 		defer func() {
@@ -183,26 +205,40 @@ func (p *pipeline) invoke(ctx context.Context, t tool, call ToolCall) *ToolResul
 		}
 		return content, false
 	}()
-	return p.end(ctx, call, content, failed, time.Since(started))
+	outcome := toolOK
+	if failed {
+		outcome = toolError
+	}
+	return p.end(ctx, s, call, content, outcome, time.Since(started))
 }
 
-// end redacts and truncates a call's result, records its outcome and reports it.
-func (p *pipeline) end(ctx context.Context, call ToolCall, content string, failed bool, took time.Duration,
+// end redacts and truncates a call's result, records its outcome, ends its step, if it started, and reports it. The
+// tool ran for ran, or not at all if ran is notRun.
+func (p *pipeline) end(ctx context.Context, s *step, call ToolCall, content string, outcome toolOutcome,
+	ran time.Duration,
 ) *ToolResult {
+	if s != nil {
+		ctx = trace.ContextWithSpan(ctx, s.span)
+	}
 	content = p.agent.redact(content)
-	if len(content) > maxResult {
-		content = cut(content, maxResult) + "\n[Truncated: the result had " + strconv.Itoa(len(content)) +
+	length := len(content)
+	if length > maxResult {
+		content = cut(content, maxResult) + "\n[Truncated: the result had " + strconv.Itoa(length) +
 			" bytes; only the first " + strconv.Itoa(maxResult) + " are shown.]"
 	}
-	outcome := "ok"
+	failed := outcome != toolOK
+	audited := "ok"
 	if failed {
-		outcome = "error"
+		audited = "error"
 	}
 	// A missing outcome entry blocks nothing: the call is over.
 	_ = p.audit.record(ctx, AuditEntry{
-		Kind: AuditToolEnded, Tool: call.Name, CallID: call.ID, Input: string(call.Input), Outcome: outcome, Detail: content,
-		Duration: took,
+		Kind: AuditToolEnded, Tool: call.Name, CallID: call.ID, Input: string(call.Input), Outcome: audited, Detail: content,
+		Duration: max(ran, 0),
 	})
+	if s != nil {
+		p.agent.telemetry.endToolCall(ctx, s.span, s.started, call, outcome, ran, length, content)
+	}
 	result := ToolResult{CallID: call.ID, Content: content, IsError: failed}
 	p.events <- ToolCallFinished{Call: p.shown(call), Result: result}
 	return &result
