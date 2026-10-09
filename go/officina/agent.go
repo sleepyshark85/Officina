@@ -164,14 +164,11 @@ func asciiOnly(inner, format string) string {
 // characters are redacted whole whatever their order.
 func (a *Agent) redact(text string) string {
 	var spans [][2]int
-	for _, form := range a.secrets {
-		for at := 0; ; {
-			i := strings.Index(text[at:], form)
-			if i < 0 {
-				break
+	for at := range len(text) {
+		for _, form := range a.secrets {
+			if strings.HasPrefix(text[at:], form) {
+				spans = append(spans, [2]int{at, at + len(form)})
 			}
-			spans = append(spans, [2]int{at + i, at + i + len(form)})
-			at += i + 1
 		}
 	}
 	if spans == nil {
