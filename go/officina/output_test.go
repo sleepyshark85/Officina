@@ -116,18 +116,20 @@ func TestNewAgent_OUT01_RefusesAnOutputNotMadeByNewOutput(t *testing.T) {
 
 func TestRun_OUT02_OutputThatFailsToDecodeOrValidateFailsTheRunWithTheErrors(t *testing.T) {
 	t.Parallel()
+	// The decoder's own words are not a stable contract: its errors are checked by what they name.
+	const unread = "the output could not be read as orderOutput: "
 	tests := []struct {
 		name, reply, detail string
+		names               []string
 	}{
-		{"not JSON", "Ana wants two copies.", "the output could not be read as orderOutput: jsontext: invalid character 'A'"},
+		{"not JSON", "Ana wants two copies.", unread, []string{"'A'"}},
 		{"a property missing", `{"customer":"Ana","lines":[],"gift":null}`,
-			"the output does not match its schema: /total: is required"},
+			"the output does not match its schema: /total: is required", nil},
 		{"several problems", `{"customer":1,"lines":[{"bookId":1.5,"copies":2,"x":1}],"gift":null,"total":"9"}`,
 			"the output does not match its schema: /customer: must be string; /lines/0/bookId: must be integer; " +
-				"/lines/0/x: is not allowed; /total: must be number"},
+				"/lines/0/x: is not allowed; /total: must be number", nil},
 		{"a value the type cannot hold", `{"customer":"Ana","lines":[{"bookId":1,"copies":300}],"gift":null,"total":1}`,
-			"the output could not be read as orderOutput: json: cannot unmarshal JSON number 300 into Go uint8 within " +
-				`"/lines/0/copies"`},
+			unread, []string{"300", "uint8", `"/lines/0/copies"`}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -141,6 +143,11 @@ func TestRun_OUT02_OutputThatFailsToDecodeOrValidateFailsTheRunWithTheErrors(t *
 			if res.Status != officina.Failed || res.Failure != officina.InvalidOutput || res.Output != nil ||
 				res.Text != "" || !strings.HasPrefix(res.Detail, tt.detail) {
 				t.Errorf("result = %+v, want Failed(InvalidOutput) with detail %q", res, tt.detail)
+			}
+			for _, name := range tt.names {
+				if !strings.Contains(res.Detail, name) {
+					t.Errorf("detail %q does not name %s", res.Detail, name)
+				}
 			}
 			// There is no correction round, and the reply stays in the conversation.
 			if n := len(model.Requests()); n != 1 {
