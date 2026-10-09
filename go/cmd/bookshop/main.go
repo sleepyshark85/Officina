@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"os"
 	"os/signal"
@@ -45,7 +46,9 @@ func run() int {
 		once.Do(func() { fmt.Fprintln(os.Stderr, "bookshop: telemetry not exported:", err) })
 	}))
 
-	model, err := bookshop.Model()
+	demo := flag.Bool("demo", false, "compact and clear early enough to see in a short session")
+	flag.Parse()
+	model, err := bookshop.Model(*demo)
 	if err != nil {
 		return fail(err)
 	}
@@ -67,7 +70,7 @@ func run() int {
 			return signal.NotifyContext(ctx, os.Interrupt)
 		},
 		TracerProvider: telemetry.Traces, MeterProvider: telemetry.Metrics, Logger: telemetry.Logger(),
-		Dashboard: setting("BOOKSHOP_DASHBOARD", composeDashboard), Budgets: budgets,
+		Dashboard: setting("BOOKSHOP_DASHBOARD", composeDashboard), Budgets: budgets, Demo: *demo,
 	})
 	if err != nil {
 		return fail(err)

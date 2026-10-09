@@ -37,6 +37,7 @@ type telemetry struct {
 	tokens, cacheTokens                                metric.Int64Histogram
 	modelDuration, cacheHitRatio, cost, toolDuration   metric.Float64Histogram
 	retries, toolCalls, approvals, runs, auditFailures metric.Int64Counter
+	compactions, clearings                             metric.Int64Counter
 }
 
 // newTelemetry returns the telemetry of an agent named agent, of model, through the host's providers; a nil one
@@ -58,7 +59,7 @@ func newTelemetry(tp trace.TracerProvider, mp metric.MeterProvider, agent string
 		},
 	}
 	m := mp.Meter(scope)
-	var errs [11]error
+	var errs [13]error
 	t.tokens, errs[0] = m.Int64Histogram("gen_ai.client.token.usage", metric.WithUnit("{token}"),
 		metric.WithDescription("Tokens per model call, by type: input (all of it, cached or not) and output."))
 	t.cacheTokens, errs[1] = m.Int64Histogram("officina.model.cache_tokens", metric.WithUnit("{token}"),
@@ -82,6 +83,10 @@ func newTelemetry(tp trace.TracerProvider, mp metric.MeterProvider, agent string
 		metric.WithDescription("Runs, by result."))
 	t.auditFailures, errs[10] = m.Int64Counter("officina.audit.failures", metric.WithUnit("{entry}"),
 		metric.WithDescription("Audit entries the sink failed to write."))
+	t.compactions, errs[11] = m.Int64Counter("officina.model.compactions", metric.WithUnit("{compaction}"),
+		metric.WithDescription("Compactions of the conversation by the provider."))
+	t.clearings, errs[12] = m.Int64Counter("officina.model.clearings", metric.WithUnit("{clearing}"),
+		metric.WithDescription("Model calls for which the provider cleared old tool results."))
 	if err := errors.Join(errs[:]...); err != nil {
 		return nil, fmt.Errorf("create the metrics: %w", err)
 	}
@@ -134,6 +139,20 @@ func (t *telemetry) endRun(ctx context.Context, span trace.Span, res Result) {
 func (t *telemetry) startModelCall(ctx context.Context) (context.Context, trace.Span) {
 	return t.tracer.Start(ctx, "chat "+t.model.Name, trace.WithSpanKind(trace.SpanKindClient), trace.WithAttributes(
 		attribute.String("gen_ai.operation.name", "chat"), t.dims[1], t.dims[2], t.dims[0]))
+}
+
+// compacted records a compaction on the model call's span in ctx, and counts it.
+func (t *telemetry) compacted(ctx context.Context, e CompactionReported) {
+	t.compactions.Add(ctx, 1, t.with())
+	trace.SpanFromContext(ctx).SetAttributes(attribute.Int64("officina.compaction.tokens", e.Tokens),
+		attribute.Int64("officina.compaction.summary_tokens", e.SummaryTokens))
+}
+
+// cleared records a clearing of old tool results on the model call's span in ctx, and counts it.
+func (t *telemetry) cleared(ctx context.Context, e ClearingReported) {
+	t.clearings.Add(ctx, 1, t.with())
+	trace.SpanFromContext(ctx).SetAttributes(attribute.Int64("officina.clearing.tokens", e.Tokens),
+		attribute.Int("officina.clearing.tool_calls", e.ToolCalls))
 }
 
 // retried counts a retry of a model call.

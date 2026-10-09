@@ -68,6 +68,9 @@ func warmEncoders() error {
 	req := officina.Request{
 		Tools:        []officina.Tool{{Name: "search", Description: "Searches.", InputSchema: jsontext.Value(`{"type":"object"}`)}},
 		Instructions: "Answer briefly.",
+		ContextManagement: officina.ContextManagement{CompactAt: 50_000, ClearToolResults: officina.ToolResultClearing{
+			After: 3, Keep: 1, AtLeastTokens: 5_000,
+		}},
 		Messages: []officina.Message{
 			{Role: officina.User, Blocks: []officina.Block{{Text: "Hi"}}},
 			{Role: officina.Operator, Blocks: []officina.Block{{Text: "Today is Monday."}}},
@@ -90,15 +93,16 @@ func warmEncoders() error {
 type response func(w http.ResponseWriter)
 
 // fakeAPI is the Claude API's side of the network: it answers each request with the next scripted response and
-// keeps the bodies it received.
+// keeps the bodies it received, and their beta headers.
 type fakeAPI struct {
 	url string
 
 	mu        sync.Mutex
 	responses []response
 	requests  []string
-	// keys are the API keys the requests carried.
-	keys []string
+	// keys are the API keys the requests carried, and betas their beta headers.
+	keys  []string
+	betas []string
 }
 
 // serve starts a fake API that answers with responses, in order, and stops it when the test ends.
@@ -114,6 +118,7 @@ func serve(t *testing.T, responses ...response) *fakeAPI {
 		api.mu.Lock()
 		api.requests = append(api.requests, string(body))
 		api.keys = append(api.keys, r.Header.Get("X-Api-Key"))
+		api.betas = append(api.betas, r.Header.Get("anthropic-beta"))
 		var next response
 		if len(api.responses) > 0 {
 			next, api.responses = api.responses[0], api.responses[1:]
@@ -136,6 +141,13 @@ func (a *fakeAPI) Requests() []string {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	return append([]string(nil), a.requests...)
+}
+
+// Betas returns the anthropic-beta header of each request received so far.
+func (a *fakeAPI) Betas() []string {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return append([]string(nil), a.betas...)
 }
 
 // model returns a model on api with medium effort and opts.

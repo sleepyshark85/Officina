@@ -39,6 +39,9 @@ type Config struct {
 	Dashboard string
 	// Budgets limit each reply and each session; a zero limit is the default: $0.50 a reply, $5 a session.
 	Budgets Budgets
+	// Demo compacts and clears early enough to see in a short session, and says so at the start; Model(true) caches
+	// for a demo. Either way the model's provider must compact and clear.
+	Demo bool
 }
 
 // App is Bookshop Assistant, wired: Run it, then Close it.
@@ -82,6 +85,7 @@ func NewAgent(cfg Config, db *pgxpool.Pool, approver officina.Approver, sink off
 		// The database password is a secret; the rest of the connection string is not.
 		Secrets:        []string{db.Config().ConnConfig.Password},
 		TracerProvider: cfg.TracerProvider, MeterProvider: cfg.MeterProvider,
+		ContextManagement: contextManagement(cfg.Demo),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("chat agent: %w", err)
@@ -117,11 +121,34 @@ func (a *App) Close() {
 	a.db.Close()
 }
 
+// contextManagement returns the chat agent's context management, the same as the .NET implementation's, so a session
+// resumes in either. By default: compaction at Claude's default threshold, and clearing of old tool results only
+// when it frees about two broad searches' worth, as each clearing rewrites the cached tail. In a demo: compaction at
+// Claude's minimum, which the demo's four 10–15k-token searches reach, and clearing above 12 tool calls (the API
+// clears above the threshold, not at it). Clearing counts every tool call, so a lower threshold clears the searches
+// before they can compact; keeping the 10 latest results means a turn of 8 lookups never loses what it just fetched.
+func contextManagement(demo bool) officina.ContextManagement {
+	if demo {
+		return officina.ContextManagement{CompactAt: 50_000, ClearToolResults: officina.ToolResultClearing{
+			After: 12, Keep: 10,
+		}}
+	}
+	return officina.ContextManagement{CompactAt: 150_000, ClearToolResults: officina.ToolResultClearing{
+		After: 20, Keep: 5, AtLeastTokens: 20_000,
+	}}
+}
+
 // Model returns the chat agent's Claude model. Staff reply minutes apart and the prefix serves every session, so
-// both caches last an hour. The API key comes from the environment (ANTHROPIC_API_KEY), as the SDK finds it.
-func Model() (*claude.Model, error) {
+// both caches last an hour; a demo is one sitting, and its large searches would cost 60% more to cache for an hour,
+// so with demo they last five minutes. The API key comes from the environment (ANTHROPIC_API_KEY), as the SDK finds
+// it.
+func Model(demo bool) (*claude.Model, error) {
+	cache := claude.CacheOneHour
+	if demo {
+		cache = claude.CacheFiveMinutes
+	}
 	model, err := claude.New(claude.Opus55, claude.EffortMedium, claude.Options{
-		MaxOutputTokens: 16_000, PrefixCache: claude.CacheOneHour, ConversationCache: claude.CacheOneHour,
+		MaxOutputTokens: 16_000, PrefixCache: cache, ConversationCache: cache,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("bookshop model: %w", err)

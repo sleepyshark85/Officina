@@ -276,7 +276,7 @@ func TestNew_MDL03_SettingsNameEverySettingThatShapesARequest(t *testing.T) {
 	}
 }
 
-func TestModel_EVT02_InfoNamesTheProviderAndModelWithItsListPrice(t *testing.T) {
+func TestModel_EVT02_HIST03_InfoNamesTheProviderAndModelWithItsListPriceAndContextManagement(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		name string
@@ -284,8 +284,9 @@ func TestModel_EVT02_InfoNamesTheProviderAndModelWithItsListPrice(t *testing.T) 
 	}{
 		{claude.Opus55, officina.ModelInfo{Provider: "anthropic", Name: claude.Opus55, Price: officina.Price{
 			Input: 4, Output: 20, CacheRead: 0.20, CacheWrite: 5, CacheWriteHour: 8,
-		}}},
-		{"claude-from-the-future", officina.ModelInfo{Provider: "anthropic", Name: "claude-from-the-future"}},
+		}, Compacts: true, ClearsToolResults: true}},
+		{"claude-from-the-future", officina.ModelInfo{Provider: "anthropic", Name: "claude-from-the-future",
+			Compacts: true, ClearsToolResults: true}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

@@ -129,10 +129,11 @@ func (m *Model) Settings() string {
 		m.name, m.effort, m.maxTokens, cache)
 }
 
-// Info returns the provider "anthropic", the model's name and its list price, in US dollars per million tokens;
-// the price is zero for a model this package does not know.
+// Info returns the provider "anthropic", the model's name and its list price, in US dollars per million tokens (zero
+// for a model this package does not know), and that Claude compacts conversations and clears old tool results on
+// its side.
 func (m *Model) Info() officina.ModelInfo {
-	info := officina.ModelInfo{Provider: "anthropic", Name: m.name}
+	info := officina.ModelInfo{Provider: "anthropic", Name: m.name, Compacts: true, ClearsToolResults: true}
 	if m.name == Opus55 {
 		// Cache writes cost 1.25 times input for five minutes, twice input for an hour.
 		info.Price = officina.Price{Input: 4, Output: 20, CacheRead: 0.20, CacheWrite: 5, CacheWriteHour: 8}

@@ -138,6 +138,8 @@ func outcome(e officina.AuditEntry) string {
 		return e.Outcome + ": " + e.Detail
 	case e.Kind == officina.AuditToolEnded && e.Duration > 0:
 		return e.Outcome + "  " + thousands(e.Duration.Milliseconds()) + " ms"
+	case e.Kind == officina.AuditCompacted || e.Kind == officina.AuditCleared:
+		return e.Detail
 	default:
 		return e.Outcome
 	}

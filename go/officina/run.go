@@ -86,8 +86,8 @@ const (
 )
 
 // RunEvent is something that happened during a run, streamed to the host as it happens: a TextStreamed,
-// ReplyRestarted, UsageReported, ConversationAppended, ToolCallStarted, ApprovalAsked, ApprovalAnswered or
-// ToolCallFinished.
+// ReplyRestarted, ConversationCompacted, ToolResultsCleared, UsageReported, ConversationAppended, ToolCallStarted,
+// ApprovalAsked, ApprovalAnswered or ToolCallFinished.
 type RunEvent interface {
 	runEvent()
 }
@@ -254,13 +254,20 @@ func (a *Agent) loop(ctx context.Context, c *Conversation, message string, opts 
 		case reached != "":
 			return Result{Status: Stopped, Stop: Budget, Detail: reached}
 		}
-		req := Request{Tools: a.tools, Instructions: a.instructions, Messages: append(slices.Clip(c.messages), pending...)}
+		req := Request{
+			Tools: a.tools, Instructions: a.instructions, ContextManagement: a.contextManagement,
+			Messages: append(slices.Clip(c.messages), pending...),
+		}
 		limit, limited := spent.outputLimit()
 		if limited {
 			req.MaxOutputTokens = limit
 		}
 		r := a.call(ctx, req, emit)
 		spent.add(r.usage)
+		for _, e := range r.edits {
+			// As for the run's own entries, a missing one blocks nothing.
+			_ = audit.record(ctx, e)
+		}
 		blocks, finished := r.blocks, r.finished
 		switch {
 		case finished == nil && r.failure == nil:
@@ -353,6 +360,8 @@ type reply struct {
 	// failure is why the call failed; nil if it finished or was cancelled.
 	failure error
 	retries int
+	// edits are the audit entries of what the provider did to shorten the conversation.
+	edits []AuditEntry
 	// firstText is how long the call took to stream its first text, on the attempt that counts; negative if it
 	// streamed none.
 	firstText time.Duration
@@ -399,6 +408,14 @@ func (a *Agent) call(ctx context.Context, req Request, emit func(RunEvent)) (r r
 			}
 		case BlockReceived:
 			r.blocks = append(r.blocks, e.Block)
+		case CompactionReported:
+			a.telemetry.compacted(ctx, e)
+			r.edits = append(r.edits, compactionEntry(e))
+			emit(ConversationCompacted(e))
+		case ClearingReported:
+			a.telemetry.cleared(ctx, e)
+			r.edits = append(r.edits, clearingEntry(e))
+			emit(ToolResultsCleared(e))
 		case UsageReceived:
 			r.usage = r.usage.plus(e.Usage)
 			emit(UsageReported{Usage: e.Usage, Cost: a.telemetry.model.Price.cost(e.Usage)})

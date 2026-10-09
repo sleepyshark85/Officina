@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json/jsontext"
 	"encoding/json/v2"
+	"fmt"
 	"slices"
 	"strings"
 	"testing"
@@ -25,6 +26,15 @@ type sharedPrefix struct {
 		InputSchema string `json:"inputSchema"`
 	} `json:"tools"`
 	Fingerprint string `json:"fingerprint"`
+	// ContextManagement holds context management settings, each with the fingerprint .NET computed for the prefix
+	// with them.
+	ContextManagement []struct {
+		CompactAt          int64  `json:"compactAt"`
+		ClearAfter         int    `json:"clearAfter"`
+		ClearKeep          int    `json:"clearKeep"`
+		ClearAtLeastTokens int64  `json:"clearAtLeastTokens"`
+		Fingerprint        string `json:"fingerprint"`
+	} `json:"contextManagement"`
 }
 
 // readSharedPrefix returns the shared prefix.
@@ -40,6 +50,12 @@ func readSharedPrefix(t *testing.T) sharedPrefix {
 // agent returns the agent of the shared prefix on model: its search tool reads, and place_order writes.
 func (p sharedPrefix) agent(t *testing.T, model officina.Model) *officina.Agent {
 	t.Helper()
+	return p.managing(t, model, officina.ContextManagement{})
+}
+
+// managing returns the agent of the shared prefix on model, with context management cm.
+func (p sharedPrefix) managing(t *testing.T, model officina.Model, cm officina.ContextManagement) *officina.Agent {
+	t.Helper()
 	var tools []officina.Tool
 	for _, st := range p.Tools {
 		kind := officina.Read
@@ -51,7 +67,7 @@ func (p sharedPrefix) agent(t *testing.T, model officina.Model) *officina.Agent 
 			Handler: func(context.Context, jsontext.Value) (string, error) { return "ok", nil },
 		})
 	}
-	agent, err := officina.NewAgent(model, p.Instructions, officina.AgentOptions{Tools: tools})
+	agent, err := officina.NewAgent(model, p.Instructions, officina.AgentOptions{Tools: tools, ContextManagement: cm})
 	if err != nil {
 		t.Fatalf("NewAgent() error = %v", err)
 	}
@@ -84,6 +100,30 @@ func TestAgent_CTX04_TheFingerprintIsDotNetsByteForByte(t *testing.T) {
 
 	if got := fingerprint(t, &c); got != p.Fingerprint {
 		t.Errorf("fingerprint = %s, want .NET's %s", got, p.Fingerprint)
+	}
+}
+
+func TestAgent_CTX04_HIST01_TheFingerprintWithContextManagementIsDotNetsByteForByte(t *testing.T) {
+	t.Parallel()
+	p := readSharedPrefix(t)
+	if len(p.ContextManagement) == 0 {
+		t.Fatal("the shared prefix has no context management settings")
+	}
+	for _, s := range p.ContextManagement {
+		cm := officina.ContextManagement{CompactAt: s.CompactAt, ClearToolResults: officina.ToolResultClearing{
+			After: s.ClearAfter, Keep: s.ClearKeep, AtLeastTokens: s.ClearAtLeastTokens,
+		}}
+		t.Run(fmt.Sprintf("%+v", cm), func(t *testing.T) {
+			t.Parallel()
+			model := compacting(officinatest.NewModel(p.Settings, officinatest.TextReply("Hello.")))
+			var c officina.Conversation
+
+			run(t, p.managing(t, model, cm), &c, "Hi", officina.RunOptions{})
+
+			if got := fingerprint(t, &c); got != s.Fingerprint {
+				t.Errorf("fingerprint = %s, want .NET's %s", got, s.Fingerprint)
+			}
+		})
 	}
 }
 
