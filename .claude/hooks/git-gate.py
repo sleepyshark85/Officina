@@ -57,6 +57,12 @@ def is_go(path):
     return path.startswith("go/")
 
 
+def require_dotnet():
+    """Blocks when the .NET checks cannot run: a missing command would crash the hook, which lets the command through."""
+    if not shutil.which("dotnet"):
+        block("Blocked: the .NET checks need the dotnet command on PATH (README.md).")
+
+
 def go_env():
     """The environment for the Go checks: the go command on PATH, and the tools it installed (golangci-lint) found in
     its GOPATH's bin."""
@@ -84,6 +90,7 @@ def before_commit(here):
         block("Blocked: these staged files also have unstaged changes; stage or stash them first:\n" + "\n".join(sorted(partly)))
     root = git(here, "rev-parse", "--show-toplevel")
     if dotnet:
+        require_dotnet()
         check(root, ["dotnet", "format", "--verify-no-changes"], "Blocked: the format check fails; run 'dotnet format', then commit again.")
         check(root, ["dotnet", "build", "--configuration", "Release", "--nologo", "--verbosity", "quiet"],
               "Blocked: the build fails (warnings are errors); fix it, then commit again.")
@@ -105,6 +112,7 @@ def before_push(here, branch):
     code = [path for path in changed if not DOCS.search(path)]
     root = git(here, "rev-parse", "--show-toplevel")
     if any(not is_go(path) for path in code):
+        require_dotnet()
         check(root, ["dotnet", "test", "--configuration", "Release", "--nologo",
               "--verbosity", "quiet", "--blame-hang-timeout", "2m"], "Blocked: the tests fail; fix them, then push again.")
     if any(is_go(path) for path in code):
