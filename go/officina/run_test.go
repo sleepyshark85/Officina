@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"iter"
+	"slices"
 	"sync"
 	"testing"
 
@@ -101,6 +102,58 @@ func TestRun_EVT01_AGT08_EventsStreamThenEachAppendThenResult(t *testing.T) {
 	}
 	if diff := cmp.Diff(wantResult, result); diff != "" {
 		t.Errorf("result mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestRun_MDL04_ARetriedReplyRestartsAndOnlyTheLastAttemptIsAppended(t *testing.T) {
+	t.Parallel()
+	usage := officina.Usage{Input: 10, Output: 3}
+	tests := []struct {
+		name  string
+		reply []officina.ModelEvent
+		want  []officina.RunEvent
+	}{
+		{
+			name: "after text streamed",
+			reply: []officina.ModelEvent{
+				officina.TextDelta{Text: "Hel"},
+				officina.BlockReceived{Block: officinatest.TextBlock("Hel")},
+				officina.UsageReceived{Usage: usage},
+				officina.Retried{},
+			},
+			want: []officina.RunEvent{
+				officina.TextStreamed{Text: "Hel"}, officina.UsageReported{Usage: usage}, officina.ReplyRestarted{},
+			},
+		},
+		{
+			name:  "before any text",
+			reply: []officina.ModelEvent{officina.UsageReceived{Usage: usage}, officina.Retried{}, officina.Retried{}},
+			want:  []officina.RunEvent{officina.UsageReported{Usage: usage}},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			reply := officinatest.TextReply("Hello.")
+			reply.Events = slices.Concat(tt.reply, reply.Events)
+			var c officina.Conversation
+
+			events, result := stream(t.Context(), t, newAgent(t, officinatest.NewModel("scripted", reply)), &c, "Hi",
+				officina.RunOptions{}, func(officina.RunEvent) bool { return true })
+
+			want := slices.Concat(tt.want, []officina.RunEvent{officina.TextStreamed{Text: "Hello."},
+				officina.ConversationAppended{Message: officina.Message{Role: officina.User, Blocks: []officina.Block{{Text: "Hi"}}}},
+				officina.ConversationAppended{Message: officina.Message{
+					Role: officina.Assistant, Blocks: []officina.Block{officinatest.TextBlock("Hello.")},
+				}}})
+			if diff := cmp.Diff(want, events); diff != "" {
+				t.Errorf("events mismatch (-want +got):\n%s", diff)
+			}
+			wantResult := officina.Result{Status: officina.Completed, Text: "Hello.", Usage: usage}
+			if diff := cmp.Diff(wantResult, result); diff != "" {
+				t.Errorf("result mismatch (-want +got):\n%s", diff)
+			}
+		})
 	}
 }
 
@@ -251,6 +304,49 @@ func TestRun_AGT03_ARunWithoutAReplyFailsOrEndsAndAppendsNothing(t *testing.T) {
 			}
 			if got := c.Messages(); len(got) != 0 {
 				t.Errorf("conversation has %d messages, want none", len(got))
+			}
+		})
+	}
+}
+
+func TestRun_AGT03_AReplyThatCallsToolsIsNeverLeftWithoutResults(t *testing.T) {
+	t.Parallel()
+	call := officina.Block{
+		ToolCall: &officina.ToolCall{ID: "t1", Name: "search", Input: jsontext.Value(`{"q":"x"}`)},
+		Raw:      jsontext.Value(`{"type":"tool_use","id":"t1","name":"search","input":{"q":"x"}}`),
+	}
+	tests := []struct {
+		name   string
+		finish officina.Finished
+		want   officina.Result
+	}{
+		{"stopped for the tools", officina.Finished{Reason: officina.FinishToolUse}, officina.Result{
+			Status: officina.Failed, Failure: officina.UnexpectedStop, Detail: "the model called tools, which this run cannot run",
+		}},
+		{"ended", officina.Finished{Reason: officina.FinishEnd}, officina.Result{
+			Status: officina.Failed, Failure: officina.UnexpectedStop,
+			Detail: "the model's reply called tools but did not stop for them",
+		}},
+		{"cut off at the output limit", officina.Finished{Reason: officina.FinishMaxTokens},
+			officina.Result{Status: officina.Stopped, Stop: officina.OutputLimit}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			model := officinatest.NewModel("scripted", officinatest.Reply{Events: []officina.ModelEvent{
+				officina.BlockReceived{Block: officinatest.TextBlock("Searching.")},
+				officina.BlockReceived{Block: call},
+				tt.finish,
+			}})
+			var c officina.Conversation
+
+			result := run(t, newAgent(t, model, tool("search", "Searches.")), &c, "Find x.", officina.RunOptions{})
+
+			if diff := cmp.Diff(tt.want, result); diff != "" {
+				t.Errorf("result mismatch (-want +got):\n%s", diff)
+			}
+			if n := len(c.Messages()); n != 0 {
+				t.Errorf("the conversation has %d messages, want none", n)
 			}
 		})
 	}

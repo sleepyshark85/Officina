@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json/jsontext"
 	"encoding/json/v2"
+	"errors"
 	"strings"
 	"testing"
 
@@ -78,8 +79,12 @@ func TestConversation_AGT06_JSONRoundTripKeepsEveryBlockByteForByte(t *testing.T
 
 func TestConversation_AGT06_TheJSONFormIsPlainAndTheSameAsDotNets(t *testing.T) {
 	t.Parallel()
-	const form = `{"id":"c1","fingerprint":"abc","messages":[{"role":"user","blocks":[{"text":"Hi"}]},` +
-		`{"role":"assistant","blocks":[{"raw":"{\"type\":\"x\"}"}]}]}`
+	// Shared with the .NET implementation: both read it, and neither rewrites it.
+	form := strings.TrimRight(sharedFile(t, "conversation", "conversation.json"), "\r\n")
+	var blocks map[string]string
+	if err := json.Unmarshal([]byte(sharedFile(t, "claude", "blocks.json")), &blocks); err != nil {
+		t.Fatalf("unmarshal the shared blocks: %v", err)
+	}
 
 	var c officina.Conversation
 	if err := json.Unmarshal([]byte(form), &c); err != nil {
@@ -91,14 +96,47 @@ func TestConversation_AGT06_TheJSONFormIsPlainAndTheSameAsDotNets(t *testing.T) 
 	}
 
 	want := []officina.Message{
-		{Role: officina.User, Blocks: []officina.Block{{Text: "Hi"}}},
-		{Role: officina.Assistant, Blocks: []officina.Block{{Raw: jsontext.Value(`{"type":"x"}`)}}},
+		{Role: officina.User, Blocks: []officina.Block{{Text: "Is Gaudy Night in stock?"}}},
+		{Role: officina.Operator, Blocks: []officina.Block{{Text: "Today is 2026-10-05."}}},
+		{Role: officina.Assistant, Blocks: []officina.Block{
+			{Raw: jsontext.Value(blocks["thinking"])},
+			{Text: "Looking up «Café Libro».", Raw: jsontext.Value(blocks["text"])},
+		}},
 	}
 	if diff := cmp.Diff(want, c.Messages()); diff != "" {
 		t.Errorf("messages mismatch (-want +got):\n%s", diff)
 	}
-	if c.ID != "c1" || string(got) != form {
-		t.Errorf("ID = %q and JSON = %s, want %q and %s", c.ID, got, "c1", form)
+	// Each implementation escapes text its own way, so the forms compare parsed; the blocks above, byte for byte.
+	var wantForm, gotForm any
+	if err := errors.Join(json.Unmarshal([]byte(form), &wantForm), json.Unmarshal(got, &gotForm)); err != nil {
+		t.Fatalf("Unmarshal() error = %v", err)
+	}
+	if diff := cmp.Diff(wantForm, gotForm); diff != "" {
+		t.Errorf("JSON mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestConversation_AGT06_AToolCallIsKeptInDotNetsForm(t *testing.T) {
+	t.Parallel()
+	const form = `{"id":"c1","messages":[{"role":"user","blocks":[{"text":"Find x."}]},{"role":"assistant","blocks":` +
+		`[{"raw":"{\"type\":\"tool_use\",\"id\":\"t1\",\"name\":\"search\",\"input\":{\"q\": \"x\"}}",` +
+		`"toolCall":{"id":"t1","name":"search","input":"{\"q\": \"x\"}"}}]}]}`
+
+	var c officina.Conversation
+	if err := json.Unmarshal([]byte(form), &c); err != nil {
+		t.Fatalf("Unmarshal() error = %v", err)
+	}
+	got, err := json.Marshal(&c)
+	if err != nil {
+		t.Fatalf("Marshal() error = %v", err)
+	}
+
+	want := &officina.ToolCall{ID: "t1", Name: "search", Input: jsontext.Value(`{"q": "x"}`)}
+	if diff := cmp.Diff(want, c.Messages()[1].Blocks[0].ToolCall); diff != "" {
+		t.Errorf("tool call mismatch (-want +got):\n%s", diff)
+	}
+	if string(got) != form {
+		t.Errorf("JSON = %s, want %s", got, form)
 	}
 }
 
@@ -114,6 +152,8 @@ func TestConversation_AGT06_UnmarshalRejectsAnInvalidConversation(t *testing.T) 
 		{"no blocks", `{"messages":[{"role":"user","blocks":[]}]}`, "message 1 has no blocks"},
 		{"empty block", `{"messages":[{"role":"user","blocks":[{}]}]}`, "block 1 of message 1 has neither text nor raw JSON"},
 		{"invalid raw", `{"messages":[{"role":"assistant","blocks":[{"raw":"{x"}]}]}`, "block 1 of message 1 has invalid raw JSON"},
+		{"invalid tool input", `{"messages":[{"role":"assistant","blocks":[{"raw":"{}","toolCall":{"id":"t1",` +
+			`"name":"s","input":"{x"}}]}]}`, "block 1 of message 1 has invalid tool input"},
 		{"duplicate name", `{"id":"a","id":"b","messages":[]}`, "duplicate"},
 	}
 	for _, tt := range tests {
