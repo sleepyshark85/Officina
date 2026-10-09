@@ -386,13 +386,49 @@ func TestRun_EVT02_CTX05_MetricsCountTokensCostCacheHitRatioToolOutcomesApproval
 	}
 }
 
+func TestRun_EVT02_HIST04_ACompactionAndAClearingShowOnTheModelCallsSpanAndAreCounted(t *testing.T) {
+	t.Parallel()
+	telemetry := newCollector(t)
+	model := compacting(officinatest.NewModel("scripted", compactingReply()))
+	agent := telemetry.agent(t, model, officina.AgentOptions{Name: "clerk", ContextManagement: managed()})
+
+	run(t, agent, nil, "Which shelf?", officina.RunOptions{})
+
+	attrs := attrMap(telemetry.span(t, "chat scripted").Attributes)
+	want := map[string]any{
+		"officina.compaction.tokens": int64(52_753), "officina.compaction.summary_tokens": int64(578),
+		"officina.clearing.tokens": int64(4_892), "officina.clearing.tool_calls": int64(2),
+	}
+	for k, v := range want {
+		if attrs[k] != v {
+			t.Errorf("model call span %s = %v, want %v", k, attrs[k], v)
+		}
+	}
+	var got []point
+	for _, p := range telemetry.points(t, map[string]any{
+		"gen_ai.agent.name": "clerk", "gen_ai.provider.name": "scripted", "gen_ai.request.model": "scripted",
+	}) {
+		if p.Metric == "officina.model.compactions" || p.Metric == "officina.model.clearings" {
+			got = append(got, p)
+		}
+	}
+	wantPoints := []point{
+		{"officina.model.clearings", map[string]any{}, 1, 0},
+		{"officina.model.compactions", map[string]any{}, 1, 0},
+	}
+	if diff := gocmp.Diff(wantPoints, got); diff != "" {
+		t.Errorf("metrics mismatch (-want +got):\n%s", diff)
+	}
+}
+
 func TestTelemetry_EVT02_InstrumentsHaveTheNamesAndUnitsOfDotNets(t *testing.T) {
 	t.Parallel()
 	telemetry := newCollector(t)
 	model := officinatest.NewModel("scripted", officinatest.ToolUseReply(
 		officinatest.ToolUseBlock("c1", "search", `{}`)), officinatest.Reply{Events: []officina.ModelEvent{
 		officina.UsageReceived{Usage: officina.Usage{Input: 1}}, officina.Retried{}, officina.TextDelta{Text: "Hi"},
-		officina.BlockReceived{Block: officinatest.TextBlock("Hi")}, officina.UsageReceived{Usage: officina.Usage{Input: 1}},
+		officina.BlockReceived{Block: officinatest.TextBlock("Hi")}, officina.CompactionReported{Tokens: 2, SummaryTokens: 1},
+		officina.ClearingReported{Tokens: 2, ToolCalls: 1}, officina.UsageReceived{Usage: officina.Usage{Input: 1}},
 		officina.Finished{Reason: officina.FinishEnd},
 	}})
 	agent := telemetry.agent(t, model, officina.AgentOptions{
@@ -425,6 +461,7 @@ func TestTelemetry_EVT02_InstrumentsHaveTheNamesAndUnitsOfDotNets(t *testing.T) 
 		"gen_ai.client.operation.duration": "s", "officina.model.cache_hit_ratio": "1", "officina.model.cost": "{USD}",
 		"officina.model.retries": "{retry}", "officina.tool.duration": "s", "officina.tool.calls": "{call}",
 		"officina.tool.approvals": "{approval}", "officina.runs": "{run}", "officina.audit.failures": "{entry}",
+		"officina.model.compactions": "{compaction}", "officina.model.clearings": "{clearing}",
 	}
 	if diff := gocmp.Diff(want, got); diff != "" {
 		t.Errorf("instruments mismatch (-want +got):\n%s", diff)

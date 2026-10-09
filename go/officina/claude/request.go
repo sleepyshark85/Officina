@@ -15,7 +15,8 @@ import (
 
 // params lays out one request: the tools in the order given (the core sorts them) with eager input streaming; the
 // instructions as one system block holding the prefix's cache point; automatic caching for the conversation's tail;
-// then the messages, each written as JSON here so stored blocks go out byte for byte.
+// the context management, with its betas; then the messages, each written as JSON here so stored blocks go out byte
+// for byte.
 func (m *Model) params(req officina.Request) (anthropic.BetaMessageNewParams, error) {
 	params := anthropic.BetaMessageNewParams{
 		Model:        anthropic.Model(m.name),
@@ -33,6 +34,7 @@ func (m *Model) params(req officina.Request) (anthropic.BetaMessageNewParams, er
 	if req.MaxOutputTokens > 0 {
 		params.MaxTokens = min(params.MaxTokens, req.MaxOutputTokens)
 	}
+	params.ContextManagement, params.Betas = contextManagement(req.ContextManagement)
 	for i, t := range req.Tools {
 		tool := &anthropic.BetaToolParam{
 			Name:                t.Name,
@@ -52,6 +54,39 @@ func (m *Model) params(req officina.Request) (anthropic.BetaMessageNewParams, er
 		params.Messages[i] = param.Override[anthropic.BetaMessageParam](raw)
 	}
 	return params, nil
+}
+
+// contextManagement returns the context management of a request, with the betas it needs: tool-result clearing,
+// then threshold compaction (never the on-demand kind, which has the client drop the compacted messages). An empty
+// setting asks for nothing, so a request without context management has none and no betas.
+func contextManagement(c officina.ContextManagement) (anthropic.BetaContextManagementConfigParam, []anthropic.AnthropicBeta) {
+	var (
+		config anthropic.BetaContextManagementConfigParam
+		betas  []anthropic.AnthropicBeta
+	)
+	if t := c.ClearToolResults; t != (officina.ToolResultClearing{}) {
+		clearing := &anthropic.BetaClearToolUses20250919EditParam{
+			Trigger: anthropic.BetaClearToolUses20250919EditTriggerUnionParam{
+				OfToolUses: &anthropic.BetaToolUsesTriggerParam{Value: int64(t.After)},
+			},
+			Keep: anthropic.BetaToolUsesKeepParam{Value: int64(t.Keep), Type: "tool_uses"},
+			// A minimum of zero leaves the parameter at its zero value, which the SDK leaves out: none.
+			ClearAtLeast: anthropic.BetaInputTokensClearAtLeastParam{Value: t.AtLeastTokens},
+		}
+		config.Edits = append(config.Edits, anthropic.BetaContextManagementConfigEditUnionParam{
+			OfClearToolUses20250919: clearing,
+		})
+		betas = append(betas, anthropic.AnthropicBetaContextManagement2025_06_27)
+	}
+	if c.CompactAt > 0 {
+		config.Edits = append(config.Edits, anthropic.BetaContextManagementConfigEditUnionParam{
+			OfCompact20260112: &anthropic.BetaCompact20260112EditParam{
+				Trigger: anthropic.BetaInputTokensTriggerParam{Value: c.CompactAt},
+			},
+		})
+		betas = append(betas, anthropic.AnthropicBetaCompact2026_01_12)
+	}
+	return config, betas
 }
 
 // message writes a message as the API takes it. An operator message is a mid-conversation system message, its text

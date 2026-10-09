@@ -13,5 +13,24 @@
       "inputSchema": "{ \u0022type\u0022 : \u0022object\u0022, \u0022description\u0022: \u0022caf\\u00e9 \\/ \u003Cq\u003E\u0022, \u0022properties\u0022: { \u0022query\u0022: { \u0022type\u0022: \u0022string\u0022 } }, \u0022required\u0022: [ \u0022query\u0022 ] }"
     }
   ],
-  "fingerprint": "4424d601ef4e216480c35399658d38735b3993e8b348807b163477bafa86022d"
+  "fingerprint": "4424d601ef4e216480c35399658d38735b3993e8b348807b163477bafa86022d",
+  "contextManagement": [
+    {
+      "compactAt": 50000,
+      "clearAfter": 12,
+      "clearKeep": 10,
+      "clearAtLeastTokens": 20000,
+      "fingerprint": "8570dd2dc3956f5e380e0f31bd574a35b4815d7d749dd6589213ee34f7fe9ce2"
+    },
+    {
+      "compactAt": 150000,
+      "fingerprint": "5655a5c7a3347000d9b2ddde0c0e5eec7d585ead454fb5e549856c45acd64722"
+    },
+    {
+      "clearAfter": 20,
+      "clearKeep": 0,
+      "clearAtLeastTokens": 0,
+      "fingerprint": "152d280f17c28f0096298c7c8951cf2959c27c5317fd7d9dc23c746b15a13b62"
+    }
+  ]
 }

@@ -78,6 +78,27 @@ public class SharedSessionTests
     }
 
     [Fact]
+    public void The_prefix_fingerprint_with_context_management_is_the_shared_fixtures()
+    {
+        var prefix = Shared(new ScriptedModel { Settings = Settings }).Prefix();
+        var shared = JsonSerializer.Deserialize<JsonElement>(Fixture("prefix.json")).GetProperty("contextManagement");
+
+        foreach (var settings in shared.EnumerateArray())
+        {
+            long? Number(string name) => settings.TryGetProperty(name, out var value) ? value.GetInt64() : null;
+            var context = new ContextManagement
+            {
+                CompactAt = Number("compactAt"),
+                ClearToolResults = Number("clearAfter") is { } after
+                    ? new ToolResultClearing((int)after, (int)Number("clearKeep")!.Value, Number("clearAtLeastTokens")!.Value)
+                    : null,
+            };
+
+            Assert.Equal(settings.GetProperty("fingerprint").GetString(), (prefix with { ContextManagement = context }).Fingerprint);
+        }
+    }
+
+    [Fact]
     public async Task A_session_the_Go_implementation_saved_mid_reply_resumes_with_its_prefix_and_interrupted_calls_answered()
     {
         var stored = Fixture("go-session.json");

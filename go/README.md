@@ -4,8 +4,8 @@ The Go implementation of Officina: the same requirements ([`REQUIREMENTS.md`](..
 ([`ARCHITECTURE.md`](../ARCHITECTURE.md)) as the .NET one at the repository root, written as idiomatic Go.
 
 Status: in progress. The core's run loop (Go S03), the Claude adapter (Go S04), tools and audit (Go S05), the
-Bookshop Assistant console (Go S06), telemetry with the audit view (Go S07) and sessions with budgets (Go S08) are
-in; memory, long conversations and MCP follow. See
+Bookshop Assistant console (Go S06), telemetry with the audit view (Go S07), sessions with budgets (Go S08) and long
+conversations (Go S10) are in; memory and MCP follow. See
 [`docs/plan/phase-1.md`](../docs/plan/phase-1.md) for the slices (the Go column),
 [`docs/implementations/go.md`](../docs/implementations/go.md) for the decisions and
 [`docs/traceability.md`](docs/traceability.md) for the tests of each requirement.
@@ -75,6 +75,12 @@ the core's metrics (tokens, cost, cache hit ratio, latency, tool outcomes, appro
 http://localhost:18888; the application sends OTLP/gRPC to http://localhost:4317. `OTEL_EXPORTER_OTLP_ENDPOINT` and
 `BOOKSHOP_DASHBOARD` name others, such as the ports a `.env` file beside the compose file chose. Telemetry holds no
 message text: the audit trail is the record.
+Long conversations are shortened on Claude's side: the conversation is compacted into a summary from 150,000 input
+tokens, and old tool results are cleared once a request holds more than 20 tool calls and clearing frees at least
+20,000 tokens. Each shows as a `~` line and an `/audit` entry. `go run ./cmd/bookshop --demo` compacts from 50,000
+input tokens (Claude's minimum) and clears above 12 tool calls, to see both in a short session: four broad catalogue
+searches in one message compact (about $0.30), and two turns of eight book lookups clear (step 13 of
+[`docs/demo.md`](../docs/demo.md)). Demo sessions do not resume in normal mode, nor the other way round.
 `BOOKSHOP_DATABASE`, a PostgreSQL connection string, names another database, such as one on another port:
 `postgres://bookshop:shelf-demo-41@localhost:5433/bookshop`. `docker compose down -v` deletes the data, so the next
 start seeds afresh.

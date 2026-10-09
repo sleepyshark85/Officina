@@ -62,6 +62,13 @@ func (m *Model) attempt(
 	if err != nil && (!started || ctx.Err() != nil) {
 		return false, err
 	}
+	if err == nil {
+		for _, edit := range contextEdits(reply) {
+			if !yield(edit, nil) {
+				return true, nil
+			}
+		}
+	}
 	// The tokens of an attempt that failed mid-stream are billed, so they are reported too.
 	if !yield(officina.UsageReceived{Usage: usage(reply.Usage)}, nil) {
 		return true, nil
@@ -88,6 +95,29 @@ func blockOf(b anthropic.BetaContentBlockUnion) (officina.Block, error) {
 		block.ToolCall = &officina.ToolCall{ID: b.ID, Name: b.Name, Input: jsontext.Value(b.Input).Clone()}
 	}
 	return block, nil
+}
+
+// contextEdits returns what the provider did to shorten the conversation for the call. A compaction comes from the
+// call's compaction iteration: what it read was summarized, what it wrote is the summary. A clearing comes from the
+// edits the API applied, which do not include compaction.
+func contextEdits(reply anthropic.BetaMessage) []officina.ModelEvent {
+	var edits []officina.ModelEvent
+	for _, it := range reply.Usage.Iterations {
+		if it.Type == "compaction" {
+			edits = append(edits, officina.CompactionReported{
+				Tokens:        it.InputTokens + it.CacheReadInputTokens + it.CacheCreationInputTokens,
+				SummaryTokens: it.OutputTokens,
+			})
+		}
+	}
+	for _, edit := range reply.ContextManagement.AppliedEdits {
+		if edit.Type == "clear_tool_uses_20250919" {
+			edits = append(edits, officina.ClearingReported{
+				Tokens: edit.ClearedInputTokens, ToolCalls: int(edit.ClearedToolUses),
+			})
+		}
+	}
+	return edits
 }
 
 // usage returns the call's tokens. When the call ran several iterations (a compaction, then the reply), the totals

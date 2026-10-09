@@ -30,8 +30,8 @@ type AuditEntry struct {
 	Agent        string `json:"agent,omitzero"`
 	// TraceID is the run's trace, in W3C hex form; empty when the run has no span, as without a tracer provider.
 	TraceID string `json:"traceId,omitzero"`
-	// SpanID is the span of the step the entry records: the run's for its start and end, the tool call's for the
-	// others.
+	// SpanID is the span of the step the entry records: the tool call's for a tool call and its approval, else the
+	// run's.
 	SpanID string    `json:"spanId,omitzero"`
 	Kind   AuditKind `json:"kind"`
 	Tool   string    `json:"tool,omitzero"`
@@ -65,6 +65,10 @@ const (
 	AuditToolEnded        AuditKind = "ToolEnded"
 	AuditApprovalAsked    AuditKind = "ApprovalAsked"
 	AuditApprovalAnswered AuditKind = "ApprovalAnswered"
+	// AuditCompacted says the provider compacted the conversation during a model call; the detail says how much.
+	AuditCompacted AuditKind = "Compacted"
+	// AuditCleared says the provider cleared old tool results for a model call; the detail says how many.
+	AuditCleared AuditKind = "Cleared"
 )
 
 // maxAuditText is the longest text an entry keeps per field, in bytes.

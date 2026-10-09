@@ -49,14 +49,16 @@ func sessionOf(t *testing.T, cfg bookshop.Config, d *database, model *officinate
 	return out.String()
 }
 
-// priced is a scripted model at Opus 5.5's list price, as the application's budgets need a price.
+// priced is a scripted model at Opus 5.5's list price, as the application's budgets need a price, whose provider
+// compacts and clears, as the application's context management needs.
 type priced struct {
 	*officinatest.Model
 }
 
 func (priced) Info() officina.ModelInfo {
 	return officina.ModelInfo{Provider: "scripted", Name: "scripted",
-		Price: officina.Price{Input: 4, Output: 20, CacheRead: 0.20, CacheWrite: 5, CacheWriteHour: 8}}
+		Price:    officina.Price{Input: 4, Output: 20, CacheRead: 0.20, CacheWrite: 5, CacheWriteHour: 8},
+		Compacts: true, ClearsToolResults: true}
 }
 
 // input is the staff member's scripted input: it reads as the script's lines, and runs each func of the script

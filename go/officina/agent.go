@@ -29,9 +29,10 @@ type Agent struct {
 	auditSink AuditSink
 	name      string
 	// secrets holds every form of each secret that is redacted.
-	secrets     []string
-	fingerprint string
-	telemetry   *telemetry
+	secrets           []string
+	fingerprint       string
+	telemetry         *telemetry
+	contextManagement ContextManagement
 }
 
 // AgentOptions holds an agent's optional parts; the zero value has none.
@@ -54,11 +55,16 @@ type AgentOptions struct {
 	// TelemetryContent puts message text and tool inputs and results in the spans, with the secrets redacted. By
 	// default telemetry holds none: it is for operation, and the audit trail is for the record.
 	TelemetryContent bool
+	// ContextManagement is how the model's provider shortens a long conversation; none by default. It needs the
+	// provider's support (ModelInfo), and is part of the prefix. Without compaction, a run that fills the model's
+	// context window stops with ContextFull.
+	ContextManagement ContextManagement
 }
 
 // NewAgent returns an agent of model and instructions. The instructions are frozen for every conversation: nothing
 // per user, run or date goes there. It fails if the instructions are blank, or a tool has no name, a name another
-// tool has, no kind, no handler, or an input schema that is not an object schema in the subset the core validates.
+// tool has, no kind, no handler, or an input schema that is not an object schema in the subset the core validates;
+// or if the context management is invalid or needs what the model's provider does not do.
 func NewAgent(model Model, instructions string, opts AgentOptions) (*Agent, error) {
 	if model == nil {
 		return nil, errors.New("new agent: no model")
@@ -98,10 +104,14 @@ func NewAgent(model Model, instructions string, opts AgentOptions) (*Agent, erro
 		}
 		schemas[i] = s
 	}
+	if err := opts.ContextManagement.check(model.Info()); err != nil {
+		return nil, fmt.Errorf("new agent: %w", err)
+	}
 	a := &Agent{
 		model: model, instructions: instructions, tools: tools, schemas: schemas, approver: opts.Approver,
 		auditSink: opts.AuditSink, name: opts.Name, secrets: secretForms(opts.Secrets),
-		fingerprint: prefixFingerprint(model.Settings(), instructions, tools),
+		fingerprint:       prefixFingerprint(model.Settings(), instructions, tools, opts.ContextManagement),
+		contextManagement: opts.ContextManagement,
 	}
 	var err error
 	a.telemetry, err = newTelemetry(opts.TracerProvider, opts.MeterProvider, opts.Name, model.Info(),
@@ -208,8 +218,9 @@ func (a *Agent) redact(text string) string {
 // prefixFingerprint returns a SHA-256 hash of everything in the prefix that reaches the model. Stored conversations
 // carry it, and a conversation either implementation stored resumes in the other, so it hashes the bytes the .NET
 // implementation hashes, which must never change: {"model":…,"instructions":…,"tools":[{"name":…,"description":…,
-// "inputSchema":…},…]}, with the strings escaped as .NET's default JSON encoder escapes them and each schema as given.
-func prefixFingerprint(settings, instructions string, tools []Tool) string {
+// "inputSchema":…},…],"contextManagement":{…}}, with the strings escaped as .NET's default JSON encoder escapes them,
+// each schema as given, and the context management only when it asks for something.
+func prefixFingerprint(settings, instructions string, tools []Tool, cm ContextManagement) string {
 	b := appendDotnetString([]byte(`{"model":`), settings)
 	b = appendDotnetString(append(b, `,"instructions":`...), instructions)
 	b = append(b, `,"tools":[`...)
@@ -221,7 +232,7 @@ func prefixFingerprint(settings, instructions string, tools []Tool) string {
 		b = appendDotnetString(append(b, `,"description":`...), t.Description)
 		b = append(append(append(b, `,"inputSchema":`...), t.InputSchema...), '}')
 	}
-	sum := sha256.Sum256(append(b, "]}"...))
+	sum := sha256.Sum256(append(cm.appendFingerprint(append(b, ']')), '}'))
 	return hex.EncodeToString(sum[:])
 }
 

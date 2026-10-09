@@ -37,6 +37,9 @@ type session struct {
 	cost         float64
 	context      string
 	saved        string
+	// cleared is how many tool calls the last clearing line named, so a clearing the provider repeats on every
+	// later call is shown once.
+	cleared int
 }
 
 // newSession returns a new session of staffMember, with an id short enough to type in /resume: 12 random hex

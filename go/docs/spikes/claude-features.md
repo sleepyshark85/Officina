@@ -81,3 +81,13 @@ schema helper.
 **No raw-field decisions are needed:** the SDK exposes every feature checked. On-demand compaction
 (`compact-2026-09-04`) and the `clear_at` / per-message `output_config` system messages are typed in the SDK but
 **unproven**: this spike did not run them, so Go S10 and Go S04 check them live before relying on them.
+
+## Go S10 follow-up: on-demand compaction and `clear_at`, live
+
+**Date:** 2026-10-09 · same SDK and model · **API cost:** about $0.01 (small prompts; on-demand compaction has no
+minimum). Run from a throwaway program, not kept.
+
+| Feature | Status | Evidence | Consequence |
+|---|---|---|---|
+| On-demand compaction (top-level `compaction: {"type":"summarize"}`, beta `compact-2026-09-04`) | **Works, but only by dropping messages** | A request over a 3-message conversation (151 tokens) answered `stop_reason: "compaction"` with one `compaction` block (summary plus a `signature`) and `usage.iterations` = one `compaction` iteration. Sent first, in place of the messages it summarized (as `assistant` or `user`), then a question: answered from the summary. Appended after those messages instead: **400** `compaction_block_misplaced`, "`compaction` block must be sent first, in place of the messages it summarizes; remove those messages" | Not used (D12): it needs the client to drop messages, which principle 5 and HIST-03 forbid. Go S10 uses threshold compaction (`compact_20260112`), whose block is appended |
+| `clear_at: "next_user_message"` on a mid-conversation system message (beta `mid-conversation-system-clear-at-2026-08-21`) | **Works** | A run context sent with it was used for the reply it preceded; on the next user turn, with the system message sent unchanged, the model no longer had it ("UNKNOWN"), and the input shrank accordingly. A first wording ("Greet her by name.") was answered with a `refusal` whose details were empty; a neutral one was not | Not used: the run context must stay in view for the whole session, as it is sent only at the start and on a new day (APP-13) |

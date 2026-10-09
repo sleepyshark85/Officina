@@ -52,6 +52,7 @@ type console struct {
 	dashboard string
 	// answers hands one approval from the console to Approve; one reply asks one approval at a time.
 	answers chan officina.Approval
+	demo    bool
 
 	// pending holds the line being read, while a read is in flight; a read an interrupt abandoned serves the next
 	// prompt. reads waits for the reading goroutine.
@@ -73,7 +74,7 @@ func newConsole(cfg Config, trail *auditTable, sessions *Sessions) *console {
 	c := &console{
 		in: bufio.NewReader(cfg.In), out: cfg.Out, echo: cfg.Echo, interrupt: cfg.Interrupt, logger: cfg.Logger,
 		trail: trail, sessions: sessions, budgets: cfg.Budgets, dashboard: cfg.Dashboard,
-		answers: make(chan officina.Approval, 1), atLineStart: true,
+		answers: make(chan officina.Approval, 1), atLineStart: true, demo: cfg.Demo,
 	}
 	if c.budgets.Reply == 0 {
 		c.budgets.Reply = defaultReplyBudget
@@ -100,6 +101,9 @@ func (c *console) run(ctx context.Context, agent *officina.Agent) error {
 	// A line still being read is waited for; run returns only after the read it asked for has ended.
 	defer c.reads.Wait()
 	c.writeLine("Bookshop Assistant. Type /help for commands.")
+	if c.demo {
+		c.writeLine("Demo mode: compaction from 50,000 input tokens, and old tool results cleared above 12 tool calls.")
+	}
 	staffMember, err := c.askStaffMember(ctx)
 	if err != nil {
 		return c.ended(err)
@@ -214,7 +218,7 @@ func (c *console) reply(ctx context.Context, agent *officina.Agent, s *session, 
 	events, result := agent.Stream(ctx, s.conversation, message, officina.RunOptions{
 		Context: newContext, Budget: officina.Limits{Cost: &budget},
 	})
-	labelled, saveFailed := false, false
+	labelled, saveFailed, compacted := false, false, false
 	// What the reply has spent so far, from each model call's usage, so every save stores the session's whole spend.
 	var (
 		spent     officina.Usage
@@ -242,6 +246,17 @@ func (c *console) reply(ctx context.Context, agent *officina.Agent, s *session, 
 			} else {
 				c.writeLine("  < " + e.Call.Name + ": ok")
 			}
+		case officina.ConversationCompacted:
+			compacted = true
+			c.writeLine("  ~ Conversation compacted: " + thousands(e.Tokens) + " tokens summarized into " +
+				thousands(e.SummaryTokens) + ".")
+		case officina.ToolResultsCleared:
+			// The provider clears again on every call, as each sends the whole conversation: a line shows a change.
+			if e.ToolCalls != s.cleared {
+				s.cleared = e.ToolCalls
+				c.writeLine(fmt.Sprintf("  ~ Old tool results cleared: %d tool calls, %s tokens.", e.ToolCalls,
+					thousands(e.Tokens)))
+			}
 		case officina.UsageReported:
 			spent, spentCost = plus(spent, e.Usage), spentCost+e.Cost
 		case officina.ConversationAppended:
@@ -266,6 +281,10 @@ func (c *console) reply(ctx context.Context, agent *officina.Agent, s *session, 
 	c.logger.InfoContext(ctx, "reply ended", "conversation", s.conversation.ID, "result", res.Status.String(),
 		"input_tokens", u.Input+u.CacheRead+u.CacheWrite, "output_tokens", u.Output)
 	switch {
+	case res.Status == officina.Completed && strings.TrimSpace(res.Text) == "" && compacted:
+		c.writeLine("[The conversation was compacted and the reply has no text. Please ask again.]")
+	case res.Status == officina.Completed && strings.TrimSpace(res.Text) == "":
+		c.writeLine("[The reply has no text. Please ask again.]")
 	case res.Status == officina.Stopped && res.Stop == officina.Cancelled:
 		c.writeLine("[Cancelled.]")
 	case res.Status == officina.Stopped && res.Stop == officina.Budget && left <= c.budgets.Reply:

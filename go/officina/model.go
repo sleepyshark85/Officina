@@ -24,13 +24,16 @@ type Model interface {
 	Stream(ctx context.Context, req Request) iter.Seq2[ModelEvent, error]
 }
 
-// Request is one model call: the prefix that stays the same for a conversation (tools and instructions; the model's
-// settings are its own), then the conversation with the run's pending messages. A Model must not modify it.
+// Request is one model call: the prefix that stays the same for a conversation (tools, instructions and context
+// management; the model's settings are its own), then the conversation with the run's pending messages. A Model
+// must not modify it.
 type Request struct {
 	// Tools are sorted by name.
 	Tools        []Tool
 	Instructions string
 	Messages     []Message
+	// ContextManagement is how the provider shortens the conversation; part of the prefix.
+	ContextManagement ContextManagement
 	// MaxOutputTokens is the most output tokens the reply may use, when the run's budget lowers the model's own
 	// limit; zero when it does not. It is not part of the prefix.
 	MaxOutputTokens int64
@@ -59,13 +62,19 @@ func (u Usage) plus(v Usage) Usage {
 	}
 }
 
-// ModelInfo names a model as telemetry does, and gives its price.
+// ModelInfo names a model as telemetry does, gives its price, and says how its provider can shorten a long
+// conversation.
 type ModelInfo struct {
 	// Provider is the provider's name (gen_ai.provider.name), such as "anthropic".
 	Provider string
 	// Name is the model's identifier (gen_ai.request.model).
 	Name  string
 	Price Price
+	// Compacts says the provider compacts a conversation on its side (ContextManagement.CompactAt). A model whose
+	// provider does not ends a run that fills its context window with FinishContextFull.
+	Compacts bool
+	// ClearsToolResults says the provider clears old tool results on its side (ContextManagement.ClearToolResults).
+	ClearsToolResults bool
 }
 
 // Price is what a model's tokens cost, in US dollars per million tokens. The zero value is a price not known: the
@@ -86,8 +95,8 @@ func (p Price) cost(u Usage) float64 {
 		float64(u.CacheWrite-u.CacheWriteHour)*p.CacheWrite + float64(u.CacheWriteHour)*p.CacheWriteHour) / 1e6
 }
 
-// ModelEvent is something a model streams while it replies: a TextDelta, BlockReceived, UsageReceived, Retried or
-// Finished.
+// ModelEvent is something a model streams while it replies: a TextDelta, BlockReceived, CompactionReported,
+// ClearingReported, UsageReceived, Retried or Finished.
 type ModelEvent interface {
 	modelEvent()
 }
