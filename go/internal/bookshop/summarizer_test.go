@@ -216,8 +216,9 @@ func TestConsole_APP15_ASessionTheDatabaseFailsToLoadIsSummarizedByTheNextListin
 		t.Fatalf("transcript has %d listings, want 3:\n%s", len(listings)-1, transcript)
 	}
 	inOrder(t, listings[1], "Summarizing 2 sessions left without a summary…\n",
-		"[The session could not be read: load session "+id+": ",
-		"[The session could not be read: load session broken-0001: ", "  Sam  (no title yet)  $")
+		"[Session "+id+" could not be read: ERROR: column \"input_tokens\" does not exist",
+		"[Session broken-0001 could not be read: ERROR: column \"input_tokens\" does not exist",
+		"  Sam  (no title yet)  $")
 	inOrder(t, listings[2], "Summarizing 2 sessions left without a summary…\n",
 		"[session broken-0001 cannot be read: ", "  Sam  Greeting  $")
 	if strings.Contains(listings[3], "Summarizing") {

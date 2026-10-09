@@ -203,7 +203,12 @@ func (c *console) summarizeLeft(ctx context.Context, listed []listing, current *
 			c.writeLine("[" + err.Error() + "]")
 			continue
 		case err != nil:
-			c.writeLine("[The session could not be read: " + err.Error() + "]")
+			// Load's error names the session already; the line names it once.
+			cause := err
+			if inner := errors.Unwrap(err); inner != nil {
+				cause = inner
+			}
+			c.writeLine("[Session " + l.id + " could not be read: " + cause.Error() + "]")
 			continue
 		}
 		if sum, ok := c.summarize(ctx, stored.Conversation); ok {

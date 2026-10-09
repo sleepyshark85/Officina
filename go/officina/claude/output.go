@@ -79,8 +79,10 @@ func adjust(schema jsontext.Value) (jsontext.Value, error) {
 func isObject(types jsontext.Value) bool {
 	var one string
 	var many []string
-	return json.Unmarshal(types, &one) == nil && one == "object" ||
-		json.Unmarshal(types, &many) == nil && slices.Contains(many, "object")
+	// The value is one name or a list of names; unmarshalling it as the other leaves that variable empty.
+	_ = json.Unmarshal(types, &one)
+	_ = json.Unmarshal(types, &many)
+	return one == "object" || slices.Contains(many, "object")
 }
 
 // adjustMembers adjusts the schema of each member of properties; a value that is not an object is kept.
