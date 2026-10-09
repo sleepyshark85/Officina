@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 
@@ -132,14 +133,31 @@ public sealed record Agent
     /// <summary>
     /// Replaces each of <see cref="Secrets"/> in <paramref name="text"/>, as written and as escaped in a JSON string
     /// (tool inputs are JSON, where a secret's <c>"</c> or <c>\</c> is escaped, and other characters may be <c>\uXXXX</c>).
+    /// Every occurrence of every form is found in the original text first and overlapping ones are merged, so secrets
+    /// that overlap or contain each other are redacted whole, whatever their order.
     /// </summary>
-    internal string Redact(string text) => Secrets
-        .Where(secret => secret.Length > 0)
-        .SelectMany(secret => new[]
+    internal string Redact(string text)
+    {
+        var covered = new bool[text.Length];
+        foreach (var form in Secrets.Where(secret => secret.Length > 0).SelectMany(secret => new[]
         {
             secret, JsonEncodedText.Encode(secret, JavaScriptEncoder.UnsafeRelaxedJsonEscaping).Value, JsonEncodedText.Encode(secret).Value,
-        })
-        .Aggregate(text, (redacted, secret) => redacted.Replace(secret, "[redacted]", StringComparison.Ordinal));
+        }).Distinct(StringComparer.Ordinal))
+        {
+            for (var at = text.IndexOf(form, StringComparison.Ordinal); at >= 0; at = text.IndexOf(form, at + 1, StringComparison.Ordinal))
+            {
+                Array.Fill(covered, true, at, form.Length);
+            }
+        }
+
+        var redacted = new StringBuilder(text.Length);
+        for (var i = 0; i < text.Length; i++)
+        {
+            _ = !covered[i] ? redacted.Append(text[i]) : i == 0 || !covered[i - 1] ? redacted.Append("[redacted]") : redacted;
+        }
+
+        return redacted.ToString();
+    }
 
     /// <summary>The part of every request that stays the same for a conversation, and identifies it.</summary>
     internal RequestPrefix Prefix() => new(Model.Settings, Tools, Instructions, Output?.Schema, ContextManagement);
