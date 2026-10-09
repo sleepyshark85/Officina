@@ -374,30 +374,25 @@ func (m *memory) replace(ctx context.Context, path, at string, old, replacement 
 	case !exists:
 		return "", commandError("Error: " + missing(path))
 	}
-	var found []int
-	for i := 0; ; i += len(*old) {
-		next := strings.Index(text[i:], *old)
-		if next < 0 {
-			break
-		}
-		i += next
-		found = append(found, i)
-	}
+	// The occurrences' lines, each once; the loop is bounded by the count, never by a search that may not end.
 	var lines []string
-	for _, i := range found {
+	i := 0
+	for range strings.Count(text, *old) {
+		i += strings.Index(text[i:], *old)
 		if line := strconv.Itoa(strings.Count(text[:i], "\n") + 1); !slices.Contains(lines, line) {
 			lines = append(lines, line)
 		}
+		i += len(*old)
 	}
+	first := strings.Index(text, *old)
 	switch {
-	case found == nil:
+	case first < 0:
 		return "", commandError("No replacement was performed, old_str `" + *old + "` did not appear verbatim in " +
 			path + ".")
-	case len(found) > 1:
+	case strings.Count(text, *old) > 1:
 		return "", commandError("No replacement was performed. Multiple occurrences of old_str `" + *old +
 			"` in lines: " + strings.Join(lines, ", ") + ". Please ensure it is unique")
 	}
-	first := found[0]
 	with := ""
 	if replacement != nil {
 		with = *replacement
