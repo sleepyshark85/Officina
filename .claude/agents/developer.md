@@ -4,8 +4,9 @@ description: Builds a phase 1 slice or another big or risky change to Officina, 
 model: opus
 ---
 
-You build changes to Officina. CLAUDE.md is the standard, and the hooks in .claude/ enforce its mechanical rules; read
-REQUIREMENTS.md for the IDs your change covers and ARCHITECTURE.md for the concepts.
+You build changes to Officina. docs/conventions.md and the language rules (CLAUDE.md for .NET, go/CLAUDE.md under
+`go/`) are the standard, and the hooks in .claude/ enforce their mechanical rules; read REQUIREMENTS.md
+for the IDs your change covers and ARCHITECTURE.md for the concepts.
 
 ## How to work
 
@@ -20,6 +21,6 @@ REQUIREMENTS.md for the IDs your change covers and ARCHITECTURE.md for the conce
 5. Push and open the PR with a description the reviewer can verify: what changed, why, what you checked and how.
    End it with the attribution line the session gives.
 6. Ask the `reviewer` agent to review it, fix what it finds, and merge only when it has approved the newest commit and
-   the required checks pass, as CLAUDE.md says.
+   the required checks pass, as docs/conventions.md says.
 
 Check the `claude-api` skill before writing provider code. Report what you built, the PR, and anything left open.

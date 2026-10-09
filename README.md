@@ -1,16 +1,20 @@
 # Officina
 
-A purpose-neutral .NET 10 library for building agentic applications: agents that call models, use tools and follow
-control flow. Packages are named under `Sleepyshark.Officina`.
+A purpose-neutral library for building agentic applications: agents that call models, use tools and follow control
+flow. Implemented in .NET 10 at the repository root (packages named under `Sleepyshark.Officina`), with a Go
+implementation planned in [`go/`](go/).
 
 Phase 1 is accepted against one reference application, **Bookshop Assistant**: an interactive console chatbot over
 PostgreSQL in Docker.
 
 - [`REQUIREMENTS.md`](REQUIREMENTS.md): what to build, phase 1 and north star.
 - [`ARCHITECTURE.md`](ARCHITECTURE.md): concepts, components, contracts and flows.
-- [`CLAUDE.md`](CLAUDE.md): working notes and conventions.
+- [`docs/conventions.md`](docs/conventions.md): how we work, in every implementation.
+- [`docs/implementations/`](docs/implementations/): each implementation's platform decisions.
+- [`CLAUDE.md`](CLAUDE.md): working notes and the .NET rules; [`go/CLAUDE.md`](go/CLAUDE.md): the Go rules.
 
-- [`docs/plan/phase-1.md`](docs/plan/phase-1.md): the phase 1 slices.
+- [`docs/plan/phase-1.md`](docs/plan/phase-1.md): the phase 1 slices (.NET); [`docs/plan/go-port.md`](docs/plan/go-port.md):
+  the Go port.
 - [`docs/traceability.md`](docs/traceability.md): each phase 1 requirement and its tests.
 - [`docs/test-report.md`](docs/test-report.md): a dated summary of the tests, coverage, mutation scores, gates and open
   gaps.

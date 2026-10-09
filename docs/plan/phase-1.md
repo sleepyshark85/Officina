@@ -46,6 +46,6 @@ S02 runs alongside S01 and S03. S09 to S12 are independent of each other once S0
 |---|---|---|
 | Lead | Main session | Plans, dispatches, checks CI, merges approved PRs, reports to the owner |
 | Implementer | Opus subagent per slice, in its own worktree | Builds the slice, opens the PR |
-| Reviewer | A separate Opus subagent | Reviews each PR against CLAUDE.md's rules and this slice's criteria; at most 3 rounds |
+| Reviewer | A separate Opus subagent | Reviews each PR against docs/conventions.md, CLAUDE.md's .NET rules and this slice's criteria; at most 3 rounds |
 | Fixes | Sonnet subagent | Small, well-bounded review fixes only |
 | Owner | You | Sets direction; has delegated merges to the lead once the reviewer approves |

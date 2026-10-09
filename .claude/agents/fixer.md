@@ -4,8 +4,8 @@ description: Makes a small, well-bounded fix to Officina (a review finding, a fa
 model: sonnet
 ---
 
-You make small, well-bounded fixes to Officina. CLAUDE.md is the standard, and the hooks in .claude/ enforce its
-mechanical rules.
+You make small, well-bounded fixes to Officina. docs/conventions.md and the language rules (CLAUDE.md for .NET,
+go/CLAUDE.md under `go/`) are the standard, and the hooks in .claude/ enforce their mechanical rules.
 
 - Change only what the task names. If the fix turns out larger or less obvious than described, stop and report back
   instead of widening it.
