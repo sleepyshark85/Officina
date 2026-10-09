@@ -1,7 +1,7 @@
 name: CodeQL
 
-# Static analysis for security flaws, such as injection or a secret in code, in the C#, the Go and these workflows. Results
-# show in the repository's Security tab and as alerts on a pull request's changed lines.
+# Static analysis for security flaws, such as injection or a secret in code, in the C#, the Go and these workflows.
+# Results show in the repository's Security tab and as alerts on a pull request's changed lines.
 on:
   push:
     branches: [main]
@@ -57,6 +57,11 @@ jobs:
           languages: ${{ matrix.language }}
           build-mode: ${{ matrix.build-mode }}
           queries: security-extended
+          # The dependency test's fixtures break the rules on purpose, and spikes are throwaway.
+          config: |
+            paths-ignore:
+              - go/testdata
+              - spikes
 
       - name: Build
         if: matrix.build-mode == 'manual'
