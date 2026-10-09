@@ -37,6 +37,8 @@ type Config struct {
 	Logger         *slog.Logger
 	// Dashboard is the telemetry dashboard's address, which /audit links each run's trace to.
 	Dashboard string
+	// Budgets limit each reply and each session; a zero limit is the default: $0.50 a reply, $5 a session.
+	Budgets Budgets
 }
 
 // App is Bookshop Assistant, wired: Run it, then Close it.
@@ -46,8 +48,9 @@ type App struct {
 	console *console
 }
 
-// Build wires the application: the database pool, the bookshop tools, the audit table, the chat agent and the
-// console, which is the agent's approver. The application starts with the database down, as the pool connects when a tool first needs it.
+// Build wires the application: the database pool, the session store, the audit table, the chat agent and the
+// console, which is the agent's approver. The application starts with the database down, as the pool connects when
+// a tool first needs it.
 func Build(ctx context.Context, cfg Config) (*App, error) {
 	if cfg.Model == nil || cfg.In == nil || cfg.Out == nil {
 		return nil, errors.New("build bookshop: a model, an input and an output are required")
@@ -56,24 +59,34 @@ func Build(ctx context.Context, cfg Config) (*App, error) {
 	if err != nil {
 		return nil, fmt.Errorf("build bookshop: %w", err)
 	}
-	tools, err := Tools(db)
-	if err != nil {
-		db.Close()
-		return nil, fmt.Errorf("build bookshop: %w", err)
-	}
 	trail := &auditTable{db: db}
-	c := newConsole(cfg, trail)
-	agent, err := officina.NewAgent(cfg.Model, instructions, officina.AgentOptions{
-		Tools: tools, Approver: c, AuditSink: trail, Name: "bookshop",
-		// The database password is a secret; the rest of the connection string is not.
-		Secrets:        []string{db.Config().ConnConfig.Password},
-		TracerProvider: cfg.TracerProvider, MeterProvider: cfg.MeterProvider,
-	})
+	c := newConsole(cfg, trail, NewSessions(db))
+	agent, err := NewAgent(cfg, db, c, trail)
 	if err != nil {
 		db.Close()
 		return nil, fmt.Errorf("build bookshop: %w", err)
 	}
 	return &App{db: db, agent: agent, console: c}, nil
+}
+
+// NewAgent returns the chat agent: cfg's model with the frozen instructions and the bookshop tools over db, asking
+// approver and auditing to sink (none when nil), with cfg's telemetry. Its prefix is the same however often it is
+// built, so a session one built resumes in another.
+func NewAgent(cfg Config, db *pgxpool.Pool, approver officina.Approver, sink officina.AuditSink) (*officina.Agent, error) {
+	tools, err := Tools(db)
+	if err != nil {
+		return nil, err
+	}
+	agent, err := officina.NewAgent(cfg.Model, instructions, officina.AgentOptions{
+		Tools: tools, Approver: approver, AuditSink: sink, Name: "bookshop",
+		// The database password is a secret; the rest of the connection string is not.
+		Secrets:        []string{db.Config().ConnConfig.Password},
+		TracerProvider: cfg.TracerProvider, MeterProvider: cfg.MeterProvider,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("chat agent: %w", err)
+	}
+	return agent, nil
 }
 
 // Connect returns a pool of connections to the database at url, a PostgreSQL connection string in either form pgx

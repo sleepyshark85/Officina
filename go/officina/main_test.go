@@ -47,6 +47,11 @@ func ignoreHandler() cmp.Option {
 	return cmpopts.IgnoreFields(officina.Tool{}, "Handler")
 }
 
+// outcome compares results by how the run ended, without their cost, counts and duration.
+func outcome() cmp.Option {
+	return cmpopts.IgnoreFields(officina.Result{}, "Cost", "ModelCalls", "ToolCalls", "Duration")
+}
+
 // run runs agent on c and fails the test on an error.
 func run(t *testing.T, agent *officina.Agent, c *officina.Conversation, message string, opts officina.RunOptions) officina.Result {
 	t.Helper()

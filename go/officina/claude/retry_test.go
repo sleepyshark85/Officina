@@ -124,16 +124,16 @@ func TestModel_MDL04_ARestartedReplyReachesTheRunOnceAndTheHostIsTold(t *testing
 
 		want := []officina.RunEvent{
 			officina.TextStreamed{Text: "Hel"},
-			officina.UsageReported{Usage: officina.Usage{Input: 10, Output: 3}},
+			officina.UsageReported{Usage: officina.Usage{Input: 10, Output: 3}, Cost: 0.0001},
 			officina.ReplyRestarted{},
 			officina.TextStreamed{Text: "Hello."},
-			officina.UsageReported{Usage: officina.Usage{Input: 10, Output: 5}},
+			officina.UsageReported{Usage: officina.Usage{Input: 10, Output: 5}, Cost: 0.00014},
 		}
 		if diff := cmp.Diff(want, got); diff != "" {
 			t.Errorf("events mismatch (-want +got):\n%s", diff)
 		}
 		wantResult := officina.Result{Status: officina.Completed, Text: "Hello.", Usage: officina.Usage{Input: 20, Output: 8}}
-		if diff := cmp.Diff(wantResult, res); diff != "" {
+		if diff := cmp.Diff(wantResult, res, outcome()); diff != "" {
 			t.Errorf("result mismatch (-want +got):\n%s", diff)
 		}
 		if n := len(c.Messages()[1].Blocks); n != 1 {
@@ -255,7 +255,7 @@ func TestModel_MDL04_APromptLongerThanTheContextWindowFinishesAsContextFull(t *t
 		t.Fatalf("Run() error = %v", err)
 	}
 
-	if diff := cmp.Diff(officina.Result{Status: officina.Stopped, Stop: officina.ContextFull}, result); diff != "" {
+	if diff := cmp.Diff(officina.Result{Status: officina.Stopped, Stop: officina.ContextFull}, result, outcome()); diff != "" {
 		t.Errorf("result mismatch (-want +got):\n%s", diff)
 	}
 }

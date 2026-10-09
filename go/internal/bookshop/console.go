@@ -3,8 +3,6 @@ package bookshop
 import (
 	"bufio"
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -21,12 +19,19 @@ import (
 
 const help = `Commands:
   /help          Show this help.
+  /new           Start a new session.
+  /sessions      List the latest sessions.
+  /resume <id>   Go on with the session with that id.
+  /cost          Show this session's tokens and cost.
   /audit [<id>]  Show the audit trail of this session, or of the session with that id.
   /quit          Leave the assistant.
 Anything else is a message to the assistant. Ctrl+C stops a reply in progress.`
 
 // console is the staff member's console: it asks who is using it, reads messages and commands, streams each reply
 // with its tool activity, asks approval for changes and stops a reply when interrupted.
+//
+// Each conversation is a session, saved after every step of a reply; each reply ends with a status line of its
+// tokens and cost, and stops at its own or its session's budget.
 //
 // Each reply is a span, the parent of the run's trace, so the console's logs join it; /audit reads the audit table
 // and links each run to its trace on the dashboard.
@@ -42,6 +47,8 @@ type console struct {
 	tracer    trace.Tracer
 	logger    *slog.Logger
 	trail     *auditTable
+	sessions  *Sessions
+	budgets   Budgets
 	dashboard string
 	// answers hands one approval from the console to Approve; one reply asks one approval at a time.
 	answers chan officina.Approval
@@ -62,10 +69,17 @@ type read struct {
 	err  error
 }
 
-func newConsole(cfg Config, trail *auditTable) *console {
+func newConsole(cfg Config, trail *auditTable, sessions *Sessions) *console {
 	c := &console{
 		in: bufio.NewReader(cfg.In), out: cfg.Out, echo: cfg.Echo, interrupt: cfg.Interrupt, logger: cfg.Logger,
-		trail: trail, dashboard: cfg.Dashboard, answers: make(chan officina.Approval, 1), atLineStart: true,
+		trail: trail, sessions: sessions, budgets: cfg.Budgets, dashboard: cfg.Dashboard,
+		answers: make(chan officina.Approval, 1), atLineStart: true,
+	}
+	if c.budgets.Reply == 0 {
+		c.budgets.Reply = defaultReplyBudget
+	}
+	if c.budgets.Session == 0 {
+		c.budgets.Session = defaultSessionBudget
 	}
 	if c.interrupt == nil {
 		c.interrupt = context.WithCancel
@@ -90,18 +104,17 @@ func (c *console) run(ctx context.Context, agent *officina.Agent) error {
 	if err != nil {
 		return c.ended(err)
 	}
-	var (
-		// A session's id is its conversation's, which the audit trail names.
-		conversation = officina.Conversation{ID: newSessionID()}
-		// sent is the run context the conversation last received.
-		sent string
-	)
+	s := newSession(staffMember)
+	c.writeLine("Session " + s.conversation.ID + ".")
 	for {
 		text, err := c.read(ctx, "you> ")
 		if err != nil {
 			return c.ended(err)
 		}
-		switch command := strings.TrimSpace(text); {
+		command := strings.TrimSpace(text)
+		resume, isResume := argument(command, "/resume")
+		audit, isAudit := argument(command, "/audit")
+		switch {
 		case command == "":
 			continue
 		case command == "/quit":
@@ -109,12 +122,25 @@ func (c *console) run(ctx context.Context, agent *officina.Agent) error {
 		case command == "/help":
 			c.writeLine(help)
 			continue
-		case command == "/audit" || strings.HasPrefix(command, "/audit "):
-			session := strings.TrimSpace(strings.TrimPrefix(command, "/audit"))
-			if session == "" {
-				session = conversation.ID
+		case command == "/new":
+			s = newSession(staffMember)
+			c.writeLine("New session " + s.conversation.ID + ".")
+			continue
+		case command == "/sessions":
+			c.listSessions(ctx, s)
+			continue
+		case command == "/cost":
+			c.writeLine(fmt.Sprintf("Session %s: %s; cost $%.4f of its $%.2f budget.", s.conversation.ID,
+				tokens(s.usage), s.cost, c.budgets.Session))
+			continue
+		case isResume:
+			s = c.resume(ctx, agent, resume, s)
+			continue
+		case isAudit:
+			if audit == "" {
+				audit = s.conversation.ID
 			}
-			c.showAudit(ctx, session)
+			c.showAudit(ctx, audit)
 			continue
 		case strings.HasPrefix(command, "/"):
 			c.writeLine("Unknown command " + command + ". Type /help for commands.")
@@ -122,17 +148,21 @@ func (c *console) run(ctx context.Context, agent *officina.Agent) error {
 		}
 		// The run context is sent at the start of the session and again only when it changes: on a new day.
 		current := runContext(time.Now(), staffMember)
-		if current == sent {
+		if current == s.context {
 			current = ""
 		}
-		received, err := c.reply(ctx, agent, &conversation, text, current)
-		if err != nil {
+		if err := c.reply(ctx, agent, s, text, current); err != nil {
 			return err
 		}
-		if received != "" {
-			sent = received
-		}
 	}
+}
+
+// argument returns what follows the command name in command, trimmed, and whether command is that command.
+func argument(command, name string) (string, bool) {
+	if command != name && !strings.HasPrefix(command, name+" ") {
+		return "", false
+	}
+	return strings.TrimSpace(command[len(name):]), true
 }
 
 // ended returns the error that ends a session at err, a read's: none at the end of the input, else the first of
@@ -161,13 +191,6 @@ func (c *console) askStaffMember(ctx context.Context) (string, error) {
 	}
 }
 
-// newSessionID returns a new session id: 32 random hex digits, as the .NET implementation makes them.
-func newSessionID() string {
-	id := make([]byte, 16)
-	_, _ = rand.Read(id) // It never fails: it crashes the program instead.
-	return hex.EncodeToString(id)
-}
-
 // showAudit shows the audit trail of session.
 func (c *console) showAudit(ctx context.Context, session string) {
 	entries, err := c.trail.entries(ctx, session)
@@ -178,17 +201,25 @@ func (c *console) showAudit(ctx context.Context, session string) {
 	c.writeLine(formatAudit(session, entries, c.dashboard, time.Local))
 }
 
-// reply streams one reply to message, with the run context newContext if it is not empty, and returns the run
-// context the conversation received, if it received one. Its error is the API misused, which is a bug.
-func (c *console) reply(ctx context.Context, agent *officina.Agent, conversation *officina.Conversation,
-	message, newContext string,
-) (received string, err error) {
+// reply streams one reply to message in session s, with the run context newContext if it is not empty, saving the
+// session after every step, within the lower of the reply's budget and what is left of the session's. Its error is
+// the API misused, which is a bug.
+func (c *console) reply(ctx context.Context, agent *officina.Agent, s *session, message, newContext string) error {
 	ctx, span := c.tracer.Start(ctx, "reply")
 	defer span.End()
 	ctx, stop := c.interrupt(ctx)
 	defer stop()
-	events, result := agent.Stream(ctx, conversation, message, officina.RunOptions{Context: newContext})
-	labelled := false
+	left := c.budgets.Session - s.cost
+	budget := max(0, min(c.budgets.Reply, left))
+	events, result := agent.Stream(ctx, s.conversation, message, officina.RunOptions{
+		Context: newContext, Budget: officina.Limits{Cost: &budget},
+	})
+	labelled, saveFailed := false, false
+	// What the reply has spent so far, from each model call's usage, so every save stores the session's whole spend.
+	var (
+		spent     officina.Usage
+		spentCost float64
+	)
 	for event := range events {
 		switch e := event.(type) {
 		case officina.TextStreamed:
@@ -211,10 +242,13 @@ func (c *console) reply(ctx context.Context, agent *officina.Agent, conversation
 			} else {
 				c.writeLine("  < " + e.Call.Name + ": ok")
 			}
+		case officina.UsageReported:
+			spent, spentCost = plus(spent, e.Usage), spentCost+e.Cost
 		case officina.ConversationAppended:
 			if e.Message.Role == officina.Operator {
-				received = e.Message.Text()
+				s.context = e.Message.Text()
 			}
+			saveFailed = !c.save(ctx, s, plus(s.usage, spent), s.cost+spentCost, saveFailed) || saveFailed
 		}
 	}
 	// The run has ended, so nothing waits for an answer: drop one a cancelled run left.
@@ -224,26 +258,33 @@ func (c *console) reply(ctx context.Context, agent *officina.Agent, conversation
 	}
 	res, err := result()
 	if err != nil {
-		return "", fmt.Errorf("reply: %w", err)
+		return fmt.Errorf("reply: %w", err)
 	}
+	s.usage, s.cost = plus(s.usage, res.Usage), s.cost+res.Cost
+	c.save(ctx, s, s.usage, s.cost, saveFailed)
 	u := res.Usage
-	c.logger.InfoContext(ctx, "reply ended", "conversation", conversation.ID, "result", res.Status.String(),
+	c.logger.InfoContext(ctx, "reply ended", "conversation", s.conversation.ID, "result", res.Status.String(),
 		"input_tokens", u.Input+u.CacheRead+u.CacheWrite, "output_tokens", u.Output)
-	switch res.Status {
-	case officina.Completed:
-	case officina.Stopped:
-		if res.Stop == officina.Cancelled {
-			c.writeLine("[Cancelled.]")
-		} else {
-			c.writeLine("[Stopped: " + res.Stop.String() + ".]")
-		}
-	case officina.Failed:
-		c.logger.ErrorContext(ctx, "reply failed", "conversation", conversation.ID, "reason", res.Failure.String(),
-			"error", res.Detail)
+	switch {
+	case res.Status == officina.Stopped && res.Stop == officina.Cancelled:
+		c.writeLine("[Cancelled.]")
+	case res.Status == officina.Stopped && res.Stop == officina.Budget && left <= c.budgets.Reply:
+		c.writeLine("[Stopped: this session has reached its budget of $" + dollars(c.budgets.Session) +
+			". Type /new to start a new session.]")
+	case res.Status == officina.Stopped && res.Stop == officina.Budget:
+		c.writeLine("[Stopped: this reply has reached its budget of $" + dollars(c.budgets.Reply) + ".]")
+	case res.Status == officina.Stopped:
+		c.writeLine("[Stopped: " + res.Stop.String() + ".]")
+	case res.Status == officina.Failed && res.Failure == officina.PrefixMismatch:
+		c.writeLine("[This session was started with another version of the assistant, so it cannot go on. " +
+			"Type /new to start a new session.]")
+	case res.Status == officina.Failed:
+		c.logger.ErrorContext(ctx, "reply failed", "conversation", s.conversation.ID, "reason",
+			res.Failure.String(), "error", res.Detail)
 		c.writeLine("[Failed: " + res.Detail + "]")
 	}
-	c.endLine()
-	return received, nil
+	c.writeLine(fmt.Sprintf("[%s · reply $%.4f · session $%.4f]", tokens(res.Usage), res.Cost, s.cost))
+	return nil
 }
 
 // askApproval shows the call's exact input and asks the staff member; the waiting Approve gets the answer. An

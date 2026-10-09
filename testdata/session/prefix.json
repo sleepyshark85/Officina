@@ -1,0 +1,17 @@
+{
+  "settings": "claude model=claude-opus-5-5 effort=medium max_tokens=16000 cache=1h thinking=adaptive",
+  "instructions": "You are the shared test assistant. \u0022quoted\u0022 back\\slash /slash tab\tnew\nline cr\rff\fbs\b nul\u0000 unit\u001F del\u007F \u003Cb\u003E\u0026amp; \u0027apos\u0027 \u002B1 \u0060tick\u0060 caf\u00E9 \u2603 \uD83D\uDE00 line\u2028sep nbsp\u00A0.",
+  "tools": [
+    {
+      "name": "place_order",
+      "description": "Places an order \u00ABnow\u00BB.",
+      "inputSchema": "{\u0022type\u0022:\u0022object\u0022,\u0022properties\u0022:{\u0022bookId\u0022:{\u0022type\u0022:\u0022integer\u0022},\u0022quantity\u0022:{\u0022type\u0022:\u0022integer\u0022,\u0022minimum\u0022:1}},\u0022required\u0022:[\u0022bookId\u0022,\u0022quantity\u0022],\u0022additionalProperties\u0022:false}"
+    },
+    {
+      "name": "search",
+      "description": "Searches the catalogue. \u0022quoted\u0022 back\\slash /slash tab\tnew\nline cr\rff\fbs\b nul\u0000 unit\u001F del\u007F \u003Cb\u003E\u0026amp; \u0027apos\u0027 \u002B1 \u0060tick\u0060 caf\u00E9 \u2603 \uD83D\uDE00 line\u2028sep nbsp\u00A0.",
+      "inputSchema": "{ \u0022type\u0022 : \u0022object\u0022, \u0022description\u0022: \u0022caf\\u00e9 \\/ \u003Cq\u003E\u0022, \u0022properties\u0022: { \u0022query\u0022: { \u0022type\u0022: \u0022string\u0022 } }, \u0022required\u0022: [ \u0022query\u0022 ] }"
+    }
+  ],
+  "fingerprint": "4424d601ef4e216480c35399658d38735b3993e8b348807b163477bafa86022d"
+}

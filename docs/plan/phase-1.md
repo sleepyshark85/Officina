@@ -1,7 +1,7 @@
 # Phase 1 plan
 
 Implements [`REQUIREMENTS.md`](../../REQUIREMENTS.md) phase 1 in 13 slices, the same for every implementation. A slice
-is cited with its implementation, such as `Go S03`; G1…G16 are Go's decisions in `go.md`, never slices. One slice = one
+is cited with its implementation, such as `Go S03`; G1…G17 are Go's decisions in `go.md`, never slices. One slice = one
 branch (`slice/<id>-<slug>`: `slice/s03-run-loop` in .NET, `slice/g03-run-loop` in Go) = one PR. Every slice ends in something that runs, with offline tests. A slice's PR is stacked on
 the previous one until that one is merged.
 
@@ -85,8 +85,9 @@ How each implementation realizes a slice, where it differs from the shared crite
 | S04 | Merged | Merged (#59) |
 | S05 | Merged | Merged (#61) |
 | S06 | Merged | Merged (#63) |
-| S07 | Merged | In review (#64) |
-| S08–S13 | Merged | Not started |
+| S07 | Merged | Merged (#64) |
+| S08 | Merged | In review (#PR) |
+| S09–S13 | Merged | Not started |
 
 ## Team
 

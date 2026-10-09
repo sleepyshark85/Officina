@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"strconv"
 	"sync"
 	"time"
 
@@ -48,6 +49,13 @@ func run() int {
 	if err != nil {
 		return fail(err)
 	}
+	// A lower reply budget, such as 0.01, shows a budget stop; unset keeps the default.
+	var budgets bookshop.Budgets
+	if v := os.Getenv("BOOKSHOP_REPLY_BUDGET"); v != "" {
+		if budgets.Reply, err = strconv.ParseFloat(v, 64); err != nil || budgets.Reply <= 0 {
+			return fail(fmt.Errorf("BOOKSHOP_REPLY_BUDGET %q is not an amount of US dollars above zero", v))
+		}
+	}
 	// Input that is not a terminal is not shown as it is typed, so the console writes each line after its prompt.
 	stdin, err := os.Stdin.Stat()
 	echo := err == nil && stdin.Mode()&os.ModeCharDevice == 0
@@ -59,7 +67,7 @@ func run() int {
 			return signal.NotifyContext(ctx, os.Interrupt)
 		},
 		TracerProvider: telemetry.Traces, MeterProvider: telemetry.Metrics, Logger: telemetry.Logger(),
-		Dashboard: setting("BOOKSHOP_DASHBOARD", composeDashboard),
+		Dashboard: setting("BOOKSHOP_DASHBOARD", composeDashboard), Budgets: budgets,
 	})
 	if err != nil {
 		return fail(err)

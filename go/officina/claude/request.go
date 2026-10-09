@@ -30,6 +30,9 @@ func (m *Model) params(req officina.Request) (anthropic.BetaMessageNewParams, er
 		Tools:    make([]anthropic.BetaToolUnionParam, len(req.Tools)),
 		Messages: make([]anthropic.BetaMessageParam, len(req.Messages)),
 	}
+	if req.MaxOutputTokens > 0 {
+		params.MaxTokens = min(params.MaxTokens, req.MaxOutputTokens)
+	}
 	for i, t := range req.Tools {
 		tool := &anthropic.BetaToolParam{
 			Name:                t.Name,

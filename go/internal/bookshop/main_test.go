@@ -42,6 +42,10 @@ var server struct { //nolint:gochecknoglobals // TestMain's container, shared by
 }
 
 func TestMain(m *testing.M) {
+	// Started by the crash test, the test binary is the application, which that test kills.
+	if os.Getenv(crashEnv) != "" {
+		os.Exit(crashingApp())
+	}
 	code := runWithDatabase(m)
 	if code == 0 {
 		if err := goleak.Find(); err != nil {

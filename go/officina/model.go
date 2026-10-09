@@ -31,6 +31,9 @@ type Request struct {
 	Tools        []Tool
 	Instructions string
 	Messages     []Message
+	// MaxOutputTokens is the most output tokens the reply may use, when the run's budget lowers the model's own
+	// limit; zero when it does not. It is not part of the prefix.
+	MaxOutputTokens int64
 }
 
 // Usage counts tokens as the provider bills them.
@@ -42,6 +45,11 @@ type Usage struct {
 	CacheWrite int64 `json:"cacheWrite"`
 	// CacheWriteHour counts the cache writes kept for an hour, which cost more: part of CacheWrite.
 	CacheWriteHour int64 `json:"cacheWriteHour"`
+}
+
+// total returns the tokens of every kind.
+func (u Usage) total() int64 {
+	return u.Input + u.Output + u.CacheRead + u.CacheWrite
 }
 
 func (u Usage) plus(v Usage) Usage {

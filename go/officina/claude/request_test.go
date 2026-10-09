@@ -95,6 +95,40 @@ func TestModel_CTX01_ARequestWithoutToolsIsLaidOutAsDotNetsIs(t *testing.T) {
 	}
 }
 
+func TestModel_BUD01_AnOutputLimitTheBudgetLowersIsSentAndAHigherOneIsNot(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name        string
+		limit, sent int64
+	}{
+		{"lower than the model's", 360, 360},
+		{"higher than the model's", 5000, 2000},
+		{"none", 0, 2000},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			api := serve(t, sse(textReply("end_turn")))
+			req := hi()
+			req.MaxOutputTokens = tt.limit
+
+			if _, err := collect(t.Context(), model(t, api, claude.Options{MaxOutputTokens: 2000}), req); err != nil {
+				t.Fatalf("Stream() error = %v", err)
+			}
+
+			var body struct {
+				MaxTokens int64 `json:"max_tokens"`
+			}
+			if err := json.Unmarshal([]byte(api.Requests()[0]), &body); err != nil {
+				t.Fatalf("unmarshal the request: %v", err)
+			}
+			if body.MaxTokens != tt.sent {
+				t.Errorf("max_tokens = %d, want %d", body.MaxTokens, tt.sent)
+			}
+		})
+	}
+}
+
 func TestModel_CTX06_ToolResultsGoOutAsOneUserMessageOfToolResultBlocks(t *testing.T) {
 	t.Parallel()
 	use := `{"type":"tool_use","id":"toolu_01","name":"search","input":{"q":"Emma"}}`

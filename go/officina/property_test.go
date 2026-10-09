@@ -121,10 +121,15 @@ func secretForm(t *rapid.T, s string) string {
 func TestRun_TEST07_EVT02_GeneratedSecretsNeverReachResultsEventsTelemetryOrTheTrail(t *testing.T) {
 	t.Parallel()
 	// The secrets' characters are none of "[redacted]"'s, so a replacement never makes a secret, and no letter or
-	// digit, which the names, ids and numbers of telemetry hold.
+	// digit, which the names, ids and numbers of telemetry hold, except in a fixed core of letters and digits that
+	// none of them holds, around which some secrets are made.
 	char := rapid.SampledFrom([]rune(`/<"\é😀€`))
+	const core = "Zq7Kx9"
+	secret := rapid.OneOf(rapid.StringOfN(char, 1, 4, -1), rapid.Custom(func(t *rapid.T) string {
+		return rapid.StringOfN(char, 0, 2, -1).Draw(t, "before") + core + rapid.StringOfN(char, 0, 2, -1).Draw(t, "after")
+	}))
 	rapid.Check(t, func(t *rapid.T) {
-		secrets := rapid.SliceOfN(rapid.StringOfN(char, 1, 4, -1), 1, 4).Draw(t, "secrets")
+		secrets := rapid.SliceOfN(secret, 1, 4).Draw(t, "secrets")
 		// Secrets, each in some form, between fillers of characters no form of a secret holds: once each secret is
 		// replaced whole, only the fillers are left.
 		var text, fillers strings.Builder

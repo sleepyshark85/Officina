@@ -15,6 +15,8 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"go.uber.org/goleak"
 
 	"github.com/sleepyshark85/officina/go/officina"
@@ -250,6 +252,11 @@ func hi() officina.Request {
 		Instructions: "Answer briefly.",
 		Messages:     []officina.Message{{Role: officina.User, Blocks: []officina.Block{{Text: "Hi"}}}},
 	}
+}
+
+// outcome compares results by how the run ended, without their cost, counts and duration.
+func outcome() cmp.Option {
+	return cmpopts.IgnoreFields(officina.Result{}, "Cost", "ModelCalls", "ToolCalls", "Duration")
 }
 
 // collect streams req from m and returns its events and the error that ended them, if any.

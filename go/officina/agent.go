@@ -98,14 +98,12 @@ func NewAgent(model Model, instructions string, opts AgentOptions) (*Agent, erro
 		}
 		schemas[i] = s
 	}
-	fingerprint, err := prefixFingerprint(model.Settings(), instructions, tools)
-	if err != nil {
-		return nil, fmt.Errorf("new agent: %w", err)
-	}
 	a := &Agent{
 		model: model, instructions: instructions, tools: tools, schemas: schemas, approver: opts.Approver,
-		auditSink: opts.AuditSink, name: opts.Name, secrets: secretForms(opts.Secrets), fingerprint: fingerprint,
+		auditSink: opts.AuditSink, name: opts.Name, secrets: secretForms(opts.Secrets),
+		fingerprint: prefixFingerprint(model.Settings(), instructions, tools),
 	}
+	var err error
 	a.telemetry, err = newTelemetry(opts.TracerProvider, opts.MeterProvider, opts.Name, model.Info(),
 		opts.TelemetryContent, a.redact)
 	if err != nil {
@@ -207,28 +205,46 @@ func (a *Agent) redact(text string) string {
 	return b.String()
 }
 
-// prefixFingerprint returns a SHA-256 hash of everything in the prefix that reaches the model. Stored
-// conversations carry it, so once Go S08 aligns it with .NET's it must not change. Until then it may: it uses .NET's
-// keys but not yet its escaping, and the schema is re-encoded, so schemas that differ only in spacing or escapes
-// share a fingerprint.
-func prefixFingerprint(settings, instructions string, tools []Tool) (string, error) {
-	type toolJSON struct {
-		Name        string         `json:"name"`
-		Description string         `json:"description"`
-		InputSchema jsontext.Value `json:"inputSchema"`
-	}
-	prefix := struct {
-		Model        string     `json:"model"`
-		Instructions string     `json:"instructions"`
-		Tools        []toolJSON `json:"tools"`
-	}{Model: settings, Instructions: instructions, Tools: make([]toolJSON, len(tools))}
+// prefixFingerprint returns a SHA-256 hash of everything in the prefix that reaches the model. Stored conversations
+// carry it, and a conversation either implementation stored resumes in the other, so it hashes the bytes the .NET
+// implementation hashes, which must never change: {"model":…,"instructions":…,"tools":[{"name":…,"description":…,
+// "inputSchema":…},…]}, with the strings escaped as .NET's default JSON encoder escapes them and each schema as given.
+func prefixFingerprint(settings, instructions string, tools []Tool) string {
+	b := appendDotnetString([]byte(`{"model":`), settings)
+	b = appendDotnetString(append(b, `,"instructions":`...), instructions)
+	b = append(b, `,"tools":[`...)
 	for i, t := range tools {
-		prefix.Tools[i] = toolJSON{Name: t.Name, Description: t.Description, InputSchema: t.InputSchema}
+		if i > 0 {
+			b = append(b, ',')
+		}
+		b = appendDotnetString(append(b, `{"name":`...), t.Name)
+		b = appendDotnetString(append(b, `,"description":`...), t.Description)
+		b = append(append(append(b, `,"inputSchema":`...), t.InputSchema...), '}')
 	}
-	data, err := json.Marshal(prefix)
-	if err != nil {
-		return "", fmt.Errorf("fingerprint the prefix: %w", err)
+	sum := sha256.Sum256(append(b, "]}"...))
+	return hex.EncodeToString(sum[:])
+}
+
+// appendDotnetString appends s to b as a JSON string escaped as .NET's default JSON encoder escapes it: a backslash
+// doubled; a backspace, tab, line feed, form feed and carriage return by their letters; and every other control
+// character, each of " & ' + < > and the backquote, and every character beyond ASCII as its UTF-16 code units in
+// upper-case hex. Invalid UTF-8 is written as U+FFFD.
+func appendDotnetString(b []byte, s string) []byte {
+	const shorts, letters = "\b\t\n\f\r", "btnfr"
+	b = append(b, '"')
+	for _, r := range s {
+		switch short := strings.IndexRune(shorts, r); {
+		case r == '\\':
+			b = append(b, '\\', '\\')
+		case short >= 0:
+			b = append(b, '\\', letters[short])
+		case r >= ' ' && r < utf8.RuneSelf-1 && !strings.ContainsRune("\"&'+<>`", r):
+			b = append(b, byte(r))
+		default:
+			for _, unit := range utf16.AppendRune(nil, r) {
+				b = fmt.Appendf(append(b, '\\', 'u'), "%04X", unit)
+			}
+		}
 	}
-	sum := sha256.Sum256(data)
-	return hex.EncodeToString(sum[:]), nil
+	return append(b, '"')
 }
