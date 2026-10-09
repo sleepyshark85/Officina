@@ -140,9 +140,9 @@ its cache intact. This needs the .NET 10 SDK; the .NET application reads its set
 
 | Do | Expect |
 |---|---|
-| In `apps/BookshopAssistant`: `dotnet run`, `Sam`, `Which three customers have placed the most orders?` | The .NET console's answer. Note the session id; `/quit`. |
+| In `apps/BookshopAssistant`: `dotnet run`, `Sam`, `How many orders has Alice Martin placed?` | The .NET console's answer. Note the session id; `/quit`. |
 | In `go/`: `go run ./cmd/bookshop`, `Sam`, `/resume <that id>` | `Resumed session <id>: N messages, $… so far.`: the Go chat agent's tools, instructions, model settings and context management give .NET's fingerprint. |
-| `And which of them ordered most recently?` | The answer from the .NET session's lookups; the status line shows most of the input read from the cache (written by the .NET application's calls). |
+| `And when was the latest?` | The answer from the .NET session's lookups; the status line shows most of the input read from the cache (written by the .NET application's calls). |
 
 ## What was checked live
 

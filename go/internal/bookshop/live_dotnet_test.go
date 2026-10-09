@@ -31,13 +31,13 @@ func TestLive_APP10_ASessionTheDotNetApplicationSavedResumesHereWithTheSamePrefi
 	d := newDatabase(t)
 	exports := exportServer(t)
 
-	id := dotnetSession(t, d, exports, "Which three customers have placed the most orders?")
+	id := dotnetSession(t, d, exports, "How many orders has Alice Martin placed?")
 
 	model := liveModel(t, false)
 	out := &transcript{}
 	console, err := bookshop.Build(t.Context(), bookshop.Config{
 		Database: d.url, Model: model, Memory: &officina.MapMemoryStore{}, Exports: exports, Out: out, Echo: true,
-		In:      &input{t: t, script: []any{"Sam", "/resume " + id, "And which of them ordered most recently?", "/quit"}},
+		In:      &input{t: t, script: []any{"Sam", "/resume " + id, "And when was the latest?", "/quit"}},
 		Budgets: bookshop.Budgets{Reply: 0.20, Session: 0.50},
 	})
 	if err != nil {
@@ -54,7 +54,7 @@ func TestLive_APP10_ASessionTheDotNetApplicationSavedResumesHereWithTheSamePrefi
 		t.Logf("call %d: %d input tokens, %d read from the cache, %d written to it, %d output", i+1,
 			u.Input+u.CacheRead+u.CacheWrite, u.CacheRead, u.CacheWrite, u.Output)
 	}
-	inOrder(t, out.String(), "Resumed session "+id+": ", "you> And which of them ordered most recently?", "[tokens: ")
+	inOrder(t, out.String(), "Resumed session "+id+": ", "you> And when was the latest?", "[tokens: ")
 	if strings.Contains(out.String(), "[Failed") || strings.Contains(out.String(), "another version") {
 		t.Errorf("the resumed session did not go on:\n%s", out)
 	}

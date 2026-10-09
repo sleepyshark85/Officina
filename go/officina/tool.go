@@ -5,7 +5,6 @@ import (
 	"encoding"
 	"encoding/json/jsontext"
 	"encoding/json/v2"
-	"errors"
 	"fmt"
 	"reflect"
 	"slices"
@@ -231,27 +230,27 @@ func (n *node) json() jsontext.Value {
 }
 
 func (n *node) append(b []byte) []byte {
-	// The description comes first, as .NET's schema exporter writes it: a session one implementation started resumes
-	// in the other only if each schema is the same bytes.
+	// The description comes first and every string is escaped, as .NET's schema exporter writes them: a session one
+	// implementation started resumes in the other only if each schema is the same bytes.
 	b = append(b, '{')
 	if n.description != "" {
-		b = append(quote(append(b, `"description":`...), n.description), ',')
+		b = append(appendDotnetString(append(b, `"description":`...), n.description), ',')
 	}
 	b = append(b, `"type":`...)
 	if len(n.types) == 1 {
-		b = quote(b, n.types[0])
+		b = appendDotnetString(b, n.types[0])
 	} else {
 		b = append(b, '[')
 		for i, t := range n.types {
 			if i > 0 {
 				b = append(b, ',')
 			}
-			b = quote(b, t)
+			b = appendDotnetString(b, t)
 		}
 		b = append(b, ']')
 	}
 	if n.format != "" {
-		b = quote(append(b, `,"format":`...), n.format)
+		b = appendDotnetString(append(b, `,"format":`...), n.format)
 	}
 	if n.enum != nil {
 		b = append(b, `,"enum":[`...)
@@ -259,7 +258,7 @@ func (n *node) append(b []byte) []byte {
 			if i > 0 {
 				b = append(b, ',')
 			}
-			b = quote(b, v)
+			b = appendDotnetString(b, v)
 		}
 		b = append(b, ']')
 	}
@@ -283,26 +282,15 @@ func (n *node) append(b []byte) []byte {
 			if i > 0 {
 				b = append(b, ',')
 			}
-			b = p.schema.append(append(quote(b, p.name), ':'))
+			b = p.schema.append(append(appendDotnetString(b, p.name), ':'))
 			if p.required {
 				if required != nil {
 					required = append(required, ',')
 				}
-				required = quote(required, p.name)
+				required = appendDotnetString(required, p.name)
 			}
 		}
 		b = append(append(append(b, `},"required":[`...), required...), `],"additionalProperties":false`...)
 	}
 	return append(b, '}')
-}
-
-// quote appends s as a JSON string.
-func quote(b []byte, s string) []byte {
-	b, err := jsontext.AppendQuote(b, s)
-	if err != nil {
-		// Only invalid UTF-8 fails, and Go names and tags in source are valid UTF-8; a type built at run time is
-		// a bug in its caller.
-		panic(errors.New("officina: invalid UTF-8 in a type's name or tag")) //nolint:forbidigo // A bug, see above.
-	}
-	return b
 }

@@ -141,7 +141,7 @@ func ExampleNewTool() {
 	fmt.Println(res.Text)
 	// Output:
 	// search -> Emma: 3 in stock
-	// {"type":"object","properties":{"title":{"description":"The book's title, or part of it.","type":"string"}},"required":["title"],"additionalProperties":false}
+	// {"type":"object","properties":{"title":{"description":"The book\u0027s title, or part of it.","type":"string"}},"required":["title"],"additionalProperties":false}
 	// Emma is in stock.
 }
 
