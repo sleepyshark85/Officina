@@ -251,9 +251,9 @@ func (s *Source) Changes() []officina.SourceChange {
 
 // Close closes the connection. A stdio server's input is closed, so it can exit by itself; one that has not
 // within 5 seconds is killed with every process it started. On Unix the server runs in a process group of its own,
-// and what is left of the group is killed once it has exited too; on Windows a process whose parent has exited is no
-// longer found, and is not stopped. Close returns once the server has exited. The tools then give error results,
-// and runs fail to connect the source.
+// and what is left of the group is killed as soon as it has exited too; on Windows a process whose parent has exited
+// is no longer found, and is not stopped, nor on Unix one that left the group (with setsid). Close returns once the
+// server has exited. The tools then give error results, and runs fail to connect the source.
 func (s *Source) Close() {
 	s.connecting.Lock()
 	defer s.connecting.Unlock()
