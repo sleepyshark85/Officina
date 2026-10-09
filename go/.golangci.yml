@@ -1,0 +1,71 @@
+# golangci-lint v2. Each linter enforces a rule of go/CLAUDE.md, or of the style guides it names, that a tool can
+# check; the rest is the reviewer's. A linter is broken only with //nolint:<linter> // <reason>.
+version: "2"
+
+linters:
+  default: none
+  enable:
+    # Correctness: the standard set.
+    - errcheck # never discard an error silently
+    - govet
+    - ineffassign
+    - staticcheck # with its style checks below: naming, receiver names, error strings, package comments
+    - unused
+    # Packages and API.
+    - revive # every exported identifier documented, no stutter, ctx first
+    - gochecknoglobals # no package-level mutable state (sentinel ErrX variables are allowed)
+    - gochecknoinits # no init() functions
+    - depguard # no unsafe
+    - recvcheck # a type's methods are all pointer or all value receivers
+    - godot # doc comments are full sentences
+    # Errors.
+    - errorlint # %w, errors.Is and errors.As
+    - wrapcheck # an error from another package is wrapped with context
+    - errname # sentinel errors ErrX, error types XError
+    - forbidigo # no panic outside tests without a stated reason
+    # Concurrency and context.
+    - contextcheck # a function passes on the context it was given
+    - containedctx # a context is never stored in a struct
+    - noctx # I/O and processes take a context
+    # Tests.
+    - thelper # t.Helper() in helpers
+    - paralleltest # t.Parallel() unless a test says why not
+    - tparallel
+    # Style the guides ask for.
+    - gocritic
+    - nolintlint # every //nolint names its linter and says why
+
+  settings:
+    staticcheck:
+      # Everything, including the style checks staticcheck leaves off by default (ST1000 package comments, ST1003
+      # naming, ST1016 receiver names), except the doc-comment form checks revive's exported rule already reports.
+      checks: ["all", "-ST1020", "-ST1021", "-ST1022"]
+    revive:
+      rules:
+        - name: exported
+        - name: context-as-argument
+        - name: unexported-return
+    depguard:
+      rules:
+        all:
+          deny:
+            - pkg: unsafe
+              desc: no unsafe (go/CLAUDE.md)
+    forbidigo:
+      forbid:
+        - pattern: ^panic$
+          msg: return an error; a panic means a bug, and needs //nolint:forbidigo // <why it cannot happen>
+    nolintlint:
+      require-explanation: true
+      require-specific: true
+
+  exclusions:
+    rules:
+      # Tests may fail fast and return a helper's error as it is.
+      - path: _test\.go
+        linters: [forbidigo, wrapcheck]
+
+formatters:
+  enable:
+    - gofmt
+    - goimports

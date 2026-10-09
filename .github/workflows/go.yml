@@ -1,0 +1,145 @@
+name: Go
+
+# The Go implementation in go/: the suite offline on Linux and Windows (TEST-03), the quality gates and mutation
+# testing. It runs on every pull request, with no path filter, so its required checks always report; when a pull
+# request changes nothing under go/ (nor this workflow), every job after `changes` is skipped, which a required check
+# counts as passing.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: go-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: go
+    shell: bash
+
+jobs:
+  changes:
+    name: go-changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      go: ${{ steps.diff.outputs.go }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # Comparing with the base branch needs its history.
+          fetch-depth: 0
+
+      - name: Diff
+        id: diff
+        working-directory: .
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          if [ "$EVENT" != pull_request ] || ! git diff --quiet "origin/$BASE_REF...HEAD" -- go .github/workflows/go.yml; then
+            echo "go=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Nothing under go/ changed; the Go jobs are skipped."
+            echo "go=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  # Two jobs rather than a matrix: a skipped matrix job reports its name unexpanded, and the required checks need
+  # these names exactly.
+  ubuntu:
+    name: go-ubuntu
+    needs: changes
+    if: needs.changes.outputs.go == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps: &test
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go/go.mod
+          cache-dependency-path: go/go.sum
+
+      - name: Test
+        # The race detector needs cgo on Windows (the runner's MinGW gcc); Officina's own code uses none.
+        env:
+          CGO_ENABLED: "1"
+        run: go test -race -shuffle=on ./...
+
+  windows:
+    name: go-windows
+    needs: changes
+    if: needs.changes.outputs.go == 'true'
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps: *test
+
+  quality:
+    name: go-quality
+    needs: changes
+    if: needs.changes.outputs.go == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go/go.mod
+          cache-dependency-path: go/go.sum
+
+      - name: Format
+        # gofmt here; goimports runs as a golangci-lint formatter below.
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then echo "Not gofmt-formatted:"; echo "$unformatted"; exit 1; fi
+
+      - name: Vet
+        run: go vet ./...
+
+      - uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        with:
+          version: v2.14.0
+          working-directory: go
+
+      - name: Tidy
+        run: go mod tidy -diff
+
+      - name: Vulnerabilities
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
+
+  mutation:
+    name: go-mutation
+    needs: changes
+    if: needs.changes.outputs.go == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go/go.mod
+          cache-dependency-path: go/go.sum
+
+      - name: Install gremlins
+        run: go install github.com/go-gremlins/gremlins/cmd/gremlins@v0.6.0
+
+      - name: Mutate
+        # A pull request mutates only the code it changed; a push to main mutates everything. Reports only, with no
+        # threshold, until Go S05's baseline sets one.
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          if [ "$EVENT" = pull_request ]; then
+            gremlins unleash --diff "origin/$BASE_REF" .
+          else
+            gremlins unleash .
+          fi

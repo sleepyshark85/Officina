@@ -32,8 +32,9 @@ reused (ARCHITECTURE §13).
 - Prerequisites: Docker, the .NET 10 SDK, an Anthropic API key or `ant auth login` for live tests.
 - Required checks before a merge: `ubuntu-latest`, `windows-latest`, `quality`, `mutation`.
 - Hooks: before a commit that stages .NET code, `dotnet format --verify-no-changes` and the Release build (warnings
-  are errors), and the staged files shown; before a push of more than docs, the tests. After an edit to a `.cs` file,
-  one type per file named after it, and no requirement IDs in comments.
+  are errors), and the staged files shown; before a push that changes more than docs outside `go/`, the tests. After
+  an edit to a `.cs` file, one type per file named after it, and no requirement IDs in comments. The Go checks run
+  only for files under `go/` ([`go/README.md`](go/README.md)).
 - **One class, record, struct, interface or enum per file**, named after it. Related types share a folder (in the
   core: `Conversations`, `Models`, `Runs`, `Tools`, `Memory`, `Audit`…); the namespace stays the package's.
 - **Dependencies:** no Microsoft Agent Framework or `Microsoft.Extensions.AI`. The Anthropic C# SDK is used only in the

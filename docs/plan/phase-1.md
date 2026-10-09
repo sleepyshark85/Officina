@@ -79,7 +79,7 @@ How each implementation realizes a slice, where it differs from the shared crite
 
 | Slice | .NET | Go |
 |---|---|---|
-| S01 | Merged | In progress (Go S01) |
+| S01 | Merged | Merged (#56) |
 | S02 | Merged | Merged (#55) |
 | S03–S13 | Merged | Not started |
 
