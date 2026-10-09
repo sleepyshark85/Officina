@@ -236,31 +236,18 @@ func (n *node) append(b []byte) []byte {
 	if n.description != "" {
 		b = append(appendDotnetString(append(b, `"description":`...), n.description), ',')
 	}
+	if n.enum != nil {
+		// An enum is its values alone, without a type, as .NET writes one.
+		return append(appendStrings(append(b, `"enum":`...), n.enum), '}')
+	}
 	b = append(b, `"type":`...)
 	if len(n.types) == 1 {
 		b = appendDotnetString(b, n.types[0])
 	} else {
-		b = append(b, '[')
-		for i, t := range n.types {
-			if i > 0 {
-				b = append(b, ',')
-			}
-			b = appendDotnetString(b, t)
-		}
-		b = append(b, ']')
+		b = appendStrings(b, n.types)
 	}
 	if n.format != "" {
 		b = appendDotnetString(append(b, `,"format":`...), n.format)
-	}
-	if n.enum != nil {
-		b = append(b, `,"enum":[`...)
-		for i, v := range n.enum {
-			if i > 0 {
-				b = append(b, ',')
-			}
-			b = appendDotnetString(b, v)
-		}
-		b = append(b, ']')
 	}
 	if n.nonNegative {
 		b = append(b, `,"minimum":0`...)
@@ -293,4 +280,16 @@ func (n *node) append(b []byte) []byte {
 		b = append(append(append(b, `},"required":[`...), required...), `],"additionalProperties":false`...)
 	}
 	return append(b, '}')
+}
+
+// appendStrings appends values as a JSON array of strings, each escaped as appendDotnetString escapes it.
+func appendStrings(b []byte, values []string) []byte {
+	b = append(b, '[')
+	for i, v := range values {
+		if i > 0 {
+			b = append(b, ',')
+		}
+		b = appendDotnetString(b, v)
+	}
+	return append(b, ']')
 }
