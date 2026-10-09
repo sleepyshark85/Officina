@@ -139,9 +139,7 @@ func checkMemory(scope string, paths ...string) error {
 // within returns the path within the scope that the model's path names, "" for the memory directory, and whether it
 // names one.
 func within(path string) (string, bool) {
-	if len(path) > 1 {
-		path = strings.TrimSuffix(path, "/")
-	}
+	path = strings.TrimSuffix(path, "/")
 	if path == memoryRoot {
 		return "", true
 	}
