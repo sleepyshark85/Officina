@@ -16,7 +16,7 @@ bytes chosen to break a re-encoder (no API cost).
 
 **Verdict:** all seven features work on the Go SDK, and **every one is typed**: no feature needs `option.WithJSONSet`
 or a raw request field. Results match .NET call for call. One caveat changes G04 and G09: the SDK sends a raw
-message through the `encoding/json` v1 encoder, which compacts it and escapes `<`, `>` and `&`, so stored bytes are
+message through its own fork of `encoding/json` (`internal/encoding/json`, v1 behaviour), which compacts it and escapes `<`, `>` and `&`, so stored bytes are
 replayed unchanged only if they are stored in that form (or the request body is built by us). `encoding/json/v2`
 does not write a `jsontext.Value` verbatim by default either.
 
@@ -30,25 +30,29 @@ does not write a `jsontext.Value` verbatim by default either.
 | 4 | Thinking `display: "updates"` (beta `thinking-display-updates-2026-08-18`) in a tool loop | **Works, with the .NET caveat** | Yes: `BetaThinkingConfigAdaptiveParam{Display: BetaThinkingConfigAdaptiveDisplayUpdates}`; deltas as `BetaThinkingDelta` / `BetaSignatureDelta` via `ev.AsContentBlockDelta().Delta.AsAny()` | Thinking blocks only on the first and last turns, each `"thinking":""` from one empty `thinking_delta` plus one `signature_delta`. Progress came as `text` blocks before `tool_use` ("I'll start with…") | G04/G06: thinking text optional and possibly empty; show text blocks between tool calls as progress |
 | 5 | Mid-conversation `system` message for run context, cache point on the last system block plus top-level automatic caching | **Works** | Yes: `BetaMessageParamRoleSystem`, `anthropic.NewBetaSystemMessage(…)`, plus `ClearAt` and per-message `OutputConfig` | Typed constructor marshals to `{"content":[{"text":"Run context: …","type":"text"}],"role":"system"}` (blocks, not a string; accepted). Model used both facts. Cache: call 1 wrote 2671; call 2 read 2671 / wrote 155; call 3 read 2826 / wrote 167 | G04 as designed (CTX-02, CTX-03) |
 | 6 | Structured output with a schema the core's validator subset produces | **Works, with adjustments** | Yes: `OutputConfig.Format = BetaJSONOutputFormatParam{Schema: …}`; `Schema` takes a `map[string]any`, a `json.RawMessage` or a struct pointer; `BetaMessage.ParseOutput` decodes the reply | A subset schema (closed objects, `type: [..,"null"]`, `anyOf` with null, `enum`, `pattern`, `minLength`, `minItems: 1`, `$schema`, `description`) was accepted and parsed. With `minimum`/`maximum`/`maxItems` added: **400** `property 'maxItems' is not supported`. The SDK's helper `BetaJSONSchemaOutputFormat(map)` **silently returned a nil schema** for that schema (its round trip through `invopop/jsonschema` fails on `type` as an array) → 400 `Input should be an object`; without the array it moves `minLength`, bounds and `$schema` into `description`. A struct pointer works (`invopop/jsonschema` + the same transform) but turns `*string` into a non-nullable `string` | G12: don't use the SDK's schema helpers. The `claude` package adjusts the core's schema itself, as .NET's `OutputSchema` does (strip `minimum`, `maximum`, `exclusiveMinimum`, `exclusiveMaximum`, `multipleOf`, `maxItems`, `minItems > 1`), and passes it as `json.RawMessage` |
-| 7 | Byte-for-byte replay of raw block JSON | **Works, with a caveat that changes G04/G09** | Partly: blocks expose `RawJSON()`; requests take raw JSON only through `param.Override` (or the whole body through `option.WithRequestBody`) | Live: 85 replayed messages, **0 mismatches**, all accepted (thinking with signature, text, tool_use, compaction), with blocks stored *normalized* (below); normalizing changed 14 of 38 blocks, every one a `tool_use` whose `input` keeps the streamed spacing (`{"command": "view", …}`). Offline: `param.Override` sends a raw message through `encoding/json` v1, which **compacts it and escapes `<` `>` `&`** (`<b>`); `é` and `\/` are kept. Stored as `json.Compact` + `json.HTMLEscape`, the bytes are a fixed point and go out unchanged. `option.WithRequestBody` sends the bytes as given (the SDK only adds `"stream":true` and still sets `anthropic-beta` from the typed params). Unlike .NET, the accumulated `RawJSON()` is the server's JSON with the deltas set by Go's encoder: non-ASCII stays UTF-8 (`Muñoz`, `«Café»`, `–`), and `+`, `/` in signatures stay literal | G04: store each block normalized (compact, HTML-escaped), then `param.Override` per message replays it exactly; or build the body ourselves and send it with `WithRequestBody`. Golden files shared with .NET (P3) compare a form both write, not raw block bytes |
+| 7 | Byte-for-byte replay of raw block JSON | **Works, with a caveat that changes G04/G09** | Partly: blocks expose `RawJSON()`; requests take raw JSON only through `param.Override` (or the whole body through `option.WithRequestBody`) | Live: 85 replayed messages, **0 mismatches**, all accepted (thinking with signature, text, tool_use, compaction), with blocks stored *normalized* (below); normalizing changed 14 of 38 blocks, every one a `tool_use` whose `input` keeps the streamed spacing (`{"command": "view", …}`). Offline: `param.Override` sends a raw message through the SDK's fork of `encoding/json` (`internal/encoding/json`, v1 behaviour), which **compacts it and escapes `<` `>` `&`** (`\u003cb\u003e`); `\u00e9` and `\/` are kept. Stored as `json.Compact` + `json.HTMLEscape`, the bytes are a fixed point and go out unchanged. `option.WithRequestBody` sends the bytes as given (the SDK only adds `"stream":true` and still sets `anthropic-beta` from the typed params). Unlike .NET, the accumulated `RawJSON()` is the server's JSON with the deltas set by Go's encoder: non-ASCII stays UTF-8 (`Muñoz`, `«Café»`, `–`), and `+`, `/` in signatures stay literal | G04: store each block normalized (compact, HTML-escaped), then `param.Override` per message replays it exactly; or build the body ourselves and send it with `WithRequestBody`. Golden files shared with .NET (P3) compare a form both write, not raw block bytes |
 
 ### `jsontext.Value` (go.md G9, `encoding/json/v2`)
 
 Checked offline, since G9 now keeps blocks as `jsontext.Value`:
 
-| Encoding of a message holding `{"type":"text", "text":"Café «Muñoz» <b>&amp;</b> a\/b +x"}` | Output | Block unchanged? |
+| Encoding of a message holding `{"type":"text", "text":"Caf\u00e9 «Muñoz» <b>&amp;</b> a\/b +x"}` | Output | Block unchanged? |
 |---|---|---|
-| `jsonv2.Marshal`, default options | `{"type":"text","text":"Café «Muñoz» <b>&amp;</b> a/b +x"}`: whitespace dropped, `é` and `\/` unescaped | No |
-| `jsonv2.Marshal` with `jsontext.PreserveRawStrings(true)` | `{"type":"text","text":"Café «Muñoz» <b>&amp;</b> a\/b +x"}`: only whitespace dropped | Yes, once the value is compacted (`Value.Compact()` keeps escapes) |
-| `encoding/json` (v1 API, what the SDK uses), or `param.Override(jsontext.Value)` | compact, `<` `>` `&` escaped | Only if stored HTML-escaped |
+| `jsonv2.Marshal`, default options | `{"type":"text","text":"Café «Muñoz» <b>&amp;</b> a/b +x"}`: whitespace dropped, `\u00e9` and `\/` unescaped | No |
+| `jsonv2.Marshal` with `jsontext.PreserveRawStrings(true)` | `{"type":"text","text":"Caf\u00e9 «Muñoz» <b>&amp;</b> a\/b +x"}`: only whitespace dropped | Yes, once the value is compacted (`Value.Compact()` keeps escapes) |
+| `encoding/json` v1 `Marshal` (the behaviour of the SDK's fork) | `{"type":"text","text":"Caf\u00e9 «Muñoz» \u003cb\u003e\u0026amp;\u003c/b\u003e a\/b +x"}`: compact, `<` `>` `&` escaped | Only if stored HTML-escaped |
+| `param.Override(jsontext.Value)` of the canonical message: block compact and HTML-escaped, message written by v2 with `PreserveRawStrings(true)` | The same bytes on the wire | Yes: message and block byte-identical |
 
-So "replayed unchanged" holds only with a fixed storage form and fixed encoder options. Recommendation for G03/G04: the
-`claude` adapter turns each response block into a `jsontext.Value` in one canonical form (compact, `<` `>` `&`
-escaped, other escapes as received); the core writes conversation JSON with `jsontext.PreserveRawStrings(true)`; the
-adapter replays through `param.Override`. That form is a fixed point of v1 and of v2 with that option. .NET's stored form (compact, with non-ASCII escaped; its
-default encoder also escapes `<` `>` `&`, not checked live) should be one too, so a .NET session resumes byte-exact in
-Go (G08); G08's cross-implementation test confirms it. A G03 test
-should pin it: marshal → unmarshal → marshal a conversation with such blocks and compare bytes.
+So "replayed unchanged" holds only with one storage form and fixed encoder options. Recommendation for G03/G04 (step C
+of `offline` runs it end to end): the `claude` adapter turns each response block into a `jsontext.Value` in one
+canonical form: compact, `<` `>` `&` escaped (`json.HTMLEscape`), other escapes as received. The core writes
+conversation JSON with `jsontext.PreserveRawStrings(true)`, and the adapter replays each message through
+`param.Override`. That form is a fixed point of the SDK's v1 encoder and of v2 with that option. .NET's stored form
+(compact, non-ASCII escaped; its default encoder also escapes `<` `>` `&`, not checked live) should be one too, so a
+.NET session should resume byte-exact in Go; G08's cross-implementation test confirms it. G03 pins the form with a
+test: marshal, unmarshal and marshal again a conversation holding such blocks, and compare bytes. The typed parts of a
+request (tools, system, settings) are written by each SDK in its own key order, so golden tests compare those as
+parsed JSON, not bytes ([`go-port.md`](../../../docs/plan/go-port.md) P3, G04).
 
 ## Against the .NET results
 
@@ -74,5 +78,6 @@ should pin it: marshal → unmarshal → marshal a conversation with such blocks
 **G09 / G10:** as S09 and S10; every field needed is typed. **G12:** schema adjustment in the `claude` package, no SDK
 schema helper.
 
-**No raw-field decisions are needed:** the SDK exposes every feature checked, including on-demand compaction
-(`compact-2026-09-04`) and the `clear_at` / per-message `output_config` system messages, which this spike did not run.
+**No raw-field decisions are needed:** the SDK exposes every feature checked. On-demand compaction
+(`compact-2026-09-04`) and the `clear_at` / per-message `output_config` system messages are typed in the SDK but
+**unproven**: this spike did not run them, so G10 and G04 check them live before relying on them.

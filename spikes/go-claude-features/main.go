@@ -319,19 +319,28 @@ func (s *spike) offline(ctx context.Context) error {
 		compacted, bytes.Contains(v2p, compacted))
 	v1, _ := json.Marshal(message{Role: "assistant", Content: []jsontext.Value{block}})
 	fmt.Printf("  C encoding/json (v1 API) Marshal of the same: %s\n", v1)
-	// C through the SDK: the v2-built message handed to param.Override.
+	// C through the SDK, the way G04 would: the block in the canonical form (compact, < > & escaped), the message
+	// written by v2 with PreserveRawStrings, handed to param.Override.
+	canonical := jsontext.Value(normalize(json.RawMessage(block)))
+	v2c, err := jsonv2.Marshal(message{Role: "assistant", Content: []jsontext.Value{canonical}}, jsontext.PreserveRawStrings(true))
+	if err != nil {
+		return err
+	}
+	fmt.Printf("  C canonical block: %s\n", canonical)
+	fmt.Printf("  C canonical message, v2 with PreserveRawStrings: %s\n", v2c)
 	_, err = c.Beta.Messages.New(ctx, anthropic.BetaMessageNewParams{
 		Model: model, MaxTokens: 10,
 		Messages: []anthropic.BetaMessageParam{
 			param.Override[anthropic.BetaMessageParam](userText("hi")),
-			param.Override[anthropic.BetaMessageParam](jsontext.Value(v2)),
+			param.Override[anthropic.BetaMessageParam](jsontext.Value(v2c)),
 		},
 	})
 	if err != nil {
 		return err
 	}
 	fmt.Printf("  C via param.Override(jsontext.Value), wire: %s\n", body)
-	fmt.Printf("  C block byte-identical on the wire: %v\n", bytes.Contains(body, block))
+	fmt.Printf("  C canonical message byte-identical on the wire: %v; canonical block too: %v\n",
+		bytes.Contains(body, v2c), bytes.Contains(body, canonical))
 
 	// The typed form, for comparison: what the SDK writes for the same text.
 	typed := anthropic.BetaMessageParam{Role: anthropic.BetaMessageParamRoleAssistant,

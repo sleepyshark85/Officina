@@ -1,5 +1,5 @@
 # G02 run output. 2026-10-09, github.com/anthropics/anthropic-sdk-go v1.79.1, go1.27.2, claude-opus-5-5. Each feature was run separately (go run . <name>); outputs concatenated.
-# structured is shown from its second run (the first, the same without the offline helper line, cost $0.0111). Total API cost of all runs: about $0.48.
+# structured is shown from its second run (the first, the same without the offline helper line, cost $0.0111). Total API cost of all runs, the first structured run included: $0.469 (about $0.47).
 
 ===== offline =====
   A param.Override, sent:   {"role":"assistant","content":[{"type":"text","text":"Caf\u00e9 «Muñoz» <b>&amp;</b> a\/b +x"} , {"text":"z","type":"text"}]}
@@ -15,8 +15,10 @@
   C jsonv2.Marshal with jsontext.PreserveRawStrings(true): {"role":"assistant","content":[{"type":"text","text":"Caf\u00e9 «Muñoz» <b>&amp;</b> a\/b +x"}]}
   C block after jsontext.Value.Compact(): {"type":"text","text":"Caf\u00e9 «Muñoz» <b>&amp;</b> a\/b +x"}; byte-identical in the PreserveRawStrings output: true
   C encoding/json (v1 API) Marshal of the same: {"role":"assistant","content":[{"type":"text","text":"Caf\u00e9 «Muñoz» \u003cb\u003e\u0026amp;\u003c/b\u003e a\/b +x"}]}
-  C via param.Override(jsontext.Value), wire: {"max_tokens":10,"messages":[{"content":"hi","role":"user"},{"role":"assistant","content":[{"type":"text","text":"Café «Muñoz» \u003cb\u003e\u0026amp;\u003c/b\u003e a/b +x"}]}],"model":"claude-opus-5-5"}
-  C block byte-identical on the wire: false
+  C canonical block: {"type":"text","text":"Caf\u00e9 «Muñoz» \u003cb\u003e\u0026amp;\u003c/b\u003e a\/b +x"}
+  C canonical message, v2 with PreserveRawStrings: {"role":"assistant","content":[{"type":"text","text":"Caf\u00e9 «Muñoz» \u003cb\u003e\u0026amp;\u003c/b\u003e a\/b +x"}]}
+  C via param.Override(jsontext.Value), wire: {"max_tokens":10,"messages":[{"content":"hi","role":"user"},{"role":"assistant","content":[{"type":"text","text":"Caf\u00e9 «Muñoz» \u003cb\u003e\u0026amp;\u003c/b\u003e a\/b +x"}]}],"model":"claude-opus-5-5"}
+  C canonical message byte-identical on the wire: true; canonical block too: true
   typed param marshals as: {"content":[{"text":"Café «Muñoz» \u003cb\u003e\u0026amp;\u003c/b\u003e a/b +x","type":"text"}],"role":"assistant"}
 
 ROUND TRIP: replayed messages checked=0 mismatched=0; assistant blocks stored=0 changed by normalizing=0
