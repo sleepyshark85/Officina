@@ -28,6 +28,8 @@ type AuditEntry struct {
 	Run          string `json:"run"`
 	Conversation string `json:"conversation,omitzero"`
 	Agent        string `json:"agent,omitzero"`
+	// MemoryScope is the run's memory scope, if it has one.
+	MemoryScope string `json:"memoryScope,omitzero"`
 	// TraceID is the run's trace, in W3C hex form; empty when the run has no span, as without a tracer provider.
 	TraceID string `json:"traceId,omitzero"`
 	// SpanID is the span of the step the entry records: the tool call's for a tool call and its approval, else the
@@ -84,13 +86,14 @@ type recorder struct {
 	agent        *Agent
 	run          string
 	conversation string
+	memoryScope  string
 
 	mu       sync.Mutex
 	sequence int64
 }
 
-func newRecorder(a *Agent, conversation string) *recorder {
-	return &recorder{agent: a, run: rand.Text(), conversation: conversation}
+func newRecorder(a *Agent, conversation, memoryScope string) *recorder {
+	return &recorder{agent: a, run: rand.Text(), conversation: conversation, memoryScope: memoryScope}
 }
 
 // record fills in e's time, sequence and identity, with the span in ctx (the step's), redacts and truncates its text,
@@ -106,6 +109,7 @@ func (r *recorder) record(ctx context.Context, e AuditEntry) error {
 	defer r.mu.Unlock()
 	r.sequence++
 	e.Time, e.Sequence, e.Run, e.Conversation, e.Agent = time.Now(), r.sequence, r.run, r.conversation, r.agent.name
+	e.MemoryScope = r.memoryScope
 	if span := trace.SpanContextFromContext(ctx); span.IsValid() {
 		e.TraceID, e.SpanID = span.TraceID().String(), span.SpanID().String()
 	}

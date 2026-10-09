@@ -4,9 +4,9 @@ The Go implementation of Officina: the same requirements ([`REQUIREMENTS.md`](..
 ([`ARCHITECTURE.md`](../ARCHITECTURE.md)) as the .NET one at the repository root, written as idiomatic Go.
 
 Status: in progress. The core's run loop (Go S03), the Claude adapter (Go S04), tools and audit (Go S05), the
-Bookshop Assistant console (Go S06), telemetry with the audit view (Go S07), sessions with budgets (Go S08), long
-conversations (Go S10), the MCP client with exports (Go S11) and typed output with the session summarizer (Go S12)
-are in; memory follows. See
+Bookshop Assistant console (Go S06), telemetry with the audit view (Go S07), sessions with budgets (Go S08), memory
+(Go S09), long conversations (Go S10), the MCP client with exports (Go S11) and typed output with the session
+summarizer (Go S12) are in. See
 [`docs/plan/phase-1.md`](../docs/plan/phase-1.md) for the slices (the Go column),
 [`docs/implementations/go.md`](../docs/implementations/go.md) for the decisions and
 [`docs/traceability.md`](docs/traceability.md) for the tests of each requirement.
@@ -70,10 +70,14 @@ output (Opus 5.5 at low effort, a $0.05 budget a summary, its cost added to the 
 session's title, summary and the changes it made, and first summarizes up to three sessions left without one, as a
 crash leaves them. Sessions are stored as the .NET application stores them, in the same table; one the .NET
 application started is refused as another version of the assistant until both chat agents have the same tools
-(memory comes with Go S09). After each reply a status line shows its tokens,
+and instructions. After each reply a status line shows its tokens,
 the share read from the cache, its cost and the session's; `/cost` shows the session's. A reply may spend $0.50 and a
 session $5; reaching either stops the reply and says why. `BOOKSHOP_REPLY_BUDGET`, in US dollars, such as `0.01`,
 lowers the reply's budget to show a stop.
+Each staff member has a memory of their own, keyed by the name given at the start (case does not matter): the
+assistant keeps their preferences and notes there, such as *"I prefer prices with tax"*, through Claude's memory tool,
+and follows them in later sessions. It is kept in `data/memory/` under the directory the application runs in, as the
+.NET application keeps it; `/memory` shows it.
 `/audit` shows the session's audit trail, from the database's `audit` table, grouped by run: each entry's time,
 kind, tool and outcome, approvals, and each run's tokens and cost, with a link to the run's trace.
 

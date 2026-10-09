@@ -208,16 +208,14 @@ func (l *lines) Write(p []byte) (int, error) {
 		return 0, errTooLong
 	}
 	l.buf = append(l.buf, p...)
-	for {
-		end := bytes.IndexByte(l.buf, '\n')
-		if end < 0 {
+	// Once per line, so the loop ends however its body goes wrong.
+	for range bytes.Count(l.buf, []byte("\n")) {
+		line, rest, _ := bytes.Cut(l.buf, []byte("\n"))
+		if len(line) > l.max {
 			break
 		}
-		if end > l.max {
-			break
-		}
-		l.line(bytes.Clone(bytes.TrimSuffix(l.buf[:end], []byte("\r"))))
-		l.buf = l.buf[end+1:]
+		l.line(bytes.Clone(bytes.TrimSuffix(line, []byte("\r"))))
+		l.buf = rest
 	}
 	if len(l.buf) > l.max {
 		l.failed, l.buf = true, nil

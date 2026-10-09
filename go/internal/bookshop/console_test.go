@@ -34,6 +34,9 @@ func sessionOf(t *testing.T, cfg bookshop.Config, d *database, model *officinate
 	t.Helper()
 	out := &transcript{cancelOn: cancelOn}
 	cfg.Database, cfg.Model, cfg.In, cfg.Out, cfg.Echo = d.url, priced{model}, &input{t: t, script: script}, out, true
+	if cfg.Memory == nil {
+		cfg.Memory = &officina.MapMemoryStore{}
+	}
 	cfg.Interrupt = func(ctx context.Context) (context.Context, context.CancelFunc) {
 		ctx, out.interrupt = context.WithCancel(ctx)
 		return ctx, out.interrupt
@@ -185,7 +188,7 @@ func TestConsole_APP02_HelpAndUnknownCommandsAreAnsweredAndQuitLeaves(t *testing
 	t.Parallel()
 	model := officinatest.NewModel("scripted")
 
-	transcript := session(t, newDatabase(t), model, "", "", "  ", "Sam", "/help", "", "/memory", "/quit", "Not read.")
+	transcript := session(t, newDatabase(t), model, "", "", "  ", "Sam", "/help", "", "/memo", "/quit", "Not read.")
 
 	inOrder(t, transcript,
 		"Bookshop Assistant. Type /help for commands.\n",
@@ -198,9 +201,10 @@ func TestConsole_APP02_HelpAndUnknownCommandsAreAnsweredAndQuitLeaves(t *testing
 		"  /resume <id>   Go on with the session with that id.\n",
 		"  /cost          Show this session's tokens and cost.\n",
 		"  /audit [<id>]  Show the audit trail of this session, or of the session with that id.\n",
+		"  /memory        Show what the assistant remembers for you.\n",
 		"  /quit          Leave the assistant.\n",
 		"Ctrl+C stops a reply in progress.\n",
-		"you> \nyou> /memory\nUnknown command /memory. Type /help for commands.\n",
+		"you> \nyou> /memo\nUnknown command /memo. Type /help for commands.\n",
 		"you> /quit\n")
 	if strings.Contains(transcript, "Not read.") || len(model.Requests()) != 0 {
 		t.Errorf("the session went on after /quit, or called the model:\n%s", transcript)

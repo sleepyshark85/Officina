@@ -36,6 +36,8 @@ type Agent struct {
 	telemetry         *telemetry
 	contextManagement ContextManagement
 	output            *Output
+	// memory says whether the agent has the memory tool, whose runs need a memory scope.
+	memory bool
 }
 
 // AgentOptions holds an agent's optional parts; the zero value has none.
@@ -126,6 +128,7 @@ func NewAgent(model Model, instructions string, opts AgentOptions) (*Agent, erro
 		approver: opts.Approver, auditSink: opts.AuditSink, name: opts.Name, secrets: secretForms(opts.Secrets),
 		fingerprint:       prefixFingerprint(model.Settings(), instructions, tools, opts.Output, opts.ContextManagement),
 		contextManagement: opts.ContextManagement, output: opts.Output,
+		memory: slices.ContainsFunc(tools, Tool.IsMemory),
 	}
 	a.telemetry, err = newTelemetry(opts.TracerProvider, opts.MeterProvider, opts.Name, model.Info(),
 		opts.TelemetryContent, a.redact)

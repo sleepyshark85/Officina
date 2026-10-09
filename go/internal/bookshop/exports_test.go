@@ -16,6 +16,7 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 
 	"github.com/sleepyshark85/officina/go/internal/bookshop"
+	"github.com/sleepyshark85/officina/go/officina"
 	"github.com/sleepyshark85/officina/go/officina/officinatest"
 )
 
@@ -181,7 +182,7 @@ func TestBuild_APP12_AnExportServerThatCannotBeReachedFailsTheStartClearly(t *te
 
 	_, err := bookshop.Build(t.Context(), bookshop.Config{
 		Database: "postgres://bookshop@127.0.0.1:1/bookshop", Model: officinatest.NewModel("scripted"),
-		In: strings.NewReader(""), Out: &strings.Builder{}, Exports: url,
+		Memory: &officina.MapMemoryStore{}, In: strings.NewReader(""), Out: &strings.Builder{}, Exports: url,
 	})
 
 	if want := "build bookshop: the export server at " + url + " is not available"; err == nil ||

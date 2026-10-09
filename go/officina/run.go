@@ -3,6 +3,7 @@ package officina
 import (
 	"context"
 	"errors"
+	"fmt"
 	"iter"
 	"slices"
 	"strconv"
@@ -20,6 +21,9 @@ type RunOptions struct {
 	Context string
 	// Budget limits the run; none by default. A host may give each run what is left of a session's budget.
 	Budget Limits
+	// MemoryScope is whose memory the run sees, such as a user's id; a run of an agent with the memory tool needs
+	// one, which ValidMemoryScope accepts.
+	MemoryScope string
 }
 
 // Result is how a run ended: Completed, Stopped or Failed, as Status says, always with what it used.
@@ -188,6 +192,10 @@ func (a *Agent) run(ctx context.Context, c *Conversation, message string, opts R
 		return Result{}, errors.New("run: blank run context")
 	case opts.Budget.Cost != nil && price == Price{}:
 		return Result{}, errors.New("run: a cost budget needs a model with a price")
+	case opts.MemoryScope != "" && !ValidMemoryScope(opts.MemoryScope):
+		return Result{}, fmt.Errorf("run: %q is not a valid memory scope", opts.MemoryScope)
+	case a.memory && opts.MemoryScope == "":
+		return Result{}, errors.New("run: the agent has memory, so the run needs a memory scope")
 	}
 	if c == nil {
 		c = &Conversation{}
@@ -198,8 +206,9 @@ func (a *Agent) run(ctx context.Context, c *Conversation, message string, opts R
 	defer c.running.Store(false)
 
 	spent := &spending{budget: opts.Budget, price: price, started: time.Now()}
-	ctx, span := a.telemetry.startRun(ctx, c.ID, message)
-	audit := newRecorder(a, c.ID)
+	ctx, span := a.telemetry.startRun(ctx, c.ID, message, opts.MemoryScope)
+	ctx = context.WithValue(ctx, memoryScopeKey{}, opts.MemoryScope)
+	audit := newRecorder(a, c.ID, opts.MemoryScope)
 	span.SetAttributes(attribute.String("officina.run.id", audit.run))
 	// A missing run entry blocks nothing: only a write's attempt depends on the trail.
 	_ = audit.record(ctx, AuditEntry{Kind: AuditRunStarted})
