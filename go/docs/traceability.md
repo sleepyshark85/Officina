@@ -13,6 +13,23 @@ Tests are under `go/`, shortened as:
 | Core | `github.com/sleepyshark85/officina/go/officina` (`officina_test`) |
 | Kit | `github.com/sleepyshark85/officina/go/officina/officinatest` (`officinatest_test`) |
 | Claude | `github.com/sleepyshark85/officina/go/officina/claude` (`claude_test`), on recorded HTTP from an `httptest.Server`; shared fixtures in the repository's `testdata/` |
+| App | `github.com/sleepyshark85/officina/go/internal/bookshop` (`bookshop_test`): `TestTools_…` on the real database, `TestConsole_…` the real console against it with only the model and the staff member scripted (TEST-09); one PostgreSQL container per run, from the shared schema and seed in `apps/BookshopAssistant/database/`, Linux only |
+
+## Reference application (APP)
+
+| ID | Tests | Also checked by |
+|---|---|---|
+| APP-01 | App: `TestConsole_APP01_TheReplyStreamsWithTextBetweenToolCallsAndEachToolWithItsInputAndOutcome` | |
+| APP-02 | App: `TestConsole_APP02_HelpAndUnknownCommandsAreAnsweredAndQuitLeaves` (`/help`, `/quit`) | The other commands come with Go S07 to Go S09 |
+| APP-03 | App: `TestConsole_APP03_CancellingStopsTheReplyAndTheSessionGoesOn`, `TestConsole_APP03_CancellingAtTheApprovalPromptStopsTheReplyAtOnceAndTheChangeIsNotMade` | Live: Ctrl+C through `signal.NotifyContext`, per reply (`cmd/bookshop`) |
+| APP-04 | App: every `TestTools_…` and `TestConsole_…` runs against the shared schema and seed | Inspection: `apps/BookshopAssistant/compose.yaml`, `database/`, shared with .NET |
+| APP-05 | App: `TestConsole_APP05_TheReadToolsOfOneReplyAllAnswerFromTheDatabase`, `TestTools_APP05_SearchFiltersByGenreAndStockAndListsTheCheapestFirst`, `TestTools_APP05_SearchMatchesPartOfTheTitleOrAuthorAndAHighestPrice`, `TestTools_APP05_ABroadSearchReturns10To15kTokensWithinTheResultLimit`, `TestTools_APP05_ReadsFindCustomersTheirOrdersBooksAndOrders` | |
+| APP-06 | App: `TestConsole_APP06_AWriteShowsItsExactInputForApprovalAndRunsOnlyIfApproved`, `TestTools_APP06_AddCustomerAddsOneAndRefusesASecondWithTheSameEmail`, `TestTools_APP06_PlaceOrderTakesTheCopiesFromStockAndChargesTheCurrentPrices`, `TestTools_APP06_ConcurrentOrdersNeverTakeMoreCopiesThanAreInStock`, `TestTools_APP06_CancelOrderReturnsTheCopiesOnce`, `TestTools_APP06_RestockAddsCopies` | |
+| APP-07 | App: `TestConsole_APP07_NotEnoughStockComesBackAsAnErrorResultAndTheModelRecoversInTheSameReply`, `TestTools_APP07_BusinessRuleFailuresAreErrorsAndChangeNothing`, `TestTools_APP07_UnknownIDsAreErrors` | |
+| APP-08 | App: `TestTools_APP08_TheOnlyTextInputsAreKnownValues`, `TestTools_APP08_EveryQueryRunsAConstant` (static, no database), `TestTools_APP08_SearchTextIsTakenLiterallySoAWildcardOrBackslashMatchesOnlyItself` | Inspection |
+| APP-09 | App: `TestConsole_APP09_AMultiStepRequestFindsSearchesOrdersAfterApprovalAndAnswers` | Live, once, with `docker compose up` (Go S06's pull request) |
+| APP-13 | App: `TestConsole_APP13_TheRunContextNamesTheDateAndStaffMemberAndIsSentAgainOnlyOnANewDay` (`testing/synctest`'s clock) | |
+| APP-18 | App: `TestConsole_APP18_WithTheDatabaseDownToolsReturnErrorsAndOnceItIsBackTheSessionWorksAgain`, `TestTools_APP18_WithTheDatabaseDownToolsFailAndOnceItIsBackTheyWorkAgain` | |
 
 ## Generality (GEN)
 
@@ -100,3 +117,4 @@ Tests are under `go/`, shortened as:
 | TEST-05 | Deps: `TestDependencies_TEST05_ModuleKeepsTheRules`, `TestDependencies_TEST05_FixturesBreakingTheRulesFail` (the core's own rule, D15 and G6, as well) | |
 | TEST-07 | Core: `TestRun_TEST07_GeneratedSecretsNeverReachResultsEventsOrTheTrail` (`rapid`: generated secrets, prefixes of each other included, in generated JSON forms; once each is replaced whole only the text around them is left, in results, events, the trail and the final text), `TestRun_TEST07_GeneratedRunsKeepTheConversationValidAndNoWriteRunsUnaudited` (`rapid`: sequences of runs, model failures, cut-off replies, cancels and breaks at any event, tool calls that succeed, fail, panic, are unknown, invalid, denied or unaudited; after each run the conversation passes the kit's check, every call answered once, and the prefix is stable); Kit: `TestCheckConversation_TEST07_AnswersEveryToolCallOnceInOrder`, `TestModel_TEST01_RejectsRoleSequencesTheProviderRejectsAndKeepsTheReply` | CI runs the property tests with a fixed seed (`go.yml`); a failure prints its seed. Save/resume, telemetry, budgets and memory paths come with Go S07 to Go S09 |
 | TEST-08 | Core: `TestValidate_TEST08_AgreesWithAReferenceValidator` (`rapid`, against `santhosh-tekuri/jsonschema/v6` under draft 2020-12), `TestValidate_TEST08_RefusesASchemaOutsideTheSubset`, `TestNewAgent_TEST08_RefusesAToolOutsideTheSubset` | |
+| TEST-09 | App: every `TestConsole_…` test (APP-01, APP-02, APP-03, APP-05, APP-06, APP-07, APP-09, APP-13, APP-18) | `go-ubuntu` runs them; elsewhere they skip, saying why |
