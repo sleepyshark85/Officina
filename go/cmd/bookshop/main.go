@@ -53,6 +53,10 @@ func run() int {
 	if err != nil {
 		return fail(err)
 	}
+	summarizer, err := bookshop.SummarizerModel()
+	if err != nil {
+		return fail(err)
+	}
 	// A lower reply budget, such as 0.01, shows a budget stop; unset keeps the default.
 	var budgets bookshop.Budgets
 	if v := os.Getenv("BOOKSHOP_REPLY_BUDGET"); v != "" {
@@ -64,7 +68,8 @@ func run() int {
 	stdin, err := os.Stdin.Stat()
 	echo := err == nil && stdin.Mode()&os.ModeCharDevice == 0
 	app, err := bookshop.Build(ctx, bookshop.Config{
-		Database: setting("BOOKSHOP_DATABASE", composeDatabase), Model: model, In: os.Stdin, Out: os.Stdout, Echo: echo,
+		Database: setting("BOOKSHOP_DATABASE", composeDatabase), Model: model, Summarizer: summarizer,
+		In: os.Stdin, Out: os.Stdout, Echo: echo,
 		// Ctrl+C stops the reply in progress and the session goes on. Between replies nothing listens for it, so it
 		// ends the application, as usual.
 		Interrupt: func(ctx context.Context) (context.Context, context.CancelFunc) {

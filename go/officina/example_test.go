@@ -145,6 +145,37 @@ func ExampleNewTool() {
 	// Emma is in stock.
 }
 
+// Typed output: the model is held to the schema of a struct, and a completed run returns a value of it.
+func ExampleNewOutput() {
+	type order struct {
+		Customer string `json:"customer"`
+		Copies   int    `json:"copies" jsonschema:"How many copies."`
+	}
+	output, err := officina.NewOutput[order]()
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	model := officinatest.NewModel("scripted", officinatest.TextReply(`{"customer":"Ana","copies":2}`))
+	agent, err := officina.NewAgent(model, "Read the order in the message.", officina.AgentOptions{Output: output})
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	res, err := agent.Run(context.Background(), nil, "Ana wants two copies of Emma.", officina.RunOptions{})
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	fmt.Println(string(model.Requests()[0].OutputSchema))
+	fmt.Printf("%+v\n", res.Output.(order))
+	// Output:
+	// {"type":"object","properties":{"customer":{"type":"string"},"copies":{"type":"integer","description":"How many copies."}},"required":["customer","copies"],"additionalProperties":false}
+	// {Customer:Ana Copies:2}
+}
+
 // An audit trail in a JSON-lines file, which the host chooses: a write tool runs only once its attempt is recorded.
 func ExampleNewJSONLinesSink() {
 	dir, err := os.MkdirTemp("", "audit")

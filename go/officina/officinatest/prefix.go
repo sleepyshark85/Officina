@@ -9,9 +9,9 @@ import (
 	"github.com/sleepyshark85/officina/go/officina"
 )
 
-// CheckPrefix checks that each request's tools, instructions and earlier messages are byte-identical to the
-// previous request's. Pass the requests of a scripted run, or of several runs, saves and resumes, in the order they
-// were sent. It returns nil when the prefix is stable, or an error with one line per difference.
+// CheckPrefix checks that each request's tools, instructions, output schema and earlier messages are byte-identical
+// to the previous request's. Pass the requests of a scripted run, or of several runs, saves and resumes, in the order
+// they were sent. It returns nil when the prefix is stable, or an error with one line per difference.
 func CheckPrefix(requests []officina.Request) error {
 	var problems []error
 	for i := 1; i < len(requests); i++ {
@@ -24,6 +24,9 @@ func CheckPrefix(requests []officina.Request) error {
 		}
 		if previous.Instructions != next.Instructions {
 			say("the instructions differ")
+		}
+		if !bytes.Equal(previous.OutputSchema, next.OutputSchema) {
+			say("the output schema differs")
 		}
 		if len(next.Messages) < len(previous.Messages) {
 			say(fmt.Sprintf("has %d messages, fewer than the %d", len(next.Messages), len(previous.Messages)))

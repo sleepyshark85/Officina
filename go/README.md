@@ -5,7 +5,8 @@ The Go implementation of Officina: the same requirements ([`REQUIREMENTS.md`](..
 
 Status: in progress. The core's run loop (Go S03), the Claude adapter (Go S04), tools and audit (Go S05), the
 Bookshop Assistant console (Go S06), telemetry with the audit view (Go S07), sessions with budgets (Go S08), long
-conversations (Go S10) and the MCP client with exports (Go S11) are in; memory follows. See
+conversations (Go S10), the MCP client with exports (Go S11) and typed output with the session summarizer (Go S12)
+are in; memory follows. See
 [`docs/plan/phase-1.md`](../docs/plan/phase-1.md) for the slices (the Go column),
 [`docs/implementations/go.md`](../docs/implementations/go.md) for the decisions and
 [`docs/traceability.md`](docs/traceability.md) for the tests of each requirement.
@@ -63,10 +64,13 @@ does not start without that server.
 
 Each conversation is a session, saved in the database's `sessions` table after every step of a reply, so a restart or
 a crash loses at most the step in flight. `/sessions` lists the latest, `/resume <id>` goes on with one (with its
-cache intact, and a call a crash left unanswered told to the model as interrupted), `/new` starts another. Sessions
-are stored as the .NET application stores them, in the same table; one the .NET application started is refused as
-another version of the assistant until both chat agents have the same tools (memory comes with
-Go S09). After each reply a status line shows its tokens,
+cache intact, and a call a crash left unanswered told to the model as interrupted), `/new` starts another. A session
+left with `/new`, `/resume`, `/quit` or the end of the input is summarized by a second, stateless agent with typed
+output (Opus 5.5 at low effort, a $0.05 budget a summary, its cost added to the session's): `/sessions` shows each
+session's title, summary and the changes it made, and first summarizes up to three sessions left without one, as a
+crash leaves them. Sessions are stored as the .NET application stores them, in the same table; one the .NET
+application started is refused as another version of the assistant until both chat agents have the same tools
+(memory comes with Go S09). After each reply a status line shows its tokens,
 the share read from the cache, its cost and the session's; `/cost` shows the session's. A reply may spend $0.50 and a
 session $5; reaching either stops the reply and says why. `BOOKSHOP_REPLY_BUDGET`, in US dollars, such as `0.01`,
 lowers the reply's budget to show a stop.

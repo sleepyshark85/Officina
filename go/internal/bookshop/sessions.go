@@ -63,10 +63,16 @@ from sessions
 where id = $1`
 
 	listSessions = `select id, staff_member, coalesce(title, ''), coalesce(summary, ''), coalesce(changes, '{}'),
-	cost::float8, updated
+	cost::float8, updated, summarized is null or summarized < updated
 from sessions
 order by updated desc
 limit $1`
+
+	saveSummary = `update sessions
+set title = $2, summary = $3, changes = $4, summarized = now(), input_tokens = input_tokens + $5,
+	output_tokens = output_tokens + $6, cache_read_tokens = cache_read_tokens + $7,
+	cache_write_tokens = cache_write_tokens + $8, cost = cost + $9
+where id = $1`
 )
 
 // Save saves the session as it is now and returns the text it is stored as. previous is the text this console last
@@ -155,12 +161,13 @@ func (s *Sessions) Load(ctx context.Context, id string) (StoredSession, error) {
 }
 
 // listing is a session as /sessions lists it. A session has a title, summary and changes once the summarizer has
-// written them.
+// written them; it is stale when it has none, or changed since.
 type listing struct {
 	id, staffMember, title, summary string
 	changes                         []string
 	cost                            float64
 	updated                         time.Time
+	stale                           bool
 }
 
 // list returns the count sessions updated last, most recent first.
@@ -173,7 +180,8 @@ func (s *Sessions) list(ctx context.Context, count int) ([]listing, error) {
 	var listed []listing
 	for rows.Next() {
 		var l listing
-		if err := rows.Scan(&l.id, &l.staffMember, &l.title, &l.summary, &l.changes, &l.cost, &l.updated); err != nil {
+		if err := rows.Scan(&l.id, &l.staffMember, &l.title, &l.summary, &l.changes, &l.cost, &l.updated,
+			&l.stale); err != nil {
 			return nil, fmt.Errorf("list sessions: %w", err)
 		}
 		listed = append(listed, l)
@@ -182,4 +190,19 @@ func (s *Sessions) list(ctx context.Context, count int) ([]listing, error) {
 		return nil, fmt.Errorf("list sessions: %w", err)
 	}
 	return listed, nil
+}
+
+// saveSummary stores the summary of session id, as of now, and adds what it cost to the session's totals. A save of
+// the session that a console makes after it replaces the totals with its own, so a summary's cost that another
+// console added since is lost.
+func (s *Sessions) saveSummary(ctx context.Context, id string, sum summary, usage officina.Usage, cost float64) error {
+	changes := sum.Changes
+	if changes == nil {
+		changes = []string{}
+	}
+	if _, err := s.db.Exec(ctx, saveSummary, id, sum.Title, sum.Summary, changes, usage.Input, usage.Output,
+		usage.CacheRead, usage.CacheWrite, cost); err != nil {
+		return fmt.Errorf("save the summary of session %s: %w", id, err)
+	}
+	return nil
 }

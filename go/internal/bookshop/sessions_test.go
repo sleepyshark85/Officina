@@ -110,12 +110,10 @@ func crashingApp() int {
 	return 0
 }
 
-func TestConsole_APP10_ACrashMidReplyLosesAtMostTheStepInFlightAndTheSessionResumes(t *testing.T) {
-	t.Parallel()
-	d := newDatabase(t)
-	stock := d.stock(t, 320)
-
-	// The application is killed at the approval prompt: after the model's reply was saved, before its tool ran.
+// crashMidReply runs the application against d as a child process, which asks to restock a book, and kills it at the
+// approval prompt: after the model's reply was saved, before its tool ran. It returns the session's id.
+func crashMidReply(t *testing.T, d *database) string {
+	t.Helper()
 	child := exec.CommandContext(t.Context(), os.Args[0])
 	child.Env = append(os.Environ(), crashEnv+"="+d.url)
 	in, err := child.StdinPipe()
@@ -139,8 +137,15 @@ func TestConsole_APP10_ACrashMidReplyLosesAtMostTheStepInFlightAndTheSessionResu
 		t.Fatalf("Kill() error = %v", err)
 	}
 	_ = child.Wait() // It was killed, so it fails.
+	return scalar[string](t, d, "select id from sessions order by updated desc limit 1")
+}
 
-	id := scalar[string](t, d, "select id from sessions order by updated desc limit 1")
+func TestConsole_APP10_ACrashMidReplyLosesAtMostTheStepInFlightAndTheSessionResumes(t *testing.T) {
+	t.Parallel()
+	d := newDatabase(t)
+	stock := d.stock(t, 320)
+
+	id := crashMidReply(t, d)
 	saved := stored(t, d, id).Messages()
 	if diff := cmp.Diff([]officina.Role{officina.User, officina.Operator, officina.Assistant}, roles(saved)); diff != "" {
 		t.Fatalf("saved roles mismatch (-want +got):\n%s", diff)

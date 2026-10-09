@@ -35,6 +35,7 @@ type Agent struct {
 	fingerprint       string
 	telemetry         *telemetry
 	contextManagement ContextManagement
+	output            *Output
 }
 
 // AgentOptions holds an agent's optional parts; the zero value has none.
@@ -61,6 +62,9 @@ type AgentOptions struct {
 	// provider's support (ModelInfo), and is part of the prefix. Without compaction, a run that fills the model's
 	// context window stops with ContextFull.
 	ContextManagement ContextManagement
+	// Output is the typed output the agent's runs return, from NewOutput; without it, a run's result is its text.
+	// Its schema is part of the prefix.
+	Output *Output
 }
 
 // NewAgent returns an agent of model and instructions. The instructions are frozen for every conversation: nothing
@@ -116,8 +120,8 @@ func NewAgent(model Model, instructions string, opts AgentOptions) (*Agent, erro
 	a := &Agent{
 		model: model, instructions: instructions, tools: tools, schemas: schemas, sources: sources,
 		approver: opts.Approver, auditSink: opts.AuditSink, name: opts.Name, secrets: secretForms(opts.Secrets),
-		fingerprint:       prefixFingerprint(model.Settings(), instructions, tools, opts.ContextManagement),
-		contextManagement: opts.ContextManagement,
+		fingerprint:       prefixFingerprint(model.Settings(), instructions, tools, opts.Output, opts.ContextManagement),
+		contextManagement: opts.ContextManagement, output: opts.Output,
 	}
 	a.telemetry, err = newTelemetry(opts.TracerProvider, opts.MeterProvider, opts.Name, model.Info(),
 		opts.TelemetryContent, a.redact)
@@ -223,9 +227,10 @@ func (a *Agent) redact(text string) string {
 // prefixFingerprint returns a SHA-256 hash of everything in the prefix that reaches the model. Stored conversations
 // carry it, and a conversation either implementation stored resumes in the other, so it hashes the bytes the .NET
 // implementation hashes, which must never change: {"model":…,"instructions":…,"tools":[{"name":…,"description":…,
-// "inputSchema":…},…],"contextManagement":{…}}, with the strings escaped as .NET's default JSON encoder escapes them,
-// each schema as given, and the context management only when it asks for something.
-func prefixFingerprint(settings, instructions string, tools []Tool, cm ContextManagement) string {
+// "inputSchema":…},…],"output":…,"contextManagement":{…}}, with the strings escaped as .NET's default JSON encoder
+// escapes them, each schema as given, the output schema only with typed output, and the context management only
+// when it asks for something.
+func prefixFingerprint(settings, instructions string, tools []Tool, output *Output, cm ContextManagement) string {
 	b := appendDotnetString([]byte(`{"model":`), settings)
 	b = appendDotnetString(append(b, `,"instructions":`...), instructions)
 	b = append(b, `,"tools":[`...)
@@ -237,7 +242,11 @@ func prefixFingerprint(settings, instructions string, tools []Tool, cm ContextMa
 		b = appendDotnetString(append(b, `,"description":`...), t.Description)
 		b = append(append(append(b, `,"inputSchema":`...), t.InputSchema...), '}')
 	}
-	sum := sha256.Sum256(append(cm.appendFingerprint(append(b, ']')), '}'))
+	b = append(b, ']')
+	if output != nil {
+		b = append(append(b, `,"output":`...), output.schema...)
+	}
+	sum := sha256.Sum256(append(cm.appendFingerprint(b), '}'))
 	return hex.EncodeToString(sum[:])
 }
 

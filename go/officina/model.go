@@ -2,6 +2,7 @@ package officina
 
 import (
 	"context"
+	"encoding/json/jsontext"
 	"iter"
 )
 
@@ -24,13 +25,16 @@ type Model interface {
 	Stream(ctx context.Context, req Request) iter.Seq2[ModelEvent, error]
 }
 
-// Request is one model call: the prefix that stays the same for a conversation (tools, instructions and context
-// management; the model's settings are its own), then the conversation with the run's pending messages. A Model
-// must not modify it.
+// Request is one model call: the prefix that stays the same for a conversation (tools, instructions, output schema
+// and context management; the model's settings are its own), then the conversation with the run's pending messages.
+// A Model must not modify it.
 type Request struct {
 	// Tools are sorted by name.
 	Tools        []Tool
 	Instructions string
+	// OutputSchema is the JSON Schema the reply's text must match, for typed output; nil for a reply of any text. It
+	// is a schema in the subset the core validates, with every object closed.
+	OutputSchema jsontext.Value
 	Messages     []Message
 	// ContextManagement is how the provider shortens the conversation; part of the prefix.
 	ContextManagement ContextManagement

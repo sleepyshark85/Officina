@@ -27,6 +27,9 @@ type Result struct {
 	Status Status
 	// Text is the final reply's text, when Completed.
 	Text string
+	// Output is the reply's typed output, a value of the type the agent's Output was made for, when Completed by an
+	// agent with one; nil otherwise.
+	Output any
 	// Stop says why the run stopped, when Stopped.
 	Stop StopReason
 	// Failure says why the run failed, when Failed.
@@ -85,6 +88,9 @@ const (
 	PrefixMismatch
 	// ToolSourceUnavailable means a tool source, such as an MCP server, could not connect at the start of the run.
 	ToolSourceUnavailable
+	// InvalidOutput means the reply is not the agent's typed output: it does not match the output schema, or does
+	// not decode into the output type. It is not retried.
+	InvalidOutput
 )
 
 // RunEvent is something that happened during a run, streamed to the host as it happens: a TextStreamed,
@@ -199,6 +205,12 @@ func (a *Agent) run(ctx context.Context, c *Conversation, message string, opts R
 	_ = audit.record(ctx, AuditEntry{Kind: AuditRunStarted})
 	res := spent.report(a.loop(ctx, c, message, opts, audit, spent, yield))
 	res.Text, res.Detail = a.redact(res.Text), a.redact(res.Detail)
+	if res.Status == Completed && a.output != nil {
+		var err error
+		if res.Output, err = a.output.read(res.Text); err != nil {
+			res.Status, res.Failure, res.Text, res.Detail = Failed, InvalidOutput, "", a.redact(err.Error())
+		}
+	}
 	outcome := res.Status.String()
 	switch res.Status {
 	case Stopped:
@@ -214,8 +226,8 @@ func (a *Agent) run(ctx context.Context, c *Conversation, message string, opts R
 }
 
 // CanContinue reports whether the agent's runs may go on with c: whether c is new, or was started by an agent with
-// the same tools, instructions and model settings, in this implementation or another. A run on a conversation it
-// cannot continue fails with PrefixMismatch.
+// the same prefix (tools, instructions, model settings, output schema and context management), in this
+// implementation or another. A run on a conversation it cannot continue fails with PrefixMismatch.
 func (a *Agent) CanContinue(c *Conversation) bool {
 	return c.fingerprint == "" || c.fingerprint == a.fingerprint
 }
@@ -263,6 +275,9 @@ func (a *Agent) loop(ctx context.Context, c *Conversation, message string, opts 
 		req := Request{
 			Tools: a.tools, Instructions: a.instructions, ContextManagement: a.contextManagement,
 			Messages: append(slices.Clip(c.messages), pending...),
+		}
+		if a.output != nil {
+			req.OutputSchema = a.output.schema
 		}
 		limit, limited := spent.outputLimit()
 		if limited {
@@ -490,7 +505,8 @@ func (r StopReason) String() string {
 
 // String returns the reason's name.
 func (r FailureReason) String() string {
-	return name(int(r), "FailureReason", "ModelError", "UnexpectedStop", "PrefixMismatch", "ToolSourceUnavailable")
+	return name(int(r), "FailureReason", "ModelError", "UnexpectedStop", "PrefixMismatch", "ToolSourceUnavailable",
+		"InvalidOutput")
 }
 
 // name returns the name of the value v of an enumeration whose values start at 1, or the type and number for any

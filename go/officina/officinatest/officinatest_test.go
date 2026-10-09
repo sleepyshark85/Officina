@@ -111,15 +111,17 @@ func TestCheckPrefix_TEST02_ReportsEachKindOfChange(t *testing.T) {
 	search := officina.Tool{Name: "search", Description: "Searches.", InputSchema: jsontext.Value(`{"type":"object"}`)}
 	changed := search
 	changed.InputSchema = jsontext.Value(`{"type": "object"}`)
+	typed := jsontext.Value(`{"type":"object","additionalProperties":false}`)
 	requests := []officina.Request{
 		{Tools: []officina.Tool{search}, Instructions: "A", Messages: []officina.Message{hi}},
 		{Tools: []officina.Tool{search}, Instructions: "A", Messages: []officina.Message{hi, hello}},
 		{Tools: []officina.Tool{changed}, Instructions: "A", Messages: []officina.Message{hi, hello}},
 		{Tools: []officina.Tool{changed}, Instructions: "B", Messages: []officina.Message{hi, hello}},
-		{Tools: []officina.Tool{changed}, Instructions: "B", Messages: []officina.Message{hi, {
+		{Tools: []officina.Tool{changed}, Instructions: "B", OutputSchema: typed, Messages: []officina.Message{hi, hello}},
+		{Tools: []officina.Tool{changed}, Instructions: "B", OutputSchema: typed, Messages: []officina.Message{hi, {
 			Role: officina.Assistant, Blocks: []officina.Block{{Text: "Hello.", Raw: jsontext.Value(`{"type": "text", "text": "Hello."}`)}},
 		}}},
-		{Tools: []officina.Tool{changed}, Instructions: "B"},
+		{Tools: []officina.Tool{changed}, Instructions: "B", OutputSchema: typed},
 	}
 
 	err := officinatest.CheckPrefix(requests)
@@ -127,8 +129,9 @@ func TestCheckPrefix_TEST02_ReportsEachKindOfChange(t *testing.T) {
 	want := []string{
 		"request 3: the tools differ from request 2's",
 		"request 4: the instructions differ from request 3's",
-		"request 5: message 2 differs from request 4's",
-		"request 6: has 0 messages, fewer than the 2 from request 5's",
+		"request 5: the output schema differs from request 4's",
+		"request 6: message 2 differs from request 5's",
+		"request 7: has 0 messages, fewer than the 2 from request 6's",
 	}
 	if err == nil {
 		t.Fatal("CheckPrefix() = nil, want the differences")
