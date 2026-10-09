@@ -139,6 +139,9 @@ public sealed record Agent
         {
             secret, JsonEncodedText.Encode(secret, JavaScriptEncoder.UnsafeRelaxedJsonEscaping).Value, JsonEncodedText.Encode(secret).Value,
         })
+        // Longest first, so a secret that starts with another is replaced whole, not left with its tail showing.
+        .Distinct(StringComparer.Ordinal)
+        .OrderByDescending(form => form.Length)
         .Aggregate(text, (redacted, secret) => redacted.Replace(secret, "[redacted]", StringComparison.Ordinal));
 
     /// <summary>The part of every request that stays the same for a conversation, and identifies it.</summary>

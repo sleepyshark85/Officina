@@ -144,6 +144,19 @@ public class AuditTests
     }
 
     [Fact]
+    public async Task A_secret_that_starts_with_another_is_redacted_whole()
+    {
+        var sink = new RecordingSink();
+        var model = new ScriptedModel().CallTools(new ToolCall("c1", "search", """{"query":"key=abcdef"}""")).Reply("Used abcdef.");
+
+        var result = await (Agents.With(model, tools: Agents.SearchTool()) with { AuditSink = sink, Secrets = ["abc", "abcdef"] })
+            .RunAsync(new Conversation(), "Go.", cancellationToken: Ct);
+
+        Assert.Equal("""{"query":"key=[redacted]"}""", sink.Entries.Single(entry => entry.Kind == AuditKind.ToolStarted).Input);
+        Assert.Equal("Used [redacted].", Assert.IsType<Completed>(result).Text);
+    }
+
+    [Fact]
     public async Task Refusals_failures_prefix_mismatches_and_budget_stops_are_recorded_as_the_run_ends()
     {
         var sink = new RecordingSink();

@@ -159,7 +159,7 @@ only a live run or inspection checks, noted in the last column.
 | AUD-02 | Core/AuditTests: `A_write_runs_only_after_its_attempt_is_recorded`, `A_write_whose_attempt_cannot_be_audited_never_runs_…`; Core/ConversationPropertyTests: `Any_sequence_of_runs_keeps_the_conversation_valid_and_every_write_audited_first` | |
 | AUD-03 | Core/TelemetryTests: `A_run_is_one_trace_…_and_its_audit_entries_point_into_it`; Core/MemoryTests: `AUD_03_every_audit_entry_of_a_run_names_its_memory_scope`; Core/AuditTests: `An_entry_the_sink_failed_to_write_leaves_a_gap_in_the_sequence`; App/AuditTests: `The_table_keeps_every_field_…` | |
 | AUD-04 | Core/AuditTests: `The_JSON_lines_sink_appends_one_entry_per_line`, `The_JSON_lines_sink_reports_a_failed_write`; Samples/BackgroundAgentTests: `An_unattended_job_…` | |
-| AUD-05 | Core/AuditTests: `Long_text_is_truncated_with_its_size_and_secrets_are_redacted`, `A_secret_is_redacted_as_escaped_in_JSON_too_…` | |
+| AUD-05 | Core/AuditTests: `Long_text_is_truncated_with_its_size_and_secrets_are_redacted`, `A_secret_is_redacted_as_escaped_in_JSON_too_…`, `A_secret_that_starts_with_another_is_redacted_whole` | |
 | AUD-06 | Core/TelemetryTests: `An_audit_sink_failure_and_a_write_it_blocks_show_in_telemetry` | |
 
 ## Testing (TEST)
