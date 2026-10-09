@@ -1,18 +1,21 @@
 #!/usr/bin/env python3
 """Before a Bash command: blocks pushing to main, committing on main and branches without an allowed prefix, as
-docs/conventions.md asks. Before a commit that stages code it runs the format check and the build, and shows the staged files so
-an unexpected one is caught; before a push of more than docs it runs the tests. CI runs the same checks; these find a
-failure before the commit or push instead of after it."""
+docs/conventions.md asks. Before a commit that stages code it runs that implementation's format check and build (.NET
+at the root, Go under go/), and shows the staged files so an unexpected one is caught; before a push of more than docs
+it runs the tests of each implementation it changes. CI runs the same checks; these find a failure before the commit
+or push instead of after it."""
 import json
 import os
 import re
 import shlex
+import shutil
 import subprocess
 import sys
 
 PREFIXES = ("slice/", "docs/", "fix/", "refactor/", "chore/", "test/", "feature/")
 OPERATORS = set(";&|\n")
 CODE = re.compile(r"\.(cs|csproj|props|targets|slnx|editorconfig|json)$")
+GO_CODE = re.compile(r"(\.go|(^|/)go\.(mod|sum)|\.golangci\.yml)$")
 DOCS = re.compile(r"\.(md|html|svg|png)$")
 
 # A heredoc's body is input to a command, never a command: from "<<WORD" to the line holding only WORD.
@@ -41,37 +44,72 @@ def commands(text):
         yield words
 
 
-def check(root, command, failure):
-    """Runs a check in the repository's root; a failure blocks the command with the check's last lines."""
-    run = subprocess.run(command, cwd=root, capture_output=True, text=True)
+def check(cwd, command, failure, env=None):
+    """Runs a check; a failure blocks the command with the check's last lines. Returns what the check printed."""
+    run = subprocess.run(command, cwd=cwd, capture_output=True, text=True, env=env)
     if run.returncode != 0:
         tail = "\n".join((run.stdout + run.stderr).strip().splitlines()[-30:])
         block(f"{failure}\n{tail}")
+    return run.stdout
+
+
+def is_go(path):
+    return path.startswith("go/")
+
+
+def go_env():
+    """The environment for the Go checks: the go command on PATH, and the tools it installed (golangci-lint) found in
+    its GOPATH's bin."""
+    go = shutil.which("go")
+    if not go:
+        block("Blocked: the Go checks need the go command on PATH (go/README.md).")
+    gopath = subprocess.run([go, "env", "GOPATH"], capture_output=True, text=True).stdout.strip()
+    env = dict(os.environ)
+    env["PATH"] = os.pathsep.join([env.get("PATH", ""), *(os.path.join(p, "bin") for p in gopath.split(os.pathsep) if p)])
+    if not shutil.which("golangci-lint", path=env["PATH"]):
+        block("Blocked: the Go checks need golangci-lint on PATH or in GOPATH's bin (go/README.md).")
+    return env
 
 
 def before_commit(here):
-    """The format check and the build, when the commit stages code; both read the working tree, so every staged code
-    file must have no unstaged changes."""
+    """Each implementation's format check and build, when the commit stages its code: .NET's outside go/, Go's under
+    it. They read the working tree, so every staged code file must have no unstaged changes."""
     staged = git(here, "diff", "--cached", "--name-only").splitlines()
-    code = [path for path in staged if CODE.search(path)]
-    if not code:
+    dotnet = [path for path in staged if CODE.search(path) and not is_go(path)]
+    go = [path for path in staged if GO_CODE.search(path) and is_go(path)]
+    if not dotnet and not go:
         return
-    partly = set(code) & set(git(here, "diff", "--name-only").splitlines())
+    partly = set(dotnet + go) & set(git(here, "diff", "--name-only").splitlines())
     if partly:
         block("Blocked: these staged files also have unstaged changes; stage or stash them first:\n" + "\n".join(sorted(partly)))
     root = git(here, "rev-parse", "--show-toplevel")
-    check(root, ["dotnet", "format", "--verify-no-changes"], "Blocked: the format check fails; run 'dotnet format', then commit again.")
-    check(root, ["dotnet", "build", "--configuration", "Release", "--nologo", "--verbosity", "quiet"],
-          "Blocked: the build fails (warnings are errors); fix it, then commit again.")
+    if dotnet:
+        check(root, ["dotnet", "format", "--verify-no-changes"], "Blocked: the format check fails; run 'dotnet format', then commit again.")
+        check(root, ["dotnet", "build", "--configuration", "Release", "--nologo", "--verbosity", "quiet"],
+              "Blocked: the build fails (warnings are errors); fix it, then commit again.")
+    if go:
+        env, module = go_env(), os.path.join(root, "go")
+        unformatted = check(module, ["gofmt", "-l", "."], "Blocked: gofmt fails.", env).strip()
+        if unformatted:
+            block("Blocked: these files are not formatted; run 'gofmt -w .' in go/, then commit again:\n" + unformatted)
+        check(module, ["go", "vet", "./..."], "Blocked: go vet fails; fix it, then commit again.", env)
+        check(module, ["golangci-lint", "run", "./..."],
+              "Blocked: golangci-lint fails (go/.golangci.yml); fix it, then commit again.", env)
+        check(module, ["go", "build", "./..."], "Blocked: the Go build fails; fix it, then commit again.", env)
 
 
 def before_push(here, branch):
-    """The tests, when the commits the push would send change more than docs."""
+    """The tests of each implementation the push's commits change beyond docs: .NET's outside go/, Go's under it."""
     base = git(here, "merge-base", "origin/main", branch or "HEAD")
-    changed = git(here, "diff", "--no-renames", "--name-only", base, branch or "HEAD").splitlines() if base else ["?"]
-    if any(not DOCS.search(path) for path in changed):
-        check(git(here, "rev-parse", "--show-toplevel"), ["dotnet", "test", "--configuration", "Release", "--nologo",
+    changed = git(here, "diff", "--no-renames", "--name-only", base, branch or "HEAD").splitlines() if base else ["?", "go/?"]
+    code = [path for path in changed if not DOCS.search(path)]
+    root = git(here, "rev-parse", "--show-toplevel")
+    if any(not is_go(path) for path in code):
+        check(root, ["dotnet", "test", "--configuration", "Release", "--nologo",
               "--verbosity", "quiet", "--blame-hang-timeout", "2m"], "Blocked: the tests fail; fix them, then push again.")
+    if any(is_go(path) for path in code):
+        check(os.path.join(root, "go"), ["go", "test", "-race", "-shuffle=on", "./..."],
+              "Blocked: the Go tests fail; fix them, then push again.", go_env())
 
 
 def stages_all(rest):
