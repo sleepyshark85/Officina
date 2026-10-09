@@ -82,10 +82,20 @@ func stream(ctx context.Context, t *testing.T, agent *officina.Agent, c *officin
 	return got, res
 }
 
+// shared returns the path of a file of the repository's testdata: under OFFICINA_TESTDATA when it is set, as for
+// mutation testing, which runs the tests in a copy of go/ alone; else beside the module.
+func shared(path ...string) string {
+	dir := os.Getenv("OFFICINA_TESTDATA")
+	if dir == "" {
+		dir = filepath.Join("..", "..", "testdata")
+	}
+	return filepath.Join(append([]string{dir}, path...)...)
+}
+
 // sharedFile returns a file of the repository's testdata, which the .NET implementation reads too.
 func sharedFile(t *testing.T, path ...string) string {
 	t.Helper()
-	data, err := os.ReadFile(filepath.Join(append([]string{"..", "..", "testdata"}, path...)...))
+	data, err := os.ReadFile(shared(path...))
 	if err != nil {
 		t.Fatalf("read shared testdata: %v", err)
 	}

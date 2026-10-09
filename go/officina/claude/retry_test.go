@@ -45,6 +45,8 @@ func TestModel_MDL04_ATransientFailureWaitsThenSucceeds(t *testing.T) {
 		{"an overload then a server error back off exponentially with jitter",
 			[]response{apiError(529, "overloaded_error", "Overloaded", ""), apiError(500, "api_error", "Oops", "")},
 			1500 * time.Millisecond, 3 * time.Second},
+		{"any server error is retried, by its status alone", []response{apiError(500, "unknown_error", "Oops", "")},
+			500 * time.Millisecond, time.Second},
 		{"a request timeout is retried", []response{apiError(408, "timeout_error", "Timeout", "")},
 			500 * time.Millisecond, time.Second},
 		{"a conflict is retried", []response{apiError(409, "conflict_error", "Conflict", "")},

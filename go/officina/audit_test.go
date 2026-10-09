@@ -216,7 +216,8 @@ func u(hex string) string { return `\` + "u" + hex }
 
 func TestRun_EVT03_AUD05_EveryFormOfASecretIsRedactedWhole(t *testing.T) {
 	t.Parallel()
-	secrets := []string{"abc", "abcdef", "café/ü", "😀x", "abc"}
+	// U+0080, the first character beyond ASCII, is escaped like the others.
+	secrets := []string{"abc", "abcdef", "café/ü", "😀x", "abc", "\xc2\x80z"}
 	tests := []struct{ name, text, want string }{
 		{"a secret that starts with another", "key abcdef!", "key [redacted]!"},
 		{"the shorter one", "key abc!", "key [redacted]!"},
@@ -225,6 +226,7 @@ func TestRun_EVT03_AUD05_EveryFormOfASecretIsRedactedWhole(t *testing.T) {
 		{"lower-case escapes", "caf" + u("00e9") + "/" + u("00fc"), "[redacted]"},
 		{"upper-case escapes and slash", "caf" + u("00E9") + `\/` + u("00FC"), "[redacted]"},
 		{"a surrogate pair", u("d83d") + u("de00") + "x", "[redacted]"},
+		{"the first character beyond ASCII escaped", u("0080") + "z", "[redacted]"},
 		{"in a JSON string", `{"k":"abcdef","l":"` + u("D83D") + u("DE00") + `x"}`, `{"k":"[redacted]","l":"[redacted]"}`},
 	}
 	for _, tt := range tests {
@@ -354,5 +356,22 @@ func TestJSONLinesSink_AUD04_WritesEveryFieldAndReportsAFailure(t *testing.T) {
 	}
 	if missing == nil {
 		t.Error("Write() to a missing directory error = nil, want the failure")
+	}
+}
+
+func TestRun_AUD05_TextOfExactlyTheAuditLimitIsKeptWhole(t *testing.T) {
+	t.Parallel()
+	exact := strings.Repeat("y", 4_000)
+	echo := handlerTool("echo", officina.Read, func(context.Context, jsontext.Value) (string, error) { return exact, nil })
+	model := officinatest.NewModel("scripted",
+		officinatest.ToolUseReply(officinatest.ToolUseBlock("c1", "echo", `{}`)), officinatest.TextReply("Done."))
+	sink := &memorySink{}
+
+	run(t, auditAgent(t, model, sink, nil, echo), nil, "Go", officina.RunOptions{})
+
+	if !slices.ContainsFunc(sink.Entries(), func(e officina.AuditEntry) bool {
+		return e.Kind == officina.AuditToolEnded && e.Detail == exact
+	}) {
+		t.Error("the 4,000-byte result is not in the trail whole")
 	}
 }

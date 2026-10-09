@@ -38,7 +38,7 @@ func TestMain(m *testing.M) {
 // warmEncoders streams, outside any synctest bubble, one request of every shape the tests send, and decodes a
 // reply of every kind of block and an API error.
 func warmEncoders() error {
-	tool, err := os.ReadFile(filepath.Join("..", "..", "..", "testdata", "claude", "thinking-text-tool.sse"))
+	tool, err := os.ReadFile(shared("claude", "thinking-text-tool.sse"))
 	if err != nil {
 		return err
 	}
@@ -97,6 +97,8 @@ type fakeAPI struct {
 	mu        sync.Mutex
 	responses []response
 	requests  []string
+	// keys are the API keys the requests carried.
+	keys []string
 }
 
 // serve starts a fake API that answers with responses, in order, and stops it when the test ends.
@@ -111,6 +113,7 @@ func serve(t *testing.T, responses ...response) *fakeAPI {
 		}
 		api.mu.Lock()
 		api.requests = append(api.requests, string(body))
+		api.keys = append(api.keys, r.Header.Get("X-Api-Key"))
 		var next response
 		if len(api.responses) > 0 {
 			next, api.responses = api.responses[0], api.responses[1:]
@@ -188,10 +191,20 @@ func unused(context.Context, jsontext.Value) (string, error) {
 	return "", errors.New("unused tool")
 }
 
+// shared returns the path of a file of the repository's testdata: under OFFICINA_TESTDATA when it is set, as for
+// mutation testing, which runs the tests in a copy of go/ alone; else beside the module.
+func shared(path ...string) string {
+	dir := os.Getenv("OFFICINA_TESTDATA")
+	if dir == "" {
+		dir = filepath.Join("..", "..", "..", "testdata")
+	}
+	return filepath.Join(append([]string{dir}, path...)...)
+}
+
 // fixture returns a file of the shared testdata, which the .NET implementation reads too.
 func fixture(t *testing.T, name string) string {
 	t.Helper()
-	data, err := os.ReadFile(filepath.Join("..", "..", "..", "testdata", name))
+	data, err := os.ReadFile(shared(name))
 	if err != nil {
 		t.Fatalf("read fixture: %v", err)
 	}

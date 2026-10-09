@@ -79,10 +79,10 @@ func (s *spending) reached() string {
 	return ""
 }
 
-// decimals returns v with at most n decimals, without trailing zeros.
+// decimals returns v with at most n decimals, n at least 1, without trailing zeros.
 func decimals(v float64, n int) string {
 	s := strconv.FormatFloat(v, 'f', n, 64)
-	for n > 0 && s[len(s)-1] == '0' {
+	for s[len(s)-1] == '0' {
 		s = s[:len(s)-1]
 	}
 	if s[len(s)-1] == '.' {

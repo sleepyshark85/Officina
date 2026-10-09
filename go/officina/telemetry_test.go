@@ -491,6 +491,33 @@ func TestRun_EVT02_TimeToFirstTokenIsTheWaitForTheFirstTextOfTheAttemptThatSucce
 	})
 }
 
+func TestRun_EVT02_ATimeToFirstTokenOfZeroIsKept(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		telemetry := newCollector(t)
+		model := funcModel(func(context.Context, officina.Request) iter.Seq2[officina.ModelEvent, error] {
+			return func(yield func(officina.ModelEvent, error) bool) {
+				if !yield(officina.TextDelta{Text: "Hel"}, nil) {
+					return
+				}
+				time.Sleep(time.Second)
+				for _, e := range []officina.ModelEvent{officina.TextDelta{Text: "lo."},
+					officina.BlockReceived{Block: officinatest.TextBlock("Hello.")}, officina.Finished{Reason: officina.FinishEnd}} {
+					if !yield(e, nil) {
+						return
+					}
+				}
+			}
+		})
+
+		run(t, telemetry.agent(t, model, officina.AgentOptions{}), nil, "Hi", officina.RunOptions{})
+
+		if got := attrMap(telemetry.span(t, "chat func").Attributes)["officina.model.time_to_first_token"]; got != 0.0 {
+			t.Errorf("time to first token = %v, want 0s: the first text came at once", got)
+		}
+	})
+}
+
 func TestRun_EVT02_EVT03_AFailedModelCallMarksItsSpanAndTheRunsWithoutTheSecret(t *testing.T) {
 	t.Parallel()
 	telemetry := newCollector(t)
@@ -611,6 +638,10 @@ func TestRun_EVT03_EVT04_TelemetryCarriesNoTextUnlessTheHostOptsInAndNeverASecre
 				if want := `[{"role":"user","parts":[{"type":"text","content":"question-text [redacted]"}]}]`; got != want {
 					t.Errorf("input messages = %v, want %s", got, want)
 				}
+				got = attrMap(telemetry.span(t, "invoke_agent").Attributes)["gen_ai.output.messages"]
+				if want := `[{"role":"assistant","parts":[{"type":"text","content":"answer-text [redacted]"}]}]`; got != want {
+					t.Errorf("output messages = %v, want %s", got, want)
+				}
 			}
 		})
 	}
@@ -691,4 +722,46 @@ type blockingApprover struct{}
 func (blockingApprover) Approve(ctx context.Context, _ officina.Tool, _ officina.ToolCall) (officina.Approval, error) {
 	<-ctx.Done()
 	return officina.Approval{}, ctx.Err()
+}
+
+func TestRun_EVT02_AnUnknownFinishIsNamedByTheProvidersWordAndACallWithoutTokensHasNoHitRatio(t *testing.T) {
+	t.Parallel()
+	telemetry := newCollector(t)
+	model := officinatest.NewModel("scripted", officinatest.Reply{Events: []officina.ModelEvent{
+		officina.BlockReceived{Block: officinatest.TextBlock("Hm.")},
+		officina.Finished{Reason: officina.FinishUnknown, Detail: "pause_turn"},
+	}})
+
+	run(t, telemetry.agent(t, model, officina.AgentOptions{}), nil, "Go.", officina.RunOptions{})
+
+	reasons := attrMap(telemetry.span(t, "chat scripted").Attributes)["gen_ai.response.finish_reasons"]
+	if diff := gocmp.Diff([]string{"pause_turn"}, reasons); diff != "" {
+		t.Errorf("finish reasons mismatch (-want +got):\n%s", diff)
+	}
+	for _, p := range telemetry.points(t, nil) {
+		if p.Metric == "officina.model.cache_hit_ratio" {
+			t.Errorf("a call without input tokens recorded a cache hit ratio: %+v", p)
+		}
+	}
+}
+
+func TestRun_TOOL06_EVT02_AResultOfExactlyTheLimitIsKeptWholeAndNotMarkedTruncated(t *testing.T) {
+	t.Parallel()
+	telemetry := newCollector(t)
+	exact := strings.Repeat("x", 64_000)
+	big := handlerTool("big", officina.Read, func(context.Context, jsontext.Value) (string, error) { return exact, nil })
+	model := officinatest.NewModel("scripted",
+		officinatest.ToolUseReply(officinatest.ToolUseBlock("c1", "big", `{}`)), officinatest.TextReply("Done."))
+	var c officina.Conversation
+
+	run(t, telemetry.agent(t, model, officina.AgentOptions{Tools: []officina.Tool{big}}), &c, "Go", officina.RunOptions{})
+
+	if got := results(c.Messages()[2])[0].Content; got != exact {
+		t.Errorf("the result has %d bytes, want all %d", len(got), len(exact))
+	}
+	attrs := attrMap(telemetry.span(t, "execute_tool big").Attributes)
+	if attrs["officina.tool.truncated"] != false || attrs["officina.tool.result_length"] != int64(64_000) {
+		t.Errorf("span: truncated %v, length %v; want false, 64000", attrs["officina.tool.truncated"],
+			attrs["officina.tool.result_length"])
+	}
 }

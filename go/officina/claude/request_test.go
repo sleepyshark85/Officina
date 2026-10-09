@@ -95,6 +95,21 @@ func TestModel_CTX01_ARequestWithoutToolsIsLaidOutAsDotNetsIs(t *testing.T) {
 	}
 }
 
+func TestNew_MDL02_TheAPIKeyGivenIsSent(t *testing.T) {
+	t.Parallel()
+	api := serve(t, sse(textReply("end_turn")))
+
+	if _, err := collect(t.Context(), model(t, api, claude.Options{}), hi()); err != nil {
+		t.Fatalf("Stream() error = %v", err)
+	}
+
+	api.mu.Lock()
+	defer api.mu.Unlock()
+	if diff := cmp.Diff([]string{"test-key"}, api.keys); diff != "" {
+		t.Errorf("API keys mismatch (-want +got):\n%s", diff)
+	}
+}
+
 func TestModel_BUD01_AnOutputLimitTheBudgetLowersIsSentAndAHigherOneIsNot(t *testing.T) {
 	t.Parallel()
 	tests := []struct {

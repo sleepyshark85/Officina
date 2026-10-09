@@ -3,3 +3,6 @@
 *.sh text eol=lf
 # Shared golden files, read byte for byte by every implementation.
 testdata/** text eol=lf
+# C# sources: a tool schema or instructions written as a multi-line raw string enter the prefix fingerprint, which
+# must not change with the checkout's line endings.
+*.cs text eol=lf

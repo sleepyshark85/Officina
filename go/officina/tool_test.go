@@ -26,6 +26,7 @@ type order struct {
 	Note    *string           `json:"note"`
 	Tags    []string          `json:"tags"`
 	Pair    [2]int            `json:"pair"`
+	None    [0]int            `json:"none"`
 	Extra   map[string]int64  `json:"extra"`
 	Ship    address           `json:"ship"`
 	Due     time.Time         `json:"due"`
@@ -52,12 +53,13 @@ func TestNewTool_TOOL01_DerivesTheSchemaFromTheInputType(t *testing.T) {
 		`"note":{"type":["string","null"]},` +
 		`"tags":{"type":"array","items":{"type":"string"}},` +
 		`"pair":{"type":"array","items":{"type":"integer"},"minItems":2,"maxItems":2},` +
+		`"none":{"type":"array","items":{"type":"integer"},"minItems":0,"maxItems":0},` +
 		`"extra":{"type":"object","additionalProperties":{"type":"integer"}},` +
 		`"ship":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},` +
 		`"due":{"type":"string","format":"date-time"},` +
 		`"Exact":{"type":"integer"},` +
 		`"nested":{"type":"array","items":{"type":"object","additionalProperties":{"type":"boolean"}}}},` +
-		`"required":["isbn","price","note","tags","pair","extra","ship","due","Exact"],"additionalProperties":false}`
+		`"required":["isbn","price","note","tags","pair","none","extra","ship","due","Exact"],"additionalProperties":false}`
 	if diff := cmp.Diff(want, string(got.InputSchema)); diff != "" {
 		t.Errorf("schema mismatch (-want +got):\n%s", diff)
 	}

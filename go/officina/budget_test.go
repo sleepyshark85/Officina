@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"iter"
 	"math"
+	"slices"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -143,6 +144,73 @@ func TestRun_BUD01_EachCallsOutputLimitIsLoweredToWhatTheRemainingCostAndTokensA
 	if diff := cmp.Diff([]int64{500, 360, 0}, got); diff != "" {
 		t.Errorf("output limits mismatch (-want +got):\n%s", diff)
 	}
+}
+
+func TestRun_BUD01_ATokenBudgetAloneLowersTheOutputLimitToTheTokensLeft(t *testing.T) {
+	t.Parallel()
+	model := priced(callTool("c1", officina.Usage{Input: 200, Output: 100}), officinatest.TextReply("Done."))
+	tokens := int64(1_000)
+
+	run(t, newAgent(t, model, tool("search", "Searches.")), nil, "Go.",
+		officina.RunOptions{Budget: officina.Limits{Tokens: &tokens}})
+
+	if got := limits(model.Requests()); !slices.Equal(got, []int64{1_000, 700}) {
+		t.Errorf("output limits = %v, want 1,000 then 700", got)
+	}
+}
+
+func TestRun_BUD01_TheCostBudgetAtItsBoundaries(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name       string
+		outputFree bool
+		cost       float64
+		requests   []int64
+	}{
+		// $0.00002 buys exactly one output token at $20 per million: the call is made, limited to it.
+		{"what is left buys one output token", false, 0.00002, []int64{1}},
+		// Nothing is left, so nothing more may be spent, even where output costs nothing.
+		{"nothing left, output free", true, 0, nil},
+		// Output that costs nothing is not limited by what is left.
+		{"something left, output free", true, 0.01, []int64{0}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			scripted := officinatest.NewModel("scripted", officinatest.TextReply("Y"))
+			var model officina.Model = pricedModel{scripted}
+			if tt.outputFree {
+				model = inputPriced{scripted}
+			}
+
+			result := run(t, newAgent(t, model), nil, "Go.", officina.RunOptions{Budget: costs(tt.cost)})
+
+			if got := limits(scripted.Requests()); !slices.Equal(got, tt.requests) {
+				t.Errorf("output limits = %v, want %v", got, tt.requests)
+			}
+			if wantStop := tt.requests == nil; wantStop != (result.Stop == officina.Budget) {
+				t.Errorf("result = %+v, stopped for the budget: want %v", result, wantStop)
+			}
+		})
+	}
+}
+
+// inputPriced is a scripted model whose output costs nothing.
+type inputPriced struct {
+	*officinatest.Model
+}
+
+func (inputPriced) Info() officina.ModelInfo {
+	return officina.ModelInfo{Price: officina.Price{Input: 4}}
+}
+
+// limits returns the output limit of each request.
+func limits(requests []officina.Request) []int64 {
+	var got []int64
+	for _, req := range requests {
+		got = append(got, req.MaxOutputTokens)
+	}
+	return got
 }
 
 func TestRun_BUD01_AReplyCutShortByTheLoweredLimitStopsForTheBudgetAndOneCutByTheModelsOwnDoesNot(t *testing.T) {

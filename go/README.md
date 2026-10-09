@@ -95,7 +95,8 @@ Mutation testing, over the core, the test kit and the Claude package; `go-mutati
 
 ```sh
 go install github.com/go-gremlins/gremlins/cmd/gremlins@v0.6.0
-gremlins unleash --coverpkg ./officina/... --timeout-coefficient 20 ./officina
+# Each mutant is tested in a copy of go/ alone, which finds the shared testdata through this variable.
+OFFICINA_TESTDATA=$PWD/../testdata gremlins unleash --coverpkg ./officina/... --timeout-coefficient 20 ./officina
 ```
 
 CI is [`.github/workflows/go.yml`](../.github/workflows/go.yml), on every pull request: `go-ubuntu` and `go-windows`
