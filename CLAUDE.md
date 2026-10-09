@@ -30,7 +30,8 @@ reused (ARCHITECTURE §13).
   ARCHITECTURE.md it names types, so update it when a change moves what it shows. Each diagram's `.html` is the source;
   the `.svg` beside it is exported from it. `docs/traceability.md` maps the .NET tests to requirement IDs.
 - Prerequisites: Docker, the .NET 10 SDK, an Anthropic API key or `ant auth login` for live tests.
-- Required checks before a merge: `ubuntu-latest`, `windows-latest`, `quality`, `mutation`.
+- Required checks before a merge: `ubuntu-latest`, `windows-latest`, `quality`, `mutation`, and the Go ones
+  (`go-changes`, `go-ubuntu`, `go-windows`, `go-quality`, `go-mutation`): every PR needs all nine.
 - Hooks: before a commit that stages .NET code, `dotnet format --verify-no-changes` and the Release build (warnings
   are errors), and the staged files shown; before a push that changes more than docs outside `go/`, the tests. After
   an edit to a `.cs` file, one type per file named after it, and no requirement IDs in comments. The Go checks run
