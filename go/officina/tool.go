@@ -68,8 +68,8 @@ type Approval struct {
 
 // NewTool returns a tool that runs fn. Its input schema is derived from In, which must be a struct: each exported
 // field is a property named as encoding/json/v2 names it, required unless its json tag says omitempty or omitzero,
-// and described by its jsonschema tag. A string fn returns is the result as it is; any other value is sent as JSON.
-// It fails for a field whose type has no schema in the supported subset, such as an interface, a func, a
+// described by its jsonschema tag, and, for a string field, limited to the comma-separated values of its enum tag.
+// A string fn returns is the result as it is; any other value is sent as JSON. It fails for a field whose type has no schema in the supported subset, such as an interface, a func, a
 // []byte, an embedded struct or a type with its own JSON form (time.Time is a date-time string).
 func NewTool[In, Out any](name, description string, kind ToolKind, fn func(ctx context.Context, in In) (Out, error),
 ) (Tool, error) {
@@ -106,6 +106,7 @@ func NewTool[In, Out any](name, description string, kind ToolKind, fn func(ctx c
 type node struct {
 	types               []string
 	description, format string
+	enum                []string
 	nonNegative         bool
 	items, values       *node
 	minItems            int
@@ -200,6 +201,12 @@ func describeStruct(t reflect.Type, within []reflect.Type) (*node, error) {
 			return nil, fmt.Errorf("field %s of %s: %w", field.Name, t, err)
 		}
 		schema.description = field.Tag.Get("jsonschema")
+		if values, has := field.Tag.Lookup("enum"); has {
+			if field.Type.Kind() != reflect.String {
+				return nil, fmt.Errorf("field %s of %s: an enum tag needs a string field", field.Name, t)
+			}
+			schema.enum = strings.Split(values, ",")
+		}
 		n.props = append(n.props, property{name: name, schema: schema, required: !optional})
 	}
 	return n, nil
@@ -242,6 +249,16 @@ func (n *node) append(b []byte) []byte {
 	}
 	if n.format != "" {
 		b = quote(append(b, `,"format":`...), n.format)
+	}
+	if n.enum != nil {
+		b = append(b, `,"enum":[`...)
+		for i, v := range n.enum {
+			if i > 0 {
+				b = append(b, ',')
+			}
+			b = quote(b, v)
+		}
+		b = append(b, ']')
 	}
 	if n.nonNegative {
 		b = append(b, `,"minimum":0`...)

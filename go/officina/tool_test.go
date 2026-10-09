@@ -34,7 +34,11 @@ type order struct {
 	Skipped string            `json:"-"`
 	hidden  string            //nolint:unused // An unexported field is not part of the schema.
 	Nested  []map[string]bool `json:"nested,omitempty"`
+	Cover   binding           `json:"cover" enum:"paperback,hardback"`
 }
+
+// binding is a string type whose values the cover field's enum tag lists.
+type binding string
 
 func TestNewTool_TOOL01_DerivesTheSchemaFromTheInputType(t *testing.T) {
 	t.Parallel()
@@ -58,8 +62,9 @@ func TestNewTool_TOOL01_DerivesTheSchemaFromTheInputType(t *testing.T) {
 		`"ship":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},` +
 		`"due":{"type":"string","format":"date-time"},` +
 		`"Exact":{"type":"integer"},` +
-		`"nested":{"type":"array","items":{"type":"object","additionalProperties":{"type":"boolean"}}}},` +
-		`"required":["isbn","price","note","tags","pair","none","extra","ship","due","Exact"],"additionalProperties":false}`
+		`"nested":{"type":"array","items":{"type":"object","additionalProperties":{"type":"boolean"}}},` +
+		`"cover":{"type":"string","enum":["paperback","hardback"]}},` +
+		`"required":["isbn","price","note","tags","pair","none","extra","ship","due","Exact","cover"],"additionalProperties":false}`
 	if diff := cmp.Diff(want, string(got.InputSchema)); diff != "" {
 		t.Errorf("schema mismatch (-want +got):\n%s", diff)
 	}
@@ -99,6 +104,9 @@ func TestNewTool_TOOL01_RefusesATypeWithoutASchema(t *testing.T) {
 		{"string option", newTool[struct {
 			N int `json:"n,string"`
 		}], `the json option "string" is not supported`},
+		{"enum of numbers", newTool[struct {
+			N int `enum:"1,2"`
+		}], "an enum tag needs a string field"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
