@@ -125,12 +125,12 @@ func (p *pipeline) prepare(ctx context.Context, t tool, found bool, call ToolCal
 	// The trail records the question even when it cannot: only a write's attempt depends on the sink.
 	_ = p.audit.record(ctx, AuditEntry{Kind: AuditApprovalAsked, Tool: t.Name, CallID: call.ID, Input: string(call.Input)})
 	p.events <- ApprovalAsked{Call: p.shown(call)}
-	approval, err := approver.Approve(ctx, t.Tool, call)
+	approval, err := ask(ctx, approver, t.Tool, call)
 	switch {
 	case err != nil && ctx.Err() != nil:
 		approval = Approval{Reason: "the run was cancelled while waiting for approval"}
 	case err != nil:
-		approval = Approval{Reason: "asking for approval failed: " + err.Error()}
+		approval = Approval{Reason: err.Error()}
 	}
 	outcome := "denied"
 	if approval.Approved {
@@ -148,6 +148,20 @@ func (p *pipeline) prepare(ctx context.Context, t tool, found bool, call ToolCal
 	default:
 		return "The call was denied: " + approval.Reason
 	}
+}
+
+// ask asks approver about call; a panic in the approver is an error, as the host cannot recover it on the
+// pipeline's goroutine.
+func ask(ctx context.Context, approver Approver, t Tool, call ToolCall) (approval Approval, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			approval, err = Approval{}, fmt.Errorf("asking for approval failed: the approver panicked: %v", r)
+		}
+	}()
+	if approval, err = approver.Approve(ctx, t, call); err != nil {
+		return Approval{}, fmt.Errorf("asking for approval failed: %w", err)
+	}
+	return approval, nil
 }
 
 // invoke runs the tool on the call's input, already validated, and returns its result; a panic in the handler is an

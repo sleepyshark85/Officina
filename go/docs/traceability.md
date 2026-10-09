@@ -63,7 +63,7 @@ Tests are under `go/`, shortened as:
 | TOOL-01 | Core: `TestNewTool_TOOL01_DerivesTheSchemaFromTheInputType`, `TestNewTool_TOOL01_RefusesATypeWithoutASchema`, `TestNewTool_TOOL01_RunsOnTheDecodedInputAndSendsItsResultAsJSON`; `ExampleNewTool` | |
 | TOOL-02 | Core: `TestRun_TOOL02_TOOL04_TOOL05_FailuresComeBackAsErrorResultsAndTheRunContinues` (input not JSON, invalid input, unknown tool), `TestValidate_TOOL02_ChecksEachKeywordOfTheSubset`, `FuzzValidate_TOOL02_NeverPanicsAndIsDeterministic` | |
 | TOOL-03 | Core: `TestRun_TOOL03_ReadsOverlapAndWritesRunAloneInOrder` (under `testing/synctest`: reads that wait for each other would deadlock if run one after the other) | |
-| TOOL-04 | Core: `TestRun_TOOL02_TOOL04_TOOL05_FailuresComeBackAsErrorResultsAndTheRunContinues` (denied, with and without a reason; a failing approver), `TestRun_TOOL04_EVT01_AnApprovedCallRunsAndEachStepIsAnEvent` | |
+| TOOL-04 | Core: `TestRun_TOOL02_TOOL04_TOOL05_FailuresComeBackAsErrorResultsAndTheRunContinues` (denied, with and without a reason; a failing and a panicking approver), `TestRun_TOOL04_EVT01_AnApprovedCallRunsAndEachStepIsAnEvent` | |
 | TOOL-05 | Core: `TestRun_TOOL02_TOOL04_TOOL05_FailuresComeBackAsErrorResultsAndTheRunContinues` (a failing and a panicking handler) | |
 | TOOL-06 | Core: `TestRun_TOOL06_ALongResultIsTruncatedAndTheModelIsTold` (never inside a character) | |
 
@@ -72,7 +72,7 @@ Tests are under `go/`, shortened as:
 | ID | Tests | Also checked by |
 |---|---|---|
 | EVT-01 | Core: `TestRun_EVT01_AGT08_EventsStreamThenEachAppendThenResult`, `TestRun_EVT01_AConsumerThatBreaksMidRunLeavesNoGoroutine` (with `goleak` in `TestMain`), `TestRun_EVT01_EventsRangeOnceAndTheResultWaitsForThem`; `ExampleAgent_Stream`; Claude: `TestModel_EVT01_AConsumerThatStopsEarlyEndsTheCall` (with `goleak`); Core: `TestRun_TOOL04_EVT01_AnApprovedCallRunsAndEachStepIsAnEvent` (tool and approval events), `TestRun_AGT05_EVT01_AConsumerThatBreaksDuringToolsStopsThemAndKeepsAValidConversation` | Compaction events come with Go S10 |
-| EVT-03 | Core: `TestRun_AUD05_EVT03_SecretsNeverReachTheTrailEventsOrResultsAndLongTextIsCut` (tool calls in events, tool results, audit, the final text; as written and as escaped in JSON), `TestRun_TOOL04_EVT01_AnApprovedCallRunsAndEachStepIsAnEvent` | Telemetry comes with Go S07 |
+| EVT-03 | Core: `TestRun_AUD05_EVT03_SecretsNeverReachTheTrailEventsOrResultsAndLongTextIsCut` (tool calls in events, tool results, audit, the final text; as written and as escaped in JSON), `TestRun_EVT03_AUD05_EveryFormOfASecretIsRedactedWhole` (a secret that starts with another, escaped non-ASCII in either case, escaped `/`, surrogate pairs), `TestRun_TEST07_GeneratedSecretsNeverReachResultsEventsOrTheTrail`, `TestRun_TOOL04_EVT01_AnApprovedCallRunsAndEachStepIsAnEvent` | Telemetry comes with Go S07 |
 
 ## Audit (AUD)
 
@@ -82,7 +82,7 @@ Tests are under `go/`, shortened as:
 | AUD-02 | Core: `TestRun_AUD02_AWriteWhoseAttemptCannotBeRecordedNeverRuns`, `TestRun_AUD02_AWriteRunsOnlyAfterItsAttemptIsRecorded`, `TestRun_TEST07_GeneratedRunsKeepTheConversationValidAndNoWriteRunsUnaudited` | |
 | AUD-03 | Core: `TestRun_AUD01_AUD03_TheTrailRecordsTheRunAndEachStepInOrder` (time, sequence, run, conversation, agent) | Memory scope, trace and span come with Go S07 and Go S09 |
 | AUD-04 | Core: `TestJSONLinesSink_AUD04_AppendsOneLinePerEntryAndReadsBack`, `TestJSONLinesSink_AUD04_WritesEveryFieldAndReportsAFailure`; `ExampleNewJSONLinesSink` | |
-| AUD-05 | Core: `TestRun_AUD05_EVT03_SecretsNeverReachTheTrailEventsOrResultsAndLongTextIsCut` | |
+| AUD-05 | Core: `TestRun_AUD05_EVT03_SecretsNeverReachTheTrailEventsOrResultsAndLongTextIsCut`, `TestRun_EVT03_AUD05_EveryFormOfASecretIsRedactedWhole`, `TestRun_TEST07_GeneratedSecretsNeverReachResultsEventsOrTheTrail` | |
 
 ## Principles
 
@@ -98,5 +98,5 @@ Tests are under `go/`, shortened as:
 | TEST-02 | Core: `TestRun_TEST02_ThePrefixIsStableAcrossTurnsAndAcrossSaveRestartAndResume`; Kit: `TestCheckPrefix_TEST02_ReportsEachKindOfChange`, `ExampleCheckPrefix` | |
 | TEST-03 | — | The Go workflow (`.github/workflows/go.yml`): `go-ubuntu` and `go-windows`, offline |
 | TEST-05 | Deps: `TestDependencies_TEST05_ModuleKeepsTheRules`, `TestDependencies_TEST05_FixturesBreakingTheRulesFail` (the core's own rule, D15 and G6, as well) | |
-| TEST-07 | Core: `TestRun_TEST07_GeneratedRunsKeepTheConversationValidAndNoWriteRunsUnaudited` (`rapid`: sequences of runs, model failures, cut-off replies, cancels and breaks at any event, tool calls that succeed, fail, panic, are unknown, invalid, denied or unaudited; after each run the conversation passes the kit's check, every call answered once, and the prefix is stable); Kit: `TestCheckConversation_TEST07_AnswersEveryToolCallOnceInOrder`, `TestModel_TEST01_RejectsRoleSequencesTheProviderRejectsAndKeepsTheReply` | CI runs the property tests with a fixed seed (`go.yml`); a failure prints its seed. Save/resume, secrets in telemetry, budgets and memory paths come with Go S07 to Go S09 |
+| TEST-07 | Core: `TestRun_TEST07_GeneratedSecretsNeverReachResultsEventsOrTheTrail` (`rapid`: generated secrets, prefixes of each other included, in generated JSON forms; once each is replaced whole only the text around them is left, in results, events, the trail and the final text), `TestRun_TEST07_GeneratedRunsKeepTheConversationValidAndNoWriteRunsUnaudited` (`rapid`: sequences of runs, model failures, cut-off replies, cancels and breaks at any event, tool calls that succeed, fail, panic, are unknown, invalid, denied or unaudited; after each run the conversation passes the kit's check, every call answered once, and the prefix is stable); Kit: `TestCheckConversation_TEST07_AnswersEveryToolCallOnceInOrder`, `TestModel_TEST01_RejectsRoleSequencesTheProviderRejectsAndKeepsTheReply` | CI runs the property tests with a fixed seed (`go.yml`); a failure prints its seed. Save/resume, telemetry, budgets and memory paths come with Go S07 to Go S09 |
 | TEST-08 | Core: `TestValidate_TEST08_AgreesWithAReferenceValidator` (`rapid`, against `santhosh-tekuri/jsonschema/v6` under draft 2020-12), `TestValidate_TEST08_RefusesASchemaOutsideTheSubset`, `TestNewAgent_TEST08_RefusesAToolOutsideTheSubset` | |

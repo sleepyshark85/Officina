@@ -211,6 +211,84 @@ func TestRun_AUD05_EVT03_SecretsNeverReachTheTrailEventsOrResultsAndLongTextIsCu
 	}
 }
 
+// u returns a JSON escape of the UTF-16 code unit hex, spelled out so no tool rewrites it.
+func u(hex string) string { return `\` + "u" + hex }
+
+func TestRun_EVT03_AUD05_EveryFormOfASecretIsRedactedWhole(t *testing.T) {
+	t.Parallel()
+	secrets := []string{"abc", "abcdef", "café/ü", "😀x", "abc"}
+	tests := []struct{ name, text, want string }{
+		{"a secret that starts with another", "key abcdef!", "key [redacted]!"},
+		{"the shorter one", "key abc!", "key [redacted]!"},
+		{"as written", "café/ü", "[redacted]"},
+		{"slash escaped", `café\/ü`, "[redacted]"},
+		{"lower-case escapes", "caf" + u("00e9") + "/" + u("00fc"), "[redacted]"},
+		{"upper-case escapes and slash", "caf" + u("00E9") + `\/` + u("00FC"), "[redacted]"},
+		{"a surrogate pair", u("d83d") + u("de00") + "x", "[redacted]"},
+		{"in a JSON string", `{"k":"abcdef","l":"` + u("D83D") + u("DE00") + `x"}`, `{"k":"[redacted]","l":"[redacted]"}`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			echo := handlerTool("echo", officina.Read, func(context.Context, jsontext.Value) (string, error) {
+				return tt.text, nil
+			})
+			model := officinatest.NewModel("scripted",
+				officinatest.ToolUseReply(officinatest.ToolUseBlock("c1", "echo", `{}`)), officinatest.TextReply(tt.text))
+			sink := &memorySink{}
+			var c officina.Conversation
+
+			result := run(t, auditAgent(t, model, sink, secrets, echo), &c, "Go", officina.RunOptions{})
+
+			got := []string{results(c.Messages()[2])[0].Content, result.Text}
+			for _, e := range sink.Entries() {
+				if e.Kind == officina.AuditToolEnded {
+					got = append(got, e.Detail)
+				}
+			}
+			if diff := cmp.Diff([]string{tt.want, tt.want, tt.want}, got); diff != "" {
+				t.Errorf("redacted text mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestRun_EVT03_AUD05_OverlappingSecretsAreRedactedWholeInAnyOrder(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name       string
+		secrets    []string
+		text, want string
+	}{
+		{"prefix", []string{"abc", "abcdef"}, "key=abcdef;", "key=[redacted];"},
+		{"partial overlap", []string{"abcd", "cdef"}, "key=abcdef;", "key=[redacted];"},
+		{"touching", []string{"ab", "cd"}, "key=abcd;", "key=[redacted];"},
+		{"equal length overlap", []string{"abc", "bcd"}, "abcd abc bcd", "[redacted] [redacted] [redacted]"},
+		{"escaped against raw", []string{"é1", "1x"}, "k=" + u("00e9") + "1x;", "k=[redacted];"},
+		{"repeated", []string{"aa"}, "aaaa-aaa", "[redacted]-[redacted]"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			for _, secrets := range [][]string{tt.secrets, slices.Concat(tt.secrets[1:], tt.secrets[:1])} {
+				echo := handlerTool("echo", officina.Read, func(context.Context, jsontext.Value) (string, error) {
+					return tt.text, nil
+				})
+				model := officinatest.NewModel("scripted",
+					officinatest.ToolUseReply(officinatest.ToolUseBlock("c1", "echo", `{}`)), officinatest.TextReply(tt.text))
+				var c officina.Conversation
+
+				result := run(t, auditAgent(t, model, nil, secrets, echo), &c, "Go", officina.RunOptions{})
+
+				got := []string{results(c.Messages()[2])[0].Content, result.Text}
+				if diff := cmp.Diff([]string{tt.want, tt.want}, got); diff != "" {
+					t.Errorf("secrets %q: redacted text mismatch (-want +got):\n%s", secrets, diff)
+				}
+			}
+		})
+	}
+}
+
 func TestJSONLinesSink_AUD04_AppendsOneLinePerEntryAndReadsBack(t *testing.T) {
 	t.Parallel()
 	path := filepath.Join(t.TempDir(), "audit.jsonl")

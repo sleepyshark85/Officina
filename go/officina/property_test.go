@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"unicode/utf16"
 
 	"pgregory.net/rapid"
 
@@ -84,6 +85,112 @@ func replyGen(prefix string) *rapid.Generator[officinatest.Reply] {
 			reply.Events[len(reply.Events)-1] = officina.Finished{Reason: officina.FinishEnd}
 		}
 		return reply
+	})
+}
+
+// secretForm returns s written as text, or as the inside of a JSON string in one of the ways an encoder may write
+// it: with or without HTML escapes, every non-ASCII character escaped, or / escaped.
+func secretForm(t *rapid.T, s string) string {
+	quoted, err := json.Marshal(s, jsontext.EscapeForHTML(rapid.Bool().Draw(t, "html")))
+	if err != nil {
+		t.Fatalf("Marshal() error = %v", err)
+	}
+	inner := string(quoted[1 : len(quoted)-1])
+	switch rapid.IntRange(0, 3).Draw(t, "form") {
+	case 0:
+		return s
+	case 1:
+		return inner
+	case 2:
+		var b strings.Builder
+		for _, r := range inner {
+			if r < 0x80 {
+				b.WriteRune(r)
+				continue
+			}
+			for _, unit := range utf16.AppendRune(nil, r) {
+				b.WriteString(u(fmt.Sprintf("%04X", unit)))
+			}
+		}
+		return b.String()
+	default:
+		return strings.ReplaceAll(inner, "/", `\/`)
+	}
+}
+
+func TestRun_TEST07_GeneratedSecretsNeverReachResultsEventsOrTheTrail(t *testing.T) {
+	t.Parallel()
+	// The secrets' characters are none of "[redacted]"'s, so a replacement never makes a secret.
+	char := rapid.SampledFrom([]rune(`xyz/<"\é😀`))
+	rapid.Check(t, func(t *rapid.T) {
+		secrets := rapid.SliceOfN(rapid.StringOfN(char, 1, 4, -1), 1, 4).Draw(t, "secrets")
+		// Secrets, each in some form, between fillers of characters no form of a secret holds: once each secret is
+		// replaced whole, only the fillers are left.
+		var text, fillers strings.Builder
+		for range rapid.IntRange(1, 6).Draw(t, "pieces") {
+			filler := rapid.StringOfN(rapid.SampledFrom([]rune("#!% ")), 1, 3, -1).Draw(t, "filler")
+			text.WriteString(filler + secretForm(t, rapid.SampledFrom(secrets).Draw(t, "secret")))
+			fillers.WriteString(filler)
+		}
+		input, err := json.Marshal(map[string]string{"t": text.String()})
+		if err != nil {
+			t.Fatalf("Marshal() error = %v", err)
+		}
+		echo := handlerTool("echo", officina.Read, func(context.Context, jsontext.Value) (string, error) {
+			return text.String(), nil
+		})
+		model := officinatest.NewModel("scripted",
+			officinatest.ToolUseReply(officinatest.ToolUseBlock("c1", "echo", string(input))),
+			officinatest.TextReply(text.String()))
+		sink := &memorySink{}
+		agent, err := officina.NewAgent(model, instructions, officina.AgentOptions{
+			Tools: []officina.Tool{echo}, AuditSink: sink, Secrets: secrets,
+		})
+		if err != nil {
+			t.Fatalf("NewAgent() error = %v", err)
+		}
+		var c officina.Conversation
+		events, result := agent.Stream(context.Background(), &c, "Go", officina.RunOptions{})
+		var seen []string
+		for e := range events {
+			switch e.(type) {
+			case officina.ConversationAppended, officina.TextStreamed:
+				// The two places a secret may appear, by design.
+			default:
+				seen = append(seen, fmt.Sprint(e))
+			}
+		}
+		res, err := result()
+		if err != nil {
+			t.Fatalf("result() error = %v", err)
+		}
+
+		redacted := []string{res.Text, results(c.Messages()[2])[0].Content}
+		for _, e := range sink.Entries() {
+			seen = append(seen, e.Input)
+			if e.Kind == officina.AuditToolEnded {
+				redacted = append(redacted, e.Detail)
+			}
+		}
+		for _, out := range redacted {
+			if left := strings.ReplaceAll(out, "[redacted]", ""); left != fillers.String() {
+				t.Fatalf("redacting %q left %q of %q, want only the fillers %q", text.String(), left, out, fillers.String())
+			}
+		}
+		seen = append(seen, redacted...)
+		for _, s := range secrets {
+			quoted, err := json.Marshal(s)
+			if err != nil {
+				t.Fatalf("Marshal() error = %v", err)
+			}
+			for _, form := range []string{s, string(quoted[1 : len(quoted)-1])} {
+				for _, out := range seen {
+					if strings.Contains(out, form) {
+						t.Fatalf("secret %q reached %q", form, out)
+					}
+				}
+			}
+		}
 	})
 }
 

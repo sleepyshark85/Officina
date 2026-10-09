@@ -19,6 +19,13 @@ import (
 
 func ok(context.Context, jsontext.Value) (string, error) { return "ok", nil }
 
+// panickingApprover is a host's approver with a bug.
+type panickingApprover struct{}
+
+func (panickingApprover) Approve(context.Context, officina.Tool, officina.ToolCall) (officina.Approval, error) {
+	panic("no console")
+}
+
 func TestRun_AGT02_TheRunCallsToolsThenTheModelAgainUntilItEnds(t *testing.T) {
 	t.Parallel()
 	search := handlerTool("search", officina.Read, func(_ context.Context, input jsontext.Value) (string, error) {
@@ -91,6 +98,10 @@ func TestRun_TOOL02_TOOL04_TOOL05_FailuresComeBackAsErrorResultsAndTheRunContinu
 		{
 			"failing approver", officina.Tool{NeedsApproval: true}, `{"isbn":"1"}`, officinatest.NewApprover(),
 			"The call was denied: asking for approval failed: scripted approver: request 1 has no answer left",
+		},
+		{
+			"panicking approver", officina.Tool{NeedsApproval: true}, `{"isbn":"1"}`, panickingApprover{},
+			"The call was denied: asking for approval failed: the approver panicked: no console",
 		},
 	}
 	for _, tt := range tests {
@@ -258,14 +269,13 @@ func TestRun_TOOL03_ReadsOverlapAndWritesRunAloneInOrder(t *testing.T) {
 func TestRun_CTX06_ResultsOfOneReplyReturnInOneMessageInCallOrder(t *testing.T) {
 	t.Parallel()
 	synctest.Test(t, func(t *testing.T) {
+		// The first call finishes last: only once the host has seen the second one finish.
 		second := make(chan struct{})
-		// The first call finishes last.
 		slow := handlerTool("slow", officina.Read, func(context.Context, jsontext.Value) (string, error) {
 			<-second
 			return "slow", nil
 		})
 		fast := handlerTool("fast", officina.Read, func(context.Context, jsontext.Value) (string, error) {
-			close(second)
 			return "fast", nil
 		})
 		model := officinatest.NewModel("scripted", officinatest.ToolUseReply(
@@ -274,7 +284,12 @@ func TestRun_CTX06_ResultsOfOneReplyReturnInOneMessageInCallOrder(t *testing.T) 
 		var c officina.Conversation
 
 		events, _ := stream(t.Context(), t, newAgent(t, model, slow, fast), &c, "Go", officina.RunOptions{},
-			func(officina.RunEvent) bool { return true })
+			func(e officina.RunEvent) bool {
+				if f, ok := e.(officina.ToolCallFinished); ok && f.Call.ID == "c2" {
+					close(second)
+				}
+				return true
+			})
 
 		var finished []string
 		for _, e := range events {

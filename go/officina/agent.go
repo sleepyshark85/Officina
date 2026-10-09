@@ -10,6 +10,8 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"unicode/utf16"
+	"unicode/utf8"
 )
 
 // Agent is what an agent is: a model and instructions, and optionally tools, an approver and an audit sink. It is
@@ -19,11 +21,12 @@ type Agent struct {
 	instructions string
 	tools        []Tool
 	// schemas holds each tool's compiled input schema, in the order of tools.
-	schemas     []*schema
-	approver    Approver
-	auditSink   AuditSink
-	name        string
-	secrets     *strings.Replacer
+	schemas   []*schema
+	approver  Approver
+	auditSink AuditSink
+	name      string
+	// secrets holds every form of each secret that is redacted.
+	secrets     []string
 	fingerprint string
 }
 
@@ -90,7 +93,7 @@ func NewAgent(model Model, instructions string, opts AgentOptions) (*Agent, erro
 	}
 	return &Agent{
 		model: model, instructions: instructions, tools: tools, schemas: schemas, approver: opts.Approver,
-		auditSink: opts.AuditSink, name: opts.Name, secrets: replacer(opts.Secrets), fingerprint: fingerprint,
+		auditSink: opts.AuditSink, name: opts.Name, secrets: secretForms(opts.Secrets), fingerprint: fingerprint,
 	}, nil
 }
 
@@ -109,34 +112,85 @@ func (a *Agent) tool(name string) (tool, bool) {
 	return tool{a.tools[i], a.schemas[i]}, true
 }
 
-// replacer returns a replacer of each secret, as written and as escaped in a JSON string, by "[redacted]"; nil
-// when there are none.
-func replacer(secrets []string) *strings.Replacer {
-	var pairs []string
+// secretForms returns each secret as written and as a JSON string may escape it: with or without <, > and &
+// escaped, with every character beyond ASCII escaped in lower or upper case hex, and with / as written or escaped;
+// sorted and without duplicates.
+func secretForms(secrets []string) []string {
+	var forms []string
 	for _, s := range secrets {
 		if s == "" {
 			continue
 		}
-		pairs = append(pairs, s, "[redacted]")
+		forms = append(forms, s)
 		for _, escape := range []json.Options{jsontext.EscapeForHTML(false), jsontext.EscapeForHTML(true)} {
 			// Only invalid UTF-8 fails, and such a secret cannot appear in a JSON string.
-			if quoted, err := json.Marshal(s, escape); err == nil {
-				pairs = append(pairs, string(quoted[1:len(quoted)-1]), "[redacted]")
+			quoted, err := json.Marshal(s, escape)
+			if err != nil {
+				continue
 			}
+			inner := string(quoted[1 : len(quoted)-1])
+			forms = append(forms, inner, asciiOnly(inner, "%04x"), asciiOnly(inner, "%04X"))
 		}
 	}
-	if pairs == nil {
-		return nil
+	for _, f := range slices.Clone(forms) {
+		forms = append(forms, strings.ReplaceAll(f, "/", `\/`))
 	}
-	return strings.NewReplacer(pairs...)
+	slices.Sort(forms)
+	return slices.Compact(forms)
 }
 
-// redact returns text with the agent's secrets replaced.
+// asciiOnly returns the inside of a JSON string with each character beyond ASCII escaped as a backslash, u and its
+// UTF-16 code units in hex, written with format.
+func asciiOnly(inner, format string) string {
+	var b strings.Builder
+	for _, r := range inner {
+		if r < utf8.RuneSelf {
+			b.WriteRune(r)
+			continue
+		}
+		units := []rune{r}
+		if r1, r2 := utf16.EncodeRune(r); r1 != utf8.RuneError {
+			units = []rune{r1, r2}
+		}
+		for _, u := range units {
+			b.WriteString(`\` + "u" + fmt.Sprintf(format, u))
+		}
+	}
+	return b.String()
+}
+
+// redact returns text with every stretch that holds a form of a secret replaced by "[redacted]". It finds every
+// occurrence of every form in the original text and merges those that overlap or touch, so secrets that share
+// characters are redacted whole whatever their order.
 func (a *Agent) redact(text string) string {
-	if a.secrets == nil {
+	var spans [][2]int
+	for _, form := range a.secrets {
+		for at := 0; ; {
+			i := strings.Index(text[at:], form)
+			if i < 0 {
+				break
+			}
+			spans = append(spans, [2]int{at + i, at + i + len(form)})
+			at += i + 1
+		}
+	}
+	if spans == nil {
 		return text
 	}
-	return a.secrets.Replace(text)
+	slices.SortFunc(spans, func(x, y [2]int) int { return cmp.Compare(x[0], y[0]) })
+	var b strings.Builder
+	done := 0
+	for k := 0; k < len(spans); {
+		start, end := spans[k][0], spans[k][1]
+		for k++; k < len(spans) && spans[k][0] <= end; k++ {
+			end = max(end, spans[k][1])
+		}
+		b.WriteString(text[done:start])
+		b.WriteString("[redacted]")
+		done = end
+	}
+	b.WriteString(text[done:])
+	return b.String()
 }
 
 // prefixFingerprint returns a SHA-256 hash of everything in the prefix that reaches the model. Stored

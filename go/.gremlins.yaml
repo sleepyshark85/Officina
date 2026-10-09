@@ -1,0 +1,6 @@
+# gremlins (G12): go-mutation fails below these. Go S05's baseline was 99.7% efficacy and 82.5–84.7% mutant
+# coverage; the coverage floor sits below that swing (docs/implementations/go.md).
+unleash:
+  threshold:
+    efficacy: 90
+    mutant-coverage: 75
