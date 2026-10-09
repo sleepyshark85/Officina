@@ -72,14 +72,16 @@ func (h *streamable) send(ctx context.Context, msg []byte, id int64, version str
 	if id == 0 {
 		return response{}, nil
 	}
+	// A response, with what the server sends before it, is at most maxMessage bytes.
+	body := &capped{r: resp.Body, left: maxMessage}
 	if media, _, _ := mime.ParseMediaType(resp.Header.Get("Content-Type")); media == "text/event-stream" {
-		return readEvents(resp.Body, id)
+		return readEvents(body, id)
 	}
-	body, err := io.ReadAll(resp.Body)
+	data, err := io.ReadAll(body)
 	if err != nil {
 		return response{}, fmt.Errorf("read the response: %w", err)
 	}
-	if r, got, ok := parseResponse(body); ok && got == id {
+	if r, got, ok := parseResponse(data); ok && got == id {
 		return r, nil
 	}
 	return response{}, errors.New("the server's answer is not a response to the request")
@@ -110,6 +112,30 @@ func readEvents(body io.Reader, id int64) (response, error) {
 			return response{}, errors.New("the server ended its event stream without a response")
 		}
 	}
+}
+
+// capped reads from r until it has read left bytes, then fails with errTooLong if r holds more.
+type capped struct {
+	r    io.Reader
+	left int64
+}
+
+func (c *capped) Read(p []byte) (int, error) {
+	if c.left == 0 {
+		var one [1]byte
+		if n, err := c.r.Read(one[:]); n > 0 {
+			return 0, errTooLong
+		} else if err != nil {
+			return 0, err //nolint:wrapcheck // io.EOF must reach the reader as it is.
+		}
+		return 0, nil
+	}
+	if int64(len(p)) > c.left {
+		p = p[:c.left]
+	}
+	n, err := c.r.Read(p)
+	c.left -= int64(n)
+	return n, err //nolint:wrapcheck // As above.
 }
 
 func (h *streamable) close() {

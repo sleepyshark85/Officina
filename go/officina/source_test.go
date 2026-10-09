@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json/jsontext"
 	"errors"
+	"strings"
 	"sync"
 	"testing"
 
@@ -198,5 +199,28 @@ func TestSourceState_AUD01_StatesPrintTheirNames(t *testing.T) {
 	want := []string{"SourceConnected", "SourceFailed", "SourceLost", "SourceState(0)", "ToolSourceUnavailable"}
 	if diff := cmp.Diff(want, got); diff != "" {
 		t.Errorf("names mismatch (-want +got):\n%s", diff)
+	}
+}
+
+// valueSource is a tool source whose type cannot be compared, as it holds a slice.
+type valueSource struct {
+	names []string
+}
+
+func (valueSource) Name() string                     { return "value" }
+func (valueSource) Connect(context.Context) error    { return nil }
+func (valueSource) Changes() []officina.SourceChange { return nil }
+
+func TestNewAgent_AGT01_ASourceThatCannotBeComparedIsRefused(t *testing.T) {
+	t.Parallel()
+	ok := func(context.Context, jsontext.Value) (string, error) { return "ok", nil }
+	source := valueSource{names: []string{"a"}}
+
+	_, err := officina.NewAgent(officinatest.NewModel("scripted"), instructions, officina.AgentOptions{
+		Tools: []officina.Tool{sourceTool("value__a", source, ok), sourceTool("value__b", source, ok)},
+	})
+
+	if want := "new agent: a tool source cannot be compared"; err == nil || !strings.HasPrefix(err.Error(), want) {
+		t.Errorf("NewAgent() error = %v, want it to start %q", err, want)
 	}
 }

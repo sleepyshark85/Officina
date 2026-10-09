@@ -106,16 +106,19 @@ func NewAgent(model Model, instructions string, opts AgentOptions) (*Agent, erro
 		}
 		schemas[i] = s
 	}
+	sources, err := sourcesOf(tools)
+	if err != nil {
+		return nil, fmt.Errorf("new agent: %w", err)
+	}
 	if err := opts.ContextManagement.check(model.Info()); err != nil {
 		return nil, fmt.Errorf("new agent: %w", err)
 	}
 	a := &Agent{
-		model: model, instructions: instructions, tools: tools, schemas: schemas, sources: sourcesOf(tools),
+		model: model, instructions: instructions, tools: tools, schemas: schemas, sources: sources,
 		approver: opts.Approver, auditSink: opts.AuditSink, name: opts.Name, secrets: secretForms(opts.Secrets),
 		fingerprint:       prefixFingerprint(model.Settings(), instructions, tools, opts.ContextManagement),
 		contextManagement: opts.ContextManagement,
 	}
-	var err error
 	a.telemetry, err = newTelemetry(opts.TracerProvider, opts.MeterProvider, opts.Name, model.Info(),
 		opts.TelemetryContent, a.redact)
 	if err != nil {

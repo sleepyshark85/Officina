@@ -14,21 +14,25 @@ import (
 )
 
 const (
-	// exitWait is how long a closing server may take to exit, once its input is closed, before it is killed.
+	// exitWait is how long a closing server may take to exit, once its input is closed, before it is killed with
+	// every process it started.
 	exitWait = 5 * time.Second
 	// writeFailedWait is how long a failed write waits for the server's exit, whose reason says more.
 	writeFailedWait = time.Second
 	// stderrKept is how much of the end of a server's error output is kept, to say why it ended.
 	stderrKept = 4096
+	// maxMessage is the longest message a server may send, in bytes; a longer one loses the connection.
+	maxMessage = 16 << 20
 )
 
 // stdio is the stdio transport: the server is a child process, and each message is one line of its input or
 // output. Responses are matched to requests by id, so calls may overlap. When the process ends, every waiting
 // request fails, with the last line of its error output, which often says why.
 type stdio struct {
+	cmd   *exec.Cmd
 	stdin io.WriteCloser
-	// stop ends the process's context: its input is closed, and it is killed if it has not exited within exitWait.
-	stop context.CancelFunc
+	// exitWait is how long close waits for the server to exit by itself.
+	exitWait time.Duration
 	// exited is closed once the process has exited and its output has been read; ended says how, by then.
 	exited chan struct{}
 	ended  string
@@ -39,40 +43,79 @@ type stdio struct {
 	writing sync.Mutex
 	mu      sync.Mutex
 	waiting map[int64]chan response
-	stderr  tail
+	// overflow says why the server was stopped for a message too long; "" if it was not.
+	overflow string
+	stderr   tail
 }
 
-// startStdio starts the server's program.
+// startStdio starts the server's program, in a process group of its own.
 func startStdio(server *Server) (*stdio, error) {
-	life, stop := context.WithCancel(context.Background())
-	cmd := exec.CommandContext(life, server.Command, server.Args...)
+	// The process outlives any caller's context: close stops it.
+	cmd := exec.Command(server.Command, server.Args...) //nolint:noctx // See above.
 	cmd.Env = append(os.Environ(), server.Env...)
-	s := &stdio{stop: stop, exited: make(chan struct{}), waiting: map[int64]chan response{}}
-	cmd.Stdout = &lines{line: s.dispatch}
+	ownGroup(cmd)
+	s := &stdio{cmd: cmd, exitWait: server.exitWait, exited: make(chan struct{}), waiting: map[int64]chan response{}}
+	if s.exitWait == 0 {
+		s.exitWait = exitWait
+	}
+	cmd.Stdout = &lines{max: maxMessage, line: s.dispatch, tooLong: s.tooLong}
 	cmd.Stderr = &s.stderr
+	// Once the server has exited, a process it started that still holds its output does not hold up Wait for
+	// longer than this.
+	cmd.WaitDelay = s.exitWait
 	stdin, err := cmd.StdinPipe()
 	if err == nil {
 		s.stdin = stdin
-		// Closing its input lets the server exit by itself, as a container must to be removed; WaitDelay later,
-		// it is killed.
-		cmd.Cancel = stdin.Close
-		cmd.WaitDelay = exitWait
 		err = cmd.Start()
 	}
 	if err != nil {
-		stop()
 		return nil, fmt.Errorf("mcp server %q could not be started (%s): %w", server.Name, server.Command, err)
 	}
 	s.wg.Go(func() {
 		// How it exited matters less than what it said: the error output names the cause.
 		_ = cmd.Wait()
+		endGroup(cmd.Process.Pid)
+		s.mu.Lock()
 		s.ended = "it closed its connection"
+		if s.overflow != "" {
+			s.ended = s.overflow
+		}
+		s.mu.Unlock()
 		if said := s.stderr.lastLine(); said != "" {
 			s.ended += ": " + said
 		}
 		close(s.exited)
 	})
 	return s, nil
+}
+
+// tooLong stops a server that sent a message longer than maxMessage.
+func (s *stdio) tooLong() {
+	s.mu.Lock()
+	s.overflow = fmt.Sprintf("it sent a message longer than %d MB", maxMessage>>20)
+	s.mu.Unlock()
+	s.kill()
+}
+
+// kill kills the server and every process it started.
+func (s *stdio) kill() {
+	killTree(s.cmd.Process.Pid)
+	// Where the tree could not be killed, the server itself is; it may have exited already.
+	_ = s.cmd.Process.Kill()
+}
+
+// close closes the server's input, so it can exit by itself, as a container must to be removed. One that has not
+// exited within exitWait is killed with every process it started. close returns once the server has exited.
+func (s *stdio) close() {
+	_ = s.stdin.Close() // A failure means it was closed already.
+	timer := time.NewTimer(s.exitWait)
+	defer timer.Stop()
+	select {
+	case <-s.exited:
+	case <-timer.C:
+		s.kill()
+	}
+	s.wg.Wait()
 }
 
 func (s *stdio) send(ctx context.Context, msg []byte, id int64, _ string) (response, error) {
@@ -147,26 +190,39 @@ func (s *stdio) dispatch(line []byte) {
 	}
 }
 
-func (s *stdio) close() {
-	s.stop()
-	s.wg.Wait()
+// lines splits what is written to it into lines, and hands each, without its line ending, to line. A line longer
+// than max bytes is not kept: tooLong is told, once, and every later write fails.
+type lines struct {
+	buf     []byte
+	max     int
+	line    func([]byte)
+	tooLong func()
+	failed  bool
 }
 
-// lines splits what is written to it into lines, and hands each, without its line ending, to line.
-type lines struct {
-	buf  []byte
-	line func([]byte)
-}
+// errTooLong is a server's message over the length a transport accepts.
+var errTooLong = fmt.Errorf("a message is longer than %d MB", maxMessage>>20)
 
 func (l *lines) Write(p []byte) (int, error) {
+	if l.failed {
+		return 0, errTooLong
+	}
 	l.buf = append(l.buf, p...)
 	for {
 		end := bytes.IndexByte(l.buf, '\n')
 		if end < 0 {
 			break
 		}
+		if end > l.max {
+			break
+		}
 		l.line(bytes.Clone(bytes.TrimSuffix(l.buf[:end], []byte("\r"))))
 		l.buf = l.buf[end+1:]
+	}
+	if len(l.buf) > l.max {
+		l.failed, l.buf = true, nil
+		l.tooLong()
+		return 0, errTooLong
 	}
 	if len(l.buf) == 0 {
 		l.buf = nil

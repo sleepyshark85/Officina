@@ -46,15 +46,20 @@ func (s SourceState) String() string {
 	return name(int(s), "SourceState", "SourceConnected", "SourceFailed", "SourceLost")
 }
 
-// sourcesOf returns the distinct sources of tools, in the order of the tools.
-func sourcesOf(tools []Tool) []ToolSource {
-	var sources []ToolSource
+// sourcesOf returns the distinct sources of tools, in the order of the tools. It fails for a source that cannot be
+// compared, which == panics on.
+func sourcesOf(tools []Tool) (sources []ToolSource, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			sources, err = nil, fmt.Errorf("a tool source cannot be compared, as it must be: %v", r)
+		}
+	}()
 	for _, t := range tools {
 		if t.Source != nil && !slices.Contains(sources, t.Source) {
 			sources = append(sources, t.Source)
 		}
 	}
-	return sources
+	return sources, nil
 }
 
 // connectSources connects each of the agent's tool sources and records their changes; it returns why the run

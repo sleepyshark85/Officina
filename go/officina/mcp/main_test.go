@@ -2,6 +2,7 @@ package mcp_test
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json/jsontext"
 	"encoding/json/v2"
@@ -11,10 +12,12 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"strconv"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"go.uber.org/goleak"
 
@@ -45,9 +48,20 @@ func TestMain(m *testing.M) {
 //   - serve: serves the tools echo (annotated read-only), upper (no annotations), fail (an error result), token (the
 //     credential in FAKE_MCP_TOKEN), pid (its process id) and crash (the process exits mid-call);
 //   - complain: reads the first request, says why it cannot go on on its error output, and exits;
-//   - silent <file>: writes its process id to the file and never answers, until its input ends.
+//   - silent <file>: writes its process id to the file and never answers, until its input ends;
+//   - stubborn <file> serve|silent: starts a child that shares its output (sleeper), writes its own and the child's
+//     process ids to the file, serves or stays silent, and never exits by itself, even once its input ends;
+//   - flood: reads the first request and answers with a line longer than a message may be.
 func fake(mode string, args []string) int {
 	switch mode {
+	case "stubborn":
+		return stubborn(args[0], args[1] == "serve")
+	case "sleeper":
+		time.Sleep(time.Hour)
+	case "flood":
+		_, _ = bufio.NewReader(os.Stdin).ReadString('\n')           // Any line, or none.
+		_, _ = os.Stdout.Write(bytes.Repeat([]byte("x"), 16<<20+1)) // The test sees what it got.
+		_, _ = io.Copy(io.Discard, os.Stdin)                        // Until the input ends.
 	case "serve":
 		yes := true
 		server := officinatest.NewMCPServer(
@@ -79,11 +93,7 @@ func fake(mode string, args []string) int {
 		_, _ = bufio.NewReader(os.Stdin).ReadString('\n') // Any line, or none.
 		fmt.Fprintln(os.Stderr, "configuration file missing")
 	case "silent":
-		// Written aside and then moved, so the test never reads the file half written.
-		if err := os.WriteFile(args[0]+".tmp", []byte(strconv.Itoa(os.Getpid())), 0o600); err != nil {
-			return 1
-		}
-		if err := os.Rename(args[0]+".tmp", args[0]); err != nil {
+		if writePIDs(args[0], os.Getpid()) != nil {
 			return 1
 		}
 		_, _ = io.Copy(io.Discard, os.Stdin) // Until the input ends.
@@ -91,6 +101,39 @@ func fake(mode string, args []string) int {
 		return 2
 	}
 	return 0
+}
+
+// stubborn runs the stubborn fake server, which writes "<its pid> <its child's pid>" to file.
+func stubborn(file string, serve bool) int {
+	exe, err := os.Executable()
+	if err != nil {
+		return 1
+	}
+	child := exec.CommandContext(context.Background(), exe, fakeArg, "sleeper")
+	child.Stdout = os.Stdout
+	if err := child.Start(); err != nil {
+		return 1
+	}
+	if writePIDs(file, os.Getpid(), child.Process.Pid) != nil {
+		return 1
+	}
+	if serve {
+		_ = officinatest.NewMCPServer().Serve(context.Background(), os.Stdin, os.Stdout) // Until the input ends.
+	}
+	time.Sleep(time.Hour)
+	return 0
+}
+
+// writePIDs writes the process ids to file aside and then moves it, so the test never reads it half written.
+func writePIDs(file string, pids ...int) error {
+	text := make([]string, len(pids))
+	for i, pid := range pids {
+		text[i] = strconv.Itoa(pid)
+	}
+	if err := os.WriteFile(file+".tmp", []byte(strings.Join(text, " ")), 0o600); err != nil {
+		return err
+	}
+	return os.Rename(file+".tmp", file)
 }
 
 // text returns the "text" property of a call's arguments.

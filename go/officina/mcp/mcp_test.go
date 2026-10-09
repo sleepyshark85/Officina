@@ -446,22 +446,46 @@ func TestClose_MCP01_ClosingStopsTheServerAndItsToolsThenGiveErrorResults(t *tes
 	}
 }
 
-// waitForPID waits for the silent fake server to write its process id to file.
+// waitForPID waits for a fake server to write its process id to file.
 func waitForPID(t *testing.T, file string) int {
+	t.Helper()
+	return waitForPIDs(t, file)[0]
+}
+
+// waitForPIDs waits for a fake server to write process ids to file, and returns them.
+func waitForPIDs(t *testing.T, file string) []int {
 	t.Helper()
 	for {
 		if data, err := os.ReadFile(file); err == nil {
-			pid, err := strconv.Atoi(string(data))
-			if err != nil {
-				t.Fatalf("the pid file holds %q", data)
+			var pids []int
+			for field := range strings.FieldsSeq(string(data)) {
+				pid, err := strconv.Atoi(field)
+				if err != nil {
+					t.Fatalf("the pid file holds %q", data)
+				}
+				pids = append(pids, pid)
 			}
-			return pid
+			return pids
 		}
 		select {
 		case <-t.Context().Done():
 			t.Fatal("the fake server never started")
 		case <-time.After(10 * time.Millisecond):
 		}
+	}
+}
+
+// waitExited waits for the process pid to have exited and been waited for: a process the server started is waited
+// for by the system once its parent has gone, which takes a moment.
+func waitExited(t *testing.T, pid int) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for !exited(pid) {
+		if time.Now().After(deadline) {
+			t.Errorf("process %d is still running", pid)
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 }
 

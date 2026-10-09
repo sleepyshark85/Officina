@@ -113,7 +113,7 @@ func FuzzLines_MCP01_SplitsTheOutputIntoLinesHoweverItIsWritten(f *testing.F) {
 			return
 		}
 		var got []string
-		l := &lines{line: func(line []byte) { got = append(got, string(line)) }}
+		l := &lines{max: maxMessage, line: func(line []byte) { got = append(got, string(line)) }}
 		for rest := output; len(rest) > 0; {
 			n := min(chunk, len(rest))
 			if written, err := l.Write(rest[:n]); written != n || err != nil {

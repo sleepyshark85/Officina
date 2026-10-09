@@ -32,6 +32,9 @@ type Server struct {
 	// URL is the server's Streamable HTTP endpoint; Header is sent with every request, such as a credential.
 	URL    string
 	Header http.Header
+
+	// exitWait, when set, replaces exitWait for this server, so tests of a stubborn one stay fast.
+	exitWait time.Duration
 }
 
 // Secrets returns the values that may hold credentials: those of Env and Header. Give them to the agent as
@@ -54,12 +57,33 @@ func (s Server) Secrets() []string {
 	return secrets
 }
 
-// redact returns text with the server's credentials replaced by "[redacted]".
+// redact returns text with every stretch that holds one of the server's credentials replaced by "[redacted]", as
+// the core redacts an agent's secrets: it finds every occurrence of every credential in the original text and
+// merges those that overlap or touch, so credentials that share characters are redacted whole whatever their order.
 func (s Server) redact(text string) string {
-	for _, secret := range s.Secrets() {
-		text = strings.ReplaceAll(text, secret, "[redacted]")
+	secrets := s.Secrets()
+	var b strings.Builder
+	done, start, end := 0, -1, -1
+	for at := range len(text) {
+		for _, secret := range secrets {
+			if !strings.HasPrefix(text[at:], secret) {
+				continue
+			}
+			if at > end {
+				if start >= 0 {
+					b.WriteString(text[done:start] + "[redacted]")
+					done = end
+				}
+				start = at
+			}
+			end = max(end, at+len(secret))
+		}
 	}
-	return text
+	if start < 0 {
+		return text
+	}
+	b.WriteString(text[done:start] + "[redacted]" + text[end:])
+	return b.String()
 }
 
 // check reports what makes the server unusable.
@@ -195,7 +219,7 @@ func (s *Source) open(ctx context.Context) (*conn, error) {
 		c.t = newStreamable(&s.server)
 	} else {
 		// The process outlives ctx, which bounds only the connecting: Close stops it.
-		t, err := startStdio(&s.server) //nolint:contextcheck // See above.
+		t, err := startStdio(&s.server)
 		if err != nil {
 			return nil, err
 		}
@@ -226,8 +250,10 @@ func (s *Source) Changes() []officina.SourceChange {
 }
 
 // Close closes the connection. A stdio server's input is closed, so it can exit by itself; one that has not
-// within 5 seconds is killed. Close returns once it has exited. The tools then give error results, and runs fail
-// to connect the source.
+// within 5 seconds is killed with every process it started. On Unix the server runs in a process group of its own,
+// and what is left of the group is killed once it has exited too; on Windows a process whose parent has exited is no
+// longer found, and is not stopped. Close returns once the server has exited. The tools then give error results,
+// and runs fail to connect the source.
 func (s *Source) Close() {
 	s.connecting.Lock()
 	defer s.connecting.Unlock()
