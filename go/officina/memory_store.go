@@ -76,9 +76,9 @@ func (s *MapMemoryStore) Delete(_ context.Context, scope, path string) error {
 }
 
 // FileMemoryStore keeps memory files on disk: each scope is a directory, named by the hex of its UTF-8 bytes so
-// scopes that differ in case stay apart, of UTF-8 text files. The scope's directory must not be a link, and a link
-// under it is followed only where it stays in the scope, so no file outside the scope is reached; files reached only
-// through a link are not listed. Directories left empty are removed. Create it with NewFileMemoryStore.
+// scopes that differ in case stay apart, of UTF-8 text files. The scope's directory must not be a link; under it,
+// only a relative link that stays in the scope is followed, and an absolute one is refused even when it points
+// inside, so no file outside the scope is reached; files reached only through a link are not listed. Directories left empty are removed. Create it with NewFileMemoryStore.
 //
 // It guards against the model's paths, not against other processes changing the directory. On a case-insensitive
 // file system, paths in one scope that differ only in case name the same file.
