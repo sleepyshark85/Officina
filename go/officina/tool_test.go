@@ -50,7 +50,7 @@ func TestNewTool_TOOL01_DerivesTheSchemaFromTheInputType(t *testing.T) {
 	}
 
 	want := `{"type":"object","properties":{` +
-		`"isbn":{"type":"string","description":"The book's ISBN."},` +
+		`"isbn":{"description":"The book's ISBN.","type":"string"},` +
 		`"copies":{"type":"integer","minimum":0},` +
 		`"price":{"type":"number"},` +
 		`"gift":{"type":"boolean"},` +

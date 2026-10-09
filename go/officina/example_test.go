@@ -141,7 +141,7 @@ func ExampleNewTool() {
 	fmt.Println(res.Text)
 	// Output:
 	// search -> Emma: 3 in stock
-	// {"type":"object","properties":{"title":{"type":"string","description":"The book's title, or part of it."}},"required":["title"],"additionalProperties":false}
+	// {"type":"object","properties":{"title":{"description":"The book's title, or part of it.","type":"string"}},"required":["title"],"additionalProperties":false}
 	// Emma is in stock.
 }
 
@@ -172,7 +172,7 @@ func ExampleNewOutput() {
 	fmt.Println(string(model.Requests()[0].OutputSchema))
 	fmt.Printf("%+v\n", res.Output.(order))
 	// Output:
-	// {"type":"object","properties":{"customer":{"type":"string"},"copies":{"type":"integer","description":"How many copies."}},"required":["customer","copies"],"additionalProperties":false}
+	// {"type":"object","properties":{"customer":{"type":"string"},"copies":{"description":"How many copies.","type":"integer"}},"required":["customer","copies"],"additionalProperties":false}
 	// {Customer:Ana Copies:2}
 }
 

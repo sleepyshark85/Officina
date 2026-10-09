@@ -13,6 +13,7 @@ import (
 
 	"github.com/sleepyshark85/officina/go/internal/bookshop"
 	"github.com/sleepyshark85/officina/go/officina"
+	"github.com/sleepyshark85/officina/go/officina/claude"
 )
 
 // The live smoke tests: the real console, Claude in demo mode and the database in Docker, with only the staff member
@@ -72,18 +73,9 @@ func TestLive_TEST04_APP17_DemoModeCompactsAfterTheDemoScriptsSearches(t *testin
 // budget US dollars, and returns the transcript and each model call's usage, in order.
 func liveSession(t *testing.T, d *database, budget float64, script ...any) (string, []officina.Usage) {
 	t.Helper()
-	if os.Getenv("ANTHROPIC_API_KEY") == "" {
-		t.Fatal("the live tests need ANTHROPIC_API_KEY")
-	}
-	// The SDK sends through http.DefaultClient; its connections must not outlive the tests.
-	t.Cleanup(http.DefaultClient.CloseIdleConnections)
-	claude, err := bookshop.Model(true)
-	if err != nil {
-		t.Fatalf("Model() error = %v", err)
-	}
-	model := &metered{Model: claude}
+	model := liveModel(t, true)
 	out := &transcript{}
-	app, err := bookshop.Build(t.Context(), bookshop.Config{
+	console, err := bookshop.Build(t.Context(), bookshop.Config{
 		Database: d.url, Model: model, Memory: &officina.MapMemoryStore{}, In: &input{t: t, script: script}, Out: out,
 		Echo: true, Demo: true,
 		Budgets: bookshop.Budgets{Reply: budget, Session: budget},
@@ -91,8 +83,8 @@ func liveSession(t *testing.T, d *database, budget float64, script ...any) (stri
 	if err != nil {
 		t.Fatalf("Build() error = %v", err)
 	}
-	defer app.Close()
-	if err := app.Run(t.Context()); err != nil {
+	defer console.Close()
+	if err := console.Run(t.Context()); err != nil {
 		t.Fatalf("Run() error = %v\ntranscript:\n%s", err, out)
 	}
 	calls := model.usage()
@@ -105,6 +97,35 @@ func liveSession(t *testing.T, d *database, budget float64, script ...any) (stri
 		t.Errorf("a reply failed:\n%s", out)
 	}
 	return out.String(), calls
+}
+
+// liveModel returns the application's model, in demo mode or not, recording each call's usage, with a client of the
+// test's own, so its connections do not outlive the test.
+func liveModel(t *testing.T, demo bool) *metered {
+	t.Helper()
+	if os.Getenv("ANTHROPIC_API_KEY") == "" {
+		t.Fatal("the live tests need ANTHROPIC_API_KEY")
+	}
+	app, err := bookshop.Model(demo)
+	if err != nil {
+		t.Fatalf("Model() error = %v", err)
+	}
+	cache := claude.CacheOneHour
+	if demo {
+		cache = claude.CacheFiveMinutes
+	}
+	client := &http.Client{Transport: &http.Transport{Proxy: http.ProxyFromEnvironment, ForceAttemptHTTP2: true}}
+	t.Cleanup(client.CloseIdleConnections)
+	model, err := claude.New(claude.Opus55, claude.EffortMedium, claude.Options{
+		MaxOutputTokens: 16_000, PrefixCache: cache, ConversationCache: cache, HTTPClient: client,
+	})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	if model.Settings() != app.Settings() {
+		t.Fatalf("the test's model is %q, the application's %q", model.Settings(), app.Settings())
+	}
+	return &metered{Model: model}
 }
 
 // cacheReadFromTheSecondCall checks that there were several model calls and each after the first read the cache.

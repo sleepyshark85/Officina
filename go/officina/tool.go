@@ -231,7 +231,13 @@ func (n *node) json() jsontext.Value {
 }
 
 func (n *node) append(b []byte) []byte {
-	b = append(b, `{"type":`...)
+	// The description comes first, as .NET's schema exporter writes it: a session one implementation started resumes
+	// in the other only if each schema is the same bytes.
+	b = append(b, '{')
+	if n.description != "" {
+		b = append(quote(append(b, `"description":`...), n.description), ',')
+	}
+	b = append(b, `"type":`...)
 	if len(n.types) == 1 {
 		b = quote(b, n.types[0])
 	} else {
@@ -243,9 +249,6 @@ func (n *node) append(b []byte) []byte {
 			b = quote(b, t)
 		}
 		b = append(b, ']')
-	}
-	if n.description != "" {
-		b = quote(append(b, `,"description":`...), n.description)
 	}
 	if n.format != "" {
 		b = quote(append(b, `,"format":`...), n.format)
