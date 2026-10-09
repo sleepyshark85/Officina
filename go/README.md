@@ -3,7 +3,7 @@
 The Go implementation of Officina: the same requirements ([`REQUIREMENTS.md`](../REQUIREMENTS.md)) and architecture
 ([`ARCHITECTURE.md`](../ARCHITECTURE.md)) as the .NET one at the repository root, written as idiomatic Go.
 
-Status: planned. No code yet; slice G01 creates the module here. See
+Status: planned. No code yet; slice Go S01 creates the module here. See
 [`docs/plan/phase-1.md`](../docs/plan/phase-1.md) for the slices (the Go column) and
 [`docs/implementations/go.md`](../docs/implementations/go.md) for the decisions.
 

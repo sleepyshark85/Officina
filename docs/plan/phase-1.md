@@ -1,8 +1,8 @@
 # Phase 1 plan
 
-Implements [`REQUIREMENTS.md`](../../REQUIREMENTS.md) phase 1 in 13 slices, the same for every implementation. .NET's
-slices are `S01`…`S13`; Go's are `G01`…`G13`, so `G03` is Go's `S03`. One slice = one branch (`slice/<id>-<slug>`,
-such as `slice/g03-run-loop`) = one PR. Every slice ends in something that runs, with offline tests. A slice's PR is stacked on
+Implements [`REQUIREMENTS.md`](../../REQUIREMENTS.md) phase 1 in 13 slices, the same for every implementation. A slice
+is cited with its implementation, such as `Go S03`; G1…G15 are Go's decisions in `go.md`, never slices. One slice = one
+branch (`slice/<id>-<slug>`: `slice/s03-run-loop` in .NET, `slice/g03-run-loop` in Go) = one PR. Every slice ends in something that runs, with offline tests. A slice's PR is stacked on
 the previous one until that one is merged.
 
 **Done means, for every slice:** the implementation's gates green (its build, format, lint and test checks, listed
@@ -20,9 +20,9 @@ requirement meant in an edge case; never port its shape.
 | # | Slice | Delivers (requirements) | Acceptance criteria |
 |---|---|---|---|
 | S01 | **Skeleton** | Project layout, packages (core, Claude, MCP, test kit, Bookshop app), pinned dependency versions, CI, the hooks' checks (TEST-03, TEST-05) | Builds and tests on every supported OS in CI · the dependency test fails on a fixture where the core or a non-Claude package uses the Anthropic SDK, and when the core uses anything beyond what D15 allows |
-| S02 | **Live check** | A spike, run once on the implementation's Anthropic SDK, of the provider features phase 1 relies on, on the beta types with Opus 5.5: server-side compaction, tool-result clearing, the memory tool, thinking display `updates`, a mid-conversation system message, structured output, byte-exact replay of stored blocks | The implementation's spike doc records each feature as works / works with a caveat / fails, with evidence, and what the SDK exposes typed or only raw · total API cost under $1 · the spike is not part of the build |
+| S02 | **Live check** | A spike, run once on the implementation's Anthropic SDK, of the provider features phase 1 relies on, on the beta types with Opus 5.5: server-side compaction, tool-result clearing, the memory tool, thinking display `updates`, a mid-conversation system message, structured output, byte-exact replay of stored blocks | The implementation's spike doc records each feature as works / works with a caveat / fails with evidence · total API cost under $1 · the spike is not part of the build |
 | S03 | **Run loop** | Agent definition, conversation (JSON, byte-exact), run engine, results, events, cancellation, prefix fingerprint; scripted model in the test kit (AGT-01…06, AGT-08, GEN-02, GEN-03, CTX-01, CTX-04, EVT-01, TEST-01 part, TEST-02) | A scripted multi-turn run completes with text · every stop reason maps to its result · cancelling mid-stream appends nothing · a changed tool or instruction fails the run with a prefix mismatch · TEST-02 passes within a run and across save → new process → resume · 100 concurrent runs of one definition pass |
-| S04 | **Claude adapter** | Streaming requests on the beta types, cache points, run context as a mid-conversation system message, retries with `Retry-After` and mid-stream, error classes, refusal, usage (MDL-01…06, CTX-02, CTX-03, CTX-05 usage part) | Golden tests of the request layout (tools sorted, instructions frozen, cache points, operator message after the user message), read from the shared test data · retry tests on recorded HTTP · a hello sample that chats live with Opus 5.5 and shows cache reads from the second message |
+| S04 | **Claude adapter** | Streaming requests on the beta types, cache points, run context as a mid-conversation system message, retries with `Retry-After` and mid-stream, error classes, refusal, usage (MDL-01…06, CTX-02, CTX-03, CTX-05 usage part) | Golden tests of the request layout (tools sorted, instructions frozen, cache points, operator message after the user message) · retry tests on recorded HTTP · a hello sample that chats live with Opus 5.5 and shows cache reads from the second message |
 | S05 | **Tools and audit** | Tools from typed functions, the schema validator (Q2), read tools in parallel and writes in order, approval, truncation, error results, the audit recorder, JSON-lines sink; scripted approver (TOOL-01…06, GEN-04, AUD-01…05, TEST-07 part, TEST-08) | Invalid input, a failing handler and a denial each come back as error results and the run continues · reads overlap, writes don't · an unattended run denies approval-requiring calls · a write whose attempt cannot be audited never runs · results of one reply return in one message, in call order · property tests (TEST-07) over generated sequences of runs, cancels, failures and tool calls keep the conversation valid and every tool call answered once, and no write runs before its audit entry · the validator agrees with a reference validator on generated cases (TEST-08) |
 | S06 | **Bookshop console** | Compose file with PostgreSQL, schema and seed; the 9 tools on the plain driver (Q1); console with streaming, tool activity, progress notes, approvals, Ctrl+C, `/help`, `/quit`; run context (APP-01, APP-03…09, APP-13, APP-18) | `docker compose up` then the app runs APP-09's request end to end live · tool tests run against the real database (Linux) · not enough stock comes back as an error result · stopping the database mid-session gives an error answer, and the session works again once it is back · no tool takes SQL text |
 | S07 | **Telemetry and audit view** | Traces and metrics in the core, the Aspire dashboard in the compose file, the app's exporter and logs, the audit table sink with trace ids, `/audit` (EVT-02…04, AUD-03, AUD-06, CTX-05, APP-16, APP-20, TEST-06, TEST-07 part) | In-memory collection proves the span tree, attributes and metrics, and that no message text or secret appears by default; a property test (TEST-07) generates secrets and checks events, telemetry and audit never contain them · a live reply shows in the dashboard as one trace with model and tool spans · an `/audit` entry's link opens its trace |
@@ -49,7 +49,8 @@ Every implementation after the first also meets these, so the implementations st
 
 | Slice | Check |
 |---|---|
-| S04 | Golden request data lives in a top-level `testdata/` that every implementation reads and none rewrites. Stored blocks and messages compare byte for byte in the canonical form (compact, `<` `>` `&` escaped): a stored block from either implementation is replayed byte for byte. The typed parts of a request compare as parsed JSON, as each SDK writes its own key order and escapes |
+| S02 | The spike doc also records, per feature, what the SDK exposes typed and what only as raw JSON |
+| S04 | Golden request data lives in a top-level `testdata/` that every implementation reads and none rewrites: .NET's request layouts (`tests/Sleepyshark.Officina.Claude.Tests/Fixtures/`) and conversation JSON move there in Go S04. Stored blocks and messages compare byte for byte in the canonical form (compact, `<` `>` `&` escaped): a stored block from either implementation is replayed byte for byte. The typed parts of a request compare as parsed JSON, as each SDK writes its own key order and escapes |
 | S07 | The same span names, attributes and metrics, so one dashboard reads every implementation |
 | S06, S08 | The same compose file, SQL schema and seed; a session saved by one implementation resumes in another with the same prefix and cache reads |
 
@@ -60,7 +61,7 @@ How each implementation realizes a slice, where it differs from the shared crite
 
 | Slice | .NET (done) | Go |
 |---|---|---|
-| S01 | Solution and central package versions; the Claude provider, MCP client, scripted model and human, dependency check and build props ported from `~/sources/agentic-core` (its spike notes in `docs/spikes/` there) | `go.mod` (G1, G2), `doc.go` per package, `.golangci.yml`, `go.yml` with its own required checks (G15); hooks run the Go checks for files under `go/` and the .NET ones for the rest; a `go-rules.py` edit hook; the dependency test checks direct imports (G4, G6); checks `gremlins` runs on Go 1.27 (G12) |
+| S01 | Solution and central package versions. From `~/sources/agentic-core` (ARCHITECTURE §13; spike notes in its `docs/spikes/`), ported, not copied wholesale: the dependency check and build props here, the scripted model and human in S03 and S05, the Claude provider in S04, the MCP client in S11 | `go.mod` (G1, G2), `doc.go` per package, `.golangci.yml`, `go.yml` with its own required checks (G15); hooks run the Go checks for files under `go/` and the .NET ones for the rest; a `go-rules.py` edit hook that flags a package without `doc.go` and requirement IDs in comments; the dependency test checks direct imports (G4, G6); checks `gremlins` runs on Go 1.27 (G12) |
 | S02 | [`docs/spikes/claude-features.md`](../spikes/claude-features.md) | [`go/docs/spikes/claude-features.md`](../../go/docs/spikes/claude-features.md): all seven features typed in the SDK; blocks stored in the canonical form and replayed through `param.Override` |
 | S03 | Events as `IAsyncEnumerable`; tool events through an unbounded channel | The run as `iter.Seq[RunEvent]` plus result (G10); `jsontext.Value` blocks in the canonical form (G9), pinned by a test that marshals, unmarshals and marshals again a conversation holding `<`, `&`, non-ASCII and `\u` escapes; `goleak` clean; a consumer that `break`s mid-run leaves no goroutine; 100 concurrent runs under `-race`; sets the core line budget (G13) |
 | S04 | `samples/hello` | Blocks stored canonical as they arrive; retries tested on `httptest.Server`; `examples/hello` |
@@ -69,7 +70,7 @@ How each implementation realizes a slice, where it differs from the shared crite
 | S07 | `ActivitySource` and `Meter` | The OpenTelemetry API with host-passed providers (G6); the SDK's in-memory exporter in tests only |
 | S08 | | The .NET-saved session resumes in Go (above) |
 | S09 | | Fuzz test of path scoping, besides the `rapid` property |
-| S10 | | Checks on-demand compaction and `clear_at` live before relying on them (G02 left them unproven) |
+| S10 | | Checks on-demand compaction and `clear_at` live before relying on them (Go S02 left them unproven) |
 | S11 | | Stdio through `os/exec`, Streamable HTTP through `net/http`; fuzz test of message parsing; the child process is stopped and waited for when the context ends |
 | S12 | | The output schema through S05's schema derivation |
 | S13 | `docs/demo.md` | `examples/` as runnable `Example` tests and programs; the live smoke test behind a build tag; `go/docs/traceability.md` complete |
@@ -78,7 +79,7 @@ How each implementation realizes a slice, where it differs from the shared crite
 
 | Slice | .NET | Go |
 |---|---|---|
-| S01 | Merged | In progress (G01) |
+| S01 | Merged | In progress (Go S01) |
 | S02 | Merged | Merged (#55) |
 | S03–S13 | Merged | Not started |
 
