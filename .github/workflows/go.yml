@@ -144,4 +144,6 @@ jobs:
         # that reads a fixture fails, and every mutant counts as killed.
         env:
           OFFICINA_TESTDATA: ${{ github.workspace }}/testdata
+          # Mutant timeouts come from the coverage run's duration, which a cached test result would make near zero.
+          GOFLAGS: -count=1
         run: gremlins unleash --coverpkg ./officina/... --timeout-coefficient 20 ./officina
