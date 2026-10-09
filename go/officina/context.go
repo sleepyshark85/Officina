@@ -35,20 +35,25 @@ func (c ContextManagement) clears() bool {
 
 // check returns why c cannot be used with a model described by info, or nil.
 func (c ContextManagement) check(info ModelInfo) error {
+	// Each check is an if of its own, not a case, so mutation testing sees its condition covered.
 	t := c.ClearToolResults
-	switch {
-	case c.CompactAt < 0:
+	if c.CompactAt < 0 {
 		return fmt.Errorf("the compaction threshold %d is negative", c.CompactAt)
-	case c.clears() && t.After < 1:
+	}
+	if c.clears() && t.After < 1 {
 		return fmt.Errorf("tool results are cleared after %d tool calls; it must be at least 1", t.After)
-	case t.Keep < 0:
+	}
+	if t.Keep < 0 {
 		return fmt.Errorf("tool results clearing keeps %d tool calls; it cannot keep fewer than 0", t.Keep)
-	case t.AtLeastTokens < 0:
+	}
+	if t.AtLeastTokens < 0 {
 		return fmt.Errorf("tool results clearing clears at least %d tokens; it cannot clear fewer than 0",
 			t.AtLeastTokens)
-	case c.CompactAt > 0 && !info.Compacts:
+	}
+	if c.CompactAt > 0 && !info.Compacts {
 		return errors.New("the model's provider does not compact conversations")
-	case c.clears() && !info.ClearsToolResults:
+	}
+	if c.clears() && !info.ClearsToolResults {
 		return errors.New("the model's provider does not clear old tool results")
 	}
 	return nil

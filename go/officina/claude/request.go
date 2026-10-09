@@ -70,9 +70,8 @@ func contextManagement(c officina.ContextManagement) (anthropic.BetaContextManag
 				OfToolUses: &anthropic.BetaToolUsesTriggerParam{Value: int64(t.After)},
 			},
 			Keep: anthropic.BetaToolUsesKeepParam{Value: int64(t.Keep), Type: "tool_uses"},
-		}
-		if t.AtLeastTokens > 0 {
-			clearing.ClearAtLeast = anthropic.BetaInputTokensClearAtLeastParam{Value: t.AtLeastTokens}
+			// A minimum of zero leaves the parameter at its zero value, which the SDK leaves out: none.
+			ClearAtLeast: anthropic.BetaInputTokensClearAtLeastParam{Value: t.AtLeastTokens},
 		}
 		config.Edits = append(config.Edits, anthropic.BetaContextManagementConfigEditUnionParam{
 			OfClearToolUses20250919: clearing,

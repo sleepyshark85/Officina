@@ -176,6 +176,7 @@ func TestRun_CTX04_HIST01_ContextManagementIsPartOfThePrefix(t *testing.T) {
 		{CompactAt: 50_000},
 		{CompactAt: 60_000},
 		{ClearToolResults: officina.ToolResultClearing{After: 12}},
+		{ClearToolResults: officina.ToolResultClearing{After: 1}},
 		{ClearToolResults: officina.ToolResultClearing{After: 12, Keep: 1}},
 		{ClearToolResults: officina.ToolResultClearing{After: 12, AtLeastTokens: 1}},
 		managed(),

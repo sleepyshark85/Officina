@@ -283,6 +283,8 @@ func (c *console) reply(ctx context.Context, agent *officina.Agent, s *session, 
 	switch {
 	case res.Status == officina.Completed && strings.TrimSpace(res.Text) == "" && compacted:
 		c.writeLine("[The conversation was compacted and the reply has no text. Please ask again.]")
+	case res.Status == officina.Completed && strings.TrimSpace(res.Text) == "":
+		c.writeLine("[The reply has no text. Please ask again.]")
 	case res.Status == officina.Stopped && res.Stop == officina.Cancelled:
 		c.writeLine("[Cancelled.]")
 	case res.Status == officina.Stopped && res.Stop == officina.Budget && left <= c.budgets.Reply:

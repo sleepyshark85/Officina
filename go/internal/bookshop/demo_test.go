@@ -69,3 +69,28 @@ func TestConsole_HIST01_HIST02_OutsideDemoModeCompactionAndClearingComeLate(t *t
 		t.Errorf("context management mismatch (-want +got):\n%s", diff)
 	}
 }
+
+func TestConsole_APP01_HIST04_AReplyWithoutTextSaysSoAndWhetherTheConversationWasCompacted(t *testing.T) {
+	t.Parallel()
+	thinking := officina.Block{Raw: jsontext.Value(`{"type":"thinking","thinking":"","signature":"c2ln"}`)}
+	model := officinatest.NewModel("scripted",
+		officinatest.Reply{Events: []officina.ModelEvent{
+			officina.BlockReceived{Block: officina.Block{Raw: jsontext.Value(`{"type":"compaction","content":"Summary."}`)}},
+			officina.CompactionReported{Tokens: 50_100, SummaryTokens: 900},
+			officina.Finished{Reason: officina.FinishEnd},
+		}},
+		officinatest.Reply{Events: []officina.ModelEvent{
+			officina.BlockReceived{Block: thinking}, officina.Finished{Reason: officina.FinishEnd},
+		}})
+
+	transcript := sessionOf(t, bookshop.Config{Demo: true}, newDatabase(t), model, "", "Sam", "Count the books.",
+		"And now?", "/quit")
+
+	inOrder(t, transcript,
+		"you> Count the books.\n",
+		"  ~ Conversation compacted: 50,100 tokens summarized into 900.\n",
+		"[The conversation was compacted and the reply has no text. Please ask again.]\n",
+		"you> And now?\n",
+		"[The reply has no text. Please ask again.]\n",
+		"you> /quit\n")
+}

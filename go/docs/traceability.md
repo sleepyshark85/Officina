@@ -19,7 +19,7 @@ Tests are under `go/`, shortened as:
 
 | ID | Tests | Also checked by |
 |---|---|---|
-| APP-01 | App: `TestConsole_APP01_TheReplyStreamsWithTextBetweenToolCallsAndEachToolWithItsInputAndOutcome` | |
+| APP-01 | App: `TestConsole_APP01_TheReplyStreamsWithTextBetweenToolCallsAndEachToolWithItsInputAndOutcome`, `TestConsole_APP01_HIST04_AReplyWithoutTextSaysSoAndWhetherTheConversationWasCompacted` | |
 | APP-02 | App: `TestConsole_APP02_HelpAndUnknownCommandsAreAnsweredAndQuitLeaves` (`/help`, `/quit`), `TestConsole_APP02_NewStartsASessionOfItsOwnAndResumeOfAnUnknownOrUnreadableIdSaysSo` (`/new`, `/resume`), `TestConsole_APP10_QuitRestartAndResumeContinuesTheSessionWithItsPrefixByteIdentical` (`/sessions`), `TestConsole_APP14_TheStatusLineAndCostShowTheTokensCacheShareAndCostOfTheReplyAndTheSession` (`/cost`), `TestConsole_APP16_APP20_AuditShowsTheSessionsEntriesByRunEachLinkedToItsTraceWhichTheLogsJoin` (`/audit`, `/audit <id>`) | `/memory` comes with Go S09; titles and summaries in `/sessions` with Go S12 |
 | APP-03 | App: `TestConsole_APP03_CancellingStopsTheReplyAndTheSessionGoesOn`, `TestConsole_APP03_CancellingAtTheApprovalPromptStopsTheReplyAtOnceAndTheChangeIsNotMade` | Live: Ctrl+C through `signal.NotifyContext`, per reply (`cmd/bookshop`) |
 | APP-04 | App: every `TestTools_…` and `TestConsole_…` runs against the shared schema and seed | Inspection: `apps/BookshopAssistant/compose.yaml`, `database/`, shared with .NET |
