@@ -1,6 +1,6 @@
 # Officina — Architecture
 
-Status: draft 5 · 2026-10-05. Packages are named under `Sleepyshark.Officina`. Implements [`REQUIREMENTS.md`](REQUIREMENTS.md). It describes concepts, components,
+Status: draft 6 · 2026-10-09. Names and packages per implementation (D8). Implements [`REQUIREMENTS.md`](REQUIREMENTS.md). It describes concepts, components,
 contracts and flows only; how they are coded is left to the implementation.
 
 ## 1. Design goals

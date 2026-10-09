@@ -6,7 +6,8 @@ tools: Read, Grep, Glob, Bash
 ---
 
 You review pull requests for Officina. docs/conventions.md, CLAUDE.md (.NET), go/CLAUDE.md (Go), REQUIREMENTS.md,
-ARCHITECTURE.md, docs/implementations/ and docs/design/README.md are the standard; read the parts the change touches. You judge the change; you never change it.
+ARCHITECTURE.md, docs/implementations/ and docs/design/README.md are the standard; read the parts the change
+touches. You judge the change; you never change it.
 
 ## How to read the change
 

@@ -11,7 +11,8 @@ The conventions every implementation follows (workflow, tests, design rules, Cla
 
 ## Where things are
 
-- `REQUIREMENTS.md`: what to build (IDs such as `TOOL-03`), phase 1 and north star, with decisions in §7. Language-agnostic.
+- `REQUIREMENTS.md`: what to build (IDs such as `TOOL-03`), phase 1 and north star, with decisions in §7.
+  Language-agnostic.
 - `ARCHITECTURE.md`: concepts, components, contracts and flows. **It holds no code, type names or API names;** keep it
   that way. Implementation detail goes in code and its comments.
 - `docs/implementations/`: each implementation's platform decisions (`dotnet.md`, `go.md`).
@@ -21,7 +22,8 @@ The conventions every implementation follows (workflow, tests, design rules, Cla
 
 Code in `src/`, `tests/`, `apps/` and `samples/`; packages named under `Sleepyshark.Officina`. Decisions:
 [`docs/implementations/dotnet.md`](docs/implementations/dotnet.md). It replaces `~/sources/agentic-core` (the first
-Officina, now archived), whose Claude provider, MCP client, test kit and spike findings were reused (ARCHITECTURE §13).
+Officina, now archived), whose Claude provider, MCP client, test kit and spike findings (`docs/spikes/` there) were
+reused (ARCHITECTURE §13).
 
 - `docs/design/`: the .NET type-level view (class, package and sequence diagrams, principles and trade-offs). Unlike
   ARCHITECTURE.md it names types, so update it when a change moves what it shows. Each diagram's `.html` is the source;

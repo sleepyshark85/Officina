@@ -17,7 +17,8 @@ container, exceptions as panics, builders for everything), rewrite it.
 
 - `gofmt` and `goimports`; `go vet`; `golangci-lint run` with `.golangci.yml`; `go mod tidy` leaves no diff;
   `govulncheck ./...` clean; `go test -race -shuffle=on ./...` green. All before a commit or push, as for .NET.
-- No `GOEXPERIMENT`, no `unsafe`, no `cgo`, no `init()` functions, no `reflect` outside tests.
+- No `GOEXPERIMENT`, no `unsafe`, no `cgo`, no `init()` functions. No `reflect` outside tests, except where the core
+  derives a JSON Schema from a Go type (typed tools and typed output), and only there.
 - New dependencies need a line in `docs/implementations/go.md` saying why the standard library is not enough.
 
 ## Packages and API
@@ -51,8 +52,9 @@ container, exceptions as panics, builders for everything), rewrite it.
 ## Concurrency
 
 - `context.Context` is the first parameter of anything that blocks or does I/O, named `ctx`, never stored in a struct.
-- **Every goroutine has an owner that waits for it** (`sync.WaitGroup`, `errgroup.Group`) and a way to stop (its
-  context). No fire-and-forget. `goleak` in every package's `TestMain` proves it.
+- **Every goroutine has an owner that waits for it** (`sync.WaitGroup` with `wg.Go`) and a way to stop (its
+  context). No fire-and-forget. `goleak` in every package's `TestMain` proves it; the end-to-end tests ignore
+  only testcontainers' own reaper goroutines, by name.
 - The goroutine that sends on a channel closes it. Channels are sized from a known bound (for a reply's tool events,
   the number of calls times the events per call), never "big enough".
 - Prefer a mutex for guarding state and a channel for handing over work; don't use channels as locks. Copy no type
@@ -63,13 +65,14 @@ container, exceptions as panics, builders for everything), rewrite it.
 
 - Table-driven tests with `t.Run` subtests and names that carry the requirement ID (`TestRun_AGT05_CancelMidStream`).
   `t.Parallel()` unless a test shares a boundary fake. `t.Helper()` in helpers, `t.Cleanup` over `defer` in setup.
-- Compare with `cmp.Diff` and report `got` before `want`: `t.Errorf("Foo() mismatch (-want +got):\n%s", diff)`.
+- Compare with `cmp.Diff(want, got)` and print `(-want +got)`; in plain messages, `got` before `want`.
   No assertion libraries.
 - Black-box tests (`package officina_test`) by default; internal tests only for what the API can't reach.
 - `Example` functions for each exported entry point; they run as tests and are the API docs.
 - Fuzz tests (`FuzzX`) for every parser and validator (JSON Schema subset, MCP messages, memory paths); property tests
   with `rapid` for TEST-07.
-- Golden files under `testdata/`, updated only with `-update`, reviewed like code.
+- Golden files under the package's `testdata/`, updated only with `-update`, reviewed like code. The shared files in
+  the repository's top-level `testdata/` are read only: .NET reads them too, and `-update` never writes them.
 
 ## Files
 

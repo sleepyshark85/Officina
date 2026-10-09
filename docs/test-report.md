@@ -30,7 +30,7 @@ From CI run [37560093413](https://github.com/sleepyshark85/officina/actions/runs
   benchmark, which run with `OFFICINA_LIVE_TESTS=1` or `OFFICINA_BENCHMARK=1`.
 - **Windows** skips the tests that need PostgreSQL in Docker (`DatabaseFact`, Linux only).
 - **Fakes** replace only system boundaries: the model, the network and MCP servers, the clock, the human, and storage
-  where a real one is impractical (CLAUDE.md). Most offline tests take milliseconds, but two property tests take just
+  where a real one is impractical (docs/conventions.md). Most offline tests take milliseconds, but two property tests take just
   over a second (see [Open gaps](#open-gaps)); the app's tests against PostgreSQL in Docker take up to about 3 s each
   (measured locally with `--logger trx`; CI does not record per-test times).
 
@@ -72,7 +72,7 @@ mutants); the rest is listed below.
 | Where | Gate |
 |---|---|
 | Required checks (branch protection) | `ubuntu-latest`, `windows-latest` (build with warnings as errors, all tests), `quality` (format, vulnerable packages), `mutation` (changed files above their package's threshold); the branch up to date and conversations resolved |
-| Other checks (not required) | CodeQL for the C# and the workflows; `review`, set by the `reviewer` agent's verdict comment, which CLAUDE.md asks for before a merge |
+| Other checks (not required) | CodeQL for the C# and the workflows; `review`, set by the `reviewer` agent's verdict comment, which docs/conventions.md asks for before a merge |
 | Claude Code hooks, blocking (`.claude/`) | No push to `main` or commit on `main`; branch prefixes; staging in its own command before a commit; before a commit that stages code, the format check and Release build; before a push of more than docs, the tests |
 | Claude Code hooks, reporting | After a `.cs` edit: one type per file named after it, no requirement IDs in comments (Claude is told to fix it) |
 
@@ -91,7 +91,7 @@ Surviving mutants and branches worth a test, most important first:
 | `Output/SchemaValidator.cs` | 49 undetected (17 not wording) | Validates tool input and typed output against their schemas |
 | `ClaudePrices.cs` | 0% | No test pins a price; cost budgets depend on them |
 
-Two offline tests break CLAUDE.md's one-second rule and need speeding up:
+Two offline tests break docs/conventions.md's one-second rule and need speeding up:
 `MemoryPropertyTests.Memory_paths_never_leave_their_scope` (1.0–1.2 s) and
 `ConversationPropertyTests.Any_sequence_of_runs_…` (1.1 s).
 
