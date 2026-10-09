@@ -2,6 +2,7 @@ package officinatest_test
 
 import (
 	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"strings"
 	"testing"
 
@@ -149,4 +150,132 @@ func TestTextBlock_TEST01_StoresRawJSONInTheCanonicalForm(t *testing.T) {
 	if diff := cmp.Diff(want, got); diff != "" {
 		t.Errorf("TextBlock() mismatch (-want +got):\n%s", diff)
 	}
+}
+
+func TestCheckPrefix_TEST02_ComparesToolCallsAndResults(t *testing.T) {
+	t.Parallel()
+	hi := message(officina.User, "Hi")
+	call := func(input string) officina.Message {
+		b := officinatest.ToolUseBlock("c1", "search", `{}`)
+		b.ToolCall.Input = jsontext.Value(input)
+		return officina.Message{Role: officina.Assistant, Blocks: []officina.Block{b}}
+	}
+	result := func(content string) officina.Message {
+		return officina.Message{Role: officina.User, Blocks: []officina.Block{
+			{ToolResult: &officina.ToolResult{CallID: "c1", Content: content}},
+		}}
+	}
+	tests := []struct {
+		name          string
+		first, second []officina.Message
+		same          bool
+	}{
+		{"same", []officina.Message{hi, call(`{}`), result("ok")}, []officina.Message{hi, call(`{}`), result("ok")}, true},
+		{"call input", []officina.Message{hi, call(`{}`)}, []officina.Message{hi, call(`{"q":1}`)}, false},
+		{"call against none", []officina.Message{hi, call(`{}`)}, []officina.Message{hi, message(officina.Assistant, "")}, false},
+		{"result content", []officina.Message{hi, call(`{}`), result("ok")}, []officina.Message{hi, call(`{}`), result("no")}, false},
+		{"result against none", []officina.Message{hi, call(`{}`), result("")}, []officina.Message{hi, call(`{}`), {
+			Role: officina.User, Blocks: []officina.Block{{}},
+		}}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			err := officinatest.CheckPrefix([]officina.Request{{Messages: tt.first}, {Messages: tt.second}})
+
+			if (err == nil) != tt.same {
+				t.Errorf("CheckPrefix() = %v, want the prefix same = %v", err, tt.same)
+			}
+		})
+	}
+}
+
+func TestCheckConversation_TEST07_AnswersEveryToolCallOnceInOrder(t *testing.T) {
+	t.Parallel()
+	hi := message(officina.User, "Hi")
+	calls := officina.Message{Role: officina.Assistant, Blocks: []officina.Block{
+		officinatest.ToolUseBlock("c1", "search", `{}`), officinatest.ToolUseBlock("c2", "search", `{}`),
+	}}
+	answer := func(ids ...string) officina.Message {
+		m := officina.Message{Role: officina.User}
+		for _, id := range ids {
+			m.Blocks = append(m.Blocks, officina.Block{ToolResult: &officina.ToolResult{CallID: id, Content: "ok"}})
+		}
+		return m
+	}
+	done := message(officina.Assistant, "Done.")
+	tests := []struct {
+		name     string
+		messages []officina.Message
+		want     string
+	}{
+		{"answered", []officina.Message{hi, calls, answer("c1", "c2"), done}, ""},
+		{"user message after results", []officina.Message{hi, calls, answer("c1", "c2"), hi, done}, ""},
+		{"operator after results", []officina.Message{
+			hi, calls, answer("c1", "c2"), hi, message(officina.Operator, "Monday."), done,
+		}, ""},
+		{"unanswered", []officina.Message{hi, calls}, `the calls ["c1" "c2"] of the last message have no results`},
+		{"answered by text", []officina.Message{hi, calls, hi}, `message 3 answers calls [], want ["c1" "c2"]`},
+		{"out of order", []officina.Message{hi, calls, answer("c2", "c1")}, `message 3 answers calls ["c2" "c1"]`},
+		{"twice", []officina.Message{hi, calls, answer("c1", "c2", "c2")}, `answers calls ["c1" "c2" "c2"]`},
+		{"answering nothing", []officina.Message{hi, done, answer("c1")}, `message 3 answers calls ["c1"], want []`},
+		{"two text messages", []officina.Message{hi, hi}, "messages 1 and 2 have one role, user"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			err := officinatest.CheckConversation(tt.messages)
+
+			if tt.want == "" && err != nil || tt.want != "" && (err == nil || !strings.Contains(err.Error(), tt.want)) {
+				t.Errorf("CheckConversation() = %v, want %q", err, tt.want)
+			}
+		})
+	}
+}
+
+func TestApprover_TEST01_AnswersInOrderAndRecordsEachCall(t *testing.T) {
+	t.Parallel()
+	approver := officinatest.NewApprover(officina.Approval{Approved: true}, officina.Approval{Reason: "no"})
+	call := func(id string) officina.ToolCall { return officina.ToolCall{ID: id, Name: "order"} }
+
+	first, err1 := approver.Approve(t.Context(), officina.Tool{}, call("c1"))
+	second, err2 := approver.Approve(t.Context(), officina.Tool{}, call("c2"))
+	_, err3 := approver.Approve(t.Context(), officina.Tool{}, call("c3"))
+
+	if err1 != nil || err2 != nil || !first.Approved || second != (officina.Approval{Reason: "no"}) {
+		t.Errorf("answers = %+v, %v and %+v, %v; want approved, then denied with its reason", first, err1, second, err2)
+	}
+	if err3 == nil || err3.Error() != "scripted approver: request 3 has no answer left" {
+		t.Errorf("third Approve() error = %v, want no answer left", err3)
+	}
+	if diff := cmp.Diff([]officina.ToolCall{call("c1"), call("c2"), call("c3")}, approver.Asked()); diff != "" {
+		t.Errorf("asked mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestToolUseBlock_TEST01_StoresTheCallAndItsRawJSON(t *testing.T) {
+	t.Parallel()
+
+	got := officinatest.ToolUseBlock("c1", "search", `{"q":"<b>"}`)
+	invalid := officinatest.ToolUseBlock("c2", "search", `{"q":`)
+
+	want := `{"type":"tool_use","id":"c1","name":"search","input":{"q":"` + htmlEscaped("<b>") + `"}}`
+	if string(got.Raw) != want || string(got.ToolCall.Input) != `{"q":"<b>"}` || got.ToolCall.ID != "c1" {
+		t.Errorf("ToolUseBlock() = %s with call %+v, want %s and the input as given", got.Raw, got.ToolCall, want)
+	}
+	if string(invalid.Raw) != `{"type":"tool_use","id":"c2","name":"search","input":{}}` ||
+		string(invalid.ToolCall.Input) != `{"q":` {
+		t.Errorf("ToolUseBlock() of invalid input = %s with input %s", invalid.Raw, invalid.ToolCall.Input)
+	}
+}
+
+// htmlEscaped returns s as the inside of a JSON string with <, > and & escaped.
+func htmlEscaped(s string) string {
+	quoted, err := json.Marshal(s, jsontext.EscapeForHTML(true))
+	if err != nil {
+		panic(err)
+	}
+	return string(quoted[1 : len(quoted)-1])
 }

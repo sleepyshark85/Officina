@@ -7,7 +7,9 @@ toolchain go1.27.2
 require (
 	github.com/anthropics/anthropic-sdk-go v1.79.1
 	github.com/google/go-cmp v0.7.0
+	github.com/santhosh-tekuri/jsonschema/v6 v6.0.3
 	go.uber.org/goleak v1.3.0
+	pgregory.net/rapid v1.3.0
 )
 
 require (
@@ -22,4 +24,5 @@ require (
 	github.com/tidwall/sjson v1.2.5 // indirect
 	go.yaml.in/yaml/v4 v4.0.0-rc.2 // indirect
 	golang.org/x/sync v0.16.0 // indirect
+	golang.org/x/text v0.27.0 // indirect
 )

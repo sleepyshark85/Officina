@@ -25,7 +25,10 @@ func TestRun_CTX04_AChangedPrefixFailsWithPrefixMismatchBeforeAnyModelCall(t *te
 		{"tool description", "scripted", instructions, []officina.Tool{tool("search", "Finds books.")}},
 		{
 			"tool schema", "scripted", instructions,
-			[]officina.Tool{{Name: "search", Description: search.Description, InputSchema: jsontext.Value(`{"type":"object","properties":{}}`)}},
+			[]officina.Tool{{
+				Name: "search", Description: search.Description, InputSchema: jsontext.Value(`{"type":"object","properties":{}}`),
+				Kind: search.Kind, Handler: search.Handler,
+			}},
 		},
 		{"added tool", "scripted", instructions, []officina.Tool{search, tool("order", "Places an order.")}},
 		{"removed tool", "scripted", instructions, nil},

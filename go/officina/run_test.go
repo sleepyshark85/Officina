@@ -172,7 +172,7 @@ func TestRun_CTX01_RequestHasSortedToolsInstructionsThenUserAndOperatorMessages(
 			{Role: officina.Operator, Blocks: []officina.Block{{Text: "Date: 2026-10-05. Staff: Ana."}}},
 		},
 	}
-	if diff := cmp.Diff([]officina.Request{want}, model.Requests()); diff != "" {
+	if diff := cmp.Diff([]officina.Request{want}, model.Requests(), ignoreHandler()); diff != "" {
 		t.Errorf("requests mismatch (-want +got):\n%s", diff)
 	}
 }
@@ -320,9 +320,6 @@ func TestRun_AGT03_AReplyThatCallsToolsIsNeverLeftWithoutResults(t *testing.T) {
 		finish officina.Finished
 		want   officina.Result
 	}{
-		{"stopped for the tools", officina.Finished{Reason: officina.FinishToolUse}, officina.Result{
-			Status: officina.Failed, Failure: officina.UnexpectedStop, Detail: "the model called tools, which this run cannot run",
-		}},
 		{"ended", officina.Finished{Reason: officina.FinishEnd}, officina.Result{
 			Status: officina.Failed, Failure: officina.UnexpectedStop,
 			Detail: "the model's reply called tools but did not stop for them",
@@ -693,7 +690,7 @@ func TestNewAgent_AGT01_TheDefinitionDoesNotChangeWithTheCallersTools(t *testing
 	copy(tools[0].InputSchema, `{"type":"string"}`)
 	run(t, agent, nil, "Hi", officina.RunOptions{})
 
-	if diff := cmp.Diff([]officina.Tool{tool("search", "Searches.")}, model.Requests()[0].Tools); diff != "" {
+	if diff := cmp.Diff([]officina.Tool{tool("search", "Searches.")}, model.Requests()[0].Tools, ignoreHandler()); diff != "" {
 		t.Errorf("tools mismatch (-want +got):\n%s", diff)
 	}
 }
@@ -702,7 +699,8 @@ func TestResult_AGT03_StatusesAndReasonsPrintTheirNames(t *testing.T) {
 	t.Parallel()
 	values := []fmt.Stringer{
 		officina.Completed, officina.Stopped, officina.Failed, officina.Status(0),
-		officina.Cancelled, officina.Refusal, officina.OutputLimit, officina.ContextFull, officina.StopReason(5),
+		officina.Cancelled, officina.Refusal, officina.OutputLimit, officina.ContextFull, officina.IterationLimit,
+		officina.StopReason(6), officina.Read, officina.Write, officina.ToolKind(0),
 		officina.ModelError, officina.UnexpectedStop, officina.PrefixMismatch, officina.FailureReason(0),
 		officina.FinishUnknown, officina.FinishEnd, officina.FinishToolUse, officina.FinishMaxTokens,
 		officina.FinishRefusal, officina.FinishContextFull, officina.FinishReason(6),
@@ -714,7 +712,8 @@ func TestResult_AGT03_StatusesAndReasonsPrintTheirNames(t *testing.T) {
 
 	want := []string{
 		"Completed", "Stopped", "Failed", "Status(0)",
-		"Cancelled", "Refusal", "OutputLimit", "ContextFull", "StopReason(5)",
+		"Cancelled", "Refusal", "OutputLimit", "ContextFull", "IterationLimit", "StopReason(6)", "Read", "Write",
+		"ToolKind(0)",
 		"ModelError", "UnexpectedStop", "PrefixMismatch", "FailureReason(0)",
 		"FinishUnknown", "FinishEnd", "FinishToolUse", "FinishMaxTokens", "FinishRefusal", "FinishContextFull",
 		"FinishReason(6)",

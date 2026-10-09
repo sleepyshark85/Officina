@@ -2,7 +2,9 @@ package claude_test
 
 import (
 	"context"
+	"encoding/json/jsontext"
 	"encoding/json/v2"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -20,7 +22,66 @@ import (
 )
 
 func TestMain(m *testing.M) {
+	// The SDK's JSON encoder builds each type's encoder once and makes later callers wait for it on a WaitGroup. If
+	// a test in a synctest bubble (the retry tests) built one first, a parallel test outside the bubble would wait on
+	// a WaitGroup tied to the bubble, and panic. Building every encoder the tests use here, outside any bubble,
+	// avoids it.
+	if err := warmEncoders(); err != nil {
+		fmt.Fprintln(os.Stderr, "warm the SDK's encoders:", err)
+		os.Exit(1)
+	}
 	goleak.VerifyTestMain(m)
+}
+
+// warmEncoders streams, outside any synctest bubble, one request of every shape the tests send, and decodes a
+// reply of every kind of block and an API error.
+func warmEncoders() error {
+	tool, err := os.ReadFile(filepath.Join("..", "..", "..", "testdata", "claude", "thinking-text-tool.sse"))
+	if err != nil {
+		return err
+	}
+	replies := []string{string(tool), ""}
+	var mu sync.Mutex
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.Copy(io.Discard, r.Body) // Only the request's encoding matters.
+		mu.Lock()
+		reply := replies[0]
+		replies = replies[1:]
+		mu.Unlock()
+		if reply == "" {
+			apiError(http.StatusBadRequest, "invalid_request_error", "warm", "")(w)
+			return
+		}
+		sse(reply)(w)
+	}))
+	defer srv.Close()
+	m, err := claude.New(claude.Opus55, claude.EffortHigh, claude.Options{
+		APIKey: "test-key", BaseURL: srv.URL, MaxOutputTokens: 1000, PrefixCache: claude.CacheOneHour,
+		ConversationCache: claude.CacheFiveMinutes,
+		HTTPClient:        &http.Client{Transport: &http.Transport{DisableKeepAlives: true}},
+	})
+	if err != nil {
+		return err
+	}
+	req := officina.Request{
+		Tools:        []officina.Tool{{Name: "search", Description: "Searches.", InputSchema: jsontext.Value(`{"type":"object"}`)}},
+		Instructions: "Answer briefly.",
+		Messages: []officina.Message{
+			{Role: officina.User, Blocks: []officina.Block{{Text: "Hi"}}},
+			{Role: officina.Operator, Blocks: []officina.Block{{Text: "Today is Monday."}}},
+			{Role: officina.Assistant, Blocks: []officina.Block{{
+				Raw:      jsontext.Value(`{"type":"tool_use","id":"t1","name":"search","input":{}}`),
+				ToolCall: &officina.ToolCall{ID: "t1", Name: "search", Input: jsontext.Value(`{}`)},
+			}}},
+			{Role: officina.User, Blocks: []officina.Block{{ToolResult: &officina.ToolResult{CallID: "t1", Content: "ok"}}}},
+		},
+	}
+	for range 2 {
+		if _, err := collect(context.Background(), m, req); err != nil && !strings.Contains(err.Error(), "warm") {
+			return err
+		}
+	}
+	return nil
 }
 
 // response is one scripted answer of the fake API.
@@ -118,6 +179,11 @@ func apiError(status int, kind, message, retryAfter string) response {
 		w.WriteHeader(status)
 		_, _ = fmt.Fprintf(w, `{"type":"error","error":{"type":%q,"message":%q}}`, kind, message)
 	}
+}
+
+// unused is the handler of a tool a test never calls.
+func unused(context.Context, jsontext.Value) (string, error) {
+	return "", errors.New("unused tool")
 }
 
 // fixture returns a file of the shared testdata, which the .NET implementation reads too.

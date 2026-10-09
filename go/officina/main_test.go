@@ -3,11 +3,16 @@ package officina_test
 import (
 	"context"
 	"encoding/json/jsontext"
+	"errors"
 	"iter"
 	"os"
 	"path/filepath"
+	"slices"
+	"sync"
 	"testing"
 
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"go.uber.org/goleak"
 
 	"github.com/sleepyshark85/officina/go/officina"
@@ -31,7 +36,15 @@ func newAgent(t *testing.T, model officina.Model, tools ...officina.Tool) *offic
 
 // tool returns a tool with a small input schema.
 func tool(name, description string) officina.Tool {
-	return officina.Tool{Name: name, Description: description, InputSchema: jsontext.Value(`{"type":"object"}`)}
+	return officina.Tool{
+		Name: name, Description: description, InputSchema: jsontext.Value(`{"type":"object"}`), Kind: officina.Read,
+		Handler: func(context.Context, jsontext.Value) (string, error) { return "ok", nil },
+	}
+}
+
+// ignoreHandler compares tools without their handlers, as funcs never compare equal.
+func ignoreHandler() cmp.Option {
+	return cmpopts.IgnoreFields(officina.Tool{}, "Handler")
 }
 
 // run runs agent on c and fails the test on an error.
@@ -72,6 +85,49 @@ func sharedFile(t *testing.T, path ...string) string {
 		t.Fatalf("read shared testdata: %v", err)
 	}
 	return string(data)
+}
+
+// results returns the tool results of a message.
+func results(m officina.Message) []officina.ToolResult {
+	var got []officina.ToolResult
+	for _, b := range m.Blocks {
+		if b.ToolResult != nil {
+			got = append(got, *b.ToolResult)
+		}
+	}
+	return got
+}
+
+// handlerTool returns a tool of kind with an object schema that runs handler.
+func handlerTool(name string, kind officina.ToolKind,
+	handler func(ctx context.Context, input jsontext.Value) (string, error),
+) officina.Tool {
+	return officina.Tool{Name: name, InputSchema: jsontext.Value(`{"type":"object"}`), Kind: kind, Handler: handler}
+}
+
+// memorySink is an audit sink that keeps its entries, and fails a write when fail says so.
+type memorySink struct {
+	fail func(officina.AuditEntry) bool
+
+	mu      sync.Mutex
+	entries []officina.AuditEntry
+}
+
+func (s *memorySink) Write(_ context.Context, e officina.AuditEntry) error {
+	if s.fail != nil && s.fail(e) {
+		return errors.New("the disk is full")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.entries = append(s.entries, e)
+	return nil
+}
+
+// Entries returns the entries written so far.
+func (s *memorySink) Entries() []officina.AuditEntry {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return slices.Clone(s.entries)
 }
 
 // roles returns the role of each message.

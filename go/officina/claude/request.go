@@ -52,8 +52,9 @@ func (m *Model) params(req officina.Request) (anthropic.BetaMessageNewParams, er
 }
 
 // message writes a message as the API takes it. An operator message is a mid-conversation system message, its text
-// the content; a block with raw JSON goes as it is, and one without is a text block. The result is in the canonical
-// form, so the SDK, which compacts and escapes what it is given, sends it unchanged.
+// the content; a block with raw JSON goes as it is, a tool result as a tool_result block, and any other is a text
+// block. The result is in the canonical form, so the SDK, which compacts and escapes what it is given, sends it
+// unchanged.
 func message(msg officina.Message) (jsontext.Value, error) {
 	type wire struct {
 		Role    string `json:"role"`
@@ -66,6 +67,19 @@ func message(msg officina.Message) (jsontext.Value, error) {
 	for i, b := range msg.Blocks {
 		if b.Raw != nil {
 			content[i] = b.Raw
+			continue
+		}
+		if r := b.ToolResult; r != nil {
+			result, err := marshal(struct {
+				Type      string `json:"type"`
+				ToolUseID string `json:"tool_use_id"`
+				Content   string `json:"content"`
+				IsError   bool   `json:"is_error,omitzero"`
+			}{"tool_result", r.CallID, r.Content, r.IsError})
+			if err != nil {
+				return nil, err
+			}
+			content[i] = result
 			continue
 		}
 		text, err := marshal(struct {

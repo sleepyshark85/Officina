@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 )
 
@@ -53,6 +54,8 @@ const (
 	OutputLimit
 	// ContextFull means the conversation no longer fits the model's context window.
 	ContextFull
+	// IterationLimit means the run made as many model calls as it may, and the model still asked for tools.
+	IterationLimit
 )
 
 // FailureReason is why a run failed.
@@ -69,7 +72,8 @@ const (
 )
 
 // RunEvent is something that happened during a run, streamed to the host as it happens: a TextStreamed,
-// ReplyRestarted, UsageReported or ConversationAppended.
+// ReplyRestarted, UsageReported, ConversationAppended, ToolCallStarted, ApprovalAsked, ApprovalAnswered or
+// ToolCallFinished.
 type RunEvent interface {
 	runEvent()
 }
@@ -113,9 +117,11 @@ func (a *Agent) Run(ctx context.Context, c *Conversation, message string, opts R
 // without reporting events. The events can be ranged over once. Called while they are still being ranged over,
 // result returns ErrRunNotEnded.
 //
-// The message and run context enter the conversation only with the model's reply, so a run that gets none leaves
-// the conversation unchanged. Cancelling ctx, or stopping the range early, ends the run as Stopped(Cancelled) unless
-// its result was already decided. A nil c runs on a new conversation that is then discarded.
+// While the model stops for tool calls, the run runs them, appends all their results as one message and calls the
+// model again. The message and run context enter the conversation only with the model's reply, so a run that gets
+// none leaves the conversation unchanged. Cancelling ctx, or stopping the range early, ends the run as
+// Stopped(Cancelled) unless its result was already decided; a reply's calls still all get results, those that had
+// not started a cancelled one. A nil c runs on a new conversation that is then discarded.
 //
 // The error is for the API misused: a blank message or run context, or a conversation another run is using
 // (ErrConversationInUse); how the run went is the Result.
@@ -144,7 +150,10 @@ func (a *Agent) Stream(
 	return events, result
 }
 
-// run makes one run, reporting its events to yield.
+// maxModelCalls is the most model calls a run makes; one that needs more stops at IterationLimit.
+const maxModelCalls = 25
+
+// run makes one run, reporting its events to yield, and audits its start and end.
 func (a *Agent) run(ctx context.Context, c *Conversation, message string, opts RunOptions, yield func(RunEvent) bool) (Result, error) {
 	if strings.TrimSpace(message) == "" {
 		return Result{}, errors.New("run: blank message")
@@ -160,102 +169,158 @@ func (a *Agent) run(ctx context.Context, c *Conversation, message string, opts R
 	}
 	defer c.running.Store(false)
 
+	audit := newRecorder(a, c.ID)
+	// A missing run entry blocks nothing: only a write's attempt depends on the trail.
+	_ = audit.record(ctx, AuditEntry{Kind: AuditRunStarted})
+	res := a.loop(ctx, c, message, opts, audit, yield)
+	res.Text, res.Detail = a.redact(res.Text), a.redact(res.Detail)
+	outcome := res.Status.String()
+	switch res.Status {
+	case Stopped:
+		outcome += ": " + res.Stop.String()
+	case Failed:
+		outcome += ": " + res.Failure.String()
+	}
+	_ = audit.record(ctx, AuditEntry{Kind: AuditRunEnded, Outcome: outcome, Detail: res.Detail, Usage: res.Usage}) // As above.
+	return res, nil
+}
+
+// loop calls the model and runs the tools it asks for until a reply ends the run.
+func (a *Agent) loop(ctx context.Context, c *Conversation, message string, opts RunOptions, audit *recorder,
+	yield func(RunEvent) bool,
+) Result {
 	if c.fingerprint != "" && c.fingerprint != a.fingerprint {
 		return Result{Status: Failed, Failure: PrefixMismatch, Detail: "the agent's tools, instructions or model " +
-			"settings differ from those the conversation was started with; start a new conversation"}, nil
+			"settings differ from those the conversation was started with; start a new conversation"}
 	}
-	// Whatever the model call started stops when the run ends, the host's break included.
+	// Whatever the run started stops when it ends, the host's break included: once the host stops ranging, the run
+	// reports nothing more and ends as cancelled, though a reply's calls still get their results.
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-
-	cancelled := Result{Status: Stopped, Stop: Cancelled}
-	if ctx.Err() != nil {
-		return cancelled, nil
+	stopped := false
+	emit := func(e RunEvent) {
+		if !stopped && !yield(e) {
+			stopped = true
+			cancel()
+		}
 	}
+	var usage Usage
 	pending := []Message{textMessage(User, message)}
 	if opts.Context != "" {
 		pending = append(pending, textMessage(Operator, opts.Context))
 	}
-	req := Request{Tools: a.tools, Instructions: a.instructions, Messages: append(slices.Clip(c.messages), pending...)}
+	for calls := 1; ; calls++ {
+		switch {
+		case ctx.Err() != nil:
+			return Result{Status: Stopped, Stop: Cancelled, Usage: usage}
+		case calls > maxModelCalls:
+			return Result{Status: Stopped, Stop: IterationLimit, Usage: usage}
+		}
+		req := Request{Tools: a.tools, Instructions: a.instructions, Messages: append(slices.Clip(c.messages), pending...)}
+		blocks, finished, used, failure := a.call(ctx, req, emit)
+		usage = usage.plus(used)
+		switch {
+		case finished == nil && ctx.Err() != nil:
+			// Cut off mid-stream: nothing is appended, not even the message it would have answered.
+			return Result{Status: Stopped, Stop: Cancelled, Usage: usage}
+		case finished == nil && failure != nil:
+			return Result{Status: Failed, Failure: ModelError, Detail: failure.Error(), Usage: usage}
+		case finished == nil:
+			return Result{Status: Failed, Failure: ModelError, Detail: "the model's reply ended without a finish reason",
+				Usage: usage}
+		}
 
-	var (
-		blocks   []Block
-		streamed bool
-		finished *Finished
-		failure  error
-	)
+		end := finish(*finished, blocks, usage)
+		var toolCalls []ToolCall
+		for _, b := range blocks {
+			if b.ToolCall != nil {
+				toolCalls = append(toolCalls, *b.ToolCall)
+			}
+		}
+		switch {
+		case len(blocks) == 0:
+			return end
+		// The provider rejects a call without its result, so a reply whose calls will not run is not kept.
+		case toolCalls != nil && finished.Reason == FinishEnd:
+			return Result{Status: Failed, Failure: UnexpectedStop, Detail: "the model's reply called tools but did " +
+				"not stop for them", Usage: usage}
+		case toolCalls != nil && finished.Reason != FinishToolUse:
+			return end
+		}
+
+		// Everything is appended before any of it is reported, so a host that stops reading midway still holds a
+		// conversation where the reply follows the messages it answers.
+		c.fingerprint = a.fingerprint
+		pending = append(pending, Message{Role: Assistant, Blocks: blocks})
+		c.messages = append(c.messages, pending...)
+		for _, m := range pending {
+			emit(ConversationAppended{Message: m})
+		}
+		pending = nil
+		if toolCalls == nil {
+			return end
+		}
+
+		results := a.runTools(ctx, toolCalls, audit, emit)
+		answer := Message{Role: User, Blocks: make([]Block, len(results))}
+		for i := range results {
+			answer.Blocks[i] = Block{ToolResult: &results[i]}
+		}
+		c.messages = append(c.messages, answer)
+		emit(ConversationAppended{Message: answer})
+	}
+}
+
+// call makes one model call, reporting its text and usage, and returns the reply's blocks, its finish (nil if it
+// did not finish) and usage, and the failure that ended it, if any.
+func (a *Agent) call(ctx context.Context, req Request, emit func(RunEvent)) (
+	blocks []Block, finished *Finished, usage Usage, failure error,
+) {
+	streamed := false
 	for event, err := range a.model.Stream(ctx, req) {
 		if err != nil || ctx.Err() != nil {
-			failure = err
-			break
+			return blocks, nil, usage, err
 		}
 		switch e := event.(type) {
 		case TextDelta:
 			streamed = true
-			if !yield(TextStreamed(e)) {
-				return cancelled, nil
-			}
+			emit(TextStreamed(e))
 		case Retried:
 			blocks = nil
 			if streamed {
 				streamed = false
-				if !yield(ReplyRestarted{}) {
-					return cancelled, nil
-				}
+				emit(ReplyRestarted{})
 			}
 		case BlockReceived:
 			blocks = append(blocks, e.Block)
 		case UsageReceived:
-			cancelled.Usage = cancelled.Usage.plus(e.Usage)
-			if !yield(UsageReported(e)) {
-				return cancelled, nil
-			}
+			usage = usage.plus(e.Usage)
+			emit(UsageReported(e))
 		case Finished:
-			finished = &e
-		}
-		if finished != nil {
-			break
+			return blocks, &e, usage, nil
 		}
 	}
-	usage := cancelled.Usage
-	switch {
-	case finished == nil && ctx.Err() != nil:
-		// Cut off mid-stream: nothing is appended, not even the message it would have answered.
-		return cancelled, nil
-	case finished == nil && failure != nil:
-		return Result{Status: Failed, Failure: ModelError, Detail: failure.Error(), Usage: usage}, nil
-	case finished == nil:
-		return Result{Status: Failed, Failure: ModelError, Detail: "the model's reply ended without a finish reason",
-			Usage: usage}, nil
-	}
+	return blocks, nil, usage, nil
+}
 
-	end := finish(*finished, blocks, usage)
-	if len(blocks) == 0 {
-		return end, nil
+// runTools runs a reply's tool calls in the pipeline, on a goroutine of its own, and reports their events here, on
+// the run's goroutine, as they come. It returns once every call has its result.
+func (a *Agent) runTools(ctx context.Context, calls []ToolCall, audit *recorder, emit func(RunEvent)) []ToolResult {
+	// Sized for every event the calls can send, so the pipeline never waits for the host.
+	events := make(chan RunEvent, len(calls)*eventsPerCall)
+	var (
+		results []ToolResult
+		wg      sync.WaitGroup
+	)
+	wg.Go(func() {
+		defer close(events)
+		results = (&pipeline{agent: a, audit: audit, events: events}).run(ctx, calls)
+	})
+	for e := range events {
+		emit(e)
 	}
-	// The provider rejects a call without its result, so a reply that calls tools is kept only once they can run.
-	if slices.ContainsFunc(blocks, func(b Block) bool { return b.ToolCall != nil }) {
-		switch finished.Reason {
-		case FinishToolUse:
-			end = Result{Status: Failed, Failure: UnexpectedStop, Detail: "the model called tools, which this run " +
-				"cannot run", Usage: usage}
-		case FinishEnd:
-			end = Result{Status: Failed, Failure: UnexpectedStop, Detail: "the model's reply called tools but did " +
-				"not stop for them", Usage: usage}
-		}
-		return end, nil
-	}
-	// Everything is appended before any of it is reported, so a host that stops reading midway still holds a
-	// conversation where the reply follows the messages it answers.
-	c.fingerprint = a.fingerprint
-	pending = append(pending, Message{Role: Assistant, Blocks: blocks})
-	c.messages = append(c.messages, pending...)
-	for _, m := range pending {
-		if !yield(ConversationAppended{Message: m}) {
-			break
-		}
-	}
-	return end, nil
+	wg.Wait()
+	return results
 }
 
 // finish returns the result a reply's finish reason maps to.
@@ -289,7 +354,7 @@ func (s Status) String() string {
 
 // String returns the reason's name.
 func (r StopReason) String() string {
-	return name(int(r), "StopReason", "Cancelled", "Refusal", "OutputLimit", "ContextFull")
+	return name(int(r), "StopReason", "Cancelled", "Refusal", "OutputLimit", "ContextFull", "IterationLimit")
 }
 
 // String returns the reason's name.

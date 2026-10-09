@@ -34,10 +34,10 @@ type Request struct {
 // Usage counts tokens as the provider bills them.
 type Usage struct {
 	// Input counts the input tokens neither read from nor written to the cache.
-	Input      int64
-	Output     int64
-	CacheRead  int64
-	CacheWrite int64
+	Input      int64 `json:"input"`
+	Output     int64 `json:"output"`
+	CacheRead  int64 `json:"cacheRead"`
+	CacheWrite int64 `json:"cacheWrite"`
 }
 
 func (u Usage) plus(v Usage) Usage {

@@ -18,19 +18,20 @@ Tests are under `go/`, shortened as:
 
 | ID | Tests | Also checked by |
 |---|---|---|
-| GEN-02 | Core: `TestRun_GEN02_GEN03_AgentOfModelAndInstructionsRunsStatelessly` | |
+| GEN-02 | Core: `TestRun_GEN02_GEN03_AgentOfModelAndInstructionsRunsStatelessly`; the tool tests run without approver or audit sink unless they test one | |
 | GEN-03 | Core: `TestRun_GEN02_GEN03_AgentOfModelAndInstructionsRunsStatelessly` (stateless); `TestRun_AGT02_MultiTurnRunCompletesWithText` (stateful) | |
+| GEN-04 | Core: `TestRun_GEN04_AnUnattendedRunDeniesApprovalRequiringCallsAndTellsTheModelWhy`, `TestRun_TOOL04_EVT01_AnApprovedCallRunsAndEachStepIsAnEvent` (interactive); Kit: `ExampleNewApprover` | |
 
 ## Agent and turn loop (AGT)
 
 | ID | Tests | Also checked by |
 |---|---|---|
 | AGT-01 | Core: `TestNewAgent_AGT01_RejectsAnInvalidDefinition`, `TestNewAgent_AGT01_TheDefinitionDoesNotChangeWithTheCallersTools`; `TestRun_AGT04_HundredConcurrentRunsOfOneAgentEachKeepTheirConversation` (shared under `-race`) | |
-| AGT-02 | Core: `TestRun_AGT02_MultiTurnRunCompletesWithText`; `ExampleAgent_Run` | The tool loop comes with tools (Go S05) |
-| AGT-03 | Core: `TestRun_AGT03_EveryFinishReasonMapsToItsResultAndTheReplyIsKept`, `TestRun_AGT03_ARunWithoutAReplyFailsOrEndsAndAppendsNothing`, `TestResult_AGT03_StatusesAndReasonsPrintTheirNames`, `TestRun_AGT03_AReplyThatCallsToolsIsNeverLeftWithoutResults` | |
+| AGT-02 | Core: `TestRun_AGT02_MultiTurnRunCompletesWithText`, `TestRun_AGT02_TheRunCallsToolsThenTheModelAgainUntilItEnds`; `ExampleAgent_Run`, `ExampleNewTool` | |
+| AGT-03 | Core: `TestRun_AGT03_EveryFinishReasonMapsToItsResultAndTheReplyIsKept`, `TestRun_AGT03_ARunWithoutAReplyFailsOrEndsAndAppendsNothing`, `TestResult_AGT03_StatusesAndReasonsPrintTheirNames`, `TestRun_AGT03_AReplyThatCallsToolsIsNeverLeftWithoutResults` (a reply whose calls will not run is not kept), `TestRun_AGT03_ARunThatKeepsCallingToolsStopsAtTheIterationLimit` | |
 | AGT-04 | Core: `TestRun_AGT04_HundredConcurrentRunsOfOneAgentEachKeepTheirConversation`, `TestRun_AGT04_ASecondRunOnAConversationInUseFails` | |
-| AGT-05 | Core: `TestRun_AGT05_CancellingMidStreamAppendsNothingAndTheNextRequestIsValid`, `TestRun_AGT05_ARunCancelledBeforeItStartsCallsNoModel`, `TestRun_AGT05_CancellingStopsTheRunEvenIfTheModelIgnoresIt` | Tool calls on cancel come with tools (Go S05) |
-| AGT-06 | Core: `TestConversation_AGT06_JSONRoundTripKeepsEveryBlockByteForByte` (the canonical-form pin: `<`, `&`, non-ASCII, `\u` escapes, and stores that rewrite the JSON), `TestConversation_AGT06_TheJSONFormIsPlainAndTheSameAsDotNets` (shared `testdata/conversation/`, compared parsed), `TestConversation_AGT06_AToolCallIsKeptInDotNetsForm`, `TestConversation_AGT06_UnmarshalRejectsAnInvalidConversation`, `FuzzConversation_AGT06_UnmarshalThenMarshalIsAFixedPoint`, `TestRun_AGT06_ReplyBlocksAreAppendedExactlyAsReceived`; Claude: `TestModel_MDL05_AGT06_AReplyIsReplayedUnchangedAfterSaveAndResume` | |
+| AGT-05 | Core: `TestRun_AGT05_CancellingMidStreamAppendsNothingAndTheNextRequestIsValid`, `TestRun_AGT05_ARunCancelledBeforeItStartsCallsNoModel`, `TestRun_AGT05_CancellingStopsTheRunEvenIfTheModelIgnoresIt`, `TestRun_AGT05_CancellingDuringToolsKeepsFinishedResultsAndCancelsTheRest`, `TestRun_AGT05_EVT01_AConsumerThatBreaksDuringToolsStopsThemAndKeepsAValidConversation`, `TestRun_TEST07_GeneratedRunsKeepTheConversationValidAndNoWriteRunsUnaudited` | |
+| AGT-06 | Core: `TestConversation_AGT06_JSONRoundTripKeepsEveryBlockByteForByte` (the canonical-form pin: `<`, `&`, non-ASCII, `\u` escapes, and stores that rewrite the JSON), `TestConversation_AGT06_TheJSONFormIsPlainAndTheSameAsDotNets` (shared `testdata/conversation/`, compared parsed), `TestConversation_AGT06_AToolCallAndItsResultAreKeptInDotNetsForm`, `TestConversation_AGT06_UnmarshalRejectsAnInvalidConversation`, `FuzzConversation_AGT06_UnmarshalThenMarshalIsAFixedPoint`, `TestRun_AGT06_ReplyBlocksAreAppendedExactlyAsReceived`; Claude: `TestModel_MDL05_AGT06_AReplyIsReplayedUnchangedAfterSaveAndResume` | |
 | AGT-08 | Core: `TestRun_EVT01_AGT08_EventsStreamThenEachAppendThenResult`, `TestRun_AGT08_AConsumerThatBreaksAtAnAppendKeepsAValidConversation` | |
 
 ## Models (MDL)
@@ -53,12 +54,35 @@ Tests are under `go/`, shortened as:
 | CTX-03 | Claude: `TestModel_CTX01_CTX02_CTX03_MDL02_MDL03_RequestMatchesTheSharedGoldenLayout` (cache point on the instructions, automatic caching, two lifetimes), `TestNew_MDL03_RejectsAnInvalidSetting` (prefix shorter than the tail) | `examples/hello`, run live: cache reads from the second message |
 | CTX-04 | Core: `TestRun_CTX04_AChangedPrefixFailsWithPrefixMismatchBeforeAnyModelCall` (instructions, tool description, schema, added and removed tool, model settings) | |
 | CTX-05 | Claude: `TestModel_CTX05_UsageCountsCacheReadsAndWritesAndAddsUpEveryIteration` (the usage part) | Telemetry's hit ratio comes in Go S07 |
+| CTX-06 | Core: `TestRun_CTX06_ResultsOfOneReplyReturnInOneMessageInCallOrder` (the first call finishes last), `TestRun_TOOL03_ReadsOverlapAndWritesRunAloneInOrder`; Kit: `TestCheckConversation_TEST07_AnswersEveryToolCallOnceInOrder`; Claude: `TestModel_CTX06_ToolResultsGoOutAsOneUserMessageOfToolResultBlocks` | |
+
+## Tools (TOOL)
+
+| ID | Tests | Also checked by |
+|---|---|---|
+| TOOL-01 | Core: `TestNewTool_TOOL01_DerivesTheSchemaFromTheInputType`, `TestNewTool_TOOL01_RefusesATypeWithoutASchema`, `TestNewTool_TOOL01_RunsOnTheDecodedInputAndSendsItsResultAsJSON`; `ExampleNewTool` | |
+| TOOL-02 | Core: `TestRun_TOOL02_TOOL04_TOOL05_FailuresComeBackAsErrorResultsAndTheRunContinues` (input not JSON, invalid input, unknown tool), `TestValidate_TOOL02_ChecksEachKeywordOfTheSubset`, `FuzzValidate_TOOL02_NeverPanicsAndIsDeterministic` | |
+| TOOL-03 | Core: `TestRun_TOOL03_ReadsOverlapAndWritesRunAloneInOrder` (under `testing/synctest`: reads that wait for each other would deadlock if run one after the other) | |
+| TOOL-04 | Core: `TestRun_TOOL02_TOOL04_TOOL05_FailuresComeBackAsErrorResultsAndTheRunContinues` (denied, with and without a reason; a failing and a panicking approver), `TestRun_TOOL04_EVT01_AnApprovedCallRunsAndEachStepIsAnEvent` | |
+| TOOL-05 | Core: `TestRun_TOOL02_TOOL04_TOOL05_FailuresComeBackAsErrorResultsAndTheRunContinues` (a failing and a panicking handler) | |
+| TOOL-06 | Core: `TestRun_TOOL06_ALongResultIsTruncatedAndTheModelIsTold` (never inside a character) | |
 
 ## Events and observability (EVT)
 
 | ID | Tests | Also checked by |
 |---|---|---|
-| EVT-01 | Core: `TestRun_EVT01_AGT08_EventsStreamThenEachAppendThenResult`, `TestRun_EVT01_AConsumerThatBreaksMidRunLeavesNoGoroutine` (with `goleak` in `TestMain`), `TestRun_EVT01_EventsRangeOnceAndTheResultWaitsForThem`; `ExampleAgent_Stream`; Claude: `TestModel_EVT01_AConsumerThatStopsEarlyEndsTheCall` (with `goleak`) | Tool, approval and compaction events come with their slices |
+| EVT-01 | Core: `TestRun_EVT01_AGT08_EventsStreamThenEachAppendThenResult`, `TestRun_EVT01_AConsumerThatBreaksMidRunLeavesNoGoroutine` (with `goleak` in `TestMain`), `TestRun_EVT01_EventsRangeOnceAndTheResultWaitsForThem`; `ExampleAgent_Stream`; Claude: `TestModel_EVT01_AConsumerThatStopsEarlyEndsTheCall` (with `goleak`); Core: `TestRun_TOOL04_EVT01_AnApprovedCallRunsAndEachStepIsAnEvent` (tool and approval events), `TestRun_AGT05_EVT01_AConsumerThatBreaksDuringToolsStopsThemAndKeepsAValidConversation` | Compaction events come with Go S10 |
+| EVT-03 | Core: `TestRun_AUD05_EVT03_SecretsNeverReachTheTrailEventsOrResultsAndLongTextIsCut` (tool calls in events, tool results, audit, the final text; as written and as escaped in JSON), `TestRun_EVT03_AUD05_EveryFormOfASecretIsRedactedWhole` (a secret that starts with another, escaped non-ASCII in either case, escaped `/`, surrogate pairs), `TestRun_TEST07_GeneratedSecretsNeverReachResultsEventsOrTheTrail`, `TestRun_TOOL04_EVT01_AnApprovedCallRunsAndEachStepIsAnEvent` | Telemetry comes with Go S07 |
+
+## Audit (AUD)
+
+| ID | Tests | Also checked by |
+|---|---|---|
+| AUD-01 | Core: `TestRun_AUD01_AUD03_TheTrailRecordsTheRunAndEachStepInOrder` (run, approvals, tool calls), `TestRun_AUD01_TheEndEntrySaysHowTheRunEnded` | Memory, compaction and MCP entries come with their slices |
+| AUD-02 | Core: `TestRun_AUD02_AWriteWhoseAttemptCannotBeRecordedNeverRuns`, `TestRun_AUD02_AWriteRunsOnlyAfterItsAttemptIsRecorded`, `TestRun_TEST07_GeneratedRunsKeepTheConversationValidAndNoWriteRunsUnaudited` | |
+| AUD-03 | Core: `TestRun_AUD01_AUD03_TheTrailRecordsTheRunAndEachStepInOrder` (time, sequence, run, conversation, agent) | Memory scope, trace and span come with Go S07 and Go S09 |
+| AUD-04 | Core: `TestJSONLinesSink_AUD04_AppendsOneLinePerEntryAndReadsBack`, `TestJSONLinesSink_AUD04_WritesEveryFieldAndReportsAFailure`; `ExampleNewJSONLinesSink` | |
+| AUD-05 | Core: `TestRun_AUD05_EVT03_SecretsNeverReachTheTrailEventsOrResultsAndLongTextIsCut`, `TestRun_EVT03_AUD05_EveryFormOfASecretIsRedactedWhole`, `TestRun_TEST07_GeneratedSecretsNeverReachResultsEventsOrTheTrail` | |
 
 ## Principles
 
@@ -70,7 +94,9 @@ Tests are under `go/`, shortened as:
 
 | ID | Tests | Also checked by |
 |---|---|---|
-| TEST-01 | Kit: `TestModel_TEST01_RepliesInOrderAndRecordsRequests`, `TestModel_TEST01_RejectsRoleSequencesTheProviderRejectsAndKeepsTheReply`, `TestTextBlock_TEST01_StoresRawJSONInTheCanonicalForm` | The scripted approver and fake MCP server come in Go S05 and Go S11 |
+| TEST-01 | Kit: `TestModel_TEST01_RepliesInOrderAndRecordsRequests`, `TestModel_TEST01_RejectsRoleSequencesTheProviderRejectsAndKeepsTheReply`, `TestTextBlock_TEST01_StoresRawJSONInTheCanonicalForm`, `TestApprover_TEST01_AnswersInOrderAndRecordsEachCall`, `TestToolUseBlock_TEST01_StoresTheCallAndItsRawJSON` | The fake MCP server comes in Go S11 |
 | TEST-02 | Core: `TestRun_TEST02_ThePrefixIsStableAcrossTurnsAndAcrossSaveRestartAndResume`; Kit: `TestCheckPrefix_TEST02_ReportsEachKindOfChange`, `ExampleCheckPrefix` | |
 | TEST-03 | — | The Go workflow (`.github/workflows/go.yml`): `go-ubuntu` and `go-windows`, offline |
 | TEST-05 | Deps: `TestDependencies_TEST05_ModuleKeepsTheRules`, `TestDependencies_TEST05_FixturesBreakingTheRulesFail` (the core's own rule, D15 and G6, as well) | |
+| TEST-07 | Core: `TestRun_TEST07_GeneratedSecretsNeverReachResultsEventsOrTheTrail` (`rapid`: generated secrets, prefixes of each other included, in generated JSON forms; once each is replaced whole only the text around them is left, in results, events, the trail and the final text), `TestRun_TEST07_GeneratedRunsKeepTheConversationValidAndNoWriteRunsUnaudited` (`rapid`: sequences of runs, model failures, cut-off replies, cancels and breaks at any event, tool calls that succeed, fail, panic, are unknown, invalid, denied or unaudited; after each run the conversation passes the kit's check, every call answered once, and the prefix is stable); Kit: `TestCheckConversation_TEST07_AnswersEveryToolCallOnceInOrder`, `TestModel_TEST01_RejectsRoleSequencesTheProviderRejectsAndKeepsTheReply` | CI runs the property tests with a fixed seed (`go.yml`); a failure prints its seed. Save/resume, telemetry, budgets and memory paths come with Go S07 to Go S09 |
+| TEST-08 | Core: `TestValidate_TEST08_AgreesWithAReferenceValidator` (`rapid`, against `santhosh-tekuri/jsonschema/v6` under draft 2020-12), `TestValidate_TEST08_RefusesASchemaOutsideTheSubset`, `TestNewAgent_TEST08_RefusesAToolOutsideTheSubset` | |
