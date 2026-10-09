@@ -15,12 +15,13 @@ import (
 	"github.com/sleepyshark85/officina/go/internal/bookshop"
 )
 
-// The compose file's services, in apps/BookshopAssistant: the database, with its demo password, and the telemetry
-// dashboard, with its OTLP endpoint.
+// The compose file's services, in apps/BookshopAssistant: the database, with its demo password, the telemetry
+// dashboard, with its OTLP endpoint, and the export server.
 const (
 	composeDatabase  = "postgres://bookshop:shelf-demo-41@localhost:5432/bookshop"
 	composeDashboard = "http://localhost:18888"
 	composeOTLP      = "http://localhost:4317"
+	composeExports   = "http://localhost:18800/mcp"
 )
 
 func main() {
@@ -71,6 +72,7 @@ func run() int {
 		},
 		TracerProvider: telemetry.Traces, MeterProvider: telemetry.Metrics, Logger: telemetry.Logger(),
 		Dashboard: setting("BOOKSHOP_DASHBOARD", composeDashboard), Budgets: budgets, Demo: *demo,
+		Exports: setting("BOOKSHOP_EXPORTS", composeExports),
 	})
 	if err != nil {
 		return fail(err)

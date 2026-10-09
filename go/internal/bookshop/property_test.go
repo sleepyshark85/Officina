@@ -73,7 +73,7 @@ func TestSessions_TEST07_ThePrefixStaysByteIdenticalAcrossSavesToTheSessionsTabl
 				last.Events = append([]officina.ModelEvent{officina.BlockReceived{Block: thinking}}, last.Events...)
 			}
 			model := officinatest.NewModel("scripted", append(replies, last)...)
-			agent, err := bookshop.NewAgent(bookshop.Config{Model: priced{model}}, d.pool, officinatest.NewApprover(), nil)
+			agent, err := bookshop.NewAgent(bookshop.Config{Model: priced{model}}, d.pool, nil, officinatest.NewApprover(), nil)
 			if err != nil {
 				rt.Fatalf("NewAgent() error = %v", err)
 			}
