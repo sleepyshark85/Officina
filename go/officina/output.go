@@ -10,7 +10,8 @@ import (
 )
 
 // Output is the typed output an agent requires: a Go type whose JSON Schema the model is held to, and whose value a
-// completed run returns as its Result's Output. The schema is part of the prefix.
+// completed run returns as its Result's Output. The schema is part of the prefix. NewOutput makes one; the zero
+// value is none.
 type Output struct {
 	schema   jsontext.Value
 	compiled *schema

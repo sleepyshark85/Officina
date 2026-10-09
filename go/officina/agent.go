@@ -70,7 +70,8 @@ type AgentOptions struct {
 // NewAgent returns an agent of model and instructions. The instructions are frozen for every conversation: nothing
 // per user, run or date goes there. It fails if the instructions are blank, or a tool has no name, a name another
 // tool has, no kind, no handler, or an input schema that is not an object schema in the subset the core validates;
-// or if the context management is invalid or needs what the model's provider does not do.
+// if the output was not made by NewOutput; or if the context management is invalid or needs what the model's
+// provider does not do.
 func NewAgent(model Model, instructions string, opts AgentOptions) (*Agent, error) {
 	if model == nil {
 		return nil, errors.New("new agent: no model")
@@ -113,6 +114,9 @@ func NewAgent(model Model, instructions string, opts AgentOptions) (*Agent, erro
 	sources, err := sourcesOf(tools)
 	if err != nil {
 		return nil, fmt.Errorf("new agent: %w", err)
+	}
+	if opts.Output != nil && opts.Output.compiled == nil {
+		return nil, errors.New("new agent: the output was not made by NewOutput")
 	}
 	if err := opts.ContextManagement.check(model.Info()); err != nil {
 		return nil, fmt.Errorf("new agent: %w", err)

@@ -171,7 +171,8 @@ func (c *console) listSessions(ctx context.Context, current *session) {
 }
 
 // summarizeLeft summarizes up to summariesPerListing of the listed sessions left without a summary, never current
-// nor one whose summary failed in this console, and puts each summary in its listing.
+// nor one whose summary failed, or whose conversation could not be read, in this console; and puts each summary in
+// its listing. A session the database failed to load is tried again by the next listing.
 func (c *console) summarizeLeft(ctx context.Context, listed []listing, current *session) {
 	if c.summarizer == nil {
 		return
@@ -197,9 +198,12 @@ func (c *console) summarizeLeft(ctx context.Context, listed []listing, current *
 		switch {
 		case errors.Is(err, ErrNoSession):
 			continue
-		case err != nil:
+		case errors.Is(err, ErrSessionUnreadable):
 			c.unsummarized[l.id] = true
 			c.writeLine("[" + err.Error() + "]")
+			continue
+		case err != nil:
+			c.writeLine("[The session could not be read: " + err.Error() + "]")
 			continue
 		}
 		if sum, ok := c.summarize(ctx, stored.Conversation); ok {

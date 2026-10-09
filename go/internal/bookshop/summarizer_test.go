@@ -186,3 +186,44 @@ func TestConsole_APP15_AListingSummarizesAFewSessionsAtATimeAndSaysWhenASummaryF
 		t.Errorf("the summarizer made %d requests, want 4", n)
 	}
 }
+
+func TestConsole_APP15_ASessionTheDatabaseFailsToLoadIsSummarizedByTheNextListingAndAnUnreadableOneIsNot(t *testing.T) {
+	t.Parallel()
+	d := newDatabase(t)
+	id := sessionID(t, session(t, d, officinatest.NewModel("scripted", officinatest.TextReply("Hello.")), "", "Sam",
+		"Hi.", "/quit"))
+	if _, err := d.pool.Exec(t.Context(), `insert into sessions (id, staff_member, conversation, input_tokens,
+		output_tokens, cache_read_tokens, cache_write_tokens, cost, updated)
+		values ('broken-0001', 'Sam', 'not json', 0, 0, 0, 0, 0, now() - interval '1 minute')`); err != nil {
+		t.Fatalf("store a broken session: %v", err)
+	}
+	// Loading a session reads a column that listing does not: without it, the database fails each load.
+	rename := func(from, to string) func() {
+		return func() {
+			if _, err := d.pool.Exec(t.Context(), "alter table sessions rename column "+from+" to "+to); err != nil {
+				t.Errorf("rename %s: %v", from, err)
+			}
+		}
+	}
+	rename("input_tokens", "input_tokens_gone")()
+	summaries := officinatest.NewModel("summarizer", summaryReply(t, "Greeting", "Sam said hello."))
+
+	transcript := summarized(t, d, officinatest.NewModel("scripted"), summaries, "Sam", "/sessions",
+		rename("input_tokens_gone", "input_tokens"), "/sessions", "/sessions", "/quit")
+
+	listings := strings.Split(transcript, "you> /sessions\n")
+	if len(listings) != 4 {
+		t.Fatalf("transcript has %d listings, want 3:\n%s", len(listings)-1, transcript)
+	}
+	inOrder(t, listings[1], "Summarizing 2 sessions left without a summary…\n",
+		"[The session could not be read: load session "+id+": ",
+		"[The session could not be read: load session broken-0001: ", "  Sam  (no title yet)  $")
+	inOrder(t, listings[2], "Summarizing 2 sessions left without a summary…\n",
+		"[session broken-0001 cannot be read: ", "  Sam  Greeting  $")
+	if strings.Contains(listings[3], "Summarizing") {
+		t.Errorf("the third listing tried the unreadable session again:\n%s", listings[3])
+	}
+	if n := len(summaries.Requests()); n != 1 {
+		t.Errorf("the summarizer made %d requests, want 1", n)
+	}
+}

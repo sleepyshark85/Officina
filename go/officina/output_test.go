@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json/v2"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -102,19 +103,31 @@ func TestNewOutput_OUT01_TEST08_RefusesATypeWithoutAClosedSchema(t *testing.T) {
 	}
 }
 
+func TestNewAgent_OUT01_RefusesAnOutputNotMadeByNewOutput(t *testing.T) {
+	t.Parallel()
+
+	agent, err := officina.NewAgent(officinatest.NewModel("scripted"), instructions,
+		officina.AgentOptions{Output: &officina.Output{}})
+
+	if want := "new agent: the output was not made by NewOutput"; err == nil || err.Error() != want || agent != nil {
+		t.Errorf("NewAgent() = %v, %v; want nil, %q", agent, err, want)
+	}
+}
+
 func TestRun_OUT02_OutputThatFailsToDecodeOrValidateFailsTheRunWithTheErrors(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		name, reply, detail string
 	}{
-		{"not JSON", "Ana wants two copies.", "the output could not be read as orderOutput: "},
+		{"not JSON", "Ana wants two copies.", "the output could not be read as orderOutput: jsontext: invalid character 'A'"},
 		{"a property missing", `{"customer":"Ana","lines":[],"gift":null}`,
 			"the output does not match its schema: /total: is required"},
 		{"several problems", `{"customer":1,"lines":[{"bookId":1.5,"copies":2,"x":1}],"gift":null,"total":"9"}`,
 			"the output does not match its schema: /customer: must be string; /lines/0/bookId: must be integer; " +
 				"/lines/0/x: is not allowed; /total: must be number"},
 		{"a value the type cannot hold", `{"customer":"Ana","lines":[{"bookId":1,"copies":300}],"gift":null,"total":1}`,
-			"the output could not be read as orderOutput: "},
+			"the output could not be read as orderOutput: json: cannot unmarshal JSON number 300 into Go uint8 within " +
+				`"/lines/0/copies"`},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -183,42 +196,63 @@ func TestAgent_CTX04_OUT01_TheOutputSchemaIsPartOfThePrefix(t *testing.T) {
 	}
 }
 
-// replyText generates a reply's text for orderOutput: often valid, often not by one property, sometimes not JSON.
-func replyText(t *rapid.T) string {
-	if rapid.IntRange(0, 9).Draw(t, "prose") == 0 {
-		return rapid.StringMatching(`[a-z {}":,]{0,12}`).Draw(t, "text")
-	}
+// replyText generates a reply's text for orderOutput and whether it is one. Validity is drawn first: a valid reply
+// has every required property and no other, each of a value the type holds; an invalid one breaks exactly one
+// thing, or is not JSON.
+func replyText(t *rapid.T) (string, bool) {
 	lineGen := rapid.Custom(func(t *rapid.T) map[string]any {
 		return map[string]any{
-			"bookId": rapid.OneOf(rapid.Just[any](7.0), rapid.Just[any](1.5), rapid.Just[any]("7")).Draw(t, "bookId"),
-			"copies": rapid.OneOf(rapid.Just[any](2.0), rapid.Just[any](-1.0), rapid.Just[any](300.0)).Draw(t, "copies"),
+			"bookId": float64(rapid.IntRange(-5, 500).Draw(t, "bookId")),
+			"copies": float64(rapid.IntRange(0, 255).Draw(t, "copies")),
 		}
 	})
 	order := map[string]any{
-		"customer": rapid.OneOf(rapid.Just[any]("Ana"), rapid.Just[any](nil)).Draw(t, "customer"),
+		"customer": rapid.SampledFrom([]string{"", "Ana", "Zoë <&>"}).Draw(t, "customer"),
 		"lines":    rapid.SliceOfN(lineGen, 0, 2).Draw(t, "lines"),
 		"gift":     rapid.OneOf(rapid.Just[any](nil), lineGen.AsAny()).Draw(t, "gift"),
-		"total":    rapid.OneOf(rapid.Just[any](12.5), rapid.Just[any](true)).Draw(t, "total"),
-		"tags":     rapid.OneOf(rapid.Just[any]([]any{"a"}), rapid.Just[any]([]any{1.0})).Draw(t, "tags"),
-		"extra":    1.0,
+		"total":    rapid.SampledFrom([]float64{0, 12.5, -3, 1e6}).Draw(t, "total"),
 	}
-	for _, name := range []string{"customer", "lines", "gift", "total", "tags", "extra"} {
-		if rapid.IntRange(0, 3).Draw(t, "drop "+name) == 0 {
-			delete(order, name)
-		}
+	if rapid.Bool().Draw(t, "tags") {
+		order["tags"] = rapid.SliceOfN(rapid.SampledFrom([]any{"a", "b"}), 0, 2).Draw(t, "tag values")
 	}
-	return marshal(t, order)
+	if rapid.Bool().Draw(t, "valid") {
+		return marshal(t, order), true
+	}
+	line := map[string]any{"bookId": 7.0, "copies": 2.0}
+	switch rapid.IntRange(0, 7).Draw(t, "break") {
+	case 0:
+		return rapid.StringMatching(`[a-z {}":,]{0,12}`).Draw(t, "prose") + "}", false
+	case 1:
+		delete(order, rapid.SampledFrom([]string{"customer", "lines", "gift", "total"}).Draw(t, "missing"))
+	case 2:
+		order["customer"] = rapid.SampledFrom([]any{nil, 1.0, true}).Draw(t, "customer of another type")
+	case 3:
+		order["total"] = rapid.SampledFrom([]any{nil, "9", []any{}}).Draw(t, "total of another type")
+	case 4:
+		order["extra"] = 1.0
+	case 5:
+		line["copies"] = rapid.SampledFrom([]any{-1.0, 1.5, "2"}).Draw(t, "copies out of the schema")
+		order["gift"] = line
+	case 6:
+		// Valid against the schema, but beyond what the type's uint8 holds.
+		line["copies"] = 300.0
+		order["lines"] = []any{line}
+	default:
+		order["tags"] = []any{1.0}
+	}
+	return marshal(t, order), false
 }
 
 func TestRun_OUT02_TEST08_AGeneratedReplyCompletesOnlyIfTheReferenceValidatorAcceptsIt(t *testing.T) {
 	t.Parallel()
+	output, err := officina.NewOutput[orderOutput]()
+	if err != nil {
+		t.Fatalf("NewOutput() error = %v", err)
+	}
+	var completed, failed atomic.Int64
 	rapid.Check(t, func(t *rapid.T) {
-		text := replyText(t)
+		text, valid := replyText(t)
 		model := officinatest.NewModel("scripted", officinatest.TextReply(text))
-		output, err := officina.NewOutput[orderOutput]()
-		if err != nil {
-			t.Fatalf("NewOutput() error = %v", err)
-		}
 		agent, err := officina.NewAgent(model, instructions, officina.AgentOptions{Output: output})
 		if err != nil {
 			t.Fatalf("NewAgent() error = %v", err)
@@ -232,15 +266,24 @@ func TestRun_OUT02_TEST08_AGeneratedReplyCompletesOnlyIfTheReferenceValidatorAcc
 		var value any
 		// A copy above 255 is valid against the schema but does not fit the type's uint8.
 		fits := json.Unmarshal([]byte(text), &value) == nil &&
-			referenceValid(t, string(model.Requests()[0].OutputSchema), text) && !strings.Contains(text, "300")
-		switch {
-		case fits && (res.Status != officina.Completed || res.Output == nil):
-			t.Fatalf("reply %s: result %+v, want Completed with the output", text, res)
+			referenceValid(t, string(model.Requests()[0].OutputSchema), text) && !strings.Contains(text, `"copies":300`)
+		if fits != valid {
+			t.Fatalf("reply %s: the reference validator and the type accept = %v, want the generated %v", text, fits,
+				valid)
+		}
+		switch _, typed := res.Output.(orderOutput); {
+		case fits && (res.Status != officina.Completed || !typed):
+			t.Fatalf("reply %s: result %+v, want Completed with an orderOutput", text, res)
 		case !fits && (res.Status != officina.Failed || res.Failure != officina.InvalidOutput || res.Output != nil):
 			t.Fatalf("reply %s: result %+v, want Failed(InvalidOutput)", text, res)
-		}
-		if _, ok := res.Output.(orderOutput); fits && !ok {
-			t.Fatalf("output %T, want orderOutput", res.Output)
+		case fits:
+			completed.Add(1)
+		default:
+			failed.Add(1)
 		}
 	})
+	t.Logf("%d replies completed and %d failed", completed.Load(), failed.Load())
+	if completed.Load() == 0 || failed.Load() == 0 {
+		t.Errorf("%d replies completed and %d failed; the property needs both", completed.Load(), failed.Load())
+	}
 }

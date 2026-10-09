@@ -42,6 +42,8 @@ var (
 	ErrNoSession = errors.New("no such session")
 	// ErrSessionChanged is returned for a save that would overwrite what another console saved.
 	ErrSessionChanged = errors.New("changed elsewhere since it was last saved here, so it was not overwritten")
+	// ErrSessionUnreadable is returned for a session whose stored conversation is not one.
+	ErrSessionUnreadable = errors.New("cannot be read")
 )
 
 const (
@@ -141,8 +143,8 @@ func earlier(stored string, c *officina.Conversation) bool {
 	return true
 }
 
-// Load returns the session with id: ErrNoSession when there is none, and an error saying it cannot be read when its
-// conversation is not one.
+// Load returns the session with id: ErrNoSession when there is none, and ErrSessionUnreadable when its conversation
+// is not one.
 func (s *Sessions) Load(ctx context.Context, id string) (StoredSession, error) {
 	stored := StoredSession{Conversation: &officina.Conversation{}}
 	u := &stored.Usage
@@ -155,7 +157,7 @@ func (s *Sessions) Load(ctx context.Context, id string) (StoredSession, error) {
 		return StoredSession{}, fmt.Errorf("load session %s: %w", id, err)
 	}
 	if err := json.Unmarshal([]byte(stored.Saved), stored.Conversation); err != nil {
-		return StoredSession{}, fmt.Errorf("session %s cannot be read: %w", id, err)
+		return StoredSession{}, fmt.Errorf("session %s %w: %w", id, ErrSessionUnreadable, err)
 	}
 	return stored, nil
 }
