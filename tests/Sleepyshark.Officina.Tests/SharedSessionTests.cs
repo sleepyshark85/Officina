@@ -99,6 +99,22 @@ public class SharedSessionTests
     }
 
     [Fact]
+    public void The_prefix_fingerprint_with_an_output_schema_is_the_shared_fixtures()
+    {
+        // The schema is the Go implementation's, derived from a type of its own: the fingerprint takes it as given.
+        var prefix = Shared(new ScriptedModel { Settings = Settings }).Prefix();
+        var shared = JsonSerializer.Deserialize<JsonElement>(Fixture("prefix.json")).GetProperty("output");
+
+        foreach (var output in shared.EnumerateArray())
+        {
+            var context = output.TryGetProperty("compactAt", out var compactAt) ? new ContextManagement { CompactAt = compactAt.GetInt64() } : null;
+            var typed = prefix with { OutputSchema = output.GetProperty("schema").GetString(), ContextManagement = context };
+
+            Assert.Equal(output.GetProperty("fingerprint").GetString(), typed.Fingerprint);
+        }
+    }
+
+    [Fact]
     public async Task A_session_the_Go_implementation_saved_mid_reply_resumes_with_its_prefix_and_interrupted_calls_answered()
     {
         var stored = Fixture("go-session.json");

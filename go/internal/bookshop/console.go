@@ -48,8 +48,12 @@ type console struct {
 	logger    *slog.Logger
 	trail     *auditTable
 	sessions  *Sessions
-	budgets   Budgets
-	dashboard string
+	// summarizer summarizes the sessions left; nil for none. unsummarized holds the sessions whose summary failed
+	// in this console, which listings do not try again.
+	summarizer   *officina.Agent
+	unsummarized map[string]bool
+	budgets      Budgets
+	dashboard    string
 	// answers hands one approval from the console to Approve; one reply asks one approval at a time.
 	answers chan officina.Approval
 	demo    bool
@@ -70,10 +74,11 @@ type read struct {
 	err  error
 }
 
-func newConsole(cfg Config, trail *auditTable, sessions *Sessions) *console {
+func newConsole(cfg Config, trail *auditTable, sessions *Sessions, summarizer *officina.Agent) *console {
 	c := &console{
 		in: bufio.NewReader(cfg.In), out: cfg.Out, echo: cfg.Echo, interrupt: cfg.Interrupt, logger: cfg.Logger,
-		trail: trail, sessions: sessions, budgets: cfg.Budgets, dashboard: cfg.Dashboard,
+		trail: trail, sessions: sessions, summarizer: summarizer, unsummarized: map[string]bool{},
+		budgets: cfg.Budgets, dashboard: cfg.Dashboard,
 		answers: make(chan officina.Approval, 1), atLineStart: true, demo: cfg.Demo,
 	}
 	if c.budgets.Reply == 0 {
@@ -96,7 +101,8 @@ func newConsole(cfg Config, trail *auditTable, sessions *Sessions) *console {
 	return c
 }
 
-// run runs the session until /quit or the end of the input.
+// run runs the session until /quit or the end of the input, and summarizes each session it leaves: with /new,
+// /resume, /quit or the end of the input.
 func (c *console) run(ctx context.Context, agent *officina.Agent) error {
 	// A line still being read is waited for; run returns only after the read it asked for has ended.
 	defer c.reads.Wait()
@@ -113,6 +119,7 @@ func (c *console) run(ctx context.Context, agent *officina.Agent) error {
 	for {
 		text, err := c.read(ctx, "you> ")
 		if err != nil {
+			c.leave(ctx, s)
 			return c.ended(err)
 		}
 		command := strings.TrimSpace(text)
@@ -122,11 +129,13 @@ func (c *console) run(ctx context.Context, agent *officina.Agent) error {
 		case command == "":
 			continue
 		case command == "/quit":
+			c.leave(ctx, s)
 			return c.err
 		case command == "/help":
 			c.writeLine(help)
 			continue
 		case command == "/new":
+			c.leave(ctx, s)
 			s = newSession(staffMember)
 			c.writeLine("New session " + s.conversation.ID + ".")
 			continue
@@ -260,6 +269,7 @@ func (c *console) reply(ctx context.Context, agent *officina.Agent, s *session, 
 		case officina.UsageReported:
 			spent, spentCost = plus(spent, e.Usage), spentCost+e.Cost
 		case officina.ConversationAppended:
+			s.changed = true
 			if e.Message.Role == officina.Operator {
 				s.context = e.Message.Text()
 			}

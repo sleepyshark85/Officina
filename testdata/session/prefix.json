@@ -32,5 +32,16 @@
       "clearAtLeastTokens": 0,
       "fingerprint": "152d280f17c28f0096298c7c8951cf2959c27c5317fd7d9dc23c746b15a13b62"
     }
+  ],
+  "output": [
+    {
+      "schema": "{\u0022type\u0022:\u0022object\u0022,\u0022properties\u0022:{\u0022title\u0022:{\u0022type\u0022:\u0022string\u0022,\u0022description\u0022:\u0022A title \u00ABshort\u00BB, with \u003Cb\u003E\u0026amp; \u0027quotes\u0027 \u002B more.\u0022},\u0022copies\u0022:{\u0022type\u0022:\u0022integer\u0022,\u0022minimum\u0022:0},\u0022changes\u0022:{\u0022type\u0022:\u0022array\u0022,\u0022items\u0022:{\u0022type\u0022:\u0022string\u0022}},\u0022note\u0022:{\u0022type\u0022:[\u0022string\u0022,\u0022null\u0022]}},\u0022required\u0022:[\u0022title\u0022,\u0022copies\u0022,\u0022note\u0022],\u0022additionalProperties\u0022:false}",
+      "fingerprint": "5f991621d0a0654f723ee9e95ffbcadd037eac6b59627405f2e735ddcb742b47"
+    },
+    {
+      "schema": "{\u0022type\u0022:\u0022object\u0022,\u0022properties\u0022:{\u0022title\u0022:{\u0022type\u0022:\u0022string\u0022,\u0022description\u0022:\u0022A title \u00ABshort\u00BB, with \u003Cb\u003E\u0026amp; \u0027quotes\u0027 \u002B more.\u0022},\u0022copies\u0022:{\u0022type\u0022:\u0022integer\u0022,\u0022minimum\u0022:0},\u0022changes\u0022:{\u0022type\u0022:\u0022array\u0022,\u0022items\u0022:{\u0022type\u0022:\u0022string\u0022}},\u0022note\u0022:{\u0022type\u0022:[\u0022string\u0022,\u0022null\u0022]}},\u0022required\u0022:[\u0022title\u0022,\u0022copies\u0022,\u0022note\u0022],\u0022additionalProperties\u0022:false}",
+      "compactAt": 50000,
+      "fingerprint": "f41a43f5179a4c5feefa2621a10b4449ddb2be5cbaff9f5c3784ce22c62f74ce"
+    }
   ]
 }

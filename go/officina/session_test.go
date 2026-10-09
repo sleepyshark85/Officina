@@ -35,6 +35,21 @@ type sharedPrefix struct {
 		ClearAtLeastTokens int64  `json:"clearAtLeastTokens"`
 		Fingerprint        string `json:"fingerprint"`
 	} `json:"contextManagement"`
+	// Output holds output schemas, each with a compaction threshold or none, and the fingerprint .NET computed for
+	// the prefix with them. The schema is sharedOutput's.
+	Output []struct {
+		Schema      string `json:"schema"`
+		CompactAt   int64  `json:"compactAt"`
+		Fingerprint string `json:"fingerprint"`
+	} `json:"output"`
+}
+
+// sharedOutput is the type whose schema the shared prefix's output entries hold.
+type sharedOutput struct {
+	Title   string   `json:"title" jsonschema:"A title «short», with <b>&amp; 'quotes' + more."`
+	Copies  uint     `json:"copies"`
+	Changes []string `json:"changes,omitempty"`
+	Note    *string  `json:"note"`
 }
 
 // readSharedPrefix returns the shared prefix.
@@ -56,6 +71,12 @@ func (p sharedPrefix) agent(t *testing.T, model officina.Model) *officina.Agent 
 // managing returns the agent of the shared prefix on model, with context management cm.
 func (p sharedPrefix) managing(t *testing.T, model officina.Model, cm officina.ContextManagement) *officina.Agent {
 	t.Helper()
+	return p.with(t, model, officina.AgentOptions{ContextManagement: cm})
+}
+
+// with returns the agent of the shared prefix on model, with the options of opts besides the tools.
+func (p sharedPrefix) with(t *testing.T, model officina.Model, opts officina.AgentOptions) *officina.Agent {
+	t.Helper()
 	var tools []officina.Tool
 	for _, st := range p.Tools {
 		kind := officina.Read
@@ -67,7 +88,8 @@ func (p sharedPrefix) managing(t *testing.T, model officina.Model, cm officina.C
 			Handler: func(context.Context, jsontext.Value) (string, error) { return "ok", nil },
 		})
 	}
-	agent, err := officina.NewAgent(model, p.Instructions, officina.AgentOptions{Tools: tools, ContextManagement: cm})
+	opts.Tools = tools
+	agent, err := officina.NewAgent(model, p.Instructions, opts)
 	if err != nil {
 		t.Fatalf("NewAgent() error = %v", err)
 	}
@@ -120,6 +142,37 @@ func TestAgent_CTX04_HIST01_TheFingerprintWithContextManagementIsDotNetsByteForB
 
 			run(t, p.managing(t, model, cm), &c, "Hi", officina.RunOptions{})
 
+			if got := fingerprint(t, &c); got != s.Fingerprint {
+				t.Errorf("fingerprint = %s, want .NET's %s", got, s.Fingerprint)
+			}
+		})
+	}
+}
+
+func TestAgent_CTX04_OUT01_TheFingerprintWithAnOutputSchemaIsDotNetsByteForByte(t *testing.T) {
+	t.Parallel()
+	p := readSharedPrefix(t)
+	if len(p.Output) == 0 {
+		t.Fatal("the shared prefix has no output schemas")
+	}
+	output, err := officina.NewOutput[sharedOutput]()
+	if err != nil {
+		t.Fatalf("NewOutput() error = %v", err)
+	}
+	for _, s := range p.Output {
+		t.Run(fmt.Sprintf("compactAt=%d", s.CompactAt), func(t *testing.T) {
+			t.Parallel()
+			model := compacting(officinatest.NewModel(p.Settings, officinatest.TextReply(`{"title":"Hi","copies":1,`+
+				`"note":null}`)))
+			var c officina.Conversation
+
+			run(t, p.with(t, model, officina.AgentOptions{Output: output, ContextManagement: officina.ContextManagement{
+				CompactAt: s.CompactAt,
+			}}), &c, "Hi", officina.RunOptions{})
+
+			if got := string(model.Requests()[0].OutputSchema); got != s.Schema {
+				t.Errorf("output schema = %s, want the shared %s", got, s.Schema)
+			}
 			if got := fingerprint(t, &c); got != s.Fingerprint {
 				t.Errorf("fingerprint = %s, want .NET's %s", got, s.Fingerprint)
 			}

@@ -15,8 +15,8 @@ import (
 
 // params lays out one request: the tools in the order given (the core sorts them) with eager input streaming; the
 // instructions as one system block holding the prefix's cache point; automatic caching for the conversation's tail;
-// the context management, with its betas; then the messages, each written as JSON here so stored blocks go out byte
-// for byte.
+// the context management, with its betas; typed output's schema as the structured output format, never a forced
+// tool choice; then the messages, each written as JSON here so stored blocks go out byte for byte.
 func (m *Model) params(req officina.Request) (anthropic.BetaMessageNewParams, error) {
 	params := anthropic.BetaMessageNewParams{
 		Model:        anthropic.Model(m.name),
@@ -35,6 +35,13 @@ func (m *Model) params(req officina.Request) (anthropic.BetaMessageNewParams, er
 		params.MaxTokens = min(params.MaxTokens, req.MaxOutputTokens)
 	}
 	params.ContextManagement, params.Betas = contextManagement(req.ContextManagement)
+	if req.OutputSchema != nil {
+		schema, err := outputSchema(req.OutputSchema)
+		if err != nil {
+			return anthropic.BetaMessageNewParams{}, fmt.Errorf("claude request: %w", err)
+		}
+		params.OutputConfig.Format = anthropic.BetaJSONOutputFormatParam{Schema: jsonv1.RawMessage(schema)}
+	}
 	for i, t := range req.Tools {
 		tool := &anthropic.BetaToolParam{
 			Name:                t.Name,

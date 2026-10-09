@@ -23,6 +23,9 @@ type Config struct {
 	Database string
 	// Model is the chat agent's model: Claude (see Model) in the application, a scripted one in tests.
 	Model officina.Model
+	// Summarizer is the session summarizer's model (see SummarizerModel); nil for none: sessions are then not
+	// summarized.
+	Summarizer officina.Model
 	// In and Out are the staff member's console.
 	In  io.Reader
 	Out io.Writer
@@ -56,8 +59,8 @@ type App struct {
 }
 
 // Build wires the application: the database pool, the session store, the export server's tools, the audit table,
-// the chat agent and the console, which is the agent's approver. The application starts with the database down, as
-// the pool connects when a tool first needs it, but not with the export server down.
+// the chat agent, the session summarizer and the console, which is the chat agent's approver. The application starts
+// with the database down, as the pool connects when a tool first needs it, but not with the export server down.
 func Build(ctx context.Context, cfg Config) (*App, error) {
 	if cfg.Model == nil || cfg.In == nil || cfg.Out == nil {
 		return nil, errors.New("build bookshop: a model, an input and an output are required")
@@ -74,7 +77,17 @@ func Build(ctx context.Context, cfg Config) (*App, error) {
 		}
 	}
 	trail := &auditTable{db: db}
-	c := newConsole(cfg, trail, NewSessions(db))
+	var summarizer *officina.Agent
+	if cfg.Summarizer != nil {
+		if summarizer, err = newSummarizer(cfg, cfg.Summarizer); err != nil {
+			if exports != nil {
+				exports.Close()
+			}
+			db.Close()
+			return nil, fmt.Errorf("build bookshop: %w", err)
+		}
+	}
+	c := newConsole(cfg, trail, NewSessions(db), summarizer)
 	var exportTools []officina.Tool
 	if exports != nil {
 		exportTools = exports.Tools()
