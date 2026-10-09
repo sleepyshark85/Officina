@@ -14,6 +14,7 @@ import (
 
 	"github.com/sleepyshark85/officina/go/officina"
 	"github.com/sleepyshark85/officina/go/officina/claude"
+	"github.com/sleepyshark85/officina/go/officina/mcp"
 )
 
 // Config is what Build wires: the boundaries of the application.
@@ -42,18 +43,21 @@ type Config struct {
 	// Demo compacts and clears early enough to see in a short session, and says so at the start; Model(true) caches
 	// for a demo. Either way the model's provider must compact and clear.
 	Demo bool
+	// Exports is the export server's MCP endpoint; empty for none, and the assistant cannot export.
+	Exports string
 }
 
 // App is Bookshop Assistant, wired: Run it, then Close it.
 type App struct {
 	db      *pgxpool.Pool
+	exports *mcp.Source
 	agent   *officina.Agent
 	console *console
 }
 
-// Build wires the application: the database pool, the session store, the audit table, the chat agent and the
-// console, which is the agent's approver. The application starts with the database down, as the pool connects when
-// a tool first needs it.
+// Build wires the application: the database pool, the session store, the export server's tools, the audit table,
+// the chat agent and the console, which is the agent's approver. The application starts with the database down, as
+// the pool connects when a tool first needs it, but not with the export server down.
 func Build(ctx context.Context, cfg Config) (*App, error) {
 	if cfg.Model == nil || cfg.In == nil || cfg.Out == nil {
 		return nil, errors.New("build bookshop: a model, an input and an output are required")
@@ -62,24 +66,41 @@ func Build(ctx context.Context, cfg Config) (*App, error) {
 	if err != nil {
 		return nil, fmt.Errorf("build bookshop: %w", err)
 	}
+	var exports *mcp.Source
+	if cfg.Exports != "" {
+		if exports, err = connectExports(ctx, cfg.Exports); err != nil {
+			db.Close()
+			return nil, fmt.Errorf("build bookshop: %w", err)
+		}
+	}
 	trail := &auditTable{db: db}
 	c := newConsole(cfg, trail, NewSessions(db))
-	agent, err := NewAgent(cfg, db, c, trail)
+	var exportTools []officina.Tool
+	if exports != nil {
+		exportTools = exports.Tools()
+	}
+	agent, err := NewAgent(cfg, db, exportTools, c, trail)
 	if err != nil {
+		if exports != nil {
+			exports.Close()
+		}
 		db.Close()
 		return nil, fmt.Errorf("build bookshop: %w", err)
 	}
-	return &App{db: db, agent: agent, console: c}, nil
+	return &App{db: db, exports: exports, agent: agent, console: c}, nil
 }
 
-// NewAgent returns the chat agent: cfg's model with the frozen instructions and the bookshop tools over db, asking
-// approver and auditing to sink (none when nil), with cfg's telemetry. Its prefix is the same however often it is
-// built, so a session one built resumes in another.
-func NewAgent(cfg Config, db *pgxpool.Pool, approver officina.Approver, sink officina.AuditSink) (*officina.Agent, error) {
+// NewAgent returns the chat agent: cfg's model with the frozen instructions, the bookshop tools over db and the
+// export server's tools, asking approver and auditing to sink (none when nil), with cfg's telemetry. Its prefix is
+// the same however often it is built, so a session one built resumes in another.
+func NewAgent(cfg Config, db *pgxpool.Pool, exports []officina.Tool, approver officina.Approver,
+	sink officina.AuditSink,
+) (*officina.Agent, error) {
 	tools, err := Tools(db)
 	if err != nil {
 		return nil, err
 	}
+	tools = append(tools, exports...)
 	agent, err := officina.NewAgent(cfg.Model, instructions, officina.AgentOptions{
 		Tools: tools, Approver: approver, AuditSink: sink, Name: "bookshop",
 		// The database password is a secret; the rest of the connection string is not.
@@ -116,8 +137,11 @@ func (a *App) Run(ctx context.Context) error {
 	return a.console.run(ctx, a.agent)
 }
 
-// Close closes the database pool.
+// Close closes the connection to the export server and the database pool.
 func (a *App) Close() {
+	if a.exports != nil {
+		a.exports.Close()
+	}
 	a.db.Close()
 }
 
@@ -178,6 +202,9 @@ How to work:
   changed: explain and offer a way forward, such as fewer copies or another book. If the database cannot be
   reached, say so plainly and suggest trying again shortly; do not pretend the change was made.
 - Prices are in pounds sterling. Give totals to the penny.
+- Asked to export a report, such as a customer's order history, look up the data, then write it as a CSV file
+  with a header row into the exports folder, /projects/exports, named for its content (for example
+  order-history-alice-martin.csv). Writing a file needs the staff member's approval. Tell them the file's name.
 
 How to answer:
 - Be brief and concrete: a few sentences, or a short list when there are several items. Name books by title and

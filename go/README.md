@@ -4,8 +4,8 @@ The Go implementation of Officina: the same requirements ([`REQUIREMENTS.md`](..
 ([`ARCHITECTURE.md`](../ARCHITECTURE.md)) as the .NET one at the repository root, written as idiomatic Go.
 
 Status: in progress. The core's run loop (Go S03), the Claude adapter (Go S04), tools and audit (Go S05), the
-Bookshop Assistant console (Go S06), telemetry with the audit view (Go S07), sessions with budgets (Go S08) and long
-conversations (Go S10) are in; memory and MCP follow. See
+Bookshop Assistant console (Go S06), telemetry with the audit view (Go S07), sessions with budgets (Go S08), long
+conversations (Go S10) and the MCP client with exports (Go S11) are in; memory follows. See
 [`docs/plan/phase-1.md`](../docs/plan/phase-1.md) for the slices (the Go column),
 [`docs/implementations/go.md`](../docs/implementations/go.md) for the decisions and
 [`docs/traceability.md`](docs/traceability.md) for the tests of each requirement.
@@ -27,7 +27,8 @@ Layout (G2, G3):
 ## Build and test
 
 Needs the Go version in `go.mod`. The tests need no API key and no network. On Linux with Docker, Bookshop
-Assistant's tests run against PostgreSQL in a container (testcontainers-go), started once per run; elsewhere they skip
+Assistant's tests run against PostgreSQL in a container (testcontainers-go), started once per run, and its export
+tests against the filesystem MCP server, built from the compose file's `exports-server` image; elsewhere they skip
 and say why, and in CI a missing Docker fails them. Run from this directory:
 
 ```sh
@@ -49,20 +50,23 @@ from the compose file, schema and seed in [`apps/BookshopAssistant/`](../apps/Bo
 and `ANTHROPIC_API_KEY`; a reply costs a few cents.
 
 ```sh
-(cd ../apps/BookshopAssistant && docker compose up --detach --wait postgres dashboard)
+(cd ../apps/BookshopAssistant && ./start.sh)
 go run ./cmd/bookshop
 ```
 
 It asks your name, then takes messages, such as *Order the two cheapest fantasy books in stock for Alice Martin and
 tell me the total*. Replies stream with each tool call shown; a change asks for your approval with its exact input.
 Ctrl+C stops a reply in progress, and the session goes on; `/help` lists the commands, `/quit` leaves.
+Asked to export a report, such as *Export Alice Martin's order history as CSV*, it writes the file, after your
+approval, through the compose file's filesystem MCP server, into `apps/BookshopAssistant/exports/`. The application
+does not start without that server.
 
 Each conversation is a session, saved in the database's `sessions` table after every step of a reply, so a restart or
 a crash loses at most the step in flight. `/sessions` lists the latest, `/resume <id>` goes on with one (with its
 cache intact, and a call a crash left unanswered told to the model as interrupted), `/new` starts another. Sessions
 are stored as the .NET application stores them, in the same table; one the .NET application started is refused as
-another version of the assistant until both chat agents have the same tools (memory and the export tools come with
-Go S09 and Go S11). After each reply a status line shows its tokens,
+another version of the assistant until both chat agents have the same tools (memory comes with
+Go S09). After each reply a status line shows its tokens,
 the share read from the cache, its cost and the session's; `/cost` shows the session's. A reply may spend $0.50 and a
 session $5; reaching either stops the reply and says why. `BOOKSHOP_REPLY_BUDGET`, in US dollars, such as `0.01`,
 lowers the reply's budget to show a stop.
@@ -81,6 +85,7 @@ tokens, and old tool results are cleared once a request holds more than 20 tool 
 input tokens (Claude's minimum) and clears above 12 tool calls, to see both in a short session: four broad catalogue
 searches in one message compact (about $0.30), and two turns of eight book lookups clear (step 13 of
 [`docs/demo.md`](../docs/demo.md)). Demo sessions do not resume in normal mode, nor the other way round.
+`BOOKSHOP_EXPORTS` names another export server's MCP endpoint than `http://localhost:18800/mcp`.
 `BOOKSHOP_DATABASE`, a PostgreSQL connection string, names another database, such as one on another port:
 `postgres://bookshop:shelf-demo-41@localhost:5433/bookshop`. `docker compose down -v` deletes the data, so the next
 start seeds afresh.
@@ -96,8 +101,8 @@ go mod tidy -diff
 govulncheck ./...
 ```
 
-Mutation testing, over the core, the test kit and the Claude package; `go-mutation` fails below the thresholds in
-[`.gremlins.yaml`](.gremlins.yaml) (G12):
+Mutation testing, over the core, the test kit, the Claude package and the MCP client; `go-mutation` fails below the
+thresholds in [`.gremlins.yaml`](.gremlins.yaml) (G12):
 
 ```sh
 go install github.com/go-gremlins/gremlins/cmd/gremlins@v0.6.0

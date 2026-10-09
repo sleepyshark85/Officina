@@ -136,7 +136,8 @@ jobs:
         run: go install github.com/go-gremlins/gremlins/cmd/gremlins@v0.6.0
 
       - name: Mutate
-        # Every run mutates the core and the test kit whole: they are small, and `--diff` cannot work from go/ (its
+        # Every run mutates everything under officina/ whole (the core, the test kit, the Claude package and the MCP
+        # client): they are small, and `--diff` cannot work from go/ (its
         # paths are relative to the repository, so it skipped every mutant). It fails below the thresholds in
         # go/.gremlins.yaml, set from Go S08's baseline (G12); gremlins v0.6.0 ignores the threshold flags. The default
         # timeout counts most mutants as timed out, hence the coefficient. gremlins tests each mutant in a copy of go/

@@ -69,6 +69,10 @@ const (
 	AuditCompacted AuditKind = "Compacted"
 	// AuditCleared says the provider cleared old tool results for a model call; the detail says how many.
 	AuditCleared AuditKind = "Cleared"
+	// AuditToolSource says a tool source connected, failed to connect or lost its connection; Tool names the
+	// source. A change of a source that several runs share is recorded by the run that noticed it, not always the
+	// one whose call met it.
+	AuditToolSource AuditKind = "ToolSource"
 )
 
 // maxAuditText is the longest text an entry keeps per field, in bytes.

@@ -83,6 +83,8 @@ const (
 	UnexpectedStop
 	// PrefixMismatch means the agent's prefix differs from the one the conversation was started with.
 	PrefixMismatch
+	// ToolSourceUnavailable means a tool source, such as an MCP server, could not connect at the start of the run.
+	ToolSourceUnavailable
 )
 
 // RunEvent is something that happened during a run, streamed to the host as it happens: a TextStreamed,
@@ -133,8 +135,9 @@ func (a *Agent) Run(ctx context.Context, c *Conversation, message string, opts R
 // without reporting events. The events can be ranged over once. Called while they are still being ranged over,
 // result returns ErrRunNotEnded.
 //
-// While the model stops for tool calls, the run runs them, appends all their results as one message and calls the
-// model again. The message and run context enter the conversation only with the model's reply, so a run that gets
+// Before its first model call, the run connects the tool sources of the agent's tools, and fails with
+// ToolSourceUnavailable if one cannot connect. While the model stops for tool calls, the run runs them, appends all
+// their results as one message and calls the model again. The message and run context enter the conversation only with the model's reply, so a run that gets
 // none leaves the conversation unchanged. Cancelling ctx, or stopping the range early, ends the run as
 // Stopped(Cancelled) unless its result was already decided; a reply's calls still all get results, those that had
 // not started a cancelled one. A nil c runs on a new conversation that is then discarded.
@@ -230,6 +233,9 @@ func (a *Agent) loop(ctx context.Context, c *Conversation, message string, opts 
 	// reports nothing more and ends as cancelled, though a reply's calls still get their results.
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
+	if unavailable := a.connectSources(ctx, audit); unavailable != "" {
+		return Result{Status: Failed, Failure: ToolSourceUnavailable, Detail: unavailable}
+	}
 	stopped := false
 	emit := func(e RunEvent) {
 		if !stopped && !yield(e) {
@@ -314,6 +320,7 @@ func (a *Agent) loop(ctx context.Context, c *Conversation, message string, opts 
 
 		spent.toolCalls += len(toolCalls)
 		results := a.runTools(ctx, toolCalls, audit, emit)
+		a.recordSourceChanges(ctx, audit)
 		answer := Message{Role: User, Blocks: make([]Block, len(results))}
 		for i := range results {
 			answer.Blocks[i] = Block{ToolResult: &results[i]}
@@ -483,7 +490,7 @@ func (r StopReason) String() string {
 
 // String returns the reason's name.
 func (r FailureReason) String() string {
-	return name(int(r), "FailureReason", "ModelError", "UnexpectedStop", "PrefixMismatch")
+	return name(int(r), "FailureReason", "ModelError", "UnexpectedStop", "PrefixMismatch", "ToolSourceUnavailable")
 }
 
 // name returns the name of the value v of an enumeration whose values start at 1, or the type and number for any

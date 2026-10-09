@@ -137,6 +137,7 @@ func runWithDatabase(m *testing.M) int {
 		fmt.Fprintln(os.Stderr, "find the database container:", err)
 		return 1
 	}
+	defer stopExports()
 	return m.Run()
 }
 

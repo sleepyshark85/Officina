@@ -1,0 +1,111 @@
+package mcp_test
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/sleepyshark85/officina/go/officina/mcp"
+)
+
+// stubbornServer returns the stubborn fake server, serving or silent, which writes its process ids to file and is
+// killed 100 ms after its input is closed.
+func stubbornServer(t *testing.T, file, mode string) mcp.Server {
+	t.Helper()
+	return mcp.WithExitWait(stdioServer(t, "", "stubborn", file, mode), 100*time.Millisecond)
+}
+
+func TestClose_MCP01_AServerThatIgnoresItsClosedInputIsStoppedWithEveryProcessItStarted(t *testing.T) {
+	t.Parallel()
+	file := filepath.Join(t.TempDir(), "fake.pid")
+	source, err := mcp.Connect(t.Context(), stubbornServer(t, file, "serve"), nil)
+	if err != nil {
+		t.Fatalf("Connect() error = %v", err)
+	}
+	pids := waitForPIDs(t, file)
+
+	source.Close()
+
+	for _, pid := range pids {
+		waitExited(t, pid)
+	}
+}
+
+func TestClose_MCP01_AServerThatExitsOnceItsInputIsClosedIsLeftToFinish(t *testing.T) {
+	t.Parallel()
+	file := filepath.Join(t.TempDir(), "done")
+	source, err := mcp.Connect(t.Context(), stdioServer(t, "", "tidy", file), nil)
+	if err != nil {
+		t.Fatalf("Connect() error = %v", err)
+	}
+
+	source.Close()
+
+	if data, err := os.ReadFile(file); err != nil || string(data) != "done" {
+		t.Errorf("the server's last work = %q, %v; want it done before Close returned", data, err)
+	}
+}
+
+func TestConnect_MCP04_ACancelledConnectStopsAStubbornServerWithEveryProcessItStarted(t *testing.T) {
+	t.Parallel()
+	file := filepath.Join(t.TempDir(), "fake.pid")
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	server := stubbornServer(t, file, "silent")
+	var (
+		err        error
+		connecting sync.WaitGroup
+	)
+	connecting.Go(func() {
+		_, err = mcp.Connect(ctx, server, nil)
+	})
+
+	pids := waitForPIDs(t, file)
+	cancel()
+	connecting.Wait()
+
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("Connect() error = %v, want context.Canceled", err)
+	}
+	for _, pid := range pids {
+		waitExited(t, pid)
+	}
+}
+
+func TestConnect_MCP04_AStdioServerThatSendsAMessageTooLongIsStopped(t *testing.T) {
+	t.Parallel()
+
+	_, err := mcp.Connect(t.Context(), stdioServer(t, "", "flood"), nil)
+
+	if want := "it sent a message longer than 16 MB"; err == nil || !strings.Contains(err.Error(), want) {
+		t.Errorf("Connect() error = %v, want one saying %q", err, want)
+	}
+}
+
+func TestConnect_MCP04_AnHTTPServerThatSendsAMessageTooLongIsRefused(t *testing.T) {
+	t.Parallel()
+	for _, media := range []string{"application/json", "text/event-stream"} {
+		t.Run(media, func(t *testing.T) {
+			t.Parallel()
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", media)
+				_, _ = fmt.Fprint(w, "data: "+strings.Repeat("x", 16<<20)) // The client stops reading.
+			}))
+			t.Cleanup(srv.Close)
+
+			_, err := mcp.Connect(t.Context(), mcp.Server{Name: "fake", URL: srv.URL}, nil)
+
+			if want := "a message is longer than 16 MB"; err == nil || !strings.Contains(err.Error(), want) {
+				t.Errorf("Connect() error = %v, want one saying %q", err, want)
+			}
+		})
+	}
+}

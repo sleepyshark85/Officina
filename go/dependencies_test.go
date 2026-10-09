@@ -35,6 +35,7 @@ func TestDependencies_TEST05_FixturesBreakingTheRulesFail(t *testing.T) {
 		core     = "example.com/fixture/officina"
 		onlySDK  = ": only example.com/fixture/officina/claude may import the Anthropic SDK"
 		onlyCore = ": the core may import only the standard library and the OpenTelemetry API"
+		onlyMCP  = ": the MCP client may import only the standard library and the core"
 	)
 	tests := []struct {
 		fixture string
@@ -45,6 +46,7 @@ func TestDependencies_TEST05_FixturesBreakingTheRulesFail(t *testing.T) {
 			fixture: "sdk_outside_claude",
 			want: []string{
 				core + "/mcp imports " + anthropicSDK + onlySDK,
+				core + "/mcp imports " + anthropicSDK + onlyMCP,
 				core + "/officinatest imports " + anthropicSDK + "/option" + onlySDK,
 			},
 		},
@@ -76,14 +78,14 @@ func TestDependencies_TEST05_FixturesBreakingTheRulesFail(t *testing.T) {
 }
 
 // violations returns, sorted, each direct import of a package of the module in dir that breaks a rule: only the
-// Claude package imports the Anthropic SDK, and the core imports only the standard library and the OpenTelemetry
-// API. Only direct imports count: the application reaches the SDK through the Claude package, and the OpenTelemetry
-// API brings modules of its own.
+// Claude package imports the Anthropic SDK, the core imports only the standard library and the OpenTelemetry API,
+// and the MCP client only the standard library and the core. Only direct imports count: the application reaches the
+// SDK through the Claude package, and the OpenTelemetry API brings modules of its own.
 func violations(t *testing.T, dir string, env []string) []string {
 	t.Helper()
 
 	module := strings.TrimSpace(goList(t, dir, env, "-m"))
-	core, claude := module+"/officina", module+"/officina/claude"
+	core, claude, mcp := module+"/officina", module+"/officina/claude", module+"/officina/mcp"
 
 	var found []string
 	for line := range strings.Lines(goList(t, dir, env, "-f", "{{.ImportPath}} {{join .Imports \" \"}}", "./...")) {
@@ -97,23 +99,33 @@ func violations(t *testing.T, dir string, env []string) []string {
 				found = append(found, fmt.Sprintf("%s imports %s: the core may import only the standard library "+
 					"and the OpenTelemetry API", pkg, imported))
 			}
+			if pkg == mcp && imported != core && !standard(imported) {
+				found = append(found, fmt.Sprintf("%s imports %s: the MCP client may import only the standard "+
+					"library and the core", pkg, imported))
+			}
 		}
 	}
 	slices.Sort(found)
 	return found
 }
 
-// allowedInCore reports whether the core may import the package: the standard library, whose import paths alone
-// have no dot in their first element, or the OpenTelemetry API's tracing, metrics, attributes and status codes.
+// allowedInCore reports whether the core may import the package: the standard library, or the OpenTelemetry API's
+// tracing, metrics, attributes and status codes.
 // Never the OpenTelemetry SDK or an exporter, nor the root otel package, which holds the global providers, nor the
 // semantic convention packages: the core names its attributes as the .NET implementation does.
 func allowedInCore(path string) bool {
-	first, _, _ := strings.Cut(path, "/")
-	return !strings.Contains(first, ".") ||
+	return standard(path) ||
 		within(path, "go.opentelemetry.io/otel/trace") ||
 		within(path, "go.opentelemetry.io/otel/metric") ||
 		within(path, "go.opentelemetry.io/otel/attribute") ||
 		within(path, "go.opentelemetry.io/otel/codes")
+}
+
+// standard reports whether the import path is the standard library's: only its paths have no dot in their first
+// element.
+func standard(path string) bool {
+	first, _, _ := strings.Cut(path, "/")
+	return !strings.Contains(first, ".")
 }
 
 // within reports whether the import path is the given path or below it.

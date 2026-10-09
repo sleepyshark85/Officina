@@ -229,10 +229,14 @@ func finishWord(f Finished) string {
 // startToolCall starts a tool call's span under the run's in ctx, and returns ctx with it; found says whether the
 // agent has the tool.
 func (t *telemetry) startToolCall(ctx context.Context, tl tool, found bool, call ToolCall) (context.Context, trace.Span) {
+	source := "application"
+	if found && tl.Source != nil {
+		source = tl.Source.Name()
+	}
 	attrs := []attribute.KeyValue{
 		attribute.String("gen_ai.operation.name", "execute_tool"), attribute.String("gen_ai.tool.name", call.Name),
 		attribute.String("gen_ai.tool.call.id", call.ID), attribute.String("gen_ai.tool.type", "function"),
-		attribute.String("officina.tool.source", "application"),
+		attribute.String("officina.tool.source", source),
 	}
 	if found {
 		attrs = append(attrs, attribute.String("officina.tool.kind", strings.ToLower(tl.Kind.String())))

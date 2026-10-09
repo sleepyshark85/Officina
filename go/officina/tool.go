@@ -29,6 +29,8 @@ type Tool struct {
 	// Handler runs the tool on input that is valid against InputSchema, and returns the result for the model. An
 	// error, or a panic, is the call's error result, with the error's text; the run goes on.
 	Handler func(ctx context.Context, input jsontext.Value) (string, error)
+	// Source is the source the tool comes from, such as an MCP server; nil for the application's own tools.
+	Source ToolSource
 }
 
 // ToolKind says whether a tool only reads or changes something.
