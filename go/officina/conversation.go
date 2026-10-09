@@ -56,7 +56,9 @@ var ErrConversationInUse = errors.New("another run is using the conversation; on
 
 // Conversation is the append-only list of messages between an agent and its model. The host owns it and stores it
 // as JSON between runs (its MarshalJSON and UnmarshalJSON); the core only appends to it. The zero value is an empty
-// conversation. One run at a time may use it, and nothing else may use it while a run does.
+// conversation. One run at a time may use it, and nothing else may use it while a run does, except the host's
+// handler of the run's events: it runs on the run's goroutine while the run waits, so saving the conversation from
+// a ConversationAppended handler is intended and safe.
 type Conversation struct {
 	// ID identifies the conversation for the host, such as a session id; the core only keeps it.
 	ID string
@@ -75,7 +77,9 @@ func (c *Conversation) Messages() []Message {
 }
 
 // The JSON form, the same as the .NET implementation's: a block's raw JSON is kept as a JSON string, so it reads back
-// byte for byte however the host's store or encoder rewrites the conversation's JSON.
+// byte for byte however the host's store or encoder rewrites the conversation's JSON. A block's text is written
+// when it has any, and always for a block without raw JSON, as .NET writes it; a block with raw JSON and empty text,
+// which .NET can write as "text":"", reads back the same but is written without it.
 type (
 	conversationJSON struct {
 		ID          string        `json:"id"`
@@ -87,8 +91,8 @@ type (
 		Blocks []blockJSON `json:"blocks"`
 	}
 	blockJSON struct {
-		Text string `json:"text,omitzero"`
-		Raw  string `json:"raw,omitzero"`
+		Text *string `json:"text,omitzero"`
+		Raw  string  `json:"raw,omitzero"`
 	}
 )
 
@@ -98,7 +102,10 @@ func (c *Conversation) MarshalJSON() ([]byte, error) {
 	for i, m := range c.messages {
 		wire.Messages[i] = messageJSON{Role: m.Role, Blocks: make([]blockJSON, len(m.Blocks))}
 		for j, b := range m.Blocks {
-			wire.Messages[i].Blocks[j] = blockJSON{Text: b.Text, Raw: string(b.Raw)}
+			wire.Messages[i].Blocks[j] = blockJSON{Raw: string(b.Raw)}
+			if b.Text != "" || b.Raw == nil {
+				wire.Messages[i].Blocks[j].Text = &b.Text
+			}
 		}
 	}
 	data, err := json.Marshal(wire)
@@ -125,14 +132,17 @@ func (c *Conversation) UnmarshalJSON(data []byte) error {
 		}
 		messages[i] = Message{Role: m.Role, Blocks: make([]Block, len(m.Blocks))}
 		for j, b := range m.Blocks {
-			block := Block{Text: b.Text}
+			var block Block
+			if b.Text != nil {
+				block.Text = *b.Text
+			}
 			if b.Raw != "" {
 				block.Raw = jsontext.Value(b.Raw)
 				if !block.Raw.IsValid() {
 					return fmt.Errorf("unmarshal conversation: block %d of message %d has invalid raw JSON", j+1, i+1)
 				}
 			}
-			if block.Text == "" && block.Raw == nil {
+			if b.Text == nil && block.Raw == nil {
 				return fmt.Errorf("unmarshal conversation: block %d of message %d has neither text nor raw JSON", j+1, i+1)
 			}
 			messages[i].Blocks[j] = block

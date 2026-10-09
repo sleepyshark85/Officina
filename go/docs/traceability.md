@@ -26,7 +26,7 @@ Tests are under `go/`, shortened as:
 |---|---|---|
 | AGT-01 | Core: `TestNewAgent_AGT01_RejectsAnInvalidDefinition`, `TestNewAgent_AGT01_TheDefinitionDoesNotChangeWithTheCallersTools`; `TestRun_AGT04_HundredConcurrentRunsOfOneAgentEachKeepTheirConversation` (shared under `-race`) | |
 | AGT-02 | Core: `TestRun_AGT02_MultiTurnRunCompletesWithText`; `ExampleAgent_Run` | The tool loop comes with tools (Go S05) |
-| AGT-03 | Core: `TestRun_AGT03_EveryFinishReasonMapsToItsResultAndTheReplyIsKept`, `TestRun_AGT03_ARunWithoutAReplyFailsOrEndsAndAppendsNothing` | |
+| AGT-03 | Core: `TestRun_AGT03_EveryFinishReasonMapsToItsResultAndTheReplyIsKept`, `TestRun_AGT03_ARunWithoutAReplyFailsOrEndsAndAppendsNothing`, `TestResult_AGT03_StatusesAndReasonsPrintTheirNames` | |
 | AGT-04 | Core: `TestRun_AGT04_HundredConcurrentRunsOfOneAgentEachKeepTheirConversation`, `TestRun_AGT04_ASecondRunOnAConversationInUseFails` | |
 | AGT-05 | Core: `TestRun_AGT05_CancellingMidStreamAppendsNothingAndTheNextRequestIsValid`, `TestRun_AGT05_ARunCancelledBeforeItStartsCallsNoModel`, `TestRun_AGT05_CancellingStopsTheRunEvenIfTheModelIgnoresIt` | Tool calls on cancel come with tools (Go S05) |
 | AGT-06 | Core: `TestConversation_AGT06_JSONRoundTripKeepsEveryBlockByteForByte` (the canonical-form pin: `<`, `&`, non-ASCII, `\u` escapes, and stores that rewrite the JSON), `TestConversation_AGT06_TheJSONFormIsPlainAndTheSameAsDotNets`, `TestConversation_AGT06_UnmarshalRejectsAnInvalidConversation`, `FuzzConversation_AGT06_UnmarshalThenMarshalIsAFixedPoint`, `TestRun_AGT06_ReplyBlocksAreAppendedExactlyAsReceived` | |

@@ -521,7 +521,11 @@ func TestRun_EVT01_EventsRangeOnceAndTheResultWaitsForThem(t *testing.T) {
 	events, result := newAgent(t, model).Stream(t.Context(), nil, "Hi", officina.RunOptions{})
 
 	var first, second int
+	var early error
 	for range events {
+		if first == 0 {
+			_, early = result()
+		}
 		first++
 	}
 	for range events {
@@ -532,6 +536,9 @@ func TestRun_EVT01_EventsRangeOnceAndTheResultWaitsForThem(t *testing.T) {
 		t.Fatalf("result() error = %v", err)
 	}
 
+	if !errors.Is(early, officina.ErrRunNotEnded) {
+		t.Errorf("result() during the range error = %v, want %v", early, officina.ErrRunNotEnded)
+	}
 	if first != 3 || second != 0 {
 		t.Errorf("ranges reported %d and %d events, want 3 and 0", first, second)
 	}
@@ -592,5 +599,31 @@ func TestNewAgent_AGT01_TheDefinitionDoesNotChangeWithTheCallersTools(t *testing
 
 	if diff := cmp.Diff([]officina.Tool{tool("search", "Searches.")}, model.Requests()[0].Tools); diff != "" {
 		t.Errorf("tools mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestResult_AGT03_StatusesAndReasonsPrintTheirNames(t *testing.T) {
+	t.Parallel()
+	values := []fmt.Stringer{
+		officina.Completed, officina.Stopped, officina.Failed, officina.Status(0),
+		officina.Cancelled, officina.Refusal, officina.OutputLimit, officina.ContextFull, officina.StopReason(5),
+		officina.ModelError, officina.UnexpectedStop, officina.PrefixMismatch, officina.FailureReason(0),
+		officina.FinishUnknown, officina.FinishEnd, officina.FinishToolUse, officina.FinishMaxTokens,
+		officina.FinishRefusal, officina.FinishContextFull, officina.FinishReason(6),
+	}
+	var got []string
+	for _, v := range values {
+		got = append(got, v.String())
+	}
+
+	want := []string{
+		"Completed", "Stopped", "Failed", "Status(0)",
+		"Cancelled", "Refusal", "OutputLimit", "ContextFull", "StopReason(5)",
+		"ModelError", "UnexpectedStop", "PrefixMismatch", "FailureReason(0)",
+		"FinishUnknown", "FinishEnd", "FinishToolUse", "FinishMaxTokens", "FinishRefusal", "FinishContextFull",
+		"FinishReason(6)",
+	}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("names mismatch (-want +got):\n%s", diff)
 	}
 }

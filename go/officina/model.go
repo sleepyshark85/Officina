@@ -14,6 +14,10 @@ type Model interface {
 	// Stream sends one request and yields the reply: text deltas and complete blocks as they arrive, usage, and last
 	// a Finished. The Model retries transient failures itself; a failure that remains is yielded as an error, which
 	// ends the reply. When ctx is done or the caller stops early, Stream releases everything it started.
+	//
+	// A caller that stops early does so by yield returning false; ctx is cancelled only after the stream has
+	// returned. So a stream that waits for a goroutine of its own must first stop it on that signal too, not only
+	// on ctx, or it waits forever.
 	Stream(ctx context.Context, req Request) iter.Seq2[ModelEvent, error]
 }
 
@@ -84,3 +88,12 @@ const (
 	FinishRefusal
 	FinishContextFull
 )
+
+// String returns the reason's name.
+func (r FinishReason) String() string {
+	if r == FinishUnknown {
+		return "FinishUnknown"
+	}
+	return name(int(r), "FinishReason", "FinishEnd", "FinishToolUse", "FinishMaxTokens", "FinishRefusal",
+		"FinishContextFull")
+}

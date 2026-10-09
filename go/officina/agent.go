@@ -61,8 +61,10 @@ func NewAgent(model Model, instructions string, opts AgentOptions) (*Agent, erro
 	return &Agent{model: model, instructions: instructions, tools: tools, fingerprint: fingerprint}, nil
 }
 
-// prefixFingerprint returns a SHA-256 hash of everything in the prefix that reaches the model, in a fixed encoding:
-// stored conversations carry it, so the encoding never changes.
+// prefixFingerprint returns a SHA-256 hash of everything in the prefix that reaches the model. Stored
+// conversations carry it, so once Go S08 aligns it with .NET's it must not change. Until then it may: it uses .NET's
+// keys but not yet its escaping, and the schema is re-encoded, so schemas that differ only in spacing or escapes
+// share a fingerprint.
 func prefixFingerprint(settings, instructions string, tools []Tool) (string, error) {
 	type toolJSON struct {
 		Name        string         `json:"name"`

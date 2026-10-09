@@ -5,7 +5,9 @@ import (
 	"errors"
 	"iter"
 	"slices"
+	"strconv"
 	"strings"
+	"sync/atomic"
 )
 
 // RunOptions holds what one run gets besides its message, each optional. None of it is part of the prefix.
@@ -92,6 +94,9 @@ func (TextStreamed) runEvent()         {}
 func (UsageReported) runEvent()        {}
 func (ConversationAppended) runEvent() {}
 
+// ErrRunNotEnded is returned for a run's result asked for while its events are still being ranged over.
+var ErrRunNotEnded = errors.New("run: result called before the events ended")
+
 // Run runs the agent and returns its result; see Stream.
 func (a *Agent) Run(ctx context.Context, c *Conversation, message string, opts RunOptions) (Result, error) {
 	_, result := a.Stream(ctx, c, message, opts)
@@ -100,7 +105,8 @@ func (a *Agent) Run(ctx context.Context, c *Conversation, message string, opts R
 
 // Stream runs the agent on conversation c with a user message, as events and a result. The run starts when the
 // events are ranged over, and the result returns how it ended once they are done; called first, result runs it
-// without reporting events. The events can be ranged over once.
+// without reporting events. The events can be ranged over once. Called while they are still being ranged over,
+// result returns ErrRunNotEnded.
 //
 // The message and run context enter the conversation only with the model's reply, so a run that gets none leaves
 // the conversation unchanged. Cancelling ctx, or stopping the range early, ends the run as Stopped(Cancelled) unless
@@ -112,19 +118,22 @@ func (a *Agent) Stream(
 	ctx context.Context, c *Conversation, message string, opts RunOptions,
 ) (events iter.Seq[RunEvent], result func() (Result, error)) {
 	var (
-		res    Result
-		err    error
-		ranged bool
+		res          Result
+		err          error
+		ranged, done atomic.Bool
 	)
 	events = func(yield func(RunEvent) bool) {
-		if ranged {
+		if ranged.Swap(true) {
 			return
 		}
-		ranged = true
 		res, err = a.run(ctx, c, message, opts, yield)
+		done.Store(true)
 	}
 	result = func() (Result, error) {
 		events(func(RunEvent) bool { return true })
+		if !done.Load() {
+			return Result{}, ErrRunNotEnded
+		}
 		return res, err
 	}
 	return events, result
@@ -244,4 +253,28 @@ func finish(f Finished, blocks []Block, usage Usage) Result {
 		return Result{Status: Failed, Failure: UnexpectedStop,
 			Detail: "the model stopped for a reason the run cannot act on: " + f.Detail, Usage: usage}
 	}
+}
+
+// String returns the status's name.
+func (s Status) String() string {
+	return name(int(s), "Status", "Completed", "Stopped", "Failed")
+}
+
+// String returns the reason's name.
+func (r StopReason) String() string {
+	return name(int(r), "StopReason", "Cancelled", "Refusal", "OutputLimit", "ContextFull")
+}
+
+// String returns the reason's name.
+func (r FailureReason) String() string {
+	return name(int(r), "FailureReason", "ModelError", "UnexpectedStop", "PrefixMismatch")
+}
+
+// name returns the name of the value v of an enumeration whose values start at 1, or the type and number for any
+// other value, the zero value included.
+func name(v int, typ string, names ...string) string {
+	if v < 1 || v > len(names) {
+		return typ + "(" + strconv.Itoa(v) + ")"
+	}
+	return names[v-1]
 }
