@@ -24,7 +24,7 @@ const (
 	insertAudit = `insert into audit (time, sequence, run, conversation, agent, memory_scope, trace_id, span_id, kind,
 	tool, call_id, input, outcome, detail, duration, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
 	cost)
-values ($1, $2, $3, $4, $5, null, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)`
+values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)`
 
 	selectAudit = `select time, sequence, run, agent, coalesce(trace_id, ''), coalesce(span_id, ''), kind,
 	coalesce(tool, ''), coalesce(call_id, ''), coalesce(input, ''), coalesce(outcome, ''), coalesce(detail, ''),
@@ -49,8 +49,8 @@ func (a *auditTable) Write(ctx context.Context, e officina.AuditEntry) error {
 		tokens = [4]*int64{&e.Usage.Input, &e.Usage.Output, &e.Usage.CacheRead, &e.Usage.CacheWrite}
 		cost = &e.Cost
 	}
-	_, err := a.db.Exec(ctx, insertAudit, e.Time, e.Sequence, e.Run, e.Conversation, e.Agent, null(e.TraceID),
-		null(e.SpanID), string(e.Kind), null(e.Tool), null(e.CallID), null(e.Input), null(e.Outcome), null(e.Detail),
+	_, err := a.db.Exec(ctx, insertAudit, e.Time, e.Sequence, e.Run, e.Conversation, e.Agent, null(e.MemoryScope),
+		null(e.TraceID), null(e.SpanID), string(e.Kind), null(e.Tool), null(e.CallID), null(e.Input), null(e.Outcome), null(e.Detail),
 		duration, tokens[0], tokens[1], tokens[2], tokens[3], cost)
 	if err != nil {
 		return fmt.Errorf("write the audit entry: %w", err)

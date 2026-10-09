@@ -13,10 +13,11 @@ import (
 	"github.com/sleepyshark85/officina/go/officina"
 )
 
-// params lays out one request: the tools in the order given (the core sorts them) with eager input streaming; the
-// instructions as one system block holding the prefix's cache point; automatic caching for the conversation's tail;
-// the context management, with its betas; typed output's schema as the structured output format, never a forced
-// tool choice; then the messages, each written as JSON here so stored blocks go out byte for byte.
+// params lays out one request: the tools in the order given (the core sorts them) with eager input streaming, the
+// memory tool as Claude's own; the instructions as one system block holding the prefix's cache point; automatic
+// caching for the conversation's tail; the context management, with its betas; typed output's schema as the
+// structured output format, never a forced tool choice; then the messages, each written as JSON here so stored
+// blocks go out byte for byte.
 func (m *Model) params(req officina.Request) (anthropic.BetaMessageNewParams, error) {
 	params := anthropic.BetaMessageNewParams{
 		Model:        anthropic.Model(m.name),
@@ -43,6 +44,11 @@ func (m *Model) params(req officina.Request) (anthropic.BetaMessageNewParams, er
 		params.OutputConfig.Format = anthropic.BetaJSONOutputFormatParam{Schema: jsonv1.RawMessage(schema)}
 	}
 	for i, t := range req.Tools {
+		// The memory tool is Claude's own, which the model is trained on: it carries no schema or description of ours.
+		if t.IsMemory() {
+			params.Tools[i] = anthropic.BetaToolUnionParam{OfMemoryTool20250818: &anthropic.BetaMemoryTool20250818Param{}}
+			continue
+		}
 		tool := &anthropic.BetaToolParam{
 			Name:                t.Name,
 			InputSchema:         param.Override[anthropic.BetaToolInputSchemaParam](t.InputSchema),

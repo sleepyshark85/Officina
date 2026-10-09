@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -24,6 +25,7 @@ const help = `Commands:
   /resume <id>   Go on with the session with that id.
   /cost          Show this session's tokens and cost.
   /audit [<id>]  Show the audit trail of this session, or of the session with that id.
+  /memory        Show what the assistant remembers for you.
   /quit          Leave the assistant.
 Anything else is a message to the assistant. Ctrl+C stops a reply in progress.`
 
@@ -32,6 +34,8 @@ Anything else is a message to the assistant. Ctrl+C stops a reply in progress.`
 //
 // Each conversation is a session, saved after every step of a reply; each reply ends with a status line of its
 // tokens and cost, and stops at its own or its session's budget.
+//
+// Each staff member has their own memory scope in the memory store, which /memory shows.
 //
 // Each reply is a span, the parent of the run's trace, so the console's logs join it; /audit reads the audit table
 // and links each run to its trace on the dashboard.
@@ -52,6 +56,7 @@ type console struct {
 	// in this console, which listings do not try again.
 	summarizer   *officina.Agent
 	unsummarized map[string]bool
+	memory       officina.MemoryStore
 	budgets      Budgets
 	dashboard    string
 	// answers hands one approval from the console to Approve; one reply asks one approval at a time.
@@ -74,10 +79,12 @@ type read struct {
 	err  error
 }
 
-func newConsole(cfg Config, trail *auditTable, sessions *Sessions, summarizer *officina.Agent) *console {
+func newConsole(
+	cfg Config, trail *auditTable, sessions *Sessions, summarizer *officina.Agent, memory officina.MemoryStore,
+) *console {
 	c := &console{
 		in: bufio.NewReader(cfg.In), out: cfg.Out, echo: cfg.Echo, interrupt: cfg.Interrupt, logger: cfg.Logger,
-		trail: trail, sessions: sessions, summarizer: summarizer, unsummarized: map[string]bool{},
+		trail: trail, sessions: sessions, summarizer: summarizer, unsummarized: map[string]bool{}, memory: memory,
 		budgets: cfg.Budgets, dashboard: cfg.Dashboard,
 		answers: make(chan officina.Approval, 1), atLineStart: true, demo: cfg.Demo,
 	}
@@ -155,6 +162,9 @@ func (c *console) run(ctx context.Context, agent *officina.Agent) error {
 			}
 			c.showAudit(ctx, audit)
 			continue
+		case command == "/memory":
+			c.showMemory(ctx, memoryScope(staffMember))
+			continue
 		case strings.HasPrefix(command, "/"):
 			c.writeLine("Unknown command " + command + ". Type /help for commands.")
 			continue
@@ -164,7 +174,7 @@ func (c *console) run(ctx context.Context, agent *officina.Agent) error {
 		if current == s.context {
 			current = ""
 		}
-		if err := c.reply(ctx, agent, s, text, current); err != nil {
+		if err := c.reply(ctx, agent, s, text, current, memoryScope(staffMember)); err != nil {
 			return err
 		}
 	}
@@ -197,9 +207,44 @@ func (c *console) askStaffMember(ctx context.Context) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		if name = strings.TrimSpace(name); name != "" {
+		switch name = strings.TrimSpace(name); {
+		case name != "" && !officina.ValidMemoryScope(memoryScope(name)):
+			c.writeLine("That name cannot be used. Please give another name.")
+		case name != "":
 			c.writeLine("Hello, " + name + ".")
 			return name, nil
+		}
+	}
+}
+
+// memoryScope returns a staff member's memory scope: their name, so case does not matter. Memory follows who is at
+// the counter, not who started the session: a session resumed by another staff member runs in theirs.
+func memoryScope(staffMember string) string {
+	return strings.ToLower(staffMember)
+}
+
+// showMemory shows every file of the memory scope, with its text.
+func (c *console) showMemory(ctx context.Context, scope string) {
+	files, err := c.memory.List(ctx, scope)
+	if err != nil {
+		c.writeLine("The memory could not be read: " + err.Error())
+		return
+	}
+	if len(files) == 0 {
+		c.writeLine("Nothing remembered yet.")
+		return
+	}
+	slices.SortFunc(files, func(a, b officina.MemoryFile) int { return strings.Compare(a.Path, b.Path) })
+	c.writeLine("Remembered:")
+	for _, f := range files {
+		text, err := c.memory.Read(ctx, scope, f.Path)
+		if err != nil {
+			c.writeLine("The memory could not be read: " + err.Error())
+			return
+		}
+		c.writeLine("/memories/" + f.Path)
+		for line := range strings.SplitSeq(strings.TrimRight(text, "\n"), "\n") {
+			c.writeLine("  " + line)
 		}
 	}
 }
@@ -214,10 +259,12 @@ func (c *console) showAudit(ctx context.Context, session string) {
 	c.writeLine(formatAudit(session, entries, c.dashboard, time.Local))
 }
 
-// reply streams one reply to message in session s, with the run context newContext if it is not empty, saving the
-// session after every step, within the lower of the reply's budget and what is left of the session's. Its error is
-// the API misused, which is a bug.
-func (c *console) reply(ctx context.Context, agent *officina.Agent, s *session, message, newContext string) error {
+// reply streams one reply to message in session s, with the run context newContext if it is not empty and the
+// memory of scope, saving the session after every step, within the lower of the reply's budget and what is left of
+// the session's. Its error is the API misused, which is a bug.
+func (c *console) reply(
+	ctx context.Context, agent *officina.Agent, s *session, message, newContext, scope string,
+) error {
 	ctx, span := c.tracer.Start(ctx, "reply")
 	defer span.End()
 	ctx, stop := c.interrupt(ctx)
@@ -225,7 +272,7 @@ func (c *console) reply(ctx context.Context, agent *officina.Agent, s *session, 
 	left := c.budgets.Session - s.cost
 	budget := max(0, min(c.budgets.Reply, left))
 	events, result := agent.Stream(ctx, s.conversation, message, officina.RunOptions{
-		Context: newContext, Budget: officina.Limits{Cost: &budget},
+		Context: newContext, Budget: officina.Limits{Cost: &budget}, MemoryScope: scope,
 	})
 	labelled, saveFailed, compacted := false, false, false
 	// What the reply has spent so far, from each model call's usage, so every save stores the session's whole spend.

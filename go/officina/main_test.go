@@ -42,9 +42,9 @@ func tool(name, description string) officina.Tool {
 	}
 }
 
-// ignoreHandler compares tools without their handlers, as funcs never compare equal.
+// ignoreHandler compares tools without their handlers, as funcs never compare equal, and without what is unexported.
 func ignoreHandler() cmp.Option {
-	return cmpopts.IgnoreFields(officina.Tool{}, "Handler")
+	return cmp.Options{cmpopts.IgnoreFields(officina.Tool{}, "Handler"), cmpopts.IgnoreUnexported(officina.Tool{})}
 }
 
 // outcome compares results by how the run ended, without their cost, counts and duration.

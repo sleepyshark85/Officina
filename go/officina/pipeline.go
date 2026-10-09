@@ -131,7 +131,8 @@ func (p *pipeline) prepare(ctx context.Context, t tool, found bool, call ToolCal
 	if problems := t.schema.validate(input); problems != nil {
 		return "The input does not match the tool's schema:\n" + strings.Join(problems, "\n")
 	}
-	if !t.NeedsApproval {
+	// The memory tool's views only read, so they never need approval.
+	if !t.NeedsApproval || t.memory && input.(map[string]any)["command"] == "view" {
 		return ""
 	}
 	approver := p.agent.approver

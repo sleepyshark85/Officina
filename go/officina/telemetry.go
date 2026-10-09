@@ -94,15 +94,22 @@ func newTelemetry(tp trace.TracerProvider, mp metric.MeterProvider, agent string
 }
 
 // startRun starts a run's span, under the host's span in ctx if there is one, and returns ctx with it.
-func (t *telemetry) startRun(ctx context.Context, conversation, message string) (context.Context, trace.Span) {
+func (t *telemetry) startRun(
+	ctx context.Context, conversation, message, memoryScope string,
+) (context.Context, trace.Span) {
 	name := "invoke_agent"
 	if t.agent != "" {
 		name += " " + t.agent
 	}
-	return t.tracer.Start(ctx, name, trace.WithAttributes(t.withContent([]attribute.KeyValue{
+	attrs := []attribute.KeyValue{
 		attribute.String("gen_ai.operation.name", "invoke_agent"), t.dims[0],
 		attribute.String("gen_ai.conversation.id", conversation), t.dims[1], t.dims[2],
-	}, "gen_ai.input.messages", func() string { return messages("user", message) })...))
+	}
+	if memoryScope != "" {
+		attrs = append(attrs, attribute.String("officina.memory.scope", memoryScope))
+	}
+	return t.tracer.Start(ctx, name, trace.WithAttributes(t.withContent(attrs, "gen_ai.input.messages",
+		func() string { return messages("user", message) })...))
 }
 
 // endRun counts the run and ends its span with its result, whose text is already redacted.
@@ -230,8 +237,11 @@ func finishWord(f Finished) string {
 // agent has the tool.
 func (t *telemetry) startToolCall(ctx context.Context, tl tool, found bool, call ToolCall) (context.Context, trace.Span) {
 	source := "application"
-	if found && tl.Source != nil {
+	switch {
+	case found && tl.Source != nil:
 		source = tl.Source.Name()
+	case found && tl.memory:
+		source = "memory"
 	}
 	attrs := []attribute.KeyValue{
 		attribute.String("gen_ai.operation.name", "execute_tool"), attribute.String("gen_ai.tool.name", call.Name),

@@ -98,7 +98,8 @@ func crashingApp() int {
 		sayThenCall("I'll add two copies.", officinatest.ToolUseBlock("c1", "restock_book", `{"bookId":320,"quantity":2}`)),
 		officina.Usage{Input: 100, Output: 50, CacheRead: 900, CacheWrite: 200}))
 	app, err := bookshop.Build(context.Background(), bookshop.Config{
-		Database: os.Getenv(crashEnv), Model: priced{model}, In: os.Stdin, Out: os.Stdout, Echo: true,
+		Database: os.Getenv(crashEnv), Model: priced{model}, Memory: &officina.MapMemoryStore{}, In: os.Stdin,
+		Out: os.Stdout, Echo: true,
 	})
 	if err != nil {
 		return 1

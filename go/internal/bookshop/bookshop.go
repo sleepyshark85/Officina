@@ -26,6 +26,8 @@ type Config struct {
 	// Summarizer is the session summarizer's model (see SummarizerModel); nil for none: sessions are then not
 	// summarized.
 	Summarizer officina.Model
+	// Memory keeps what the assistant remembers for each staff member.
+	Memory officina.MemoryStore
 	// In and Out are the staff member's console.
 	In  io.Reader
 	Out io.Writer
@@ -62,8 +64,8 @@ type App struct {
 // the chat agent, the session summarizer and the console, which is the chat agent's approver. The application starts
 // with the database down, as the pool connects when a tool first needs it, but not with the export server down.
 func Build(ctx context.Context, cfg Config) (*App, error) {
-	if cfg.Model == nil || cfg.In == nil || cfg.Out == nil {
-		return nil, errors.New("build bookshop: a model, an input and an output are required")
+	if cfg.Model == nil || cfg.Memory == nil || cfg.In == nil || cfg.Out == nil {
+		return nil, errors.New("build bookshop: a model, a memory store, an input and an output are required")
 	}
 	db, err := Connect(ctx, cfg.Database)
 	if err != nil {
@@ -87,7 +89,7 @@ func Build(ctx context.Context, cfg Config) (*App, error) {
 			return nil, fmt.Errorf("build bookshop: %w", err)
 		}
 	}
-	c := newConsole(cfg, trail, NewSessions(db), summarizer)
+	c := newConsole(cfg, trail, NewSessions(db), summarizer, cfg.Memory)
 	var exportTools []officina.Tool
 	if exports != nil {
 		exportTools = exports.Tools()
@@ -103,9 +105,10 @@ func Build(ctx context.Context, cfg Config) (*App, error) {
 	return &App{db: db, exports: exports, agent: agent, console: c}, nil
 }
 
-// NewAgent returns the chat agent: cfg's model with the frozen instructions, the bookshop tools over db and the
-// export server's tools, asking approver and auditing to sink (none when nil), with cfg's telemetry. Its prefix is
-// the same however often it is built, so a session one built resumes in another.
+// NewAgent returns the chat agent: cfg's model with the frozen instructions, the bookshop tools over db, the export
+// server's tools and memory in cfg's store, asking approver and auditing to sink (none when nil), with cfg's
+// telemetry. Its prefix is the same however often it is built, so a session one built resumes in another. The model
+// reads what is remembered through the memory tool; who and when come as run context.
 func NewAgent(cfg Config, db *pgxpool.Pool, exports []officina.Tool, approver officina.Approver,
 	sink officina.AuditSink,
 ) (*officina.Agent, error) {
@@ -115,7 +118,7 @@ func NewAgent(cfg Config, db *pgxpool.Pool, exports []officina.Tool, approver of
 	}
 	tools = append(tools, exports...)
 	agent, err := officina.NewAgent(cfg.Model, instructions, officina.AgentOptions{
-		Tools: tools, Approver: approver, AuditSink: sink, Name: "bookshop",
+		Tools: append(tools, officina.NewMemoryTool(cfg.Memory)), Approver: approver, AuditSink: sink, Name: "bookshop",
 		// The database password is a secret; the rest of the connection string is not.
 		Secrets:        []string{db.Config().ConnConfig.Password},
 		TracerProvider: cfg.TracerProvider, MeterProvider: cfg.MeterProvider,
@@ -218,6 +221,8 @@ How to work:
 - Asked to export a report, such as a customer's order history, look up the data, then write it as a CSV file
   with a header row into the exports folder, /projects/exports, named for its content (for example
   order-history-alice-martin.csv). Writing a file needs the staff member's approval. Tell them the file's name.
+- Your memory belongs to the staff member you are talking to. Keep their preferences and standing notes there,
+  such as how they like prices shown, and follow them.
 
 How to answer:
 - Be brief and concrete: a few sentences, or a short list when there are several items. Name books by title and

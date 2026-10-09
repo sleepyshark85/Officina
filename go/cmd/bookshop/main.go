@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strconv"
 	"sync"
 	"time"
@@ -13,6 +14,7 @@ import (
 	"go.opentelemetry.io/otel"
 
 	"github.com/sleepyshark85/officina/go/internal/bookshop"
+	"github.com/sleepyshark85/officina/go/officina"
 )
 
 // The compose file's services, in apps/BookshopAssistant: the database, with its demo password, the telemetry
@@ -70,6 +72,8 @@ func run() int {
 	app, err := bookshop.Build(ctx, bookshop.Config{
 		Database: setting("BOOKSHOP_DATABASE", composeDatabase), Model: model, Summarizer: summarizer,
 		In: os.Stdin, Out: os.Stdout, Echo: echo,
+		// What the assistant remembers, per staff member, as the .NET application keeps it: data/memory.
+		Memory: officina.NewFileMemoryStore(filepath.Join("data", "memory")),
 		// Ctrl+C stops the reply in progress and the session goes on. Between replies nothing listens for it, so it
 		// ends the application, as usual.
 		Interrupt: func(ctx context.Context) (context.Context, context.CancelFunc) {

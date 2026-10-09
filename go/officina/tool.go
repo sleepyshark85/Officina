@@ -31,6 +31,9 @@ type Tool struct {
 	Handler func(ctx context.Context, input jsontext.Value) (string, error)
 	// Source is the source the tool comes from, such as an MCP server; nil for the application's own tools.
 	Source ToolSource
+
+	// memory marks the memory tool, which NewMemoryTool returns.
+	memory bool
 }
 
 // ToolKind says whether a tool only reads or changes something.
