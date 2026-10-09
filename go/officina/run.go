@@ -18,9 +18,11 @@ import (
 type RunOptions struct {
 	// Context is the run context, appended after the user message as an operator message; empty for none.
 	Context string
+	// Budget limits the run; none by default. A host may give each run what is left of a session's budget.
+	Budget Limits
 }
 
-// Result is how a run ended: Completed, Stopped or Failed, as Status says, always with the tokens used.
+// Result is how a run ended: Completed, Stopped or Failed, as Status says, always with what it used.
 type Result struct {
 	Status Status
 	// Text is the final reply's text, when Completed.
@@ -29,9 +31,15 @@ type Result struct {
 	Stop StopReason
 	// Failure says why the run failed, when Failed.
 	Failure FailureReason
-	// Detail is a refusal's category when Stopped, or what went wrong when Failed.
+	// Detail is a refusal's category or the budget limit used up when Stopped, or what went wrong when Failed.
 	Detail string
 	Usage  Usage
+	// Cost is what the run's tokens cost, in US dollars at the model's price; zero when the model has no price.
+	Cost       float64
+	ModelCalls int
+	// ToolCalls counts the tool calls the run handled, denied and failed ones included.
+	ToolCalls int
+	Duration  time.Duration
 }
 
 // Status is how a run ended.
@@ -59,6 +67,9 @@ const (
 	ContextFull
 	// IterationLimit means the run made as many model calls as it may, and the model still asked for tools.
 	IterationLimit
+	// Budget means a limit of the run's budget was used up before a model call, or cut the reply short; the
+	// result's detail says which.
+	Budget
 )
 
 // FailureReason is why a run failed.
@@ -90,9 +101,11 @@ type TextStreamed struct {
 // streamed since the last ConversationAppended is void, and the reply starts over.
 type ReplyRestarted struct{}
 
-// UsageReported is the tokens a model call reported since its previous report.
+// UsageReported is the tokens a model call reported since its previous report, and their cost in US dollars (zero
+// when the model has no price).
 type UsageReported struct {
 	Usage Usage
+	Cost  float64
 }
 
 // ConversationAppended reports a message appended to the conversation. The run waits while the host handles the
@@ -158,11 +171,14 @@ const maxModelCalls = 25
 
 // run makes one run, reporting its events to yield, and audits its start and end.
 func (a *Agent) run(ctx context.Context, c *Conversation, message string, opts RunOptions, yield func(RunEvent) bool) (Result, error) {
-	if strings.TrimSpace(message) == "" {
+	price := a.telemetry.model.Price
+	switch {
+	case strings.TrimSpace(message) == "":
 		return Result{}, errors.New("run: blank message")
-	}
-	if opts.Context != "" && strings.TrimSpace(opts.Context) == "" {
+	case opts.Context != "" && strings.TrimSpace(opts.Context) == "":
 		return Result{}, errors.New("run: blank run context")
+	case opts.Budget.Cost != nil && price == Price{}:
+		return Result{}, errors.New("run: a cost budget needs a model with a price")
 	}
 	if c == nil {
 		c = &Conversation{}
@@ -172,13 +188,13 @@ func (a *Agent) run(ctx context.Context, c *Conversation, message string, opts R
 	}
 	defer c.running.Store(false)
 
+	spent := &spending{budget: opts.Budget, price: price, started: time.Now()}
 	ctx, span := a.telemetry.startRun(ctx, c.ID, message)
 	audit := newRecorder(a, c.ID)
 	span.SetAttributes(attribute.String("officina.run.id", audit.run))
 	// A missing run entry blocks nothing: only a write's attempt depends on the trail.
 	_ = audit.record(ctx, AuditEntry{Kind: AuditRunStarted})
-	var calls counts
-	res := a.loop(ctx, c, message, opts, audit, &calls, yield)
+	res := spent.report(a.loop(ctx, c, message, opts, audit, spent, yield))
 	res.Text, res.Detail = a.redact(res.Text), a.redact(res.Detail)
 	outcome := res.Status.String()
 	switch res.Status {
@@ -188,23 +204,25 @@ func (a *Agent) run(ctx context.Context, c *Conversation, message string, opts R
 		outcome += ": " + res.Failure.String()
 	}
 	_ = audit.record(ctx, AuditEntry{ // As above.
-		Kind: AuditRunEnded, Outcome: outcome, Detail: res.Detail, Usage: res.Usage,
-		Cost: a.telemetry.model.Price.cost(res.Usage),
+		Kind: AuditRunEnded, Outcome: outcome, Detail: res.Detail, Usage: res.Usage, Cost: res.Cost,
 	})
-	a.telemetry.endRun(ctx, span, res, calls.model, calls.tool)
+	a.telemetry.endRun(ctx, span, res)
 	return res, nil
 }
 
-// counts are the calls a run made.
-type counts struct {
-	model, tool int
+// CanContinue reports whether the agent's runs may go on with c: whether c is new, or was started by an agent with
+// the same tools, instructions and model settings, in this implementation or another. A run on a conversation it
+// cannot continue fails with PrefixMismatch.
+func (a *Agent) CanContinue(c *Conversation) bool {
+	return c.fingerprint == "" || c.fingerprint == a.fingerprint
 }
 
-// loop calls the model and runs the tools it asks for until a reply ends the run.
+// loop calls the model and runs the tools it asks for until a reply ends the run. The result it returns holds
+// neither usage nor counts: spent has them.
 func (a *Agent) loop(ctx context.Context, c *Conversation, message string, opts RunOptions, audit *recorder,
-	calls *counts, yield func(RunEvent) bool,
+	spent *spending, yield func(RunEvent) bool,
 ) Result {
-	if c.fingerprint != "" && c.fingerprint != a.fingerprint {
+	if !a.CanContinue(c) {
 		return Result{Status: Failed, Failure: PrefixMismatch, Detail: "the agent's tools, instructions or model " +
 			"settings differ from those the conversation was started with; start a new conversation"}
 	}
@@ -219,32 +237,44 @@ func (a *Agent) loop(ctx context.Context, c *Conversation, message string, opts 
 			cancel()
 		}
 	}
-	var usage Usage
+	if answer := a.answerInterrupted(ctx, c, audit); answer != nil {
+		emit(ConversationAppended{Message: *answer})
+	}
 	pending := []Message{textMessage(User, message)}
 	if opts.Context != "" {
 		pending = append(pending, textMessage(Operator, opts.Context))
 	}
 	for {
+		reached := spent.reached()
 		switch {
 		case ctx.Err() != nil:
-			return Result{Status: Stopped, Stop: Cancelled, Usage: usage}
-		case calls.model == maxModelCalls:
-			return Result{Status: Stopped, Stop: IterationLimit, Usage: usage}
+			return Result{Status: Stopped, Stop: Cancelled}
+		case spent.modelCalls == maxModelCalls:
+			return Result{Status: Stopped, Stop: IterationLimit}
+		case reached != "":
+			return Result{Status: Stopped, Stop: Budget, Detail: reached}
 		}
 		req := Request{Tools: a.tools, Instructions: a.instructions, Messages: append(slices.Clip(c.messages), pending...)}
-		calls.model++
+		limit, limited := spent.outputLimit()
+		if limited {
+			req.MaxOutputTokens = limit
+		}
 		r := a.call(ctx, req, emit)
-		usage = usage.plus(r.usage)
+		spent.add(r.usage)
 		blocks, finished := r.blocks, r.finished
 		switch {
 		case finished == nil && r.failure == nil:
 			// Cut off mid-stream: nothing is appended, not even the message it would have answered.
-			return Result{Status: Stopped, Stop: Cancelled, Usage: usage}
+			return Result{Status: Stopped, Stop: Cancelled}
 		case finished == nil:
-			return Result{Status: Failed, Failure: ModelError, Detail: r.failure.Error(), Usage: usage}
+			return Result{Status: Failed, Failure: ModelError, Detail: r.failure.Error()}
 		}
 
-		end := finish(*finished, blocks, usage)
+		end := finish(*finished, blocks)
+		// A reply the lowered output limit cut short stopped for the budget, once the budget allows no more.
+		if why := spent.reached(); limited && finished.Reason == FinishMaxTokens && why != "" {
+			end = Result{Status: Stopped, Stop: Budget, Detail: why}
+		}
 		var toolCalls []ToolCall
 		for _, b := range blocks {
 			if b.ToolCall != nil {
@@ -257,7 +287,7 @@ func (a *Agent) loop(ctx context.Context, c *Conversation, message string, opts 
 		// The provider rejects a call without its result, so a reply whose calls will not run is not kept.
 		case toolCalls != nil && finished.Reason == FinishEnd:
 			return Result{Status: Failed, Failure: UnexpectedStop, Detail: "the model's reply called tools but did " +
-				"not stop for them", Usage: usage}
+				"not stop for them"}
 		case toolCalls != nil && finished.Reason != FinishToolUse:
 			return end
 		}
@@ -275,7 +305,7 @@ func (a *Agent) loop(ctx context.Context, c *Conversation, message string, opts 
 			return end
 		}
 
-		calls.tool += len(toolCalls)
+		spent.toolCalls += len(toolCalls)
 		results := a.runTools(ctx, toolCalls, audit, emit)
 		answer := Message{Role: User, Blocks: make([]Block, len(results))}
 		for i := range results {
@@ -284,6 +314,34 @@ func (a *Agent) loop(ctx context.Context, c *Conversation, message string, opts 
 		c.messages = append(c.messages, answer)
 		emit(ConversationAppended{Message: answer})
 	}
+}
+
+// interrupted is the result of a call left without one when the application stopped while its tools ran.
+const interrupted = "The call was interrupted: the application stopped before its result was recorded, so it may " +
+	"or may not have taken effect."
+
+// answerInterrupted gives an error result to each call of c's last message, when that is a reply whose calls have no
+// results, as a crash while its tools ran leaves it: the provider rejects calls without results. It audits each and
+// returns the message it appended, or nil when none was needed.
+func (a *Agent) answerInterrupted(ctx context.Context, c *Conversation, audit *recorder) *Message {
+	if len(c.messages) == 0 || c.messages[len(c.messages)-1].Role != Assistant {
+		return nil
+	}
+	answer := Message{Role: User}
+	for _, b := range c.messages[len(c.messages)-1].Blocks {
+		if call := b.ToolCall; call != nil {
+			// As for a run's own entries, a missing one blocks nothing: the call is not run again.
+			_ = audit.record(ctx, AuditEntry{Kind: AuditToolEnded, Tool: call.Name, CallID: call.ID,
+				Input: string(call.Input), Outcome: "interrupted", Detail: interrupted})
+			answer.Blocks = append(answer.Blocks, Block{ToolResult: &ToolResult{CallID: call.ID, Content: interrupted,
+				IsError: true}})
+		}
+	}
+	if answer.Blocks == nil {
+		return nil
+	}
+	c.messages = append(c.messages, answer)
+	return &answer
 }
 
 // reply is what one model call returned.
@@ -343,7 +401,7 @@ func (a *Agent) call(ctx context.Context, req Request, emit func(RunEvent)) (r r
 			r.blocks = append(r.blocks, e.Block)
 		case UsageReceived:
 			r.usage = r.usage.plus(e.Usage)
-			emit(UsageReported(e))
+			emit(UsageReported{Usage: e.Usage, Cost: a.telemetry.model.Price.cost(e.Usage)})
 		case Finished:
 			r.finished = &e
 			return r
@@ -373,26 +431,25 @@ func (a *Agent) runTools(ctx context.Context, calls []ToolCall, audit *recorder,
 }
 
 // finish returns the result a reply's finish reason maps to.
-func finish(f Finished, blocks []Block, usage Usage) Result {
+func finish(f Finished, blocks []Block) Result {
 	switch f.Reason {
 	case FinishEnd:
 		var text strings.Builder
 		for _, b := range blocks {
 			text.WriteString(b.Text)
 		}
-		return Result{Status: Completed, Text: text.String(), Usage: usage}
+		return Result{Status: Completed, Text: text.String()}
 	case FinishMaxTokens:
-		return Result{Status: Stopped, Stop: OutputLimit, Usage: usage}
+		return Result{Status: Stopped, Stop: OutputLimit}
 	case FinishRefusal:
-		return Result{Status: Stopped, Stop: Refusal, Detail: f.Detail, Usage: usage}
+		return Result{Status: Stopped, Stop: Refusal, Detail: f.Detail}
 	case FinishContextFull:
-		return Result{Status: Stopped, Stop: ContextFull, Usage: usage}
+		return Result{Status: Stopped, Stop: ContextFull}
 	case FinishToolUse:
-		return Result{Status: Failed, Failure: UnexpectedStop, Detail: "the model stopped to use tools but called none",
-			Usage: usage}
+		return Result{Status: Failed, Failure: UnexpectedStop, Detail: "the model stopped to use tools but called none"}
 	default:
 		return Result{Status: Failed, Failure: UnexpectedStop,
-			Detail: "the model stopped for a reason the run cannot act on: " + f.Detail, Usage: usage}
+			Detail: "the model stopped for a reason the run cannot act on: " + f.Detail}
 	}
 }
 
@@ -403,7 +460,8 @@ func (s Status) String() string {
 
 // String returns the reason's name.
 func (r StopReason) String() string {
-	return name(int(r), "StopReason", "Cancelled", "Refusal", "OutputLimit", "ContextFull", "IterationLimit")
+	return name(int(r), "StopReason", "Cancelled", "Refusal", "OutputLimit", "ContextFull", "IterationLimit",
+		"Budget")
 }
 
 // String returns the reason's name.

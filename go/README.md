@@ -4,8 +4,8 @@ The Go implementation of Officina: the same requirements ([`REQUIREMENTS.md`](..
 ([`ARCHITECTURE.md`](../ARCHITECTURE.md)) as the .NET one at the repository root, written as idiomatic Go.
 
 Status: in progress. The core's run loop (Go S03), the Claude adapter (Go S04), tools and audit (Go S05), the
-Bookshop Assistant console (Go S06) and telemetry with the audit view (Go S07) are in; sessions, memory and MCP
-follow. See
+Bookshop Assistant console (Go S06), telemetry with the audit view (Go S07) and sessions with budgets (Go S08) are
+in; memory, long conversations and MCP follow. See
 [`docs/plan/phase-1.md`](../docs/plan/phase-1.md) for the slices (the Go column),
 [`docs/implementations/go.md`](../docs/implementations/go.md) for the decisions and
 [`docs/traceability.md`](docs/traceability.md) for the tests of each requirement.
@@ -56,6 +56,16 @@ go run ./cmd/bookshop
 It asks your name, then takes messages, such as *Order the two cheapest fantasy books in stock for Alice Martin and
 tell me the total*. Replies stream with each tool call shown; a change asks for your approval with its exact input.
 Ctrl+C stops a reply in progress, and the session goes on; `/help` lists the commands, `/quit` leaves.
+
+Each conversation is a session, saved in the database's `sessions` table after every step of a reply, so a restart or
+a crash loses at most the step in flight. `/sessions` lists the latest, `/resume <id>` goes on with one (with its
+cache intact, and a call a crash left unanswered told to the model as interrupted), `/new` starts another. Sessions
+are stored as the .NET application stores them, in the same table; one the .NET application started is refused as
+another version of the assistant until both chat agents have the same tools (memory and the export tools come with
+Go S09 and Go S11). After each reply a status line shows its tokens,
+the share read from the cache, its cost and the session's; `/cost` shows the session's. A reply may spend $0.50 and a
+session $5; reaching either stops the reply and says why. `BOOKSHOP_REPLY_BUDGET`, in US dollars, such as `0.01`,
+lowers the reply's budget to show a stop.
 `/audit` shows the session's audit trail, from the database's `audit` table, grouped by run: each entry's time,
 kind, tool and outcome, approvals, and each run's tokens and cost, with a link to the run's trace.
 
@@ -85,7 +95,9 @@ Mutation testing, over the core, the test kit and the Claude package; `go-mutati
 
 ```sh
 go install github.com/go-gremlins/gremlins/cmd/gremlins@v0.6.0
-gremlins unleash --coverpkg ./officina/... --timeout-coefficient 20 ./officina
+# Each mutant is tested in a copy of go/ alone, which finds the shared testdata through OFFICINA_TESTDATA; -count=1
+# keeps the coverage run, which sets the mutants' timeouts, out of the test cache.
+OFFICINA_TESTDATA=$PWD/../testdata GOFLAGS=-count=1 gremlins unleash --coverpkg ./officina/... --timeout-coefficient 20 ./officina
 ```
 
 CI is [`.github/workflows/go.yml`](../.github/workflows/go.yml), on every pull request: `go-ubuntu` and `go-windows`

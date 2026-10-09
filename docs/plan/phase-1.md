@@ -1,7 +1,7 @@
 # Phase 1 plan
 
 Implements [`REQUIREMENTS.md`](../../REQUIREMENTS.md) phase 1 in 13 slices, the same for every implementation. A slice
-is cited with its implementation, such as `Go S03`; G1…G16 are Go's decisions in `go.md`, never slices. One slice = one
+is cited with its implementation, such as `Go S03`; G1…G17 are Go's decisions in `go.md`, never slices. One slice = one
 branch (`slice/<id>-<slug>`: `slice/s03-run-loop` in .NET, `slice/g03-run-loop` in Go) = one PR. Every slice ends in something that runs, with offline tests. A slice's PR is stacked on
 the previous one until that one is merged.
 
@@ -68,12 +68,12 @@ How each implementation realizes a slice, where it differs from the shared crite
 | S05 | CsCheck properties; Stryker.NET | Every `tool_use` block gets its result (until now a tool-use stop is Failed and its reply has none); Schema derived with `reflect` (the one place `go/CLAUDE.md` allows it); reads under a `sync.WaitGroup`; the event channel sized from the call count; a panicking tool becomes an error result; fuzz test of the validator; `rapid` properties; the first `gremlins` run sets the mutation threshold |
 | S06 | Npgsql | `cmd/bookshop` on `pgx` (G7); Ctrl+C through `signal.NotifyContext`; end-to-end tests with `testcontainers-go` |
 | S07 | `ActivitySource` and `Meter` | The OpenTelemetry API with host-passed providers (G6); the SDK's in-memory exporter in tests only |
-| S08 | | The .NET-saved session resumes in Go (above); the fingerprint matches .NET's byte for byte (its JSON escaping, the tool schemas as given rather than re-encoded, and the model settings string agreed in Go S04) |
+| S08 | | The fingerprint matches .NET's byte for byte (its JSON escaping, the tool schemas as given rather than re-encoded, and the model settings string agreed in Go S04). Cross-implementation resume is proven at the core level: shared fixtures in `testdata/session/`, a session each implementation saved mid-reply resuming in the other. The Bookshop sessions do not resume across implementations yet, as .NET's chat agent has more in its prefix: they wait for memory (Go S09), context management (Go S10, which brings the fingerprint's `contextManagement` part), the MCP export tools (Go S11) and typed output (Go S12, the `output` part) |
 | S09 | | Fuzz test of path scoping, besides the `rapid` property |
 | S10 | | Checks on-demand compaction and `clear_at` live before relying on them (Go S02 left them unproven) |
 | S11 | | Stdio through `os/exec`, Streamable HTTP through `net/http`; fuzz test of message parsing; the child process is stopped and waited for when the context ends |
 | S12 | | The output schema through S05's schema derivation |
-| S13 | `docs/demo.md` | `examples/` as runnable `Example` tests and programs; the live smoke test behind a build tag; `go/docs/traceability.md` complete |
+| S13 | `docs/demo.md` | `examples/` as runnable `Example` tests and programs; the live smoke test behind a build tag; `go/docs/traceability.md` complete; a Bookshop session the .NET application saved resumes in the Go one with the same prefix and cache reads (live, once) |
 
 ## Progress
 
@@ -85,8 +85,9 @@ How each implementation realizes a slice, where it differs from the shared crite
 | S04 | Merged | Merged (#59) |
 | S05 | Merged | Merged (#61) |
 | S06 | Merged | Merged (#63) |
-| S07 | Merged | In review (#64) |
-| S08–S13 | Merged | Not started |
+| S07 | Merged | Merged (#64) |
+| S08 | Merged | In review (#68) |
+| S09–S13 | Merged | Not started |
 
 ## Team
 

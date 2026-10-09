@@ -61,7 +61,7 @@ func TestRun_GEN02_GEN03_AgentOfModelAndInstructionsRunsStatelessly(t *testing.T
 
 	result := run(t, agent, nil, "I love it", officina.RunOptions{})
 
-	if diff := cmp.Diff(officina.Result{Status: officina.Completed, Text: "positive"}, result); diff != "" {
+	if diff := cmp.Diff(officina.Result{Status: officina.Completed, Text: "positive"}, result, outcome()); diff != "" {
 		t.Errorf("result mismatch (-want +got):\n%s", diff)
 	}
 }
@@ -100,7 +100,7 @@ func TestRun_EVT01_AGT08_EventsStreamThenEachAppendThenResult(t *testing.T) {
 	wantResult := officina.Result{
 		Status: officina.Completed, Text: "Hello", Usage: officina.Usage{Input: 100, Output: 12, CacheRead: 5, CacheWrite: 901},
 	}
-	if diff := cmp.Diff(wantResult, result); diff != "" {
+	if diff := cmp.Diff(wantResult, result, outcome()); diff != "" {
 		t.Errorf("result mismatch (-want +got):\n%s", diff)
 	}
 }
@@ -150,7 +150,7 @@ func TestRun_MDL04_ARetriedReplyRestartsAndOnlyTheLastAttemptIsAppended(t *testi
 				t.Errorf("events mismatch (-want +got):\n%s", diff)
 			}
 			wantResult := officina.Result{Status: officina.Completed, Text: "Hello.", Usage: usage}
-			if diff := cmp.Diff(wantResult, result); diff != "" {
+			if diff := cmp.Diff(wantResult, result, outcome()); diff != "" {
 				t.Errorf("result mismatch (-want +got):\n%s", diff)
 			}
 		})
@@ -242,7 +242,7 @@ func TestRun_AGT03_EveryFinishReasonMapsToItsResultAndTheReplyIsKept(t *testing.
 
 			result := run(t, newAgent(t, model), &c, "Hi", officina.RunOptions{})
 
-			if diff := cmp.Diff(tt.want, result); diff != "" {
+			if diff := cmp.Diff(tt.want, result, outcome()); diff != "" {
 				t.Errorf("result mismatch (-want +got):\n%s", diff)
 			}
 			if diff := cmp.Diff([]officina.Role{officina.User, officina.Assistant}, roles(c.Messages())); diff != "" {
@@ -299,7 +299,7 @@ func TestRun_AGT03_ARunWithoutAReplyFailsOrEndsAndAppendsNothing(t *testing.T) {
 
 			result := run(t, newAgent(t, tt.model), &c, "Hi", officina.RunOptions{Context: "Date: 2026-10-05."})
 
-			if diff := cmp.Diff(tt.want, result); diff != "" {
+			if diff := cmp.Diff(tt.want, result, outcome()); diff != "" {
 				t.Errorf("result mismatch (-want +got):\n%s", diff)
 			}
 			if got := c.Messages(); len(got) != 0 {
@@ -339,7 +339,7 @@ func TestRun_AGT03_AReplyThatCallsToolsIsNeverLeftWithoutResults(t *testing.T) {
 
 			result := run(t, newAgent(t, model, tool("search", "Searches.")), &c, "Find x.", officina.RunOptions{})
 
-			if diff := cmp.Diff(tt.want, result); diff != "" {
+			if diff := cmp.Diff(tt.want, result, outcome()); diff != "" {
 				t.Errorf("result mismatch (-want +got):\n%s", diff)
 			}
 			if n := len(c.Messages()); n != 0 {
@@ -371,7 +371,7 @@ func TestRun_AGT05_CancellingMidStreamAppendsNothingAndTheNextRequestIsValid(t *
 	if diff := cmp.Diff([]officina.RunEvent{officina.TextStreamed{Text: "Par"}}, events); diff != "" {
 		t.Errorf("events mismatch (-want +got):\n%s", diff)
 	}
-	if diff := cmp.Diff(officina.Result{Status: officina.Stopped, Stop: officina.Cancelled}, result); diff != "" {
+	if diff := cmp.Diff(officina.Result{Status: officina.Stopped, Stop: officina.Cancelled}, result, outcome()); diff != "" {
 		t.Errorf("result mismatch (-want +got):\n%s", diff)
 	}
 	if got := c.Messages(); len(got) != 0 {
@@ -401,7 +401,7 @@ func TestRun_AGT05_ARunCancelledBeforeItStartsCallsNoModel(t *testing.T) {
 		t.Fatalf("Run() error = %v", err)
 	}
 
-	if diff := cmp.Diff(officina.Result{Status: officina.Stopped, Stop: officina.Cancelled}, result); diff != "" {
+	if diff := cmp.Diff(officina.Result{Status: officina.Stopped, Stop: officina.Cancelled}, result, outcome()); diff != "" {
 		t.Errorf("result mismatch (-want +got):\n%s", diff)
 	}
 	if got := len(model.Requests()); got != 0 {
@@ -429,7 +429,7 @@ func TestRun_AGT05_CancellingStopsTheRunEvenIfTheModelIgnoresIt(t *testing.T) {
 		return true
 	})
 
-	if diff := cmp.Diff(officina.Result{Status: officina.Stopped, Stop: officina.Cancelled}, result); diff != "" {
+	if diff := cmp.Diff(officina.Result{Status: officina.Stopped, Stop: officina.Cancelled}, result, outcome()); diff != "" {
 		t.Errorf("result mismatch (-want +got):\n%s", diff)
 	}
 	if got := c.Messages(); len(got) != 0 {
@@ -487,7 +487,7 @@ func TestRun_EVT01_AConsumerThatBreaksMidRunLeavesNoGoroutine(t *testing.T) {
 	default:
 		t.Error("the model's stream was not released when the consumer broke")
 	}
-	if diff := cmp.Diff(officina.Result{Status: officina.Stopped, Stop: officina.Cancelled}, result); diff != "" {
+	if diff := cmp.Diff(officina.Result{Status: officina.Stopped, Stop: officina.Cancelled}, result, outcome()); diff != "" {
 		t.Errorf("result mismatch (-want +got):\n%s", diff)
 	}
 	if got := c.Messages(); len(got) != 0 {
@@ -512,7 +512,7 @@ func TestRun_AGT08_AConsumerThatBreaksAtAnAppendKeepsAValidConversation(t *testi
 			return !appended
 		})
 
-	if diff := cmp.Diff(officina.Result{Status: officina.Completed, Text: "Hello."}, result); diff != "" {
+	if diff := cmp.Diff(officina.Result{Status: officina.Completed, Text: "Hello."}, result, outcome()); diff != "" {
 		t.Errorf("result mismatch (-want +got):\n%s", diff)
 	}
 	wantRoles := []officina.Role{officina.User, officina.Operator, officina.Assistant}
@@ -702,7 +702,7 @@ func TestResult_AGT03_StatusesAndReasonsPrintTheirNames(t *testing.T) {
 	values := []fmt.Stringer{
 		officina.Completed, officina.Stopped, officina.Failed, officina.Status(0),
 		officina.Cancelled, officina.Refusal, officina.OutputLimit, officina.ContextFull, officina.IterationLimit,
-		officina.StopReason(6), officina.Read, officina.Write, officina.ToolKind(0),
+		officina.Budget, officina.StopReason(7), officina.Read, officina.Write, officina.ToolKind(0),
 		officina.ModelError, officina.UnexpectedStop, officina.PrefixMismatch, officina.FailureReason(0),
 		officina.FinishUnknown, officina.FinishEnd, officina.FinishToolUse, officina.FinishMaxTokens,
 		officina.FinishRefusal, officina.FinishContextFull, officina.FinishReason(6),
@@ -714,7 +714,8 @@ func TestResult_AGT03_StatusesAndReasonsPrintTheirNames(t *testing.T) {
 
 	want := []string{
 		"Completed", "Stopped", "Failed", "Status(0)",
-		"Cancelled", "Refusal", "OutputLimit", "ContextFull", "IterationLimit", "StopReason(6)", "Read", "Write",
+		"Cancelled", "Refusal", "OutputLimit", "ContextFull", "IterationLimit", "Budget", "StopReason(7)",
+		"Read", "Write",
 		"ToolKind(0)",
 		"ModelError", "UnexpectedStop", "PrefixMismatch", "FailureReason(0)",
 		"FinishUnknown", "FinishEnd", "FinishToolUse", "FinishMaxTokens", "FinishRefusal", "FinishContextFull",

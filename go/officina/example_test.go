@@ -198,3 +198,59 @@ func ExampleNewJSONLinesSink() {
 	// 5 ToolEnded ok
 	// 6 RunEnded Completed
 }
+
+// A budget: each run gets the limits it may use, here one model call. The run stops before the call the budget does
+// not allow, and says why.
+func ExampleLimits() {
+	search := officina.Tool{
+		Name: "search", Kind: officina.Read, InputSchema: jsontext.Value(`{"type":"object"}`),
+		Handler: func(context.Context, jsontext.Value) (string, error) { return "3 copies", nil },
+	}
+	model := officinatest.NewModel("scripted", officinatest.ToolUseReply(officinatest.ToolUseBlock("c1", "search", `{}`)))
+	agent, err := officina.NewAgent(model, "You answer stock questions.", officina.AgentOptions{
+		Tools: []officina.Tool{search},
+	})
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	result, err := agent.Run(context.Background(), nil, "Is Emma in stock?", officina.RunOptions{
+		Budget: officina.Limits{ModelCalls: new(1)},
+	})
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	fmt.Println(result.Stop, result.ModelCalls, result.ToolCalls)
+	fmt.Println(result.Detail)
+	// Output:
+	// Budget 1 1
+	// the model call budget is used up: 1 of 1
+}
+
+// A stored conversation goes on only with an agent of the same tools, instructions and model settings; another
+// agent's run on it would fail with a prefix mismatch.
+func ExampleAgent_CanContinue() {
+	model := officinatest.NewModel("scripted", officinatest.TextReply("Hello."))
+	agent, err := officina.NewAgent(model, "You are a helpful assistant.", officina.AgentOptions{})
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	changed, err := officina.NewAgent(model, "You are a terse assistant.", officina.AgentOptions{})
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	var c officina.Conversation
+	if _, err := agent.Run(context.Background(), &c, "Hi", officina.RunOptions{}); err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	fmt.Println(agent.CanContinue(&c), changed.CanContinue(&c))
+	// Output:
+	// true false
+}

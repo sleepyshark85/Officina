@@ -100,9 +100,8 @@ func (t *telemetry) startRun(ctx context.Context, conversation, message string) 
 	}, "gen_ai.input.messages", func() string { return messages("user", message) })...))
 }
 
-// endRun counts the run and ends its span with its result, which made modelCalls model calls and toolCalls tool
-// calls. The result's text is already redacted.
-func (t *telemetry) endRun(ctx context.Context, span trace.Span, res Result, modelCalls, toolCalls int) {
+// endRun counts the run and ends its span with its result, whose text is already redacted.
+func (t *telemetry) endRun(ctx context.Context, span trace.Span, res Result) {
 	reason := ""
 	switch res.Status {
 	case Stopped:
@@ -117,8 +116,8 @@ func (t *telemetry) endRun(ctx context.Context, span trace.Span, res Result, mod
 	t.runs.Add(ctx, 1, metric.WithAttributes(slices.Concat(t.dims, attrs)...))
 	span.SetAttributes(attrs...)
 	span.SetAttributes(t.usage(res.Usage)...)
-	span.SetAttributes(attribute.Int("officina.run.model_calls", modelCalls),
-		attribute.Int("officina.run.tool_calls", toolCalls))
+	span.SetAttributes(attribute.Int("officina.run.model_calls", res.ModelCalls),
+		attribute.Int("officina.run.tool_calls", res.ToolCalls))
 	if res.Status == Completed {
 		span.SetAttributes(t.withContent(nil, "gen_ai.output.messages", func() string {
 			return messages("assistant", res.Text)

@@ -215,6 +215,8 @@ func TestCheckConversation_TEST07_AnswersEveryToolCallOnceInOrder(t *testing.T) 
 		{"operator after results", []officina.Message{
 			hi, calls, answer("c1", "c2"), hi, message(officina.Operator, "Monday."), done,
 		}, ""},
+		{"user after an empty one", []officina.Message{hi, done, {Role: officina.User}, hi},
+			"messages 3 and 4 have one role, user"},
 		{"unanswered", []officina.Message{hi, calls}, `the calls ["c1" "c2"] of the last message have no results`},
 		{"answered by text", []officina.Message{hi, calls, hi}, `message 3 answers calls [], want ["c1" "c2"]`},
 		{"out of order", []officina.Message{hi, calls, answer("c2", "c1")}, `message 3 answers calls ["c2" "c1"]`},

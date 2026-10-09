@@ -39,7 +39,7 @@ func TestRun_AGT02_TheRunCallsToolsThenTheModelAgainUntilItEnds(t *testing.T) {
 
 	result := run(t, newAgent(t, model, search), &c, "Do you have Emma and Persuasion?", officina.RunOptions{})
 
-	if diff := cmp.Diff(officina.Result{Status: officina.Completed, Text: "Both are in stock."}, result); diff != "" {
+	if diff := cmp.Diff(officina.Result{Status: officina.Completed, Text: "Both are in stock."}, result, outcome()); diff != "" {
 		t.Errorf("result mismatch (-want +got):\n%s", diff)
 	}
 	messages := c.Messages()
@@ -351,7 +351,7 @@ func TestRun_AGT05_CancellingDuringToolsKeepsFinishedResultsAndCancelsTheRest(t 
 	_, result := stream(ctx, t, newAgent(t, model, cancelling, waiting), &c, "Go", officina.RunOptions{},
 		func(officina.RunEvent) bool { return true })
 
-	if diff := cmp.Diff(officina.Result{Status: officina.Stopped, Stop: officina.Cancelled}, result); diff != "" {
+	if diff := cmp.Diff(officina.Result{Status: officina.Stopped, Stop: officina.Cancelled}, result, outcome()); diff != "" {
 		t.Errorf("result mismatch (-want +got):\n%s", diff)
 	}
 	want := []officina.ToolResult{

@@ -33,7 +33,7 @@ func sessionOf(t *testing.T, cfg bookshop.Config, d *database, model *officinate
 ) string {
 	t.Helper()
 	out := &transcript{cancelOn: cancelOn}
-	cfg.Database, cfg.Model, cfg.In, cfg.Out, cfg.Echo = d.url, model, &input{t: t, script: script}, out, true
+	cfg.Database, cfg.Model, cfg.In, cfg.Out, cfg.Echo = d.url, priced{model}, &input{t: t, script: script}, out, true
 	cfg.Interrupt = func(ctx context.Context) (context.Context, context.CancelFunc) {
 		ctx, out.interrupt = context.WithCancel(ctx)
 		return ctx, out.interrupt
@@ -47,6 +47,16 @@ func sessionOf(t *testing.T, cfg bookshop.Config, d *database, model *officinate
 		t.Fatalf("Run() error = %v\ntranscript:\n%s", err, out)
 	}
 	return out.String()
+}
+
+// priced is a scripted model at Opus 5.5's list price, as the application's budgets need a price.
+type priced struct {
+	*officinatest.Model
+}
+
+func (priced) Info() officina.ModelInfo {
+	return officina.ModelInfo{Provider: "scripted", Name: "scripted",
+		Price: officina.Price{Input: 4, Output: 20, CacheRead: 0.20, CacheWrite: 5, CacheWriteHour: 8}}
 }
 
 // input is the staff member's scripted input: it reads as the script's lines, and runs each func of the script
@@ -173,7 +183,7 @@ func TestConsole_APP02_HelpAndUnknownCommandsAreAnsweredAndQuitLeaves(t *testing
 	t.Parallel()
 	model := officinatest.NewModel("scripted")
 
-	transcript := session(t, newDatabase(t), model, "", "", "  ", "Sam", "/help", "", "/sessions", "/quit", "Not read.")
+	transcript := session(t, newDatabase(t), model, "", "", "  ", "Sam", "/help", "", "/memory", "/quit", "Not read.")
 
 	inOrder(t, transcript,
 		"Bookshop Assistant. Type /help for commands.\n",
@@ -181,10 +191,14 @@ func TestConsole_APP02_HelpAndUnknownCommandsAreAnsweredAndQuitLeaves(t *testing
 		"Who is using the assistant? Your name:   \n",
 		"Who is using the assistant? Your name: Sam\n",
 		"you> /help\nCommands:\n  /help          Show this help.\n",
+		"  /new           Start a new session.\n",
+		"  /sessions      List the latest sessions.\n",
+		"  /resume <id>   Go on with the session with that id.\n",
+		"  /cost          Show this session's tokens and cost.\n",
 		"  /audit [<id>]  Show the audit trail of this session, or of the session with that id.\n",
 		"  /quit          Leave the assistant.\n",
 		"Ctrl+C stops a reply in progress.\n",
-		"you> \nyou> /sessions\nUnknown command /sessions. Type /help for commands.\n",
+		"you> \nyou> /memory\nUnknown command /memory. Type /help for commands.\n",
 		"you> /quit\n")
 	if strings.Contains(transcript, "Not read.") || len(model.Requests()) != 0 {
 		t.Errorf("the session went on after /quit, or called the model:\n%s", transcript)

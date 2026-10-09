@@ -231,7 +231,8 @@ func (s *schema) check(value any, path string, problems *[]string) {
 	case map[string]any:
 		s.checkObject(v, path, problems)
 	case []any:
-		if s.minItems >= 0 && len(v) < s.minItems {
+		// Without a minimum it is -1, which no count is below.
+		if len(v) < s.minItems {
 			fail(fmt.Sprintf("must have at least %d items", s.minItems))
 		}
 		if s.maxItems >= 0 && len(v) > s.maxItems {
@@ -244,7 +245,8 @@ func (s *schema) check(value any, path string, problems *[]string) {
 		}
 	case string:
 		n := utf8.RuneCountInString(v)
-		if s.minLength >= 0 && n < s.minLength {
+		// As above.
+		if n < s.minLength {
 			fail(fmt.Sprintf("must have at least %d characters", s.minLength))
 		}
 		if s.maxLength >= 0 && n > s.maxLength {

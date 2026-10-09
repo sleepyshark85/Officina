@@ -86,7 +86,7 @@ func TestModel_MDL06_ARefusalFinishesWithItsCategoryAndTheRunStops(t *testing.T)
 
 	want := officina.Result{Status: officina.Stopped, Stop: officina.Refusal, Detail: "cyber",
 		Usage: officina.Usage{Input: 9, Output: 7}}
-	if diff := cmp.Diff(want, result); diff != "" {
+	if diff := cmp.Diff(want, result, outcome()); diff != "" {
 		t.Errorf("result mismatch (-want +got):\n%s", diff)
 	}
 }

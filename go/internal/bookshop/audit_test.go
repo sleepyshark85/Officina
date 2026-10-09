@@ -80,7 +80,7 @@ func TestConsole_APP16_APP20_AuditShowsTheSessionsEntriesByRunEachLinkedToItsTra
 	if diff := cmp.Diff(replySpans, runParents); diff != "" {
 		t.Errorf("the runs' parents mismatch the replies (-want +got):\n%s", diff)
 	}
-	session := regexp.MustCompile(`Audit of session ([0-9a-f]{32}):`).FindStringSubmatch(transcript)
+	session := regexp.MustCompile(`Audit of session ([0-9a-f]{12}):`).FindStringSubmatch(transcript)
 	if session == nil {
 		t.Fatalf("transcript lacks the audit of the session:\n%s", transcript)
 	}
@@ -94,7 +94,7 @@ func TestConsole_APP16_APP20_AuditShowsTheSessionsEntriesByRunEachLinkedToItsTra
 		at + `ApprovalAnswered  restock_book          approved` +
 		at + `ToolStarted       restock_book` +
 		at + `ToolEnded         restock_book          ok  \d+ ms` +
-		at + `RunEnded                                Completed  tokens: 1,500 in \(500 cached\), 20 out, \$0\.0000` +
+		at + `RunEnded                                Completed  tokens: 1,500 in \(500 cached\), 20 out, \$0\.0045` +
 		`\nRun 2, trace: http://dashboard\.test/traces/detail/` + replies[1] +
 		at + `RunStarted` +
 		at + `RunEnded                                Completed  tokens: 0 in \(0 cached\), 0 out, \$0\.0000` +
