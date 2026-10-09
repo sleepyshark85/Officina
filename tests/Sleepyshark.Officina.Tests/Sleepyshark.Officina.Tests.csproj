@@ -5,6 +5,11 @@
     <ProjectReference Include="..\..\src\Sleepyshark.Officina.Testing\Sleepyshark.Officina.Testing.csproj" />
   </ItemGroup>
 
+  <!-- Conversation JSON shared with the Go implementation, which neither rewrites. -->
+  <ItemGroup>
+    <None Include="..\..\testdata\conversation\**" LinkBase="Fixtures" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
   <!-- Test only: property tests (TEST-07), a reference schema validator (TEST-08) and a fake clock. -->
   <ItemGroup>
     <PackageReference Include="CsCheck" />

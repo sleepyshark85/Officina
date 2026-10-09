@@ -1,3 +1,5 @@
 # Scripts run by Claude Code keep LF endings, or they fail on Windows checkouts.
 .claude/hooks/* text eol=lf
 *.sh text eol=lf
+# Shared golden files, read byte for byte by every implementation.
+testdata/** text eol=lf

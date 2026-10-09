@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json/jsontext"
 	"iter"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"go.uber.org/goleak"
@@ -60,6 +62,16 @@ func stream(ctx context.Context, t *testing.T, agent *officina.Agent, c *officin
 		t.Fatalf("Stream(%q) error = %v", message, err)
 	}
 	return got, res
+}
+
+// sharedFile returns a file of the repository's testdata, which the .NET implementation reads too.
+func sharedFile(t *testing.T, path ...string) string {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join(append([]string{"..", "..", "testdata"}, path...)...))
+	if err != nil {
+		t.Fatalf("read shared testdata: %v", err)
+	}
+	return string(data)
 }
 
 // roles returns the role of each message.

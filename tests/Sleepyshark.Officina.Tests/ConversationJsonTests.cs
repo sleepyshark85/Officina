@@ -36,18 +36,20 @@ public class ConversationJsonTests
     }
 
     [Fact]
-    public void The_JSON_form_is_plain_and_readable()
+    public void The_JSON_form_is_plain_and_readable_and_the_same_as_Go_s()
     {
-        var conversation = JsonSerializer.Deserialize<Conversation>(
-            """{"id":"c1","fingerprint":"abc","messages":[{"role":"user","blocks":[{"text":"Hi"}]},{"role":"assistant","blocks":[{"raw":"{\"type\":\"x\"}"}]}]}""")!;
+        // Shared with the Go implementation: both read it, and neither rewrites it.
+        var form = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Fixtures", "conversation.json")).TrimEnd('\r', '\n');
+        var conversation = JsonSerializer.Deserialize<Conversation>(form)!;
 
         Assert.Equal("c1", conversation.Id);
         Assert.Equal("abc", conversation.Fingerprint);
-        Assert.Equal("Hi", conversation.Messages[0].Text);
-        Assert.Equal("""{"type":"x"}""", conversation.Messages[1].Blocks[0].Raw);
-        Assert.Equal(
-            """{"id":"c1","fingerprint":"abc","messages":[{"role":"user","blocks":[{"text":"Hi"}]},{"role":"assistant","blocks":[{"raw":"{\"type\":\"x\"}"}]}]}""",
-            JsonSerializer.Serialize(conversation, Relaxed));
+        Assert.Equal([Role.User, Role.Operator, Role.Assistant], conversation.Messages.Select(message => message.Role));
+        Assert.Equal("Is Gaudy Night in stock?", conversation.Messages[0].Text);
+        Assert.Equal("""{"type":"thinking","signature":"EqQBCkYIBRgCKkB\u002Bsig/a==","thinking":""}""", conversation.Messages[2].Blocks[0].Raw);
+        Assert.Equal("Looking up «Café Libro».", conversation.Messages[2].Blocks[1].Text);
+        // Each implementation escapes text its own way, so the forms compare parsed; the blocks above, byte for byte.
+        Assert.True(JsonNode.DeepEquals(JsonNode.Parse(form), JsonNode.Parse(JsonSerializer.Serialize(conversation))));
     }
 
     [Fact]
