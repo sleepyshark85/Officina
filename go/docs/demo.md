@@ -6,10 +6,11 @@ expect, then a session the .NET application saved, resumed here. The model's wor
 lines (`>` a call, `<` its outcome, `?` an approval, `~` a context event) and the bracketed lines come from the console
 and do not.
 
-**Cost.** Steps 1–12 cost about $0.30 together, step 13 (demo mode) about $0.35 and step 14 a few cents. The status
-line after each reply shows what was spent.
+**Cost.** Steps 1–12 cost about $0.30 to $1 together (step 7's request can make the model fetch much of the
+catalogue before you stop it), step 13 (demo mode) about $0.40 and step 14 a few cents. The status line after each
+reply shows what was spent.
 
-**Live check.** Run as written, live with Opus 5.5, on the date and with the results in
+**Live check.** Every step was run as written, live with Opus 5.5, on 10 October 2026: see
 [What was checked live](#what-was-checked-live).
 
 ## 0. Setup
@@ -58,7 +59,7 @@ address: `BOOKSHOP_DATABASE` (such as `postgres://bookshop:shelf-demo-41@localho
 
 | Type | Expect |
 |---|---|
-| `Order 15 copies of The Winter Archive for Alice Martin.` then `y` | `< place_order: error: Not enough stock for "The Winter Archive" (id 144): 15 requested, 11 in stock. Nothing was ordered.` (12 on a fresh database). Within the same reply the model explains and offers the 11; approve that with `y` if you like, or decline with `n`. |
+| `Order 15 copies of The Winter Archive for Alice Martin.` then `y` | `< place_order: error: Not enough stock for "The Winter Archive" (id 144): 15 requested, 11 in stock. Nothing was ordered.` (12 on a fresh database). Within the same reply the model explains and offers the 11; approve that with `y` if you like, or decline with `n`. The model often checks the stock first (`> get_book {"bookId": 144}`) and asks straight away, with no `place_order` at all: nothing is ordered either way. |
 
 ## 6. The database stops mid-session (APP-18)
 
@@ -73,7 +74,7 @@ address: `BOOKSHOP_DATABASE` (such as `postgres://bookshop:shelf-demo-41@localho
 | Do | Expect |
 |---|---|
 | `Describe each of the ten most expensive books in a short paragraph.` and press Ctrl+C while it streams | The text stops, `[Cancelled.]`, and the prompt returns. The application keeps running. |
-| `Just the titles, please.` | A normal reply: the cancelled exchange left nothing behind. Ctrl+C at a `you>` prompt quits. |
+| `Just the titles, please.` | A normal reply. Calls the cancelled reply had started get "cancelled" results, so the model may look the books up again. Ctrl+C at a `you>` prompt quits. After a Ctrl+C, `go run` itself exits with status 1 when the application ends; the application does not fail. |
 
 ## 8. Status line and `/cost` (APP-14, CTX-05)
 
@@ -127,7 +128,7 @@ Its sessions do not resume in normal mode, nor the other way round.
 |---|---|
 | `go run ./cmd/bookshop --demo`, `Sam` | `Demo mode: compaction from 50,000 input tokens, and old tool results cleared above 12 tool calls.` Note the session id. |
 | `Run these four catalogue searches together, then just give me the four counts: every book priced at most £18 (up to 300 of them), the 250 cheapest books in stock or not, every book in stock priced at most £18 (up to 300), and every book priced at most £16 (up to 300).` | Four `> search_books` lines together (`{"maxPrice":18,"limit":300}`, `{"limit":250}`, `{"maxPrice":18,"inStock":true,"limit":300}`, `{"maxPrice":16,"limit":300}`), then `~ Conversation compacted: … tokens summarized into ….` and the counts 245, 250, 224 and 208. About $0.33. The compacting reply may come without text: `[The conversation was compacted and the reply has no text. Please ask again.]`; ask again. |
-| `Look up books 1 to 8 with get_book, then list their titles.` | Eight `> get_book` calls in parallel and the eight titles. No clearing yet. |
+| `Look up books 1 to 8 with get_book, then list their titles.` | Eight `> get_book` calls in parallel and the eight titles. Usually no clearing yet; when the model called the memory tool several times in the first turn, those calls count, and the clearing comes here. |
 | `Now look up books 9 to 16 with get_book, then list their titles.` | Eight more `> get_book` calls in parallel, then `~ Old tool results cleared: … tool calls, … tokens.`: the next request holds more than 12 tool calls, so the oldest results are cleared, and the 10 most recent stay. The model does not fetch books 9 to 16 again. |
 | `/audit` | `Compacted` and `Cleared` entries with their numbers. |
 | `/quit`, then `go run ./cmd/bookshop` (normal mode), `Sam`, `/resume <demo session id>` | `Session <id> was started with another version of the assistant, so it cannot go on. Type /new to start a new session.` (APP-10): its context management differs, so its prefix would not match. |
@@ -146,6 +147,22 @@ its cache intact. This needs the .NET 10 SDK; the .NET application reads its set
 
 ## What was checked live
 
+Every step was run as written on 10 October 2026, live with Opus 5.5 and a database fresh from the seed, by a script
+that typed each line at the prompt and answered each approval. Together the runs cost about $1.40.
+
 | Step | Live | Notes |
 |---|---|---|
-| 0–14 | | To be filled by the live run |
+| 1 Run context | ✓ | `/help` listed the commands; the model viewed Sam's memory, then gave the date and his name. |
+| 2 Parallel reads | ✓ | `search_books` and `find_customer` started together, then `list_customer_orders`. |
+| 3 APP-09 | ✓ | Order 82 (order 81 was step 4's, run first by mistake), books 144 and 216, total £13.20. |
+| 4 Denial | ✓ | `< place_order: error: The call was denied: the staff member declined`, and an alternative offered. |
+| 5 Not enough stock | ✓ | The model checked the stock first and offered the copies there were, without a `place_order`; the error result path is the offline test's (APP-07). |
+| 6 Database stopped | ✓ | `[The session could not be saved: …]`, `< search_books: error: …`, then `ok` after the restart. |
+| 7 Ctrl+C | ✓ | `[Cancelled.]` mid-reply, its unfinished calls answered as cancelled; the next reply was normal. |
+| 8 Status line, `/cost` | ✓ | 95–99% of each reply's input read from the cache from the second reply on. |
+| 9 Memory | ✓ | The preference written to `/memories/progress.md`; `/memory` showed it; the next session read it. |
+| 10 Export | ✓ | `order-history-alice-martin.csv` written after approval, a header row and a line per order line. |
+| 11 `/audit`, dashboard | ✓ | Runs with their trace links and entries; the dashboard held `reply` → `invoke_agent bookshop` → `chat` and `execute_tool` spans. |
+| 12 Sessions, resume, budget | ✓ | Summaries in `/sessions`; resume read 97% from the cache; `cancel_order` after approval; `$0.01` stopped the reply after its third model call. |
+| 13 Demo mode | ✓ | Compacted 53,189 tokens into 2,512 ($0.34); the counts 245, 250, 224 and 208; clearing after the first lookup turn (the model's four memory calls counted) and again after the second; the demo session refused in normal mode. |
+| 14 .NET session resumed | ✓ | `Resumed session …: 7 messages`, 96% of the first call's input read from the cache. Also a live test (`TestLive_APP10_…`). |

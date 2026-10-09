@@ -2,7 +2,7 @@
 
 A purpose-neutral library for building agentic applications: agents that call models, use tools and follow control
 flow. Implemented in .NET 10 at the repository root (packages named under `Sleepyshark.Officina`), with a Go
-implementation in progress in [`go/`](go/) (how to build and test it: [`go/README.md`](go/README.md)).
+implementation in [`go/`](go/), phase 1 complete (how to build and test it: [`go/README.md`](go/README.md)).
 
 Phase 1 is accepted against one reference application, **Bookshop Assistant**: an interactive console chatbot over
 PostgreSQL in Docker.

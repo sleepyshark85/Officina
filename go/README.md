@@ -3,10 +3,9 @@
 The Go implementation of Officina: the same requirements ([`REQUIREMENTS.md`](../REQUIREMENTS.md)) and architecture
 ([`ARCHITECTURE.md`](../ARCHITECTURE.md)) as the .NET one at the repository root, written as idiomatic Go.
 
-Status: in progress. The core's run loop (Go S03), the Claude adapter (Go S04), tools and audit (Go S05), the
-Bookshop Assistant console (Go S06), telemetry with the audit view (Go S07), sessions with budgets (Go S08), memory
-(Go S09), long conversations (Go S10), the MCP client with exports (Go S11) and typed output with the session
-summarizer (Go S12) are in. See
+Status: phase 1 complete once Go S13 (samples, the demo script and the live smoke test) is merged: every slice of the
+plan is in, Bookshop Assistant runs the demo script as written, and a session either implementation saved resumes in
+the other. See
 [`docs/plan/phase-1.md`](../docs/plan/phase-1.md) for the slices (the Go column),
 [`docs/implementations/go.md`](../docs/implementations/go.md) for the decisions and
 [`docs/traceability.md`](docs/traceability.md) for the tests of each requirement.
@@ -71,6 +70,9 @@ built only with the `live` tag, and needs Docker and `ANTHROPIC_API_KEY`:
 go test -tags live -run TestLive -v ./internal/bookshop
 ```
 
+With the .NET SDK installed, the live tests also build the .NET application, run it headless to save a session, and
+resume that session here, checking the prefix and the cache reads (a few cents).
+
 ## Bookshop Assistant
 
 The reference application: a console chatbot for bookshop staff over the same PostgreSQL database as the .NET one,
@@ -96,9 +98,9 @@ cache intact, and a call a crash left unanswered told to the model as interrupte
 left with `/new`, `/resume`, `/quit` or the end of the input is summarized by a second, stateless agent with typed
 output (Opus 5.5 at low effort, a $0.05 budget a summary, its cost added to the session's): `/sessions` shows each
 session's title, summary and the changes it made, and first summarizes up to three sessions left without one, as a
-crash leaves them. Sessions are stored as the .NET application stores them, in the same table; one the .NET
-application started is refused as another version of the assistant until both chat agents have the same tools
-and instructions. After each reply a status line shows its tokens,
+crash leaves them. Sessions are stored as the .NET application stores them, in the same table, with the same
+prefix: a session the .NET application saved resumes here with its cache intact, and the other way round (step 14 of
+[`docs/demo.md`](docs/demo.md)). After each reply a status line shows its tokens,
 the share read from the cache, its cost and the session's; `/cost` shows the session's. A reply may spend $0.50 and a
 session $5; reaching either stops the reply and says why. `BOOKSHOP_REPLY_BUDGET`, in US dollars, such as `0.01`,
 lowers the reply's budget to show a stop.
