@@ -69,7 +69,7 @@ const (
 )
 
 // RunEvent is something that happened during a run, streamed to the host as it happens: a TextStreamed,
-// UsageReported or ConversationAppended.
+// ReplyRestarted, UsageReported or ConversationAppended.
 type RunEvent interface {
 	runEvent()
 }
@@ -78,6 +78,10 @@ type RunEvent interface {
 type TextStreamed struct {
 	Text string
 }
+
+// ReplyRestarted says the model call failed after its reply had begun streaming and is made again: the text
+// streamed since the last ConversationAppended is void, and the reply starts over.
+type ReplyRestarted struct{}
 
 // UsageReported is the tokens a model call reported since its previous report.
 type UsageReported struct {
@@ -91,6 +95,7 @@ type ConversationAppended struct {
 }
 
 func (TextStreamed) runEvent()         {}
+func (ReplyRestarted) runEvent()       {}
 func (UsageReported) runEvent()        {}
 func (ConversationAppended) runEvent() {}
 
@@ -175,6 +180,7 @@ func (a *Agent) run(ctx context.Context, c *Conversation, message string, opts R
 
 	var (
 		blocks   []Block
+		streamed bool
 		finished *Finished
 		failure  error
 	)
@@ -185,8 +191,17 @@ func (a *Agent) run(ctx context.Context, c *Conversation, message string, opts R
 		}
 		switch e := event.(type) {
 		case TextDelta:
+			streamed = true
 			if !yield(TextStreamed(e)) {
 				return cancelled, nil
+			}
+		case Retried:
+			blocks = nil
+			if streamed {
+				streamed = false
+				if !yield(ReplyRestarted{}) {
+					return cancelled, nil
+				}
 			}
 		case BlockReceived:
 			blocks = append(blocks, e.Block)
@@ -216,6 +231,18 @@ func (a *Agent) run(ctx context.Context, c *Conversation, message string, opts R
 
 	end := finish(*finished, blocks, usage)
 	if len(blocks) == 0 {
+		return end, nil
+	}
+	// The provider rejects a call without its result, so a reply that calls tools is kept only once they can run.
+	if slices.ContainsFunc(blocks, func(b Block) bool { return b.ToolCall != nil }) {
+		switch finished.Reason {
+		case FinishToolUse:
+			end = Result{Status: Failed, Failure: UnexpectedStop, Detail: "the model called tools, which this run " +
+				"cannot run", Usage: usage}
+		case FinishEnd:
+			end = Result{Status: Failed, Failure: UnexpectedStop, Detail: "the model's reply called tools but did " +
+				"not stop for them", Usage: usage}
+		}
 		return end, nil
 	}
 	// Everything is appended before any of it is reported, so a host that stops reading midway still holds a

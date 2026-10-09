@@ -12,8 +12,9 @@ type Model interface {
 	// does. It is part of the prefix fingerprint, so it must not change during the Model's life.
 	Settings() string
 	// Stream sends one request and yields the reply: text deltas and complete blocks as they arrive, usage, and last
-	// a Finished. The Model retries transient failures itself; a failure that remains is yielded as an error, which
-	// ends the reply. When ctx is done or the caller stops early, Stream releases everything it started.
+	// a Finished. The Model retries transient failures itself, yielding a Retried before each retry; a failure that
+	// remains is yielded as an error, which ends the reply. When ctx is done or the caller stops early, Stream
+	// releases everything it started.
 	//
 	// A caller that stops early does so by yield returning false; ctx is cancelled only after the stream has
 	// returned. So a stream that waits for a goroutine of its own must first stop it on that signal too, not only
@@ -43,7 +44,8 @@ func (u Usage) plus(v Usage) Usage {
 	return Usage{u.Input + v.Input, u.Output + v.Output, u.CacheRead + v.CacheRead, u.CacheWrite + v.CacheWrite}
 }
 
-// ModelEvent is something a model streams while it replies: a TextDelta, BlockReceived, UsageReceived or Finished.
+// ModelEvent is something a model streams while it replies: a TextDelta, BlockReceived, UsageReceived, Retried or
+// Finished.
 type ModelEvent interface {
 	modelEvent()
 }
@@ -63,6 +65,10 @@ type UsageReceived struct {
 	Usage Usage
 }
 
+// Retried says the call failed and is made again: the text and blocks streamed before it belong to a reply that
+// will not come. The usage reported before it stays counted, as it is billed.
+type Retried struct{}
+
 // Finished says why the model stopped: the reply's last event.
 type Finished struct {
 	Reason FinishReason
@@ -73,6 +79,7 @@ type Finished struct {
 func (TextDelta) modelEvent()     {}
 func (BlockReceived) modelEvent() {}
 func (UsageReceived) modelEvent() {}
+func (Retried) modelEvent()       {}
 func (Finished) modelEvent()      {}
 
 // FinishReason is why a model stopped, in the model contract's words.

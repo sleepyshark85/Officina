@@ -3,7 +3,7 @@
 The Go implementation of Officina: the same requirements ([`REQUIREMENTS.md`](../REQUIREMENTS.md)) and architecture
 ([`ARCHITECTURE.md`](../ARCHITECTURE.md)) as the .NET one at the repository root, written as idiomatic Go.
 
-Status: in progress. Go S01 has created the module, its packages (documentation only so far) and the checks. See
+Status: in progress. The core's run loop (Go S03) and the Claude adapter (Go S04) are in; tools, MCP and the application follow. See
 [`docs/plan/phase-1.md`](../docs/plan/phase-1.md) for the slices (the Go column),
 [`docs/implementations/go.md`](../docs/implementations/go.md) for the decisions and
 [`docs/traceability.md`](docs/traceability.md) for the tests of each requirement.
@@ -19,7 +19,7 @@ Layout (G2, G3):
 | `officina/officinatest/` | The test kit: scripted model and approver, fake MCP server, prefix stability check |
 | `dependencies_test.go` | The dependency check (TEST-05), with fixture modules in `testdata/dependencies/` |
 | `cmd/bookshop/`, `internal/bookshop/` | Bookshop Assistant (from Go S06) |
-| `examples/` | The GEN-06 samples (Go S13) |
+| `examples/` | `hello`, a live chat (Go S04); the GEN-06 samples (Go S13) |
 | `docs/` | Go design notes and traceability |
 
 ## Build and test
@@ -29,6 +29,13 @@ Needs the Go version in `go.mod`. The tests need no API key and no network. Run 
 ```sh
 go build ./...
 go test -race -shuffle=on ./...
+```
+
+The hello example chats live with Claude Opus 5.5; it needs `ANTHROPIC_API_KEY` and costs a few cents. Its status
+line shows cache reads from the second message:
+
+```sh
+go run ./examples/hello
 ```
 
 The quality gates, as CI's `go-quality` job runs them, need
