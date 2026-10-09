@@ -3,7 +3,8 @@
 The second implementation, in [`go/`](../../go/): the same core, Claude and MCP packages, test kit, Bookshop Assistant
 and samples as the .NET one, meeting the same [`REQUIREMENTS.md`](../../REQUIREMENTS.md) with the same acceptance
 criteria. It is a rewrite from the requirements and the architecture, written as idiomatic Go, not a translation of
-the C#. Working rules: [`go/CLAUDE.md`](../../go/CLAUDE.md). Plan: [`docs/plan/go-port.md`](../plan/go-port.md).
+the C#. Working rules: [`go/CLAUDE.md`](../../go/CLAUDE.md). Plan: [`docs/plan/phase-1.md`](../plan/phase-1.md), the Go
+column.
 
 The owner approved the plan's recommendations on 2026-10-09, so these decisions stand. G01 and G02 check every
 library named here before anything depends on it; one that fails is replaced through a PR to this page.
@@ -24,3 +25,4 @@ library named here before anything depends on it; one that fails is replaced thr
 | G12 | Quality gates | `gofmt`, `go vet`, `golangci-lint` with the linter set in `go/.golangci.yml`, `govulncheck`, `go mod tidy` with no diff, `go test -race`; mutation testing with `gremlins` (last release May 2024: G01 checks it on Go 1.27, else `go-mutesting` from the `avito-tech` fork), its threshold set from G05's baseline. | The tools the Go community and its style guides expect |
 | G13 | Principle 11 | Core line budget: set after G03 from the measured size of the run loop; Go is wordier than C#, so expect more than .NET's 3,500. | A budget needs a measurement |
 | G14 | NS-13 | Hosting helpers, when they enter, target `net/http`. | Standard library first |
+| G15 | TEST-03, required checks | `.github/workflows/go.yml` runs on every PR, with no path filter, as jobs `go-ubuntu`, `go-windows`, `go-quality` and `go-mutation`; the .NET workflows also keep running on every PR. Branch protection requires all eight once G01 is merged. | A required check skipped by a path filter never reports, so the PR could never merge |

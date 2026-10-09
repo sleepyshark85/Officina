@@ -13,8 +13,7 @@ PostgreSQL in Docker.
 - [`docs/implementations/`](docs/implementations/): each implementation's platform decisions.
 - [`CLAUDE.md`](CLAUDE.md): working notes and the .NET rules; [`go/CLAUDE.md`](go/CLAUDE.md): the Go rules.
 
-- [`docs/plan/phase-1.md`](docs/plan/phase-1.md): the phase 1 slices (.NET); [`docs/plan/go-port.md`](docs/plan/go-port.md):
-  the Go port.
+- [`docs/plan/phase-1.md`](docs/plan/phase-1.md): the phase 1 slices, shared by the .NET and Go implementations.
 - [`docs/traceability.md`](docs/traceability.md): each phase 1 requirement and its tests.
 - [`docs/test-report.md`](docs/test-report.md): a dated summary of the tests, coverage, mutation scores, gates and open
   gaps.
