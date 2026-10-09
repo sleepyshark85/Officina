@@ -5,7 +5,6 @@ import (
 	"encoding"
 	"encoding/json/jsontext"
 	"encoding/json/v2"
-	"errors"
 	"fmt"
 	"reflect"
 	"slices"
@@ -68,8 +67,8 @@ type Approval struct {
 
 // NewTool returns a tool that runs fn. Its input schema is derived from In, which must be a struct: each exported
 // field is a property named as encoding/json/v2 names it, required unless its json tag says omitempty or omitzero,
-// and described by its jsonschema tag. A string fn returns is the result as it is; any other value is sent as JSON.
-// It fails for a field whose type has no schema in the supported subset, such as an interface, a func, a
+// described by its jsonschema tag, and, for a string field, limited to the comma-separated values of its enum tag.
+// A string fn returns is the result as it is; any other value is sent as JSON. It fails for a field whose type has no schema in the supported subset, such as an interface, a func, a
 // []byte, an embedded struct or a type with its own JSON form (time.Time is a date-time string).
 func NewTool[In, Out any](name, description string, kind ToolKind, fn func(ctx context.Context, in In) (Out, error),
 ) (Tool, error) {
@@ -106,6 +105,7 @@ func NewTool[In, Out any](name, description string, kind ToolKind, fn func(ctx c
 type node struct {
 	types               []string
 	description, format string
+	enum                []string
 	nonNegative         bool
 	items, values       *node
 	minItems            int
@@ -200,6 +200,12 @@ func describeStruct(t reflect.Type, within []reflect.Type) (*node, error) {
 			return nil, fmt.Errorf("field %s of %s: %w", field.Name, t, err)
 		}
 		schema.description = field.Tag.Get("jsonschema")
+		if values, has := field.Tag.Lookup("enum"); has {
+			if field.Type.Kind() != reflect.String {
+				return nil, fmt.Errorf("field %s of %s: an enum tag needs a string field", field.Name, t)
+			}
+			schema.enum = strings.Split(values, ",")
+		}
 		n.props = append(n.props, property{name: name, schema: schema, required: !optional})
 	}
 	return n, nil
@@ -224,24 +230,37 @@ func (n *node) json() jsontext.Value {
 }
 
 func (n *node) append(b []byte) []byte {
-	b = append(b, `{"type":`...)
+	// The description comes first and every string is escaped, as .NET's schema exporter writes them: a session one
+	// implementation started resumes in the other only if each schema is the same bytes.
+	b = append(b, '{')
+	if n.description != "" {
+		b = append(appendDotnetString(append(b, `"description":`...), n.description), ',')
+	}
+	b = append(b, `"type":`...)
 	if len(n.types) == 1 {
-		b = quote(b, n.types[0])
+		b = appendDotnetString(b, n.types[0])
 	} else {
 		b = append(b, '[')
 		for i, t := range n.types {
 			if i > 0 {
 				b = append(b, ',')
 			}
-			b = quote(b, t)
+			b = appendDotnetString(b, t)
 		}
 		b = append(b, ']')
 	}
-	if n.description != "" {
-		b = quote(append(b, `,"description":`...), n.description)
-	}
 	if n.format != "" {
-		b = quote(append(b, `,"format":`...), n.format)
+		b = appendDotnetString(append(b, `,"format":`...), n.format)
+	}
+	if n.enum != nil {
+		b = append(b, `,"enum":[`...)
+		for i, v := range n.enum {
+			if i > 0 {
+				b = append(b, ',')
+			}
+			b = appendDotnetString(b, v)
+		}
+		b = append(b, ']')
 	}
 	if n.nonNegative {
 		b = append(b, `,"minimum":0`...)
@@ -263,26 +282,15 @@ func (n *node) append(b []byte) []byte {
 			if i > 0 {
 				b = append(b, ',')
 			}
-			b = p.schema.append(append(quote(b, p.name), ':'))
+			b = p.schema.append(append(appendDotnetString(b, p.name), ':'))
 			if p.required {
 				if required != nil {
 					required = append(required, ',')
 				}
-				required = quote(required, p.name)
+				required = appendDotnetString(required, p.name)
 			}
 		}
 		b = append(append(append(b, `},"required":[`...), required...), `],"additionalProperties":false`...)
 	}
 	return append(b, '}')
-}
-
-// quote appends s as a JSON string.
-func quote(b []byte, s string) []byte {
-	b, err := jsontext.AppendQuote(b, s)
-	if err != nil {
-		// Only invalid UTF-8 fails, and Go names and tags in source are valid UTF-8; a type built at run time is
-		// a bug in its caller.
-		panic(errors.New("officina: invalid UTF-8 in a type's name or tag")) //nolint:forbidigo // A bug, see above.
-	}
-	return b
 }

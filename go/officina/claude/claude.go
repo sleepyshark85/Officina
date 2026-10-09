@@ -55,7 +55,7 @@ type Options struct {
 	APIKey string
 	// BaseURL is the API's address; when empty, the SDK's default or ANTHROPIC_BASE_URL.
 	BaseURL string
-	// HTTPClient sends the requests; http.DefaultClient when nil.
+	// HTTPClient sends the requests; when nil, the SDK's own client, on a transport of its own.
 	HTTPClient *http.Client
 }
 

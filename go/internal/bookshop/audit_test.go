@@ -2,9 +2,11 @@ package bookshop_test
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"regexp"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 
@@ -121,4 +123,35 @@ func TestConsole_APP16_AnAuditTrailThatCannotBeReadIsSaidSoAndTheSessionGoesOn(t
 
 	inOrder(t, transcript, "you> /audit\nThe audit trail could not be read: ", "you> /audit\nNo audit entries for session ",
 		"you> /quit\n")
+}
+
+func TestConsole_APP20_EVT03_TracesHoldTheMessageTextOnlyWhenTelemetryContentIsSet(t *testing.T) {
+	t.Parallel()
+	for _, content := range []bool{false, true} {
+		t.Run(fmt.Sprintf("content %v", content), func(t *testing.T) {
+			t.Parallel()
+			spans := tracetest.NewInMemoryExporter()
+			traces := sdktrace.NewTracerProvider(sdktrace.WithSyncer(spans))
+			t.Cleanup(func() {
+				if err := traces.Shutdown(context.Background()); err != nil {
+					t.Errorf("Shutdown() error = %v", err)
+				}
+			})
+			const reply = "The Winter Archive is in stock."
+			model := officinatest.NewModel("scripted", officinatest.TextReply(reply))
+
+			sessionOf(t, bookshop.Config{TracerProvider: traces, TelemetryContent: content}, newDatabase(t), model, "",
+				"Sam", "Is The Winter Archive in stock?", "/quit")
+
+			found := false
+			for _, s := range spans.GetSpans() {
+				for _, a := range s.Attributes {
+					found = found || a.Key == "gen_ai.output.messages" && strings.Contains(a.Value.AsString(), reply)
+				}
+			}
+			if found != content {
+				t.Errorf("the reply's text is in the traces: %v, want %v", found, content)
+			}
+		})
+	}
 }

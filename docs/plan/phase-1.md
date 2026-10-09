@@ -73,7 +73,7 @@ How each implementation realizes a slice, where it differs from the shared crite
 | S10 | | Checks on-demand compaction and `clear_at` live before relying on them (Go S02 left them unproven) |
 | S11 | | Stdio through `os/exec`, Streamable HTTP through `net/http`; fuzz test of message parsing; the child process is stopped and waited for when the context ends |
 | S12 | | The output schema through S05's schema derivation |
-| S13 | `docs/demo.md` | `examples/` as runnable `Example` tests and programs; the live smoke test behind a build tag; `go/docs/traceability.md` complete; a Bookshop session the .NET application saved resumes in the Go one with the same prefix and cache reads (live, once) |
+| S13 | `docs/demo.md` | `examples/` as runnable `Example` tests and programs; the live smoke test behind a build tag; `go/docs/traceability.md` complete; a Bookshop session the .NET application saved resumes in the Go one with the same prefix and cache reads (live, once; a live test builds and runs the .NET application). It found that the schemas Go derives must be .NET's bytes, description first and strings escaped as .NET's encoder does, as the fingerprint takes each schema as given |
 
 ## Progress
 
@@ -87,11 +87,11 @@ How each implementation realizes a slice, where it differs from the shared crite
 | S06 | Merged | Merged (#63) |
 | S07 | Merged | Merged (#64) |
 | S08 | Merged | Merged (#68) |
-| S09 | Merged | In review (#71) |
+| S09 | Merged | Merged (#71) |
 | S10 | Merged | Merged (#70) |
 | S11 | Merged | Merged (#69) |
 | S12 | Merged | Merged (#72) |
-| S13 | Merged | Not started |
+| S13 | Merged | In review (#73) |
 
 ## Team
 

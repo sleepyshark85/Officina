@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -34,6 +35,30 @@ func TestClose_MCP01_AServerThatIgnoresItsClosedInputIsStoppedWithEveryProcessIt
 
 	source.Close()
 
+	for _, pid := range pids {
+		waitExited(t, pid)
+	}
+}
+
+func TestClose_MCP01_AChildThatHoldsTheOutputOfAServerThatExitedIsStoppedAtOnce(t *testing.T) {
+	t.Parallel()
+	if runtime.GOOS == "windows" {
+		t.Skip("on Windows a process whose parent has exited is not found, and is cut off only after the wait")
+	}
+	file := filepath.Join(t.TempDir(), "fake.pid")
+	// A wait the test would notice: the child must not hold the source up for it.
+	source, err := mcp.Connect(t.Context(), mcp.WithExitWait(stdioServer(t, "", "leaver", file), time.Minute), nil)
+	if err != nil {
+		t.Fatalf("Connect() error = %v", err)
+	}
+	pids := waitForPIDs(t, file)
+
+	started := time.Now()
+	source.Close()
+
+	if took := time.Since(started); took > 10*time.Second {
+		t.Errorf("Close() took %v, want it to return once the server has exited", took)
+	}
 	for _, pid := range pids {
 		waitExited(t, pid)
 	}

@@ -57,10 +57,10 @@ func TestNewOutput_OUT01_SendsTheSchemaDerivedFromTheTypeAndReturnsTheReplyAsAVa
 	schema := `{"type":"object","properties":{` +
 		`"customer":{"type":"string"},` +
 		`"lines":{"type":"array","items":{"type":"object","properties":{` +
-		`"bookId":{"type":"integer","description":"The book's id."},"copies":{"type":"integer","minimum":0}},` +
+		`"bookId":{"description":"The book\u0027s id.","type":"integer"},"copies":{"type":"integer","minimum":0}},` +
 		`"required":["bookId","copies"],"additionalProperties":false}},` +
 		`"gift":{"type":["object","null"],"properties":{` +
-		`"bookId":{"type":"integer","description":"The book's id."},"copies":{"type":"integer","minimum":0}},` +
+		`"bookId":{"description":"The book\u0027s id.","type":"integer"},"copies":{"type":"integer","minimum":0}},` +
 		`"required":["bookId","copies"],"additionalProperties":false},` +
 		`"total":{"type":"number"},` +
 		`"tags":{"type":"array","items":{"type":"string"}}},` +

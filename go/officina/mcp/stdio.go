@@ -31,12 +31,13 @@ const (
 type stdio struct {
 	cmd   *exec.Cmd
 	stdin io.WriteCloser
-	// exitWait is how long close waits for the server to exit by itself.
+	// exitWait is how long close waits for the server to exit by itself, and how long its output may stay open once
+	// it has.
 	exitWait time.Duration
 	// exited is closed once the process has exited and its output has been read; ended says how, by then.
 	exited chan struct{}
 	ended  string
-	// wg waits for the goroutine that waits for the process.
+	// wg waits for the goroutines that wait for the process and read its output.
 	wg sync.WaitGroup
 
 	// writing lets one message at a time be written.
@@ -58,23 +59,58 @@ func startStdio(server *Server) (*stdio, error) {
 	if s.exitWait == 0 {
 		s.exitWait = exitWait
 	}
-	cmd.Stdout = &lines{max: maxMessage, line: s.dispatch, tooLong: s.tooLong}
-	cmd.Stderr = &s.stderr
-	// Once the server has exited, a process it started that still holds its output does not hold up Wait for
-	// longer than this.
-	cmd.WaitDelay = s.exitWait
+	// The server writes to pipes read here rather than by exec, so Wait returns as soon as the server exits, and what
+	// is left of its group is killed then: a child that holds the output does not hold up the end.
+	stdout, stdoutW, err := os.Pipe()
+	if err != nil {
+		return nil, fmt.Errorf("mcp server %q: make its output pipe: %w", server.Name, err)
+	}
+	stderr, stderrW, err := os.Pipe()
+	if err != nil {
+		_, _ = stdout.Close(), stdoutW.Close() // Pipes never used.
+		return nil, fmt.Errorf("mcp server %q: make its error output pipe: %w", server.Name, err)
+	}
+	cmd.Stdout, cmd.Stderr = stdoutW, stderrW
 	stdin, err := cmd.StdinPipe()
 	if err == nil {
 		s.stdin = stdin
 		err = cmd.Start()
 	}
+	// The server holds the write ends now; were they open here too, the reads would never end.
+	_, _ = stdoutW.Close(), stderrW.Close() // Closing an unused end cannot lose anything.
 	if err != nil {
+		_, _ = stdout.Close(), stderr.Close() // As above.
 		return nil, fmt.Errorf("mcp server %q could not be started (%s): %w", server.Name, server.Command, err)
+	}
+	// Each reader says when its pipe has ended; it closes its end, so a server still writing fails.
+	read := make(chan struct{}, 2)
+	for _, r := range []struct {
+		pipe *os.File
+		to   io.Writer
+	}{{stdout, &lines{max: maxMessage, line: s.dispatch, tooLong: s.tooLong}}, {stderr, &s.stderr}} {
+		s.wg.Go(func() {
+			// A copy ends when the pipe does, or when what it is written to refuses more (a message too long).
+			_, _ = io.Copy(r.to, r.pipe)
+			_ = r.pipe.Close() // Read to its end, or given up on.
+			read <- struct{}{}
+		})
 	}
 	s.wg.Go(func() {
 		// How it exited matters less than what it said: the error output names the cause.
 		_ = cmd.Wait()
 		endGroup(cmd.Process.Pid)
+		// A process that left the group, or one on Windows, may still hold the output: the pipes are cut off after
+		// exitWait, as exec's WaitDelay would.
+		timer := time.NewTimer(s.exitWait)
+		defer timer.Stop()
+		for ended := 0; ended < 2; {
+			select {
+			case <-read:
+				ended++
+			case <-timer.C:
+				_, _ = stdout.Close(), stderr.Close() // Their reads end, and the readers report.
+			}
+		}
 		s.mu.Lock()
 		s.ended = "it closed its connection"
 		if s.overflow != "" {

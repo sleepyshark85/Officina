@@ -3,10 +3,9 @@
 The Go implementation of Officina: the same requirements ([`REQUIREMENTS.md`](../REQUIREMENTS.md)) and architecture
 ([`ARCHITECTURE.md`](../ARCHITECTURE.md)) as the .NET one at the repository root, written as idiomatic Go.
 
-Status: in progress. The core's run loop (Go S03), the Claude adapter (Go S04), tools and audit (Go S05), the
-Bookshop Assistant console (Go S06), telemetry with the audit view (Go S07), sessions with budgets (Go S08), memory
-(Go S09), long conversations (Go S10), the MCP client with exports (Go S11) and typed output with the session
-summarizer (Go S12) are in. See
+Status: phase 1 complete once Go S13 (samples, the demo script and the live smoke test) is merged: every slice of the
+plan is in, Bookshop Assistant runs the demo script as written, and a session either implementation saved resumes in
+the other. See
 [`docs/plan/phase-1.md`](../docs/plan/phase-1.md) for the slices (the Go column),
 [`docs/implementations/go.md`](../docs/implementations/go.md) for the decisions and
 [`docs/traceability.md`](docs/traceability.md) for the tests of each requirement.
@@ -22,7 +21,7 @@ Layout (G2, G3):
 | `officina/officinatest/` | The test kit: scripted model and approver, fake MCP server, prefix stability check |
 | `dependencies_test.go` | The dependency check (TEST-05), with fixture modules in `testdata/dependencies/` |
 | `cmd/bookshop/`, `internal/bookshop/` | Bookshop Assistant (from Go S06) |
-| `examples/` | `hello`, a live chat (Go S04); the GEN-06 samples (Go S13) |
+| `examples/` | `hello`, a live chat; the GEN-06 samples `extraction`, `chat` and `background` |
 | `docs/` | Go design notes and traceability |
 
 ## Build and test
@@ -44,11 +43,42 @@ line shows cache reads from the second message:
 go run ./examples/hello
 ```
 
+## Samples
+
+Each of the other purposes phase 1 covers (ARCHITECTURE §8, GEN-06) is a small package in `examples/`, run offline by
+its tests and its `Example` functions, on the test kit's scripted model, each checked for a stable prefix (TEST-02):
+
+| Sample | Purpose | What it shows |
+|---|---|---|
+| [`extraction`](examples/extraction/) | Extraction and classification | A stateless agent with typed output and no tools triages customer messages, one call each |
+| [`chat`](examples/chat/) | Chat assistant | One conversation per user kept by the host as JSON, a tool, memory per user, the date as run context |
+| [`background`](examples/background/) | Background agent | An unattended job per support ticket: the helpdesk's tools over Streamable HTTP MCP, a refund tool that needs an approval nobody can give, the JSON-lines audit sink, a budget per job and typed output |
+
+```sh
+go test ./examples/...
+go doc -all ./examples/background   # the API, with the examples
+```
+
+## Live smoke test
+
+The live smoke test (TEST-04) runs the real console on Claude in demo mode against the database in Docker, with only
+the staff member scripted: it places the APP-09 order after approval and reaches a compaction with the demo script's
+catalogue searches, and checks that every model call after the first reads the cache. It costs about $0.40, so it is
+built only with the `live` tag, and needs Docker and `ANTHROPIC_API_KEY`:
+
+```sh
+go test -tags live -run TestLive -v ./internal/bookshop
+```
+
+With the .NET SDK installed, the live tests also build the .NET application, run it headless to save a session, and
+resume that session here, checking the prefix and the cache reads (a few cents).
+
 ## Bookshop Assistant
 
 The reference application: a console chatbot for bookshop staff over the same PostgreSQL database as the .NET one,
 from the compose file, schema and seed in [`apps/BookshopAssistant/`](../apps/BookshopAssistant/). It needs Docker
-and `ANTHROPIC_API_KEY`; a reply costs a few cents.
+and `ANTHROPIC_API_KEY`; a reply costs a few cents. The demo script, [`docs/demo.md`](docs/demo.md), walks through
+every capability with what to type and what to expect, and resumes a session the .NET application saved.
 
 ```sh
 (cd ../apps/BookshopAssistant && ./start.sh)
@@ -68,9 +98,9 @@ cache intact, and a call a crash left unanswered told to the model as interrupte
 left with `/new`, `/resume`, `/quit` or the end of the input is summarized by a second, stateless agent with typed
 output (Opus 5.5 at low effort, a $0.05 budget a summary, its cost added to the session's): `/sessions` shows each
 session's title, summary and the changes it made, and first summarizes up to three sessions left without one, as a
-crash leaves them. Sessions are stored as the .NET application stores them, in the same table; one the .NET
-application started is refused as another version of the assistant until both chat agents have the same tools
-and instructions. After each reply a status line shows its tokens,
+crash leaves them. Sessions are stored as the .NET application stores them, in the same table, with the same
+prefix: a session the .NET application saved resumes here with its cache intact, and the other way round (step 14 of
+[`docs/demo.md`](docs/demo.md)). After each reply a status line shows its tokens,
 the share read from the cache, its cost and the session's; `/cost` shows the session's. A reply may spend $0.50 and a
 session $5; reaching either stops the reply and says why. `BOOKSHOP_REPLY_BUDGET`, in US dollars, such as `0.01`,
 lowers the reply's budget to show a stop.
@@ -86,13 +116,14 @@ trace (the reply, the run, its model calls and tool calls, with tokens, cache re
 the core's metrics (tokens, cost, cache hit ratio, latency, tool outcomes, approvals) and the application's logs. Open
 http://localhost:18888; the application sends OTLP/gRPC to http://localhost:4317. `OTEL_EXPORTER_OTLP_ENDPOINT` and
 `BOOKSHOP_DASHBOARD` name others, such as the ports a `.env` file beside the compose file chose. Telemetry holds no
-message text: the audit trail is the record.
+message text: the audit trail is the record; `BOOKSHOP_TELEMETRY_CONTENT=true` puts message text and tool inputs and
+results in the traces, redacted, for debugging.
 Long conversations are shortened on Claude's side: the conversation is compacted into a summary from 150,000 input
 tokens, and old tool results are cleared once a request holds more than 20 tool calls and clearing frees at least
 20,000 tokens. Each shows as a `~` line and an `/audit` entry. `go run ./cmd/bookshop --demo` compacts from 50,000
 input tokens (Claude's minimum) and clears above 12 tool calls, to see both in a short session: four broad catalogue
 searches in one message compact (about $0.30), and two turns of eight book lookups clear (step 13 of
-[`docs/demo.md`](../docs/demo.md)). Demo sessions do not resume in normal mode, nor the other way round.
+[`docs/demo.md`](docs/demo.md)). Demo sessions do not resume in normal mode, nor the other way round.
 `BOOKSHOP_EXPORTS` names another export server's MCP endpoint than `http://localhost:18800/mcp`.
 `BOOKSHOP_DATABASE`, a PostgreSQL connection string, names another database, such as one on another port:
 `postgres://bookshop:shelf-demo-41@localhost:5433/bookshop`. `docker compose down -v` deletes the data, so the next

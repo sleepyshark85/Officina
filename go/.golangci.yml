@@ -2,6 +2,10 @@
 # check; the rest is the reviewer's. A linter is broken only with //nolint:<linter> // <reason>.
 version: "2"
 
+run:
+  # The live smoke test is linted too, though only built on demand.
+  build-tags: [live]
+
 linters:
   default: none
   enable:

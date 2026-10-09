@@ -66,6 +66,13 @@ func run() int {
 			return fail(fmt.Errorf("BOOKSHOP_REPLY_BUDGET %q is not an amount of US dollars above zero", v))
 		}
 	}
+	// Message text in traces is for debugging, so it is off unless asked for.
+	var content bool
+	if v := os.Getenv("BOOKSHOP_TELEMETRY_CONTENT"); v != "" {
+		if content, err = strconv.ParseBool(v); err != nil {
+			return fail(fmt.Errorf("BOOKSHOP_TELEMETRY_CONTENT %q is neither true nor false", v))
+		}
+	}
 	// Input that is not a terminal is not shown as it is typed, so the console writes each line after its prompt.
 	stdin, err := os.Stdin.Stat()
 	echo := err == nil && stdin.Mode()&os.ModeCharDevice == 0
@@ -80,7 +87,8 @@ func run() int {
 			return signal.NotifyContext(ctx, os.Interrupt)
 		},
 		TracerProvider: telemetry.Traces, MeterProvider: telemetry.Metrics, Logger: telemetry.Logger(),
-		Dashboard: setting("BOOKSHOP_DASHBOARD", composeDashboard), Budgets: budgets, Demo: *demo,
+		TelemetryContent: content,
+		Dashboard:        setting("BOOKSHOP_DASHBOARD", composeDashboard), Budgets: budgets, Demo: *demo,
 		Exports: setting("BOOKSHOP_EXPORTS", composeExports),
 	})
 	if err != nil {

@@ -21,7 +21,9 @@ func killTree(pid int) {
 }
 
 // endGroup kills what is left of the server's process group once the server has exited, such as a child that ignored
-// the end of its input. The group's id cannot be reused while a process of it is left.
+// the end of its input or holds its output. The group's id cannot be reused while a process of it is left. Once the
+// server is reaped and none is left, the id is free, and the system could in principle give it to a new group before
+// the kill: the window is a few instructions long, after a whole group has gone, so it is accepted.
 func endGroup(pid int) {
 	killTree(pid)
 }

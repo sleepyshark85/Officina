@@ -41,6 +41,9 @@ type Config struct {
 	TracerProvider trace.TracerProvider
 	MeterProvider  metric.MeterProvider
 	Logger         *slog.Logger
+	// TelemetryContent puts the chat agent's message text and tool inputs and results in its traces, redacted, for
+	// debugging; by default they hold none.
+	TelemetryContent bool
 	// Dashboard is the telemetry dashboard's address, which /audit links each run's trace to.
 	Dashboard string
 	// Budgets limit each reply and each session; a zero limit is the default: $0.50 a reply, $5 a session.
@@ -121,7 +124,7 @@ func NewAgent(cfg Config, db *pgxpool.Pool, exports []officina.Tool, approver of
 		Tools: append(tools, officina.NewMemoryTool(cfg.Memory)), Approver: approver, AuditSink: sink, Name: "bookshop",
 		// The database password is a secret; the rest of the connection string is not.
 		Secrets:        []string{db.Config().ConnConfig.Password},
-		TracerProvider: cfg.TracerProvider, MeterProvider: cfg.MeterProvider,
+		TracerProvider: cfg.TracerProvider, MeterProvider: cfg.MeterProvider, TelemetryContent: cfg.TelemetryContent,
 		ContextManagement: contextManagement(cfg.Demo),
 	})
 	if err != nil {

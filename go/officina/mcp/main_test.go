@@ -51,6 +51,7 @@ func TestMain(m *testing.M) {
 //   - silent <file>: writes its process id to the file and never answers, until its input ends;
 //   - stubborn <file> serve|silent: starts a child that shares its output (sleeper), writes its own and the child's
 //     process ids to the file, serves or stays silent, and never exits by itself, even once its input ends;
+//   - leaver <file>: as stubborn serve, but exits once its input ends, leaving its child holding its output;
 //   - flood: reads the first request and answers with a line longer than a message may be;
 //   - tidy <file>: serves no tools until its input ends, then takes a moment to write "done" to the file and exits.
 func fake(mode string, args []string) int {
@@ -62,7 +63,9 @@ func fake(mode string, args []string) int {
 			return 1
 		}
 	case "stubborn":
-		return stubborn(args[0], args[1] == "serve")
+		return stubborn(args[0], args[1] == "serve", true)
+	case "leaver":
+		return stubborn(args[0], true, false)
 	case "sleeper":
 		time.Sleep(time.Hour)
 	case "flood":
@@ -110,8 +113,9 @@ func fake(mode string, args []string) int {
 	return 0
 }
 
-// stubborn runs the stubborn fake server, which writes "<its pid> <its child's pid>" to file.
-func stubborn(file string, serve bool) int {
+// stubborn runs the stubborn fake server, which writes "<its pid> <its child's pid>" to file; unless it stays, it
+// exits once its input ends.
+func stubborn(file string, serve, stay bool) int {
 	exe, err := os.Executable()
 	if err != nil {
 		return 1
@@ -127,7 +131,9 @@ func stubborn(file string, serve bool) int {
 	if serve {
 		_ = officinatest.NewMCPServer().Serve(context.Background(), os.Stdin, os.Stdout) // Until the input ends.
 	}
-	time.Sleep(time.Hour)
+	if stay {
+		time.Sleep(time.Hour)
+	}
 	return 0
 }
 
