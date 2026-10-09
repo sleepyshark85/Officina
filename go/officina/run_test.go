@@ -703,8 +703,8 @@ func TestResult_AGT03_StatusesAndReasonsPrintTheirNames(t *testing.T) {
 		officina.Completed, officina.Stopped, officina.Failed, officina.Status(0),
 		officina.Cancelled, officina.Refusal, officina.OutputLimit, officina.ContextFull, officina.IterationLimit,
 		officina.Budget, officina.StopReason(7), officina.Read, officina.Write, officina.ToolKind(0),
-		officina.ModelError, officina.UnexpectedStop, officina.PrefixMismatch, officina.InvalidOutput,
-		officina.FailureReason(0), officina.FailureReason(5),
+		officina.ModelError, officina.UnexpectedStop, officina.PrefixMismatch, officina.ToolSourceUnavailable,
+		officina.InvalidOutput, officina.FailureReason(0), officina.FailureReason(6),
 		officina.FinishUnknown, officina.FinishEnd, officina.FinishToolUse, officina.FinishMaxTokens,
 		officina.FinishRefusal, officina.FinishContextFull, officina.FinishReason(6),
 	}
@@ -718,7 +718,8 @@ func TestResult_AGT03_StatusesAndReasonsPrintTheirNames(t *testing.T) {
 		"Cancelled", "Refusal", "OutputLimit", "ContextFull", "IterationLimit", "Budget", "StopReason(7)",
 		"Read", "Write",
 		"ToolKind(0)",
-		"ModelError", "UnexpectedStop", "PrefixMismatch", "InvalidOutput", "FailureReason(0)", "FailureReason(5)",
+		"ModelError", "UnexpectedStop", "PrefixMismatch", "ToolSourceUnavailable", "InvalidOutput", "FailureReason(0)",
+		"FailureReason(6)",
 		"FinishUnknown", "FinishEnd", "FinishToolUse", "FinishMaxTokens", "FinishRefusal", "FinishContextFull",
 		"FinishReason(6)",
 	}
