@@ -86,6 +86,10 @@ record; the application sends its traces, metrics and logs there over OTLP/HTTP,
 `postgres://bookshop:shelf-demo-41@localhost:5433/bookshop`; `BOOKSHOP_DASHBOARD` another dashboard for `/audit`'s
 links, and OpenTelemetry's own `OTEL_EXPORTER_OTLP_ENDPOINT` another OTLP/HTTP endpoint, such as
 `http://localhost:4328`.
+Asked to export a report, such as *Export Alice Martin's order history as CSV*, the assistant writes it, once you
+approve, into `apps/BookshopAssistant/exports/` through the compose file's filesystem MCP server, which the
+application connects to at the start and stops with a message if it cannot. `BOOKSHOP_EXPORTS` names another
+endpoint than `http://localhost:18800/mcp`; set to nothing, the assistant runs without exports.
 
 The hooks in `../.claude/` run RuboCop and Steep before a commit that stages anything under `ruby/` but docs, and
 the tests before a push that changes it; they find `bundle` on `PATH`, or else in mise's shims

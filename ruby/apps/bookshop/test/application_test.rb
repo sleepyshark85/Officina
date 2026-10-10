@@ -18,7 +18,8 @@ class ApplicationTest < Minitest::Test
     agent = Officina::Agent.new(name: 'bookshop', model: ScriptedModel.new(ScriptedModel.text('Hello.')),
                                 instructions: 'Help.', telemetry: memory.telemetry.officina)
     memory.telemetry.reply('c1') { agent.run(Officina::Conversation.new, 'Hi.') { nil } }
-    application = Bookshop::Application.new(database: LostDatabase.new, telemetry: memory.telemetry, console: nil)
+    application = Bookshop::Application.new(database: LostDatabase.new, exports: nil, telemetry: memory.telemetry,
+                                            console: nil)
 
     refute_empty memory.spans
     assert_raises(PG::ConnectionBad) { application.close }

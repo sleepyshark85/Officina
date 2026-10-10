@@ -26,4 +26,5 @@ Gem::Specification.new do |spec|
   spec.add_dependency 'pg', '~> 1.7'
   spec.add_dependency 'sleepyshark-officina', Sleepyshark::Officina::VERSION
   spec.add_dependency 'sleepyshark-officina-claude', Sleepyshark::Officina::VERSION
+  spec.add_dependency 'sleepyshark-officina-mcp', Sleepyshark::Officina::VERSION
 end

@@ -24,7 +24,11 @@ class BookshopTest < Minitest::Test
     you> /quit
   TEXT
 
-  OFFLINE = { 'ANTHROPIC_API_KEY' => nil, 'BOOKSHOP_DATABASE' => 'postgres://nobody@127.0.0.1:1/nowhere' }.freeze
+  # No model, no database and no export server.
+  OFFLINE = { 'ANTHROPIC_API_KEY' => nil, 'BOOKSHOP_DATABASE' => 'postgres://nobody@127.0.0.1:1/nowhere',
+              'BOOKSHOP_EXPORTS' => '' }.freeze
+  # An export server's endpoint where nothing listens.
+  NO_SERVER = 'http://127.0.0.1:1/mcp'
 
   def test_app02_the_command_runs_the_console_without_reaching_the_database_or_the_model_until_a_reply_needs_them
     output, status = bookshop(stdin_data: "Sam\n/help\n/quit\n")
@@ -55,6 +59,25 @@ class BookshopTest < Minitest::Test
 
     assert_equal 1, status.exitstatus
     assert_equal %(BOOKSHOP_REPLY_BUDGET "abc" is not an amount of US dollars above zero\n), output
+  end
+
+  def test_app12_mcp04_the_command_fails_clearly_when_the_export_server_cannot_be_reached
+    output, status = bookshop(env: { 'BOOKSHOP_EXPORTS' => NO_SERVER }, stdin_data: '')
+    why, how = output.lines
+
+    assert_equal 1, status.exitstatus
+    assert_match(/\AThe export server at #{NO_SERVER} is not available: MCP server filesystem could not be reached: /o,
+                 why)
+    assert_equal 'Start it with ./start.sh (or pwsh -File start.ps1) in apps/BookshopAssistant, or set ' \
+                 "BOOKSHOP_EXPORTS to its endpoint, or to nothing to go without exports.\n", how
+  end
+
+  def test_app12_the_command_refuses_an_export_server_setting_that_is_not_an_http_url_and_fails
+    output, status = bookshop(env: { 'BOOKSHOP_EXPORTS' => 'localhost:18800' }, stdin_data: '')
+
+    assert_equal 1, status.exitstatus
+    assert_equal %(BOOKSHOP_EXPORTS "localhost:18800" cannot be used: MCP server filesystem: localhost:18800 is not ) +
+                 "an http or https URL\n", output
   end
 
   private

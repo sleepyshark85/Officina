@@ -1,8 +1,8 @@
 # frozen_string_literal: true
 
 require 'bookshop'
-require 'open3'
 require 'pg'
+require_relative 'docker'
 
 # The PostgreSQL server the database tests share, started with Docker once per run, as the compose file runs it: its
 # image, user and password, and the application's schema and seed, which .NET and Go read too. Included in a test,
@@ -51,12 +51,10 @@ module DatabaseServer
 
     # Starts the server and returns its port on this machine; the container is removed when the tests end.
     def start
-      docker('run', '--detach', '--rm', '--name', CONTAINER, '--label', 'officina-test',
-             '--env', "POSTGRES_USER=#{USER}", '--env', "POSTGRES_PASSWORD=#{PASSWORD}",
-             '--env', "POSTGRES_DB=#{SEEDED}", '--publish', '127.0.0.1::5432',
-             '--volume', "#{SCRIPTS}:/docker-entrypoint-initdb.d:ro", IMAGE)
-      Minitest.after_run { Open3.capture2e('docker', 'rm', '--force', CONTAINER) }
-      port = docker('port', CONTAINER, '5432/tcp').lines.first.split(':').last.strip
+      Docker.start(CONTAINER, '--env', "POSTGRES_USER=#{USER}", '--env', "POSTGRES_PASSWORD=#{PASSWORD}",
+                   '--env', "POSTGRES_DB=#{SEEDED}", '--publish', '127.0.0.1::5432',
+                   '--volume', "#{SCRIPTS}:/docker-entrypoint-initdb.d:ro", IMAGE)
+      port = Docker.port(CONTAINER, '5432/tcp')
       wait_until_ready(port)
       port
     end
@@ -73,13 +71,6 @@ module DatabaseServer
         sleep 0.2
         retry
       end
-    end
-
-    def docker(*arguments)
-      output, status = Open3.capture2e('docker', *arguments)
-      raise "docker #{arguments.first} failed: #{output}" unless status.success?
-
-      output
     end
   end
 
