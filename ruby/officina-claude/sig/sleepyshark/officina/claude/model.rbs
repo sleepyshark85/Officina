@@ -32,6 +32,7 @@ module Sleepyshark
                    String conversation_cache) -> void
         def check_cache: (String prefix, String conversation) -> void
         def params: (Request request) -> Hash[Symbol, untyped]
+        def output_config: (String? schema) -> Hash[Symbol, untyped]
         def tool: (Tool tool) -> Hash[Symbol, untyped]
         def message: (Message message) -> String
         def content: (Block block) -> (JSON::Fragment | Hash[Symbol, untyped])

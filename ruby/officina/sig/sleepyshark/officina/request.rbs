@@ -3,13 +3,14 @@ module Sleepyshark
     class Request < Data
       attr_reader tools: Array[Tool]
       attr_reader instructions: String
+      attr_reader output_schema: String?
       attr_reader messages: Array[Message]
       attr_reader max_output_tokens: Integer?
 
-      def self.new: (tools: Array[Tool], instructions: String, messages: Array[Message], ?max_output_tokens: Integer?)
-                  -> instance
+      def self.new: (tools: Array[Tool], instructions: String, messages: Array[Message], ?output_schema: String?,
+                    ?max_output_tokens: Integer?) -> instance
 
-      def initialize: (tools: Array[Tool], instructions: String, messages: Array[Message],
+      def initialize: (tools: Array[Tool], instructions: String, messages: Array[Message], ?output_schema: String?,
                        ?max_output_tokens: Integer?) -> void
     end
   end

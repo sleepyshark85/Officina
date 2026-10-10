@@ -10,6 +10,7 @@ module Sleepyshark
       attr_reader model: _Model
       attr_reader instructions: String
       attr_reader tools: Array[Tool]
+      attr_reader output: Input::_Class?
       attr_reader fingerprint: String
       attr_reader approver: _Approver?
       attr_reader audit_sink: _AuditSink?
@@ -19,9 +20,9 @@ module Sleepyshark
 
       @secrets: Secrets
 
-      def initialize: (model: _Model, instructions: String, ?tools: Array[Tool], ?approver: _Approver?,
-                       ?audit_sink: _AuditSink?, ?name: String?, ?secrets: Array[String], ?clock: (^() -> Time)?,
-                       ?telemetry: Telemetry?) -> void
+      def initialize: (model: _Model, instructions: String, ?tools: Array[Tool], ?output: Input::_Class?,
+                       ?approver: _Approver?, ?audit_sink: _AuditSink?, ?name: String?, ?secrets: Array[String],
+                       ?clock: (^() -> Time)?, ?telemetry: Telemetry?) -> void
 
       def tool: (String name) -> Tool?
 
@@ -34,7 +35,7 @@ module Sleepyshark
 
       def check_run: (String input, String? context, Budget? budget) -> void
 
-      def keep_prefix: (_Model model, String instructions, Array[Tool] tools) -> void
+      def keep_prefix: (_Model model, String instructions, Array[Tool] tools, Input::_Class? output) -> void
 
       def given: (String instructions) -> String
 

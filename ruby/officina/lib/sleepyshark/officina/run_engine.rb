@@ -22,12 +22,13 @@ module Sleepyshark
         @tool_step = ToolStep.new(agent:, audit: @audit, trace:, cancel:, reporter: @reporter)
       end
 
-      # The run's result, its text and detail without the agent's secrets, with what the run used, between the run's
-      # two audit entries, and its span's end; a run the host left has none, and its end is recorded as abandoned.
+      # The run's result, its text and detail without the agent's secrets, its typed output read from that text, with
+      # what the run used, between the run's two audit entries, and its span's end; a run the host left has none, and
+      # its end is recorded as abandoned.
       def run(input, context)
         # @type var result: result?
         @audit.record(:run_started)
-        result = @spending.report(redacted(decide(input, context)))
+        result = @spending.report(TypedOutput.read(redacted(decide(input, context)), @agent.output))
       ensure
         @audit.record_end(result, @spending.usage, @spending.cost)
         @trace.finish(result)
@@ -74,8 +75,8 @@ module Sleepyshark
       # The reply, the result of a call that got none, or nil when the run was cancelled, which the loop then stops.
       def call_model(messages, limit)
         @spending.count_model_call
-        request = Request.new(tools: @agent.tools, instructions: @agent.instructions, messages:,
-                              max_output_tokens: limit)
+        request = Request.new(tools: @agent.tools, instructions: @agent.instructions,
+                              output_schema: @agent.output&.schema&.to_s, messages:, max_output_tokens: limit)
         @trace.model_call { stream(request) || no_reply("The model's reply ended without a stop reason") }
       end
 

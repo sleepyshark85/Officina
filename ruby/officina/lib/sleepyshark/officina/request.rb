@@ -2,18 +2,21 @@
 
 module Sleepyshark
   module Officina
-    Request = Data.define(:tools, :instructions, :messages, :max_output_tokens)
+    Request = Data.define(:tools, :instructions, :output_schema, :messages, :max_output_tokens)
 
-    # One model call: the prefix, which stays the same for a conversation (the tools, sorted by name, and the frozen
-    # instructions; the model's settings are its own), then the conversation's messages, ending with the run's pending
-    # ones: the user's message and, as an +:operator+ message, the run context. A model must not change it.
+    # One model call: the prefix, which stays the same for a conversation (the tools, sorted by name, the frozen
+    # instructions and the output schema; the model's settings are its own), then the conversation's messages, ending
+    # with the run's pending ones: the user's message and, as an +:operator+ message, the run context. A model must not
+    # change it.
     class Request
       # @param tools [Array<Tool>]
       # @param instructions [String]
+      # @param output_schema [String, nil] the JSON schema the reply must match, sent as the provider's structured
+      #   output format; nil when the reply is text
       # @param messages [Array<Message>]
       # @param max_output_tokens [Integer, nil] the most output tokens the reply may use, when the run's budget lowers
       #   the model's own limit; the model keeps the lower of the two. nil leaves the model's own
-      def initialize(tools:, instructions:, messages:, max_output_tokens: nil) = super
+      def initialize(tools:, instructions:, messages:, output_schema: nil, max_output_tokens: nil) = super
     end
   end
 end
