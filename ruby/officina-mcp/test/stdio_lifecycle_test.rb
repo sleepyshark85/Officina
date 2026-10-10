@@ -36,14 +36,17 @@ class StdioLifecycleTest < Minitest::Test
 
   def test_mcp01_closing_stops_and_reaps_the_server_and_closes_its_pipes
     with_pid_file do |pid_file|
-      pipes = open_files
+      # Files an earlier test left to the garbage collector are closed first, so none closes now and frees its number
+      # for a pipe.
+      GC.start
+      before = open_files
       client = connect(env: { 'FAKE_MCP_PID' => pid_file })
       client.close
       error = assert_raises(Mcp::Error) { client.list_tools }
 
       assert_equal 'MCP server fs could not be reached: the connection was closed', error.message
       refute_running pid_file
-      assert_equal pipes, open_files
+      assert_empty open_files - before, 'the pipes to the server are closed'
     end
   end
 

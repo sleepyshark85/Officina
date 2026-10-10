@@ -122,19 +122,20 @@ module Sleepyshark
 
         # A connection of the request's own, opened on its thread.
         def connection
-          http = Net::HTTP.new(@host, @uri.port)
+          http = limited_connection(@host, @uri.port)
           http.use_ssl = @uri.scheme == 'https'
-          limit(http)
           http
         end
 
-        # Opening the connection may take OPEN_TIMEOUT seconds; reading and writing have no limit, as a run's
-        # cancellation ends a call. Net::HTTP takes nil for none, which its signature leaves out.
+        # A connection to host and port whose opening may take OPEN_TIMEOUT seconds; reading and writing have no
+        # limit, as a run's cancellation ends a call. Net::HTTP takes nil for none, which its signature leaves out.
         # mutant:disable -- each setting shows only once a server has kept a request waiting for 10 or 60 seconds
-        def limit(http)
+        def limited_connection(host, port)
+          http = Net::HTTP.new(host, port)
           http.open_timeout = OPEN_TIMEOUT
           http.read_timeout = nil # steep:ignore
           http.write_timeout = nil # steep:ignore
+          http
         end
 
         # Runs on the request's own thread: opens the connection (Net::HTTP#request does, as it is not open yet),

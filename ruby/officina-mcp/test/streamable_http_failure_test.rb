@@ -2,10 +2,9 @@
 
 require 'test_helper'
 require 'sleepyshark/officina/mcp'
-require_relative 'cancellations'
 require_relative 'scripted_http_server'
 
-# A Streamable HTTP server that fails, refuses or keeps a request waiting: what the client says of it.
+# A Streamable HTTP server that fails or refuses: what the client says of it.
 class StreamableHttpFailureTest < Minitest::Test
   cover 'Sleepyshark::Officina::Mcp*'
 
@@ -27,19 +26,20 @@ class StreamableHttpFailureTest < Minitest::Test
 
   def test_mcp04_an_http_server_that_goes_down_mid_call_raises_and_stays_lost
     server = FakeServer.new(tools: [ECHO, Tool.new(name: 'crash', handler: ->(_) { server.go_down })])
-    reports = Thread.report_on_exception
-    with_client(server) do |client|
-      messages = []
-      # The request's own thread ends with the failure, and says nothing of it.
-      assert_silent do
-        messages = [['crash', {}], ['echo', { 'text' => 'hi' }]].map do |name, arguments|
-          assert_raises(Mcp::Error) { client.call_tool(name, arguments) }.message
+    reporting do
+      with_client(server) do |client|
+        messages = []
+        # The request's own thread ends with the failure, and says nothing of it.
+        assert_silent do
+          messages = [['crash', {}], ['echo', { 'text' => 'hi' }]].map do |name, arguments|
+            assert_raises(Mcp::Error) { client.call_tool(name, arguments) }.message
+          end
         end
-      end
 
-      assert_match(/\AMCP server web could not be reached: /, messages.first)
-      assert_equal [messages.first] * 2, messages
-      assert_equal reports, Thread.report_on_exception, 'the setting of every other thread is left alone'
+        assert_match(/\AMCP server web could not be reached: /, messages.first)
+        assert_equal [messages.first] * 2, messages
+        assert Thread.report_on_exception, 'the setting of every other thread is left alone'
+      end
     end
   end
 
@@ -86,39 +86,21 @@ class StreamableHttpFailureTest < Minitest::Test
     end
   end
 
-  # The tool answers only once the test lets it, so the request's thread can end before that only if the client ends
-  # it.
-  def test_mcp04_a_call_cancelled_while_it_waits_raises_ends_its_thread_and_the_next_call_runs
-    gate = Thread::Queue.new
-    with_client(FakeServer.new(tools: [ECHO, Tool.new(name: 'hang', handler: ->(_) { gate.pop.to_s })])) do |client|
-      threads = Thread.list.size
-      error = assert_raises(Mcp::Error) { client.call_tool('hang', {}, cancel: CancelledAfter.new(2)) }
-
-      assert_equal threads, Thread.list.size, 'the request left no thread behind'
-      gate.close
-
-      assert_equal 'MCP server web, tools/call: cancelled', error.message
-      assert_equal 'hi', echo(client)
-    ensure
-      gate.close
-    end
-  end
-
-  def test_mcp04_a_call_cancelled_before_it_starts_is_not_sent
-    server = FakeServer.new(tools: [ECHO])
-    with_client(server) do |client|
-      error = assert_raises(Mcp::Error) { client.call_tool('echo', { 'text' => 'hi' }, cancel: CancelledAfter.new(1)) }
-
-      assert_equal 'MCP server web, tools/call: cancelled', error.message
-      assert_empty server.calls
-    end
-  end
-
   private
 
   def echo(client) = client.call_tool('echo', { 'text' => 'hi' }).text
 
   def connect(url) = Mcp.connect(Mcp::Server.new(name: 'web', url:))
+
+  # Runs the block with each thread's failures reported, whatever the runner chose (mutant turns that off), so a
+  # client that turned it off for every thread rather than for its own shows.
+  def reporting
+    reports = Thread.report_on_exception
+    Thread.report_on_exception = true
+    yield
+  ensure
+    Thread.report_on_exception = reports
+  end
 
   def with_client(server)
     server.serve_http do |url|

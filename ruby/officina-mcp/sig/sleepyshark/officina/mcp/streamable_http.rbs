@@ -49,7 +49,7 @@ module Sleepyshark
 
         def connection: () -> Net::HTTP
 
-        def limit: (Net::HTTP http) -> void
+        def limited_connection: (String host, Integer? port) -> Net::HTTP
 
         def exchange: (Net::HTTP http, Net::HTTP::Post request, Integer? id) -> Hash[String, json]
 

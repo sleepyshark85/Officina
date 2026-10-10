@@ -46,8 +46,13 @@ class WireMessageTest < Minitest::Test
     Pbt.assert do
       Pbt.property(members) do |fields|
         message = fields.compact.transform_keys(&:to_s)
+        answer = Wire.response(JSON.generate(message))
 
-        assert_equal(response?(fields) ? [fields[:id], message] : nil, Wire.response(JSON.generate(message)))
+        if response?(fields)
+          assert_equal [fields[:id], message], answer
+        else
+          assert_nil answer
+        end
       end
     end
   end

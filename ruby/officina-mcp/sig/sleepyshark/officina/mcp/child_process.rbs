@@ -39,7 +39,7 @@ module Sleepyshark
 
         def ended_within?: (Thread thread, Numeric seconds) -> bool
 
-        def join_readers: () -> void
+        def end_reader: (IO pipe, Thread reader) -> void
 
         def kill: () -> void
 

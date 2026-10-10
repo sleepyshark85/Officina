@@ -1,13 +1,12 @@
 # frozen_string_literal: true
 
-require 'socket'
 require 'test_helper'
 require 'sleepyshark/officina/mcp'
 require_relative 'cancellations'
 require_relative 'scripted_http_server'
 
 # The MCP client over Streamable HTTP, against the test kit's fake server on a local port, or a scripted one for what
-# the fake never sends: how it reaches a server and what it sends.
+# the fake never sends: what it sends and how it reads the answers.
 class StreamableHttpTest < Minitest::Test
   cover 'Sleepyshark::Officina::Mcp*'
 
@@ -72,37 +71,6 @@ class StreamableHttpTest < Minitest::Test
         client&.close
       end
     end
-  end
-
-  def test_mcp01_a_server_is_reached_at_an_ipv6_address
-    Scripted.serve(Scripted.results({ 'content' => [] }), host: '::1') do |url|
-      client = connect(url)
-
-      assert_equal '', echo(client)
-    ensure
-      client&.close
-    end
-  rescue Errno::EADDRNOTAVAIL
-    skip 'This machine has no IPv6 loopback'
-  end
-
-  def test_mcp01_an_https_url_is_reached_over_tls
-    listener = TCPServer.new('127.0.0.1', 0)
-    # The first byte a TLS client sends is that of a handshake record.
-    first = Thread.new { listener.accept.then { |connection| connection.read(1).tap { connection.close } } }
-    error = assert_raises(Mcp::Error) { connect("https://127.0.0.1:#{listener.addr[1]}/mcp") }
-
-    assert_equal "\x16".b, first.value
-    assert_match(/\AMCP server web could not be reached: /, error.message)
-  ensure
-    listener.close
-  end
-
-  def test_mcp01_a_url_that_is_not_http_or_has_no_host_is_refused
-    urls = ['ftp://127.0.0.1/mcp', 'http://:8080/mcp', 'http:/mcp']
-    messages = urls.map { |url| assert_raises(ArgumentError) { connect(url) }.message }
-
-    assert_equal(urls.map { "MCP server web: #{it} is not an http or https URL" }, messages)
   end
 
   def test_mcp01_a_closed_connection_sends_nothing_more

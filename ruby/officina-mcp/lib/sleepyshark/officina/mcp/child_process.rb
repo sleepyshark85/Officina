@@ -51,9 +51,9 @@ module Sleepyshark
           @input.close
           kill until ended_within?(@exit, EXIT_WAIT)
           kill_group
-          @output.close
-          @errors.close
-          join_readers
+          # The error output first: the output's reader may be waiting for its reader.
+          end_reader(@errors, @errors_reader)
+          end_reader(@output, @output_reader)
         end
 
         private
@@ -100,7 +100,8 @@ module Sleepyshark
         def last_line(errors)
           # @type var last: String?
           last = nil
-          errors.each_line("\n", ERRORS_KEPT) do |line|
+          # Lines of at most ERRORS_KEPT bytes; IO#each_line's signature leaves out the form with only a limit.
+          errors.each_line(ERRORS_KEPT) do |line| # steep:ignore ArgumentTypeMismatch
             text = line.scrub.strip
             last = text unless text.empty?
           end
@@ -120,11 +121,13 @@ module Sleepyshark
           true
         end
 
-        # mutant:disable -- its survivors leave out a join, and each thread ends by itself once its pipe is closed,
-        #   too soon after for a test to see it still running
-        def join_readers
-          @output_reader.join
-          @errors_reader.join
+        # Closes this side of pipe, which ends its reader even when a process outside the group still holds the
+        # other side, and waits for the reader.
+        # mutant:disable -- its survivors leave out the close, which stop's open-files test shows, or the join: the
+        #   reader ends by itself once its pipe is closed, too soon after for a test to see it still running
+        def end_reader(pipe, reader)
+          pipe.close
+          reader.join
         end
 
         if WINDOWS
