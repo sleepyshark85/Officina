@@ -69,6 +69,12 @@ bundle exec apps/bookshop/exe/bookshop
 It asks your name, then takes messages, such as *Order the two cheapest fantasy books in stock for Alice Martin and
 tell me the total*. Replies stream with each tool call shown; a change asks for your approval with its exact input.
 Ctrl+C stops a reply in progress, and the session goes on; `/help` lists the commands, `/quit` leaves.
+Each conversation is a session, saved in the database's `sessions` table after every step of a reply, so a crash
+loses at most the step in flight: `/sessions` lists the latest, `/resume <id>` goes on with one with its cache intact
+(a call a crash left unanswered is told to the model as interrupted), `/new` starts another. After each reply a status
+line shows its tokens, the share read from the cache, its cost and the session's; `/cost` shows the session's. A
+reply may spend $0.50 and a session $5; reaching either stops the reply and says why. `BOOKSHOP_REPLY_BUDGET`, in US
+dollars, such as `0.01`, lowers the reply's budget to show a stop.
 `/audit` shows the session's audit trail, each run with a link to its trace on the compose file's telemetry dashboard,
 <http://localhost:18888>, where each reply is one trace (the reply, its run, model calls and tool calls) with its log
 record; the application sends its traces, metrics and logs there over OTLP/HTTP, port 4318.
