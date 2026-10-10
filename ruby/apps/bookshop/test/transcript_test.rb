@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require 'bookshop'
 require 'test_helper'
 
 # The transcript the summarizer reads.
