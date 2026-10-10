@@ -12,7 +12,7 @@ module Sleepyshark
       @cancel: Cancellation
       @calls: Array[ToolCall]
       @results: Hash[Integer, ToolResult]
-      @reads: Hash[Integer, Thread]
+      @reads: RunningReads
       @events: Thread::Queue
       @report: CallReport
       @approvals: ApprovalDesk
@@ -32,23 +32,15 @@ module Sleepyshark
 
       def run_if_allowed: (Tool tool, ToolCall call, Integer index) -> void
 
-      def join_reads: () -> void
-
-      def stop_reads: () -> void
-
-      def join_all: (Array[Thread] threads) -> void
-
       def write: (Tool tool, ToolCall call) -> ToolResult
 
-      def read: (Tool tool, ToolCall call) -> Thread
+      def read: (Tool tool, ToolCall call, Integer index) -> void
 
       def invoke: (Tool tool, ToolCall call) -> ToolResult
 
       def finish: (ToolCall call, String content, error: bool, ?started: Time?) -> ToolResult
 
       def cut: (String content) -> String
-
-      def quiet_thread: [T] () { () -> T } -> Thread
 
       def shown: (ToolCall call) -> ToolCall
     end

@@ -19,11 +19,11 @@ module Sleepyshark
         @cancel = cancel
         @calls = calls
         @results = {}
-        @reads = {}
+        @reads = RunningReads.new(cancel)
         @events = Queue.new
         @report = CallReport.new(audit:, events: @events)
         @approvals = ApprovalDesk.new(approver: agent.approver, cancel:, report: @report)
-        @thread = quiet_thread { answer }
+        @thread = QuietThread.start { answer }
       end
 
       # Yields each event as the pipeline sends it, until it has answered every call.
@@ -40,15 +40,14 @@ module Sleepyshark
 
       private
 
-      # Runs on the pipeline's thread, the only one that touches @results and @reads; a read's thread only returns its
-      # result. What it raises, #results raises.
+      # Runs on the pipeline's thread, the only one that touches @results and @reads. What it raises, #results raises.
       def answer
         @calls.each_with_index { |call, index| start(call, index) unless @cancel.cancelled? }
-        join_reads
+        @results.merge!(@reads.join)
         @calls.each_with_index.map { |call, index| @results[index] || finish(call, NOT_STARTED, error: true) }
       ensure
         begin
-          stop_reads
+          @reads.stop
         ensure
           @events.close
         end
@@ -56,7 +55,7 @@ module Sleepyshark
 
       def start(call, index)
         tool = @agent.tool(call.name)
-        join_reads if tool&.write?
+        @results.merge!(@reads.join) if tool&.write?
         @events << ToolCallStarted.new(call: shown(call))
         return run_if_allowed(tool, call, index) if tool
 
@@ -69,31 +68,11 @@ module Sleepyshark
         # The host may have cancelled while the approver decided, or while this write waited for the reads.
         return if @cancel.cancelled?
 
-        tool.write? ? @results[index] = write(tool, call) : @reads[index] = read(tool, call)
-      end
-
-      def join_reads
-        @results.merge!(@reads.transform_values(&:value))
-        @reads.clear
-      end
-
-      # Stops the reads still running when the pipeline ends early, on an exception already on its way: cancels them
-      # and waits for each, so none outlives the run.
-      def stop_reads
-        return if @reads.empty?
-
-        @cancel.cancel
-        join_all(@reads.values)
-      end
-
-      # Joins every thread; what the first that failed raised is raised once all have ended.
-      def join_all(threads)
-        # @type var thread: Thread?
-        # @type var rest: Array[Thread]
-        thread, *rest = threads
-        thread&.join
-      ensure
-        join_all(rest) if thread
+        if tool.write?
+          @results[index] = write(tool, call)
+        else
+          read(tool, call, index)
+        end
       end
 
       # Runs the write once its attempt is in the trail.
@@ -104,9 +83,9 @@ module Sleepyshark
       end
 
       # Starts the read on a thread of its own; its attempt is recorded, but it runs without.
-      def read(tool, call)
+      def read(tool, call, index)
         @audit.record(:tool_started, call:)
-        quiet_thread { invoke(tool, call) }
+        @reads.start(index) { invoke(tool, call) }
       end
 
       def invoke(tool, call)
@@ -134,16 +113,6 @@ module Sleepyshark
 
         "#{content[0, MAX_RESULT]}\n[Truncated: the result had #{content.length} characters; only the first " \
           "#{MAX_RESULT} are shown.]"
-      end
-
-      # A thread whose failure is raised where it is joined, not also printed as it ends.
-      # mutant:disable -- the one mutation, Thread.report_on_exception= in place of the thread's own setting, changes
-      #   the default only for threads started later, which no test can tell apart
-      def quiet_thread
-        Thread.new do
-          Thread.current.report_on_exception = false
-          yield
-        end
       end
 
       # The call as events and the approver see it: its input without the agent's secrets.
