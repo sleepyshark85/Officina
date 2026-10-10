@@ -10,7 +10,7 @@ order of precedence: [Effective Go](https://go.dev/doc/effective_go),
 [Go Proverbs](https://go-proverbs.github.io/). Where a rule below is stricter, it wins. A rule is broken only with a
 `//nolint:<linter> // <reason>` or a comment saying why, and the reviewer must agree with the reason.
 
-The rules every implementation shares are in the conventions, and only there; a rule below marked *(conventions)* is
+The rules every implementation shares are in the conventions, and only there; a rule below marked "(conventions)" is
 how Go realizes the one of that name.
 
 Port the behaviour, never the shape (conventions). Go code that reads like C# (getters, `I`-prefixed interfaces, a type
@@ -22,7 +22,7 @@ per file, a container, exceptions as panics, builders for everything) is rewritt
   `govulncheck ./...` clean; `go test -race -shuffle=on ./...` green. All before a commit or push, as for .NET.
 - No `GOEXPERIMENT`, no `unsafe`, no `cgo`, no `init()` functions. No `reflect` outside tests, except where the core
   derives a JSON Schema from a Go type (typed tools and typed output), and only there.
-- A new dependency meets the conventions' *Dependencies* row, its line in `docs/implementations/go.md`.
+- A new dependency meets the conventions' *Dependencies* row, with its line in `docs/implementations/go.md`.
 
 ## Packages and API
 
@@ -58,8 +58,8 @@ per file, a container, exceptions as panics, builders for everything) is rewritt
 - **A goroutine's owner (conventions) waits for it with `sync.WaitGroup` and `wg.Go`;** its context stops it. No
   fire-and-forget. `goleak` in every package's `TestMain` proves it; the end-to-end tests ignore only testcontainers'
   own reaper goroutines, by name.
-- The goroutine that sends on a channel closes it. A channel's known bound, for a reply's tool events, is the number of
-  calls times the events per call, never "big enough".
+- The goroutine that sends on a channel closes it (conventions). Channels are sized from a known bound (for a reply's
+  tool events, the number of calls times the events per call), never "big enough".
 - Prefer a mutex for guarding state and a channel for handing over work; don't use channels as locks. Copy no type
   that holds a `sync.Mutex`.
 - Streams are `iter.Seq` / `iter.Seq2`; on a consumer's early `break`, the producer releases everything it started

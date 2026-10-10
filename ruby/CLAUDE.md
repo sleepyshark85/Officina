@@ -11,7 +11,7 @@ order of precedence: [The Ruby Style Guide](https://rubystyle.guide/), RuboCop's
 is broken only with a `# rubocop:disable Department/Cop -- <reason>` on the line or a comment saying why, and the
 reviewer must agree with the reason.
 
-The rules every implementation shares are in the conventions, and only there; a rule below marked *(conventions)* is
+The rules every implementation shares are in the conventions, and only there; a rule below marked "(conventions)" is
 how Ruby realizes the one of that name.
 
 Port the behaviour, never the shape (conventions). Ruby code that reads like Java or C# (abstract base classes raising
@@ -29,7 +29,7 @@ would do) is rewritten.
   no `eval`, `instance_eval` or `class_eval` of strings; no global variables, class variables (`@@`) or mutable
   constants (freeze them); no `ObjectSpace`; `send` to a private method only in tests, and even there prefer the public
   API.
-- A new dependency meets the conventions' *Dependencies* row, its line in `docs/implementations/ruby.md`.
+- A new dependency meets the conventions' *Dependencies* row, with its line in `docs/implementations/ruby.md`.
 
 ## Gems and API
 
@@ -71,7 +71,7 @@ would do) is rewritten.
   cooperative (R10). A signal trap only pushes to a `Thread::Queue` that an owned thread reads: no `Mutex`, I/O,
   logging or `Cancellation#cancel` in trap context, where a `Mutex` raises.
 - Shared mutable state lives behind one `Mutex` owned by the object that holds it (conventions); work is handed over
-  through a `Thread::Queue`, closed by the side that sends. A value shared across threads is frozen.
+  through a `Thread::Queue`, closed by the side that sends (conventions). A value shared across threads is frozen.
 - A block passed to `run` may `break`: the code that started tools waits for them in an `ensure` (conventions).
 
 ## Tests
