@@ -17,12 +17,6 @@ class StdioFailureTest < Minitest::Test
                  error.message.delete_suffix(' - officina-no-such-program')
   end
 
-  def test_mcp04_an_empty_command_raises_clearly
-    error = assert_raises(Mcp::Error) { Mcp.connect(Mcp::Server.new(name: 'fs', command: [])) }
-
-    assert_equal 'MCP server fs could not be started: its command is empty', error.message
-  end
-
   def test_mcp04_a_message_of_16_mb_is_read_and_a_longer_one_loses_the_server_and_kills_it
     skip 'Moving 16 MB through a pipe takes seconds on Windows' if Gem.win_platform?
     with_pid_file do |pid_file|

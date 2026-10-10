@@ -39,6 +39,7 @@ module Sleepyshark
         bound = @conversation.fingerprint
         return failed(:prefix_mismatch, PREFIX_MISMATCH) unless bound.nil? || bound == @agent.fingerprint
 
+        @tool_step.connect_sources&.then { return failed(:tool_source_unavailable, it) }
         interrupted = InterruptedCalls.answer(@conversation.messages, @audit)
         @reporter.append(interrupted) if interrupted
         pending = [text_message(:user, input)]
@@ -102,9 +103,7 @@ module Sleepyshark
         raise
       end
 
-      def no_reply(why)
-        failed(:model_error, why) unless @cancel.cancelled?
-      end
+      def no_reply(why) = (failed(:model_error, why) unless @cancel.cancelled?)
 
       # Keeps the reply, with the messages it answers and its calls' results, unless the provider would reject it, and
       # returns the run's result, or nil when the loop goes on.

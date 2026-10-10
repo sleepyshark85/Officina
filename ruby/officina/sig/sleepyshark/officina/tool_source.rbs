@@ -1,0 +1,20 @@
+module Sleepyshark
+  module Officina
+    # Where tools that share a connection come from, such as an MCP server; its tools name it as their source. Each
+    # run connects the sources of its agent's tools before its first model call, and fails if one cannot connect; a
+    # source lost later gives error results for its calls. Many runs, on many threads, may share a source.
+    interface _ToolSource
+      # Names the source in the audit trail and telemetry.
+      def name: () -> String
+
+      # Makes sure the source is connected, reconnecting it if it was lost. Raises a StandardError when it cannot,
+      # whose message says why and holds no secret. Should return soon once the cancellation is cancelled.
+      def connect: (cancel: Cancellation) -> void
+
+      # The connection changes since it was last called, oldest first; each is returned once. Runs take them when
+      # they connect and after each reply's tool calls, so a change of a source several runs share is recorded by
+      # whichever run takes it first.
+      def take_changes: () -> Array[ToolSourceChange]
+    end
+  end
+end

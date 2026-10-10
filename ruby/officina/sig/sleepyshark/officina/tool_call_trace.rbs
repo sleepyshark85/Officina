@@ -22,6 +22,8 @@ module Sleepyshark
 
       def measured: (Symbol outcome) -> Hash[String, String]
 
+      def source: (Tool? tool) -> String
+
       def started: (Tool? tool) -> Hash[String, untyped]
     end
   end

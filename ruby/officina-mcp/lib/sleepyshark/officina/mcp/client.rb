@@ -12,9 +12,9 @@ module Sleepyshark
         # The protocol version this client asks for, and those it accepts in answer.
         PROTOCOL_VERSION = '2025-06-18'
         PROTOCOL_VERSIONS = %w[2025-06-18 2025-03-26 2024-11-05].freeze
-        # How long connecting may take, in seconds.
-        CONNECT_TIMEOUT = 30
-        private_constant :PROTOCOL_VERSION, :PROTOCOL_VERSIONS, :CONNECT_TIMEOUT
+        # How long connecting, or a ping, may take, in seconds.
+        TIMEOUT = 30
+        private_constant :PROTOCOL_VERSION, :PROTOCOL_VERSIONS, :TIMEOUT
 
         # Agrees on the protocol with the server called name over transport, which only Mcp.connect makes; see
         # Mcp.connect.
@@ -56,6 +56,18 @@ module Sleepyshark
           Results.call_result(result) || unreadable('tools/call')
         end
 
+        # Checks that the server still answers.
+        #
+        # @raise [Mcp::Error] when the server has gone, fails, answers with an error or not within 30 seconds, or
+        #   cancel is cancelled.
+        def ping(cancel: nil)
+          request('ping', nil, cancel:, deadline: @clock.call + TIMEOUT)
+          nil
+        end
+
+        # Whether the connection is lost for good, as a server that went away loses it: every request then raises.
+        def lost? = @transport.lost?
+
         # Ends the connection. A server it started has its input closed, so it can exit by itself; one that has not
         # within 5 seconds is killed with every process it started (on Unix, its process group). Returns once the
         # server has exited and been reaped, and its readers have ended. Each request's own thread ends with the
@@ -67,13 +79,13 @@ module Sleepyshark
         def handshake(cancel)
           # @type var connected: bool
           connected = false
-          connect_deadline = @clock.call + CONNECT_TIMEOUT
+          deadline = @clock.call + TIMEOUT
           result = request('initialize', { 'protocolVersion' => PROTOCOL_VERSION, 'capabilities' => {},
                                            'clientInfo' => { 'name' => 'officina', 'version' => VERSION } },
-                           cancel:, connect_deadline:)
+                           cancel:, deadline:)
           # The version agreed on, sent with every later message; none before.
           @version = agreed(result['protocolVersion'])
-          exchange('notifications/initialized', nil, nil, cancel:, connect_deadline:)
+          exchange('notifications/initialized', nil, nil, cancel:, deadline:)
           connected = true
         ensure
           # However it failed, a server it started does not outlive it.
@@ -89,8 +101,8 @@ module Sleepyshark
 
         # Sends a request and returns its result. JSON.parse makes each value an instance of the class itself, never of
         # a subclass, so the check is instance_of?.
-        def request(method, params, cancel:, connect_deadline: nil)
-          error, result = exchange(method, params, next_id, cancel:, connect_deadline:).values_at('error', 'result')
+        def request(method, params, cancel:, deadline: nil)
+          error, result = exchange(method, params, next_id, cancel:, deadline:).values_at('error', 'result')
           refused(method, error.instance_of?(Hash) ? error['message'] : error) if error
           unreadable(method) unless result.instance_of?(Hash)
           result
@@ -108,32 +120,32 @@ module Sleepyshark
         end
 
         # Sends a message, a request when id is not nil, and returns its response, waiting until cancel is
-        # cancelled or, while connecting, the connect deadline passes.
-        def exchange(method, params, id, cancel:, connect_deadline:)
-          raise_if_cancelled_or_late(method, cancel, connect_deadline)
+        # cancelled or the deadline, if any, passes.
+        def exchange(method, params, id, cancel:, deadline:)
+          raise_if_cancelled_or_late(method, cancel, deadline)
           message = { 'jsonrpc' => '2.0', 'id' => id, 'method' => method, 'params' => params }.compact
           pending = @transport.post(JSON.generate(message), id, @version)
           begin
-            wait(pending, method, cancel, connect_deadline)
+            wait(pending, method, cancel, deadline)
           ensure
             pending.release
           end
         end
 
-        def wait(pending, method, cancel, connect_deadline)
+        def wait(pending, method, cancel, deadline)
           loop do
             answer = pending.take(POLL)
             return answer if answer
 
-            raise_if_cancelled_or_late(method, cancel, connect_deadline)
+            raise_if_cancelled_or_late(method, cancel, deadline)
           end
         end
 
-        def raise_if_cancelled_or_late(method, cancel, connect_deadline)
+        def raise_if_cancelled_or_late(method, cancel, deadline)
           raise Error, "MCP server #{@name}, #{method}: cancelled" if cancel&.cancelled?
-          return unless connect_deadline && @clock.call >= connect_deadline
+          return unless deadline && @clock.call >= deadline
 
-          raise Error, "MCP server #{@name} did not answer within #{CONNECT_TIMEOUT} seconds"
+          raise Error, "MCP server #{@name} did not answer within #{TIMEOUT} seconds"
         end
       end
     end

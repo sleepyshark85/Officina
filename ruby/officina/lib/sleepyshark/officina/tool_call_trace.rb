@@ -62,9 +62,11 @@ module Sleepyshark
         { **@run.dimensions, 'gen_ai.tool.name' => @call.name, 'officina.tool.outcome' => outcome.to_s }
       end
 
+      def source(tool) = tool&.source&.name || 'application'
+
       def started(tool)
         { 'gen_ai.operation.name' => 'execute_tool', 'gen_ai.tool.name' => @call.name,
-          'gen_ai.tool.call.id' => @call.id, 'gen_ai.tool.type' => 'function', 'officina.tool.source' => 'application',
+          'gen_ai.tool.call.id' => @call.id, 'gen_ai.tool.type' => 'function', 'officina.tool.source' => source(tool),
           'officina.tool.kind' => tool&.kind&.to_s, **@run.content('gen_ai.tool.call.arguments', @call.input) }.compact
       end
     end

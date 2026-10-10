@@ -35,9 +35,13 @@ module Sleepyshark
 
         def lose: (String | Exception reason) -> String
 
+        def lost?: () -> bool
+
         def close: () -> void
 
         private
+
+        def parse: (String url) -> URI::Generic
 
         def lost_reason: () -> String
 

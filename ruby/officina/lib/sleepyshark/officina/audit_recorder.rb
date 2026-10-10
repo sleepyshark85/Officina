@@ -24,8 +24,9 @@ module Sleepyshark
       # cuts its text, and writes it. A failure shows in telemetry, and is returned for the caller to decide what a
       # missing entry means: only a write's attempt depends on it.
       # @param span [OpenTelemetry::Trace::Span, nil] the step's; nil for the run's
+      # @param tool [String, nil] the call's tool unless given
       # @return [Boolean] whether the entry is in the trail
-      def record(kind, call: nil, span: nil, detail: nil, **fields)
+      def record(kind, call: nil, span: nil, detail: nil, tool: call&.name, **fields)
         sink = @agent.audit_sink
         return true unless sink
 
@@ -34,7 +35,7 @@ module Sleepyshark
           @sequence += 1
           written?(sink, span, AuditEntry.new(time: @agent.clock.call, sequence: @sequence, run: @run,
                                               conversation: @conversation, agent: @agent.name, kind:, **ids(span),
-                                              tool: call&.name, call_id: call&.id, input: clean(call&.input),
+                                              tool:, call_id: call&.id, input: clean(call&.input),
                                               detail: clean(detail), **fields))
         end
       end

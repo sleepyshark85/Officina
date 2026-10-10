@@ -65,13 +65,14 @@ module Sleepyshark
         def initialize(server)
           @name = server.name
           # Mcp.connect makes this transport only for a server with a url.
-          @uri = URI(server.url) # steep:ignore ArgumentTypeMismatch
+          @uri = parse(server.url) # steep:ignore ArgumentTypeMismatch
           # Without the brackets of an IPv6 address, which Net::HTTP would take for part of a name.
           @host = @uri.hostname.to_s
           raise ArgumentError, "MCP server #{@name}: #{@uri} is not an http or https URL" unless http?
 
           @headers = server.headers
           @mutex = Mutex.new
+          @lost = nil
         end
 
         # Sends text, a request with that id, or a notification when id is nil, and returns what to wait on.
@@ -91,10 +92,20 @@ module Sleepyshark
           end
         end
 
+        # Whether the connection is lost.
+        # mutant:disable -- see the class: the lock
+        def lost? = @mutex.synchronize { !@lost.nil? }
+
         # Nothing to stop: each request has its own connection, closed when it ends.
         def close = lose('the connection was closed')
 
         private
+
+        def parse(url)
+          URI(url)
+        rescue URI::InvalidURIError
+          raise ArgumentError, "MCP server #{@name}: #{url} is not an http or https URL"
+        end
 
         def lost_reason = "MCP server #{@name} could not be reached: #{@lost}"
 

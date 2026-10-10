@@ -24,6 +24,8 @@ module Sleepyshark
 
         def post: (String text, Integer? id, String? _version) -> Pending
 
+        def lost?: () -> bool
+
         def lost: () -> String
 
         def forget: (Integer? id) -> Thread::Queue[Hash[String, json]]?
@@ -31,6 +33,8 @@ module Sleepyshark
         def close: () -> void
 
         private
+
+        def register: (Integer? id, Thread::Queue[Hash[String, json]] queue) -> void
 
         def write: (String text) -> void
 

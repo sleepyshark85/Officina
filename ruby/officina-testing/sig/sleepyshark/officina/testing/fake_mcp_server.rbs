@@ -46,6 +46,8 @@ module Sleepyshark
 
           def result: (untyped method, message params) -> (message | bool | nil)
 
+          def tools: (String method, message params) -> message?
+
           def initialized: (message params) -> message?
 
           def page: (Integer index) -> message
@@ -65,6 +67,8 @@ module Sleepyshark
         def client_info: () -> message?
 
         def go_down: () -> void
+
+        def come_back_up: () -> void
 
         def end_session: () -> void
 

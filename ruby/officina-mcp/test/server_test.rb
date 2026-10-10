@@ -14,10 +14,20 @@ class ServerTest < Minitest::Test
     meaning = 'MCP server fs: env is for a command, headers for a url'
 
     { {} => either, { command: ['server'], url: 'http://127.0.0.1/mcp' } => either,
-      { url: 'http://127.0.0.1/mcp', env: {} } => meaning, { command: ['server'], headers: {} } => meaning }
+      { url: 'http://127.0.0.1/mcp', env: {} } => meaning, { command: ['server'], headers: {} } => meaning,
+      { command: [] } => 'MCP server fs: the command is empty' }
       .each do |reach, message|
         assert_equal message, assert_raises(ArgumentError) { Server.new(name: +'fs', **reach) }.message
       end
+  end
+
+  def test_mcp03_a_server_name_that_cannot_prefix_tool_names_is_refused
+    ['', 'my server', 'fs.1', "fs\n", 'café'].each do |name|
+      error = assert_raises(ArgumentError) { Server.new(name:, command: ['server']) }
+
+      assert_equal "MCP server #{name.inspect}: a name may hold only ASCII letters, digits, _ and -", error.message
+    end
+    assert_equal 'A-z_0-9', Server.new(name: 'A-z_0-9', command: ['server']).name
   end
 
   def test_mcp01_a_server_holds_frozen_copies_of_what_it_was_given

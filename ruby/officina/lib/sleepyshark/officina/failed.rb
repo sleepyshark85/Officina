@@ -9,8 +9,9 @@ module Sleepyshark
     # A run that went wrong, why, and what the run used.
     class Failed
       # @param reason [Symbol] +:model_error+ (a model call failed after its retries), +:unexpected_stop+ (the model
-      #   stopped in a way the run cannot act on) or +:prefix_mismatch+ (the agent's tools, instructions or model
-      #   settings differ from those the conversation was started with)
+      #   stopped in a way the run cannot act on), +:prefix_mismatch+ (the agent's tools, instructions or model
+      #   settings differ from those the conversation was started with) or +:tool_source_unavailable+ (a source of
+      #   the agent's tools, such as an MCP server, could not connect at the start of the run)
       # @param detail [String] what happened
       # @param usage [Usage] the tokens of all its model calls
       # @param cost [BigDecimal] what they cost, in US dollars at the model's price; nothing when it is not known

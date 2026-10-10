@@ -1,0 +1,53 @@
+module Sleepyshark
+  module Officina
+    module Mcp
+      class ToolSource
+        @server: Server
+        @mutex: Thread::Mutex
+        @connecting: Thread::Mutex
+        @client: Client?
+        @changes: Array[ToolSourceChange]
+        @lost_client: Client?
+        @closed: bool
+
+        attr_reader tools: Array[Officina::Tool]
+
+        def initialize: (Server server, allowed: Array[AllowedTool], ?cancel: _Cancellation?) -> void
+
+        def name: () -> String
+
+        def connect: (?cancel: _Cancellation?) -> void
+
+        def take_changes: () -> Array[ToolSourceChange]
+
+        def close: () -> void
+
+        private
+
+        def current: () -> Client?
+
+        def closed?: () -> bool
+
+        def connect_client: (_Cancellation? cancel) -> Client
+
+        def answers?: (Client client, _Cancellation? cancel) -> bool
+
+        def lost: (Client client, String reason) -> void
+
+        def drop: () -> void
+
+        def change: (Symbol state, String? detail) -> void
+
+        def pin: (Client client, Array[AllowedTool] allowed, _Cancellation? cancel) -> Array[Officina::Tool]
+
+        def pinned_tool: (AllowedTool allowed, Hash[String, Tool] listed) -> Officina::Tool
+
+        def missing: (AllowedTool allowed, Hash[String, Tool] listed) -> bot
+
+        def schema: (Tool tool) -> Schema
+
+        def call: (String tool, Hash[String, untyped] arguments, Cancellation cancel) -> (String | ToolFailure)
+      end
+    end
+  end
+end

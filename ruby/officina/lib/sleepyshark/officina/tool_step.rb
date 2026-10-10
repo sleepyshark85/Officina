@@ -3,9 +3,10 @@
 module Sleepyshark
   module Officina
     # The step that answers one reply's tool calls: it reports the reply, runs the calls through the tool pipeline
-    # while relaying its events, then appends their results as one message. A host that leaves the run at one of these
-    # events cancels it: the calls still get their results, appended, as the provider rejects a call without its
-    # result, but not reported.
+    # while relaying its events, then appends their results as one message, and records the tool sources' connection
+    # changes. A host that leaves the run at one of these events cancels it: the calls still get their results,
+    # appended, as the provider rejects a call without its result, but not reported. It also connects the tool
+    # sources, before the run's first model call.
     class ToolStep
       def initialize(agent:, audit:, trace:, cancel:, reporter:)
         @agent = agent
@@ -13,7 +14,11 @@ module Sleepyshark
         @trace = trace
         @cancel = cancel
         @reporter = reporter
+        @sources = ToolSources.new(agent:, audit:)
       end
+
+      # Why the run cannot start, as ToolSources#connect says; nil when it can.
+      def connect_sources = @sources.connect(@cancel)
 
       # Runs the calls once the block has reported the reply.
       def call(calls)
@@ -40,6 +45,7 @@ module Sleepyshark
         else
           @reporter.append_unreported(message)
         end
+        @sources.record_changes
       end
 
       def start_pipeline(calls) = ToolPipeline.new(agent: @agent, audit: @audit, trace: @trace, cancel: @cancel, calls:)

@@ -6,9 +6,12 @@ module Sleepyshark
       @trace: RunTrace
       @cancel: Cancellation
       @reporter: Reporter
+      @sources: ToolSources
 
       def initialize: (agent: Agent, audit: AuditRecorder, trace: RunTrace, cancel: Cancellation, reporter: Reporter)
                     -> void
+
+      def connect_sources: () -> String?
 
       def call: (Array[ToolCall] calls) { () -> void } -> void
 

@@ -12,7 +12,8 @@ module Sleepyshark
       # (over HTTP, in an event stream) that clients must skip, and records the calls. It requires what the protocol
       # does, stricter than a real server: JSON-RPC 2.0 with params that are an object; the client's capabilities, name
       # and version when it initializes, and its notice that it has before any tool request; over HTTP, both content
-      # types accepted, then the agreed protocol version and the session. It can go down, or end its session.
+      # types accepted, then the agreed protocol version and the session. It answers pings. It can go down and come
+      # back up, or end its session.
       class FakeMcpServer
         NOTIFICATION = JSON.generate({ 'jsonrpc' => '2.0', 'method' => 'notifications/message',
                                        'params' => { 'level' => 'info', 'data' => 'working' } })
@@ -107,8 +108,15 @@ module Sleepyshark
           def result(method, params)
             case method
             when 'initialize' then initialized(params)
-            when 'tools/list' then initialized? && page(Integer(params.fetch('cursor', '0')))
-            when 'tools/call' then initialized? && call(params['name'], params['arguments'] || {})
+            when 'ping' then {}
+            when %r{\Atools/} then initialized? && tools(method, params)
+            end
+          end
+
+          def tools(method, params)
+            case method
+            when 'tools/list' then page(Integer(params.fetch('cursor', '0')))
+            when 'tools/call' then call(params['name'], params['arguments'] || {})
             end
           end
 
@@ -165,6 +173,9 @@ module Sleepyshark
         # From now on, closes each HTTP connection without an answer, as a server that went down; a tool may call it
         # to fail mid-call.
         def go_down = @mutex.synchronize { @down = true }
+
+        # Answers HTTP requests again, in the session it had.
+        def come_back_up = @mutex.synchronize { @down = false }
 
         # Forgets the HTTP session, as a restarted server does: a request in it then gets 404.
         def end_session = @mutex.synchronize { @session = SecureRandom.hex }

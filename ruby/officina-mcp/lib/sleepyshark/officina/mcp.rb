@@ -11,6 +11,8 @@ require_relative 'mcp/child_process'
 require_relative 'mcp/stdio'
 require_relative 'mcp/streamable_http'
 require_relative 'mcp/client'
+require_relative 'mcp/allowed_tool'
+require_relative 'mcp/tool_source'
 
 module Sleepyshark
   module Officina
