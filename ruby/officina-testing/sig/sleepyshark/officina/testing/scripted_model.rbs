@@ -26,6 +26,8 @@ module Sleepyshark
 
         def self.text_block: (String text) -> Block
 
+        def self.compaction_block: (String summary) -> Block
+
         def self.tool_use_block: (String id, String name, String input) -> Block
 
         def requests: () -> Array[Request]

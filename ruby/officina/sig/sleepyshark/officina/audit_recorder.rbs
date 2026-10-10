@@ -17,6 +17,8 @@ module Sleepyshark
 
       def record_end: (result? result, Usage usage, BigDecimal cost) -> bool
 
+      def record_edit: (ConversationCompacted | ToolResultsCleared event) -> bool
+
       private
 
       def entry: (Symbol kind, ToolCall? call, OpenTelemetry::Trace::Span span, String? detail, Hash[Symbol, untyped] fields)

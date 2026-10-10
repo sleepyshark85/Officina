@@ -3,7 +3,7 @@
 module Sleepyshark
   module Officina
     # One model call's span and metrics, from its start to its end, retries included: what it streamed tells it its
-    # usage, retries and time to first token.
+    # usage, retries, time to first token, and what the provider did to shorten the conversation.
     class ModelCallTrace
       def initialize(run, model)
         @run = run
@@ -21,6 +21,11 @@ module Sleepyshark
         in TextDelta then @first_text ||= @run.now - @started
         in Retried then retried
         in UsageReported(usage:) then @usage += usage
+        in ConversationCompacted(tokens:, summary_tokens:)
+          edited(:compactions, 'officina.compaction.tokens' => tokens,
+                               'officina.compaction.summary_tokens' => summary_tokens)
+        in ToolResultsCleared(tokens:, tool_calls:)
+          edited(:clearings, 'officina.clearing.tokens' => tokens, 'officina.clearing.tool_calls' => tool_calls)
         end
       end
 
@@ -44,6 +49,12 @@ module Sleepyshark
                                'officina.model.time_to_first_token' => @first_text,
                                **@run.usage_attributes(@usage), **attributes }.compact)
         @run.stop(@span, error_type, description)
+      end
+
+      # Counts a compaction or clearing, and puts how much it took on the span.
+      def edited(counter, attributes)
+        @run.add(counter, 1, @run.dimensions)
+        @span.add_attributes(attributes)
       end
 
       def retried

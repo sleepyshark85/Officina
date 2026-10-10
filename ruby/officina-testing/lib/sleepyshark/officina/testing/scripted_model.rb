@@ -51,6 +51,12 @@ module Sleepyshark
         # A text block as a provider adapter stores it, its raw JSON in the canonical form.
         def self.text_block(text) = Block.new(text:, raw: Block.canonical(JSON.generate({ type: 'text', text: })))
 
+        # A compaction block holding the summary, as a provider adapter stores it: the provider replays it in place of
+        # the conversation before it.
+        def self.compaction_block(summary)
+          Block.new(raw: Block.canonical(JSON.generate({ type: 'compaction', content: summary })))
+        end
+
         # A block that calls the tool with the input, a JSON object, as a provider adapter stores it.
         def self.tool_use_block(id, name, input)
           raw = JSON.generate({ type: 'tool_use', id:, name:, input: JSON::Fragment.new(input) })
