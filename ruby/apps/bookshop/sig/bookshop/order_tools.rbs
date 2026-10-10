@@ -1,6 +1,5 @@
 module Bookshop
   module OrderTools
-    Tool: singleton(Sleepyshark::Officina::Tool)
     Input: singleton(Sleepyshark::Officina::Input)
     CUSTOMER: Sleepyshark::Officina::Tool::_Input
     ORDER: Sleepyshark::Officina::Tool::_Input

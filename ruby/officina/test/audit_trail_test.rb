@@ -75,15 +75,17 @@ class AuditTrailTest < Minitest::Test
   def test_aud01_a_denial_and_a_failed_call_are_recorded_with_why
     sink = Sink.new
     tools = [tool('order', kind: :write, needs_approval: true) { |_, _| 'Ordered.' },
-             tool('search') { |_, _| raise IOError, 'down' }]
+             tool('search') { |_, _| raise IOError, 'down' },
+             tool('cancel', kind: :write) { |_, _| ToolFailure.new(message: 'Already cancelled.') }]
 
-    run_calls(tools, call('1', 'order'), call('2', 'search'), approver: Testing::ScriptedApprover.new('No.'),
-                                                              audit_sink: sink, clock:)
+    run_calls(tools, call('1', 'order'), call('2', 'search'), call('3', 'cancel'),
+              approver: Testing::ScriptedApprover.new('No.'), audit_sink: sink, clock:)
 
     rows = sink.entries.select { %i[approval_answered tool_ended].include?(it.kind) }
 
     assert_equal([['denied', 'No.', nil], ['error', 'The call was denied: No.', nil],
-                  ['error', 'The tool failed: down', 1.0]], rows.map { [it.outcome, it.detail, it.duration] })
+                  ['error', 'The tool failed: down', 1.0], ['error', 'Already cancelled.', 1.0]],
+                 rows.map { [it.outcome, it.detail, it.duration] })
   end
 
   def test_aud02_a_write_runs_only_once_its_attempt_is_in_the_trail

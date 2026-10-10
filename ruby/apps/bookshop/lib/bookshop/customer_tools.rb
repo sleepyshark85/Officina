@@ -3,7 +3,6 @@
 module Bookshop
   # The tools over the customers: find_customer reads, add_customer writes once approved.
   module CustomerTools
-    Tool = Sleepyshark::Officina::Tool
     Input = Sleepyshark::Officina::Input
 
     FIND = Input.define { string :name_or_email, "Part of the customer's name or email." }
@@ -13,7 +12,7 @@ module Bookshop
       string :email, "The customer's email."
     end
 
-    private_constant :Tool, :Input, :FIND, :ADD
+    private_constant :Input, :FIND, :ADD
 
     class << self
       # @param customers [Customers]
@@ -23,15 +22,15 @@ module Bookshop
       private
 
       def find_customer_tool(customers)
-        Tool.new(name: 'find_customer', input: FIND, kind: :read,
-                 description: 'Finds customers whose name or email contains the given text, ignoring case.') do |input|
+        description = 'Finds customers whose name or email contains the given text, ignoring case.'
+        Tools.tool(name: 'find_customer', description:, input: FIND, kind: :read) do |input|
           customers.search(input.name_or_email).map { |customer| customer(customer) }
         end
       end
 
       def add_customer_tool(customers)
-        Tool.new(name: 'add_customer', description: 'Adds a new customer. Emails are unique.', input: ADD,
-                 kind: :write, needs_approval: true) do |input|
+        Tools.tool(name: 'add_customer', description: 'Adds a new customer. Emails are unique.', input: ADD,
+                   kind: :write, needs_approval: true) do |input|
           customer(customers.add(name: input.name, email: input.email))
         end
       end
