@@ -7,6 +7,7 @@ require 'json_schemer'
 # values; and every schema outside the subset refused.
 class SchemaPropertyTest < Minitest::Test
   cover 'Sleepyshark::Officina::Schema*'
+  cover 'Sleepyshark::Officina::SchemaSubset*'
 
   Schema = Sleepyshark::Officina::Schema
   SchemaError = Sleepyshark::Officina::SchemaError
@@ -89,34 +90,37 @@ class SchemaPropertyTest < Minitest::Test
   def test_test08_a_generated_schema_with_any_keyword_outside_the_subset_is_refused_where_it_is
     Pbt.assert do
       Pbt.property(Generated.new, Pbt.one_of(*OUTSIDE.keys), Pbt.integer(min: 0, max: 99)) do |(schema, _), keyword, at|
-        text = with_keyword(schema, keyword, at)
+        text, path = with_keyword(schema, keyword, at)
         next if text.nil?
 
         error = assert_raises(SchemaError) { Schema.new(text) }
 
-        assert_match(%r{/#{Regexp.escape(keyword)}' is outside the supported subset: is not a supported}, error.message)
+        assert_equal "The schema at '#{path}/#{keyword}' is outside the supported subset: is not a supported keyword.",
+                     error.message
       end
     end
   end
 
   private
 
-  # The schema as JSON with the keyword added to one of its object schemas, the one at index at (modulo their count);
-  # nil when it has none.
+  # The schema as JSON with the keyword added to one of its object schemas, the one at index at (modulo their count),
+  # and that schema's JSON pointer; nil when it has none.
   def with_keyword(schema, keyword, at)
-    nodes = objects(schema)
+    nodes = objects(schema, '')
     return if nodes.empty?
 
-    nodes[at % nodes.size][keyword] = OUTSIDE.fetch(keyword)
-    JSON.generate(schema)
+    node, path = nodes[at % nodes.size]
+    node[keyword] = OUTSIDE.fetch(keyword)
+    [JSON.generate(schema), path]
   end
 
-  # The object schemas in a generated schema, itself first.
-  def objects(schema)
+  # The object schemas in a generated schema with their JSON pointers, itself first.
+  def objects(schema, path)
     return [] unless schema.is_a?(Hash)
 
-    nested = schema.slice('additionalProperties', 'items').values + schema.fetch('properties', {}).values +
-             schema.fetch('anyOf', [])
-    [schema] + nested.flat_map { objects(it) }
+    nested = schema.slice('additionalProperties', 'items').map { |name, child| [child, "#{path}/#{name}"] } +
+             schema.fetch('properties', {}).map { |name, child| [child, "#{path}/properties/#{name}"] } +
+             schema.fetch('anyOf', []).each_with_index.map { |child, index| [child, "#{path}/anyOf/#{index}"] }
+    [[schema, path]] + nested.flat_map { |child, at| objects(child, at) }
   end
 end

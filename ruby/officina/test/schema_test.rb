@@ -5,6 +5,7 @@ require 'test_helper'
 # The core's validator for the JSON Schema subset, by example; schema_property_test.rb compares it with a reference.
 class SchemaTest < Minitest::Test
   cover 'Sleepyshark::Officina::Schema*'
+  cover 'Sleepyshark::Officina::SchemaSubset*'
 
   Schema = Sleepyshark::Officina::Schema
   SchemaError = Sleepyshark::Officina::SchemaError
@@ -73,6 +74,13 @@ class SchemaTest < Minitest::Test
     schema = Schema.new(JSON.generate({ pattern: '^(a|a)*\\1$' }))
 
     assert_equal ['/: could not be matched against ^(a|a)*\\1$ in time'], schema.validate("#{'a' * 40}!")
+  end
+
+  def test_tool02_a_nested_pattern_has_the_same_timeout
+    schema = Schema.new(JSON.generate({ properties: { a: { items: { pattern: '^(a|a)*\\1$' } } } }))
+
+    assert_equal ['/a/0: could not be matched against ^(a|a)*\\1$ in time'],
+                 schema.validate({ 'a' => ["#{'a' * 40}!"] })
   end
 
   def test_tool01_the_schema_keeps_its_text_as_given_for_the_request

@@ -27,6 +27,7 @@ module Sleepyshark
       class Declaration
         SCALARS: Array[Symbol]
         SAME: ^(untyped) -> untyped
+        WHOLE: ^(untyped) -> untyped
 
         attr_reader fields: Array[Field]
 
@@ -43,6 +44,8 @@ module Sleepyshark
         def array: (Symbol name, ?String? description, ?of: Symbol?, ?optional: bool, ?nullable: bool) ?{ () [self: Declaration] -> void } -> void
 
         private
+
+        def array_of_scalars: (Symbol name, String? description, bool optional, bool nullable, Symbol? of) -> void
 
         def array_of_objects: (Symbol name, String? description, bool optional, bool nullable) { () [self: Declaration] -> void } -> void
 

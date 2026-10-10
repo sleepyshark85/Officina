@@ -54,7 +54,9 @@ module Sleepyshark
       class Declaration
         SCALARS = %i[string integer number boolean].freeze
         SAME = ->(value) { value }
-        private_constant :SCALARS, :SAME
+        # JSON Schema counts 1.0 as an integer, so an integer member may arrive as an integral Float.
+        WHOLE = ->(value) { value.is_a?(Float) ? value.to_i : value }
+        private_constant :SCALARS, :SAME, :WHOLE
 
         attr_reader :fields
 
@@ -74,7 +76,7 @@ module Sleepyshark
         # A whole number member; 1.0 counts as one.
         # @param minimum [Integer, nil] the smallest value allowed.
         def integer(name, description = nil, optional: false, nullable: false, minimum: nil)
-          add(name, description, optional, type('integer', nullable) + bound(name, minimum))
+          add(name, description, optional, type('integer', nullable) + bound(name, minimum), WHOLE)
         end
 
         # A number member.
@@ -95,11 +97,16 @@ module Sleepyshark
           return array_of_objects(name, description, optional, nullable, &items) if items
           raise ArgumentError, "#{name}: of: must be one of #{SCALARS.join(', ')}" unless SCALARS.include?(of)
 
-          add(name, description, optional, %(#{type('array', nullable)},"items":{"type":"#{of}"}),
-              ->(value) { value&.freeze })
+          array_of_scalars(name, description, optional, nullable, of)
         end
 
         private
+
+        def array_of_scalars(name, description, optional, nullable, of)
+          each = of == :integer ? WHOLE : SAME
+          add(name, description, optional, %(#{type('array', nullable)},"items":{"type":"#{of}"}),
+              ->(value) { value&.map(&each)&.freeze })
+        end
 
         def array_of_objects(name, description, optional, nullable, &)
           element = Input.define(&)

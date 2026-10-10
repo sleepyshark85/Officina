@@ -37,7 +37,7 @@ module Sleepyshark
       }.merge(
         %w[$schema $id $comment title description default examples format readOnly writeOnly deprecated]
           .to_h { |annotation| [annotation, [nil, ANY]] }
-      ).freeze
+      ).transform_values(&:freeze).freeze
       private_constant :ANY, :COUNT, :KEYWORDS
 
       # @param schema [Object] a schema as JSON.parse returns it.

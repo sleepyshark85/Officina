@@ -25,7 +25,7 @@ module Sleepyshark
         'maxItems' => [Array, ->(rule, value) { "must have at most #{rule} items" if value.length > rule }],
         'minimum' => [Numeric, ->(rule, value) { "must be at least #{rule}" if value < rule }],
         'maximum' => [Numeric, ->(rule, value) { "must be at most #{rule}" if value > rule }]
-      }.freeze
+      }.transform_values(&:freeze).freeze
       # Seconds a pattern may take on one value; one that takes longer is that value's problem.
       PATTERN_TIMEOUT = 0.1
       private_constant :RULES, :PATTERN_TIMEOUT
