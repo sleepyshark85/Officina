@@ -20,6 +20,11 @@ require_relative 'officina/failed'
 require_relative 'officina/conversation'
 require_relative 'officina/run_engine'
 require_relative 'officina/agent'
+require_relative 'officina/schema_error'
+require_relative 'officina/dotnet_json'
+require_relative 'officina/schema_subset'
+require_relative 'officina/schema'
+require_relative 'officina/input'
 
 module Sleepyshark
   # Officina's core: a purpose-neutral library for building agentic applications.

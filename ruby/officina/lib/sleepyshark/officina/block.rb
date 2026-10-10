@@ -10,9 +10,7 @@ module Sleepyshark
     class Block
       # A JSON string, kept whole, or the whitespace between tokens.
       STRING_OR_WHITESPACE = /"(?:[^"\\]|\\.)*"|[ \t\n\r]+/
-      # Each as a \u escape of its code in upper-case hex.
-      HTML = %w[< > &].to_h { |char| [char, format('\\u%04X', char.ord)] }.freeze
-      private_constant :STRING_OR_WHITESPACE, :HTML
+      private_constant :STRING_OR_WHITESPACE
 
       # @param text [String, nil] the text, for a text block
       # @param raw [String, nil] the provider's JSON for the block, exactly as received; nil for a block the core made
@@ -32,7 +30,9 @@ module Sleepyshark
       # @param json [String] valid JSON
       # @return [String] frozen
       def self.canonical(json)
-        -json.gsub(STRING_OR_WHITESPACE) { |token| token.start_with?('"') ? token.gsub(/[<>&]/, HTML) : '' }
+        -json.gsub(STRING_OR_WHITESPACE) do |token|
+          token.start_with?('"') ? token.gsub(/[<>&]/) { |char| DotnetJson.unicode_escape(char) } : ''
+        end
       end
 
       private
