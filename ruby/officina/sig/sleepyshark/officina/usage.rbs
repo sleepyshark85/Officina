@@ -16,6 +16,8 @@ module Sleepyshark
       def total: () -> Integer
 
       def +: (Usage other) -> Usage
+
+      def all_input: () -> Integer
     end
   end
 end

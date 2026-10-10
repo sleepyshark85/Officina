@@ -85,7 +85,7 @@ module Sleepyshark
       # The span attributes of the usage and its cost.
       def usage_attributes(usage)
         { 'officina.usage.cost' => cost(usage),
-          'gen_ai.usage.input_tokens' => usage.input + usage.cache_read + usage.cache_write,
+          'gen_ai.usage.input_tokens' => usage.all_input,
           'gen_ai.usage.output_tokens' => usage.output, 'gen_ai.usage.cache_read.input_tokens' => usage.cache_read,
           'gen_ai.usage.cache_creation.input_tokens' => usage.cache_write }
       end

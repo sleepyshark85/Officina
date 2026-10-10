@@ -3,6 +3,10 @@
 
 require 'bookshop'
 
+# The terminal is the staff member's conversation: the OpenTelemetry SDK's own complaints, such as each failed export
+# while the dashboard is not running, would land in the middle of it.
+OpenTelemetry.logger = Logger.new(File::NULL)
+
 application = Bookshop.build(input: $stdin, output: $stdout)
 begin
   application.run

@@ -3,8 +3,9 @@
 module Bookshop
   # Bookshop Assistant, built by Bookshop.build: run it, then close it.
   class Application
-    def initialize(shop:, console:)
-      @shop = shop
+    def initialize(database:, telemetry:, console:)
+      @database = database
+      @telemetry = telemetry
       @console = console
       freeze
     end
@@ -13,7 +14,11 @@ module Bookshop
     # goes on.
     def run = @console.run
 
-    # Closes the database's connections.
-    def close = @shop.close
+    # Closes the database's connections, and sends the telemetry not yet sent, even when the database fails to close.
+    def close
+      @database.close
+    ensure
+      @telemetry.close
+    end
   end
 end

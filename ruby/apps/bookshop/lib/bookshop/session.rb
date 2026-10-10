@@ -17,6 +17,9 @@ module Bookshop
       @context = nil
     end
 
+    # @return [String] the session's id, its conversation's
+    def id = @conversation.id
+
     # Runs the chat agent on the message, yielding each event of the run.
     #
     # @param cancel [Sleepyshark::Officina::Cancellation]

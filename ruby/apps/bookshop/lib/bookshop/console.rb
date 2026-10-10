@@ -3,11 +3,13 @@
 module Bookshop
   # The staff member's console: asks who is using it, then reads messages and commands, streams each reply with its
   # tool activity, asks approval for changes, and cancels the reply in progress on Ctrl+C, after which the session
-  # goes on; Ctrl+C with no reply in progress leaves.
+  # goes on; Ctrl+C with no reply in progress leaves. Each reply is traced and logged; /audit shows a session's audit
+  # trail.
   class Console
     HELP = <<~TEXT.chomp
       Commands:
         /help          Show this help.
+        /audit [<id>]  Show the audit trail of this session, or of the session with that id.
         /quit          Leave the assistant.
       Anything else is a message to the assistant. Ctrl+C stops a reply in progress.
     TEXT
@@ -18,8 +20,12 @@ module Bookshop
     # @param input [IO] the staff member's lines
     # @param output [IO]
     # @param clock [#call] returns the current Time, for the run context
-    def initialize(agent:, approvals:, input:, output:, clock:)
+    # @param audit [AuditView] what /audit shows
+    # @param telemetry [Telemetry] which traces and logs each reply
+    def initialize(agent:, approvals:, input:, output:, clock:, audit:, telemetry:)
       @agent = agent
+      @audit = audit
+      @telemetry = telemetry
       @approvals = approvals
       @clock = clock
       @terminal = Terminal.new(input:, output:)
@@ -55,17 +61,27 @@ module Bookshop
         case line.strip
         when '' then next
         when '/quit' then return
-        when '/help' then @terminal.write_line(HELP)
-        when %r{\A/} then @terminal.write_line("Unknown command #{line.strip}. Type /help for commands.")
+        when %r{\A/} then command(line.strip, session)
         else reply(session, line)
         end
+      end
+    end
+
+    def command(command, session)
+      case command
+      when '/help' then @terminal.write_line(HELP)
+      when '/audit' then @terminal.write_line(@audit.show(session.id))
+      when %r{\A/audit\s+\S+\z} then @terminal.write_line(@audit.show(command.delete_prefix('/audit').strip))
+      else @terminal.write_line("Unknown command #{command}. Type /help for commands.")
       end
     end
 
     def reply(session, message)
       cancel = Sleepyshark::Officina::Cancellation.new
       view = ReplyView.new(terminal: @terminal, approvals: @approvals, cancel:)
-      result = @interrupts.cancelling(cancel) { session.reply(message, cancel:) { |event| view.show(event) } }
+      result = @telemetry.reply(session.id) do
+        @interrupts.cancelling(cancel) { session.reply(message, cancel:) { |event| view.show(event) } }
+      end
       view.finish(result)
     ensure
       # The run has ended, so nothing waits for an answer.

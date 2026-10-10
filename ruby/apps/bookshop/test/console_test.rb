@@ -49,7 +49,9 @@ class ConsoleTest < Minitest::Test
     assert_in_order transcript, "Bookshop Assistant. Type /help for commands.\n",
                     "Who is using the assistant? Your name: \n", "Who is using the assistant? Your name:   \n",
                     "Who is using the assistant? Your name: Sam\n",
-                    "you> /help\nCommands:\n  /help          Show this help.\n  /quit          Leave the assistant.\n" \
+                    "you> /help\nCommands:\n  /help          Show this help.\n  " \
+                    "/audit [<id>]  Show the audit trail of this session, or of the session with that id.\n  " \
+                    "/quit          Leave the assistant.\n" \
                     "Anything else is a message to the assistant. Ctrl+C stops a reply in progress.\n",
                     "you> \nyou> /memo\nUnknown command /memo. Type /help for commands.\n", "you> /quit\n"
     refute_includes transcript, 'Not read.'

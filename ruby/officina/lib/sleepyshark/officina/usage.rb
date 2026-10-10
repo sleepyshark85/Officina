@@ -22,6 +22,9 @@ module Sleepyshark
         with(input: input + other.input, output: output + other.output, cache_read: cache_read + other.cache_read,
              cache_write: cache_write + other.cache_write, cache_write_hour: cache_write_hour + other.cache_write_hour)
       end
+
+      # @return [Integer] every input token: those neither read from nor written to the cache, and those that were
+      def all_input = input + cache_read + cache_write
     end
   end
 end
