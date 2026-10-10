@@ -71,7 +71,10 @@ tell me the total*. Replies stream with each tool call shown; a change asks for 
 Ctrl+C stops a reply in progress, and the session goes on; `/help` lists the commands, `/quit` leaves.
 Each conversation is a session, saved in the database's `sessions` table after every step of a reply, so a crash
 loses at most the step in flight: `/sessions` lists the latest, `/resume <id>` goes on with one with its cache intact
-(a call a crash left unanswered is told to the model as interrupted), `/new` starts another. After each reply a status
+(a call a crash left unanswered is told to the model as interrupted), `/new` starts another. A session left with
+`/new`, `/resume`, `/quit` or the end of the input is summarized by a second agent, on Opus 5.5 at low effort, at most
+$0.05 a summary, added to the session's cost: `/sessions` shows each title, summary and changes, and first summarizes
+up to three sessions left without one, as after a crash. After each reply a status
 line shows its tokens, the share read from the cache, its cost and the session's; `/cost` shows the session's. A
 reply may spend $0.50 and a session $5; reaching either stops the reply and says why. `BOOKSHOP_REPLY_BUDGET`, in US
 dollars, such as `0.01`, lowers the reply's budget to show a stop; a value that is not an amount above zero stops the
