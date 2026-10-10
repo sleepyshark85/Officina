@@ -24,6 +24,8 @@ module Sleepyshark
           @errors_tail = String.new(encoding: Encoding::BINARY)
           @pid = spawn(server)
           @input.sync = true
+          # Bytes as sent: on Windows a pipe in text mode converts line ends, slowly, and messages are JSON either way.
+          [@input, @output, @errors].each(&:binmode)
           @exit = Process.detach(@pid)
           @errors_reader = Thread.new { read_errors }
         end

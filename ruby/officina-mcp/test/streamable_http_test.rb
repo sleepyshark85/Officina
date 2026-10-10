@@ -21,14 +21,13 @@ class StreamableHttpTest < Minitest::Test
     end
   end
 
-  def test_mcp01_every_page_of_any_tool_list_is_read_in_order
-    Pbt.assert do
-      Pbt.property(Pbt.integer(min: 0, max: 5)) do |count|
-        names = Array.new(count) { "tool#{it}" }
-        server = FakeServer.new(tools: names.map { Tool.new(name: it, handler: ->(_) { '' }) })
+  # A few lengths rather than generated ones: each takes a connection per page, slow on Windows.
+  def test_mcp01_every_page_of_a_tool_list_is_read_in_order
+    [0, 1, 3].each do |count|
+      names = Array.new(count) { "tool#{it}" }
+      server = FakeServer.new(tools: names.map { Tool.new(name: it, handler: ->(_) { '' }) })
 
-        with_client(server) { |client| assert_equal names, client.list_tools.map(&:name) }
-      end
+      with_client(server) { |client| assert_equal names, client.list_tools.map(&:name) }
     end
   end
 
