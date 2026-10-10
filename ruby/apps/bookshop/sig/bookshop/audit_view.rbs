@@ -16,7 +16,5 @@ module Bookshop
     def outcome: (AuditRecord record) -> String
     def spent: (AuditRecord record, Sleepyshark::Officina::Usage usage) -> String
     def milliseconds: (Float seconds) -> String
-    def dollars: (BigDecimal? cost) -> String
-    def thousands: (Integer count) -> String
   end
 end

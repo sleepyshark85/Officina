@@ -10,9 +10,14 @@ class BookshopTest < Minitest::Test
     Bookshop Assistant. Type /help for commands.
     Who is using the assistant? Your name: Sam
     Hello, Sam.
+    Session <id>.
     you> /help
     Commands:
       /help          Show this help.
+      /new           Start a new session.
+      /sessions      List the latest sessions.
+      /resume <id>   Go on with the session with that id.
+      /cost          Show this session's tokens and cost.
       /audit [<id>]  Show the audit trail of this session, or of the session with that id.
       /quit          Leave the assistant.
     Anything else is a message to the assistant. Ctrl+C stops a reply in progress.
@@ -25,6 +30,6 @@ class BookshopTest < Minitest::Test
                                      stdin_data: "Sam\n/help\n/quit\n")
 
     assert_predicate status, :success?, output
-    assert_equal TRANSCRIPT, output
+    assert_equal TRANSCRIPT, output.sub(/^Session \h{12}\.$/, 'Session <id>.')
   end
 end

@@ -1,0 +1,12 @@
+module Bookshop
+  class StoredSession < Data
+    attr_reader conversation: Sleepyshark::Officina::Conversation
+    attr_reader staff_member: String
+    attr_reader usage: Sleepyshark::Officina::Usage
+    attr_reader cost: BigDecimal
+    attr_reader saved: String?
+
+    def self.new: (conversation: Sleepyshark::Officina::Conversation, staff_member: String,
+                   usage: Sleepyshark::Officina::Usage, cost: BigDecimal, saved: String?) -> instance
+  end
+end

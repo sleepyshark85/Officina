@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require_relative 'clock'
 require_relative 'database_server'
 require_relative 'memory_telemetry'
 
@@ -10,7 +11,18 @@ module ConsoleSession
   include DatabaseServer
 
   Officina = Sleepyshark::Officina
-  ScriptedModel = Officina::Testing::ScriptedModel
+  # A model priced as Claude Opus 5.5 is, in dollars per million tokens.
+  PRICED = Officina::ModelInfo.new(provider: 'scripted', name: 'scripted', price: Officina::Price.new(
+    input: BigDecimal('5'), output: BigDecimal('25'), cache_read: BigDecimal('0.5'), cache_write: BigDecimal('6.25'),
+    cache_write_hour: BigDecimal('10')
+  ))
+
+  # The test kit's scripted model, priced unless told otherwise, as the console gives each reply a cost budget.
+  class ScriptedModel < Officina::Testing::ScriptedModel
+    def initialize(*replies, settings: 'scripted', info: PRICED)
+      super
+    end
+  end
 
   # The staff member at the console, and its output. Each time the console shows a prompt, the next line of the
   # script answers it through the input pipe; a Proc in the script runs first, and nil leaves the prompt unanswered.
