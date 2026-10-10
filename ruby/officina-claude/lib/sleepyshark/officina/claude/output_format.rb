@@ -21,7 +21,7 @@ module Sleepyshark
 
         # The schema adjusted, and the schemas inside it; anything but an object is kept.
         def self.adjust(schema)
-          return schema unless schema.is_a?(Hash)
+          return schema unless schema.instance_of?(Hash)
 
           unless schema.fetch('additionalProperties', false) == false
             raise InvalidRequestError, 'The output schema has an open object, which structured output cannot express'

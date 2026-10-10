@@ -22,6 +22,7 @@ Tests are under `ruby/`, shortened as:
 | CEnd | `officina-claude/test/early_end_test.rb` (`EarlyEndTest`) |
 | CRetry | `officina-claude/test/retry_test.rb` (`RetryTest`) |
 | CClass | `officina-claude/test/classification_test.rb` (`ClassificationTest`) |
+| COut | `officina-claude/test/output_test.rb` (`OutputTest`), with the shared `testdata/claude/output-written.json`, on the fake API; `output_format_property_test.rb` (`OutputFormatPropertyTest`) |
 | Hello | `examples/hello/hello_test.rb` (`HelloTest`) |
 | Cancel | `officina/test/cancellation_callback_test.rb` (`CancellationCallbackTest`) |
 | Stores | `officina/test/memory_store_contract.rb`, `memory_scope_contract.rb` and `memory_concurrency_contract.rb`, the tests every memory store passes, run by both `HashMemoryStoreTest` and `FileMemoryStoreTest` |
@@ -43,6 +44,7 @@ Tests are under `ruby/`, shortened as:
 | Order | `officina/test/audit_order_test.rb` (`AuditOrderTest`) |
 | End | `officina/test/audit_run_end_test.rb` (`AuditRunEndTest`) |
 | Sink | `officina/test/json_lines_audit_sink_test.rb` (`JsonLinesAuditSinkTest`) |
+| Typed | `officina/test/typed_output_test.rb` (`TypedOutputTest`) |
 | Budget | `officina/test/budget_test.rb` (`BudgetTest`), on a scripted model with Opus 5.5's price and a fake clock (`test/support/budgets.rb`) |
 | Limit | `officina/test/budget_limit_test.rb` (`BudgetLimitTest`), as Budget |
 | Report | `officina/test/budget_report_test.rb` (`BudgetReportTest`) |
@@ -81,6 +83,7 @@ Tests are under `ruby/`, shortened as:
 | GEN-02 | Agent: `test_gen02_an_agent_needs_only_a_model_and_instructions`; Trail: `test_gen02_without_a_sink_there_is_no_trail_and_a_write_runs` | |
 | GEN-03 | Loop: `test_gen03_a_run_is_stateless_on_a_new_conversation_and_stateful_on_a_kept_one` | |
 | GEN-04 | Approval: `test_gen04_an_unattended_run_denies_calls_that_need_approval_and_runs_the_rest` | |
+| GEN-05 | Typed: `test_out01_gen05_the_schema_goes_with_each_request_and_the_reply_comes_back_as_a_value_of_the_type`, `test_gen05_an_agent_without_an_output_type_completes_with_text_and_sends_no_schema`; COut: `test_out01_gen05_a_structured_reply_comes_back_as_the_typed_output_and_tool_choice_is_never_forced`; tools for side effects only: TOOL rows | |
 
 ## Agent and turn loop (AGT)
 
@@ -109,10 +112,10 @@ Tests are under `ruby/`, shortened as:
 
 | ID | Tests | Also checked by |
 |---|---|---|
-| CTX-01 | Agent: `test_ctx01_the_fingerprint_is_the_one_every_implementation_computes` (against `testdata/session/prefix.json`); CReq: `test_ctx01_ctx02_ctx03_mdl02_mdl03_a_runs_request_matches_the_shared_golden_layout` (`testdata/claude/request-layout.json`), `test_ctx01_a_request_without_tools_is_laid_out_as_dotnets_is`; Loop: `test_ctx01_the_run_context_follows_the_users_message_as_an_operator_message` | |
+| CTX-01 | Agent: `test_ctx01_the_fingerprint_is_the_one_every_implementation_computes` (against `testdata/session/prefix.json`), `test_ctx01_out01_the_fingerprint_with_an_output_schema_is_the_one_every_implementation_computes` (its first `output` entry: the DSL's schema byte for byte, and .NET's fingerprint); CReq: `test_ctx01_ctx02_ctx03_mdl02_mdl03_a_runs_request_matches_the_shared_golden_layout` (`testdata/claude/request-layout.json`), `test_ctx01_a_request_without_tools_is_laid_out_as_dotnets_is`; Loop: `test_ctx01_the_run_context_follows_the_users_message_as_an_operator_message` | |
 | CTX-02 | Agent: `test_ctx02_a_blank_run_context_is_refused`; CReq: `test_ctx01_ctx02_ctx03_mdl02_mdl03_a_runs_request_matches_the_shared_golden_layout` (the run context as a system message after each user message); Hello: `test_mdl02_hello_chats_until_an_empty_line_and_shows_each_calls_tokens` | |
 | CTX-03 | CReq: `test_ctx01_ctx02_ctx03_mdl02_mdl03_a_runs_request_matches_the_shared_golden_layout` (the cache point on the instructions, 1 h, and automatic caching of the tail, 5 min) | The live hello sample: cache reads from the second message |
-| CTX-04 | Agent: `test_ctx04_a_changed_tool_fails_the_run_with_a_prefix_mismatch`, `test_ctx04_changed_instructions_fail_the_run_with_a_prefix_mismatch`, `test_ctx04_a_changed_model_setting_fails_the_run_with_a_prefix_mismatch`; Shared: `test_app10_ctx04_a_session_each_implementation_saved_mid_reply_resumes_with_its_prefix_and_the_call_answered` | |
+| CTX-04 | Agent: `test_ctx04_a_changed_tool_fails_the_run_with_a_prefix_mismatch`, `test_ctx04_changed_instructions_fail_the_run_with_a_prefix_mismatch`, `test_ctx04_a_changed_model_setting_fails_the_run_with_a_prefix_mismatch`, `test_ctx04_out01_a_changed_output_type_fails_the_run_with_a_prefix_mismatch`; Shared: `test_app10_ctx04_a_session_each_implementation_saved_mid_reply_resumes_with_its_prefix_and_the_call_answered` | |
 | CTX-05 | CStream: `test_mdl01_mdl05_ctx05_text_streams_and_the_reply_keeps_each_block_with_the_calls_usage`, `test_ctx05_a_message_delta_without_input_counts_keeps_those_the_call_started_with`, `test_ctx05_a_message_deltas_counts_replace_those_the_call_started_with`, `test_ctx05_the_cache_writes_kept_an_hour_are_counted_apart_as_part_of_the_writes` (usage per call, cache reads and writes); TMetrics: `test_evt02_ctx05_metrics_count_tokens_cost_cache_hit_ratio_tool_outcomes_approvals_and_results` (the cache hit ratio per agent), `test_evt02_ctx05_cache_writes_kept_an_hour_cost_their_own_rate_and_five_minute_ones_theirs` (each cache write at its rate); TTrace: `test_evt02_ctx05_a_runs_span_carries_its_identity_result_usage_cost_and_calls` | |
 | CTX-06 | CReq: `test_ctx06_tool_results_go_out_as_one_user_message_of_tool_result_blocks`; Results: `test_ctx06_results_of_one_reply_return_in_one_message_in_call_order` | |
 
@@ -171,7 +174,8 @@ tool source (part B).
 
 | ID | Tests | Also checked by |
 |---|---|---|
-| OUT-01 | Core/InputDotnetTest: `test_out01_bookshops_session_summary_output_with_an_array_of_strings_has_dotnets_schema`, `test_out01_a_samples_output_with_enums_and_a_nullable_string_has_dotnets_schema` (the schema DSL declares typed output too) | The output contract: Ruby S12 |
+| OUT-01 | Core/InputDotnetTest: `test_out01_bookshops_session_summary_output_with_an_array_of_strings_has_dotnets_schema`, `test_out01_a_samples_output_with_enums_and_a_nullable_string_has_dotnets_schema` (the schema DSL declares typed output too); Typed: `test_out01_gen05_the_schema_goes_with_each_request_and_the_reply_comes_back_as_a_value_of_the_type`, `test_out01_a_run_that_does_not_complete_is_not_read`, `test_out01_the_reply_is_read_once_its_secrets_are_redacted`; Agent: `test_ctx01_out01_the_fingerprint_with_an_output_schema_is_the_one_every_implementation_computes`, `test_ctx04_out01_a_changed_output_type_fails_the_run_with_a_prefix_mismatch`; COut: `test_out01_a_written_schema_is_closed_and_stripped_of_what_the_api_rejects_as_dotnet_sends_it` (shared `output-written.json`), `test_out01_gen05_a_structured_reply_comes_back_as_the_typed_output_and_tool_choice_is_never_forced`, `test_out01_an_open_object_is_refused_rather_than_closed_and_nothing_is_sent`, `test_out01_a_generated_schema_is_closed_and_stripped_keeping_the_rest_in_order_and_adjusts_once` | The session summarizer: Ruby S12 part B; that the API accepts the adjusted format: Ruby S02, live |
+| OUT-02 | Typed: `test_out02_a_reply_that_does_not_match_the_schema_fails_the_run_with_every_problem`, `test_out02_a_reply_that_is_not_json_fails_the_run`, `test_out02_the_reply_is_kept_in_the_conversation_and_the_failure_audited` | |
 
 ## Bookshop Assistant (APP)
 
