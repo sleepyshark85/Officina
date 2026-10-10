@@ -4,9 +4,9 @@ module Sleepyshark
       class Tool < Data
         attr_reader name: String
         attr_reader description: String
-        attr_reader input_schema: Hash[String, json]
+        attr_reader input_schema: String
 
-        def self.new: (name: String, description: String, input_schema: Hash[String, json]) -> instance
+        def self.new: (name: String, description: String, input_schema: String) -> instance
       end
     end
   end

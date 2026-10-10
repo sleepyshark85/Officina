@@ -56,7 +56,7 @@ class WireTest < Minitest::Test
   def test_mcp01_a_json_body_in_any_chunks_is_its_response
     Pbt.assert do
       Pbt.property(cuts) do |lengths|
-        assert_equal RESPONSE, Wire.answer(body(JSON.generate(RESPONSE), lengths), ID, events: false)
+        assert_equal RESPONSE, Wire.answer(body(JSON.generate(RESPONSE), lengths), ID, events: false).message
       end
     end
   end
@@ -74,7 +74,7 @@ class WireTest < Minitest::Test
     chunks = (0...padded.bytesize).step(1024 * 1024).map { padded.byteslice(it, 1024 * 1024) }
     error = assert_raises(Error) { Wire.answer(Body.new(chunks + [' ']), ID, events: false) }
 
-    assert_equal RESPONSE, Wire.answer(Body.new(chunks), ID, events: false)
+    assert_equal RESPONSE, Wire.answer(Body.new(chunks), ID, events: false).message
     assert_equal 'it sent a message longer than 16 MB', error.message
   end
 
@@ -88,7 +88,7 @@ class WireTest < Minitest::Test
     answer = Wire.answer(Body.new(chunks), ID, events: true)
 
     assert_operator Process.clock_gettime(Process::CLOCK_MONOTONIC) - started, :<, 1
-    assert_equal response, answer
+    assert_equal response, answer.message
   end
 
   private
@@ -121,7 +121,7 @@ class WireTest < Minitest::Test
 
   # The response to ID in the event stream, with CRLF line endings when crlf, read in chunks of the given lengths.
   def answer(stream, crlf, lengths)
-    Wire.answer(body(crlf ? stream.gsub("\n", "\r\n") : stream, lengths), ID, events: true)
+    Wire.answer(body(crlf ? stream.gsub("\n", "\r\n") : stream, lengths), ID, events: true).message
   end
 
   # A body of text's bytes, in chunks of the given lengths, then what is left.

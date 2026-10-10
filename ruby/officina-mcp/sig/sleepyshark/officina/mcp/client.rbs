@@ -4,19 +4,20 @@ module Sleepyshark
       class Client
         # What a transport hands back for a message: something to wait on for its answer.
         interface _Pending
-          def take: (Float? timeout) -> Hash[String, json]?
+          def take: (Float? timeout) -> Wire::Response?
           def release: () -> void
         end
 
         # Stdio or Streamable HTTP.
         interface _Transport
           def post: (String text, Integer? id, String? version) -> _Pending
+          def lost?: () -> bool
           def close: () -> void
         end
 
         PROTOCOL_VERSION: String
         PROTOCOL_VERSIONS: Array[String]
-        CONNECT_TIMEOUT: Integer
+        TIMEOUT: Integer
 
         @name: String
         @clock: clock
@@ -31,16 +32,22 @@ module Sleepyshark
 
         def call_tool: (String name, Hash[String, untyped] arguments, ?cancel: _Cancellation?) -> CallResult
 
+        def ping: (?cancel: _Cancellation?) -> nil
+
+        def lost?: () -> bool
+
         def close: () -> void
 
         private
 
         def handshake: (_Cancellation? cancel) -> void
 
+        def tool_pages: (_Cancellation? cancel) -> Array[Wire::Response]
+
         def agreed: (json version) -> String
 
-        def request: (String method, Hash[String, untyped]? params, cancel: _Cancellation?, ?connect_deadline: Numeric?)
-                   -> Hash[String, json]
+        def request: (String method, Hash[String, untyped]? params, cancel: _Cancellation?, ?deadline: Numeric?)
+                   -> Wire::Response
 
         def next_id: () -> Integer
 
@@ -49,12 +56,12 @@ module Sleepyshark
         def unreadable: (String method) -> bot
 
         def exchange: (String method, Hash[String, untyped]? params, Integer? id, cancel: _Cancellation?,
-                       connect_deadline: Numeric?) -> Hash[String, json]
+                       deadline: Numeric?) -> Wire::Response
 
-        def wait: (_Pending pending, String method, _Cancellation? cancel, Numeric? connect_deadline)
-                -> Hash[String, json]
+        def wait: (_Pending pending, String method, _Cancellation? cancel, Numeric? deadline)
+                -> Wire::Response
 
-        def raise_if_cancelled_or_late: (String method, _Cancellation? cancel, Numeric? connect_deadline) -> void
+        def raise_if_cancelled_or_late: (String method, _Cancellation? cancel, Numeric? deadline) -> void
       end
     end
   end

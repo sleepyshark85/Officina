@@ -7,16 +7,25 @@ module Sleepyshark
           def read_body: () { (String chunk) -> void } -> void
         end
 
+        class Response < Data
+          attr_reader message: Hash[String, json]
+          attr_reader text: String
+
+          def self.new: (message: Hash[String, json], text: String) -> instance
+
+          def result: () -> json
+        end
+
         MAX_MESSAGE_MB: Integer
         MAX_MESSAGE: Integer
 
-        def self.response: (String text) -> [Integer, Hash[String, json]]?
+        def self.response: (String text) -> [Integer, Response]?
 
-        def self.answer: (_Body body, Integer id, events: bool) -> Hash[String, json]
+        def self.answer: (_Body body, Integer id, events: bool) -> Response
 
-        def self.from_events: (_Body body, Integer id) -> Hash[String, json]
+        def self.from_events: (_Body body, Integer id) -> Response
 
-        def self.from_body: (_Body body, Integer id) -> Hash[String, json]
+        def self.from_body: (_Body body, Integer id) -> Response
 
         def self.each_chunk: (_Body body) { (String chunk) -> void } -> void
 

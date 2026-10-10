@@ -4,8 +4,8 @@ require 'json'
 
 module Sleepyshark
   module Officina
-    # An agent's secrets, and the redaction of every form of them a text may hold: as written, and as a JSON string
-    # may escape it.
+    # Secrets, such as an agent's or an MCP server's credentials, and the redaction of every form of them a text may
+    # hold: as written, and as a JSON string may escape it.
     class Secrets
       REDACTED = '[redacted]'
       # Which characters each form escapes as \u and its UTF-16 code units: none, those Go's encoder escapes, those
@@ -66,6 +66,5 @@ module Sleepyshark
         found
       end
     end
-    private_constant :Secrets
   end
 end

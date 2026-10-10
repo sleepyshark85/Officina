@@ -13,14 +13,24 @@ module Sleepyshark
         MAX_MESSAGE_MB = 16
         MAX_MESSAGE = MAX_MESSAGE_MB * 1024 * 1024
 
-        # The id and message of the response that text holds, the message parsed and deeply frozen; nil for anything
-        # else a server may write: a request or notification of its own, what is not a response to a request of this
-        # client's, whose ids are positive integers, or what is not JSON (JSON.parse refuses a key given twice).
+        # A response: its message, parsed and deeply frozen, and the text it was parsed from, which holds each value
+        # exactly as the server wrote it.
+        Response = Data.define(:message, :text)
+
+        # Reopened rather than given a block, which Steep would not read as the class's body.
+        class Response
+          # The message's result, as the server sent it.
+          def result = message['result']
+        end
+
+        # The id and Response that text holds; nil for anything else a server may write: a request or notification of
+        # its own, what is not a response to a request of this client's, whose ids are positive integers, or what is
+        # not JSON (JSON.parse refuses a key given twice).
         def self.response(text)
           message = JSON.parse(text, freeze: true)
           # JSON.parse makes each value an instance of the class itself, never of a subclass.
           id = response_id(message) if message.instance_of?(Hash)
-          [id, message] if id
+          [id, Response.new(message:, text: -text)] if id
         rescue JSON::ParserError, EncodingError
           nil
         end
@@ -44,10 +54,10 @@ module Sleepyshark
         end
 
         def self.from_body(body, id)
-          # Bytes, as a chunk may end inside a character; JSON.parse reads them as UTF-8.
+          # Bytes, as a chunk may end inside a character.
           text = ''.b
           each_chunk(body) { text << it }
-          case response(text)
+          case response(text.force_encoding(Encoding::UTF_8))
           in [^id, message] then return message
           else nil
           end

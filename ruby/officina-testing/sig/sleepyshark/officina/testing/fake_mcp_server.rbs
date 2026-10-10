@@ -22,6 +22,7 @@ module Sleepyshark
           @protocol_version: String?
           @mutex: Thread::Mutex
           @calls: Array[Array[untyped]]
+          @requests: Array[String]
           @client_info: message?
           @version: String?
           @initialized: bool
@@ -29,6 +30,8 @@ module Sleepyshark
           def initialize: (Array[FakeMcpTool] tools, String? protocol_version) -> void
 
           def calls: () -> Array[Array[untyped]]
+
+          def requests: () -> Array[String]
 
           def client_info: () -> message?
 
@@ -46,9 +49,13 @@ module Sleepyshark
 
           def result: (untyped method, message params) -> (message | bool | nil)
 
+          def tools: (String method, message params) -> message?
+
           def initialized: (message params) -> message?
 
           def page: (Integer index) -> message
+
+          def written: (Hash[String, untyped] | String schema) -> (Hash[String, untyped] | JSON::Fragment)
 
           def call: (untyped name, Hash[String, untyped] arguments) -> message?
         end
@@ -62,9 +69,13 @@ module Sleepyshark
 
         def calls: () -> Array[Array[untyped]]
 
+        def requests: () -> Array[String]
+
         def client_info: () -> message?
 
         def go_down: () -> void
+
+        def come_back_up: () -> void
 
         def end_session: () -> void
 

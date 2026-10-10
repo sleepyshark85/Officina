@@ -2,6 +2,8 @@ module Sleepyshark
   module Officina
     module Mcp
       class Server < Data
+        NAME: Regexp
+
         attr_reader name: String
         attr_reader command: Array[String]?
         attr_reader env: Hash[String, String?]
@@ -14,7 +16,12 @@ module Sleepyshark
         def initialize: (name: String, ?command: Array[String]?, ?env: Hash[String, String?]?, ?url: String?,
                          ?headers: Hash[String, String]?) -> void
 
+        def secrets: () -> Array[String]
+
         private
+
+        def check_reach: (String name, Array[String]? command, String? url, Hash[String, String?]? env,
+                          Hash[String, String]? headers) -> void
 
         def frozen: (Hash[String, String?]? pairs) -> Hash[String, String?]
       end

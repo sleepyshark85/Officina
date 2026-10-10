@@ -12,5 +12,7 @@ Gem::Specification.new do |spec|
   spec.files = Dir.glob('{lib,sig}/**/*', base: __dir__)
   spec.metadata['rubygems_mfa_required'] = 'true'
 
+  # 3.0 on: JSON.parse refuses comments and a name given twice, which the reading of servers' responses relies on.
+  spec.add_dependency 'json', '~> 3.0'
   spec.add_dependency 'sleepyshark-officina', Sleepyshark::Officina::VERSION
 end

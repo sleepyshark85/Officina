@@ -6,17 +6,22 @@ module Sleepyshark
       # What the results of tools/list and tools/call hold. JSON.parse makes each value an instance of the class
       # itself, never of a subclass, so each is checked with instance_of?, and each member is read once (values_at).
       module Results
-        # The tools on a page of tools/list; nil when it cannot be read.
+        # The tools on a page of tools/list, a Wire::Response, each schema as the server wrote it; nil when it cannot
+        # be read.
         def self.tools(page)
-          tools = page['tools']
+          tools = page.result['tools']
           return unless tools.instance_of?(Array)
 
-          tools.map { tool(it) or return nil }
+          written = RawJson.elements(RawJson.member(RawJson.member(page.text, 'result'), 'tools'))
+          written.zip(tools).map { |text, item| tool(item, text) or return nil }
+        rescue JSON::ParserError
+          # Text the reader cannot follow, which only a parser that accepts more than JSON lets through.
+          nil
         end
 
         # The cursor of the page after this one; nil on the last page.
         def self.next_cursor(page)
-          cursor = page['nextCursor']
+          cursor = page.result['nextCursor']
           cursor if cursor.instance_of?(String) && !cursor.empty?
         end
 
@@ -30,13 +35,13 @@ module Sleepyshark
           CallResult.new(text: text.join("\n").freeze, error: result['isError'] == true)
         end
 
-        def self.tool(item)
+        def self.tool(item, text)
           return unless item.instance_of?(Hash)
 
           name, input_schema, description = item.values_at('name', 'inputSchema', 'description')
           return unless name.instance_of?(String) && input_schema.instance_of?(Hash)
 
-          Tool.new(name:, description: description.to_s, input_schema:)
+          Tool.new(name:, description: description.to_s, input_schema: RawJson.member(text, 'inputSchema'))
         end
 
         def self.content_text(item)

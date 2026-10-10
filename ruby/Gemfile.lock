@@ -25,6 +25,7 @@ PATH
   remote: officina-mcp
   specs:
     sleepyshark-officina-mcp (0.1.0)
+      json (~> 3.0)
       sleepyshark-officina (= 0.1.0)
 
 PATH
