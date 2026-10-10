@@ -51,7 +51,11 @@ module StdioConnections
 
   def running?(pid)
     Process.kill(0, pid)
-    File.read("/proc/#{pid}/stat")[/\) (\S)/, 1] != 'Z'
+    begin
+      File.read("/proc/#{pid}/stat")[/\) (\S)/, 1] != 'Z'
+    rescue Errno::ENOENT
+      false # the process exited between the kill check and the read
+    end
   rescue Errno::ESRCH
     false
   end
