@@ -1,0 +1,11 @@
+module Bookshop
+  class TelemetryLogger < ::Logger
+    NAMES: Array[String]
+    NUMBERS: Array[Integer]
+
+    @logger: OpenTelemetry::SDK::Logs::Logger
+
+    def initialize: (OpenTelemetry::SDK::Logs::Logger logger) -> void
+    def add: (Integer? severity, ?untyped message, ?untyped progname) ?{ () -> untyped } -> true
+  end
+end

@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative 'database_server'
+require_relative 'memory_telemetry'
 
 # The end-to-end tests' harness: Bookshop.build's console, agent, core and tools against the real database. Only the
 # model (scripted replies) and the staff member (scripted lines on a pipe, which answer the prompts, and Ctrl+C as a
@@ -86,10 +87,12 @@ module ConsoleSession
   private
 
   # Runs a console session on the test's database, the staff member following the script, and returns its transcript.
-  def session(model, *script, interrupt_on: nil, clock: -> { Time.now })
+  # Its telemetry is kept in memory, cleared when the session ends.
+  def session(model, *script, interrupt_on: nil, clock: -> { Time.now }, telemetry: MemoryTelemetry.new)
     staff = Staff.new(script, interrupt_on:)
     application = Bookshop.build(input: staff.input, output: staff, model:,
-                                 env: { 'BOOKSHOP_DATABASE' => database_url }, clock:)
+                                 env: { 'BOOKSHOP_DATABASE' => database_url }, clock:,
+                                 telemetry: telemetry.telemetry)
     begin
       application.run
     ensure

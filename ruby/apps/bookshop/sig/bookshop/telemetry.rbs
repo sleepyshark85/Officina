@@ -1,0 +1,30 @@
+module Bookshop
+  class Telemetry
+    SDK: singleton(OpenTelemetry::SDK)
+    Officina: singleton(Sleepyshark::Officina)
+    SCOPE: String
+    SERVICE: String
+    METRICS_INTERVAL: Integer
+    CLOSE_TIMEOUT: Integer
+
+    def self.otlp: () -> Telemetry
+
+    attr_reader officina: Sleepyshark::Officina::Telemetry
+
+    @traces: OpenTelemetry::SDK::Trace::TracerProvider
+    @metrics: OpenTelemetry::SDK::Metrics::MeterProvider
+    @logs: OpenTelemetry::SDK::Logs::LoggerProvider
+    @logger: TelemetryLogger
+
+    def initialize: (spans: OpenTelemetry::SDK::Trace::SpanProcessor,
+                     metrics: OpenTelemetry::SDK::Metrics::Export::MetricReader,
+                     logs: OpenTelemetry::SDK::Logs::LogRecordProcessor) -> void
+    def reply: (String conversation) { () -> Sleepyshark::Officina::result } -> Sleepyshark::Officina::result
+    def close: () -> void
+
+    private
+
+    def log: (String conversation, Sleepyshark::Officina::result result) -> void
+    def ended: (String conversation, String how, Sleepyshark::Officina::Usage usage) -> void
+  end
+end
