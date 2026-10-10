@@ -14,6 +14,9 @@ module Sleepyshark
 
           written = RawJson.elements(RawJson.members(RawJson.members(page.text).fetch('result')).fetch('tools'))
           written.zip(tools).map { |text, item| tool(item, text) or return nil }
+        rescue JSON::ParserError
+          # Text the reader cannot follow, which only a parser that accepts more than JSON lets through.
+          nil
         end
 
         # The cursor of the page after this one; nil on the last page.

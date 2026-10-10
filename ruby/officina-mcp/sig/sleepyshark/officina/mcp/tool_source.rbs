@@ -7,7 +7,7 @@ module Sleepyshark
         @mutex: Thread::Mutex
         @connecting: Thread::Mutex
         @client: Client?
-        @changes: Thread::Queue[ToolSourceChange]
+        @changes: Array[ToolSourceChange]
         @lost_client: Client?
         @closed: bool?
 
@@ -42,6 +42,8 @@ module Sleepyshark
         def drop: () -> void
 
         def change: (Symbol state, ?String? detail) -> void
+
+        def record: (ToolSourceChange change) -> void
 
         def pin: (Client client, Array[AllowedTool] allowed) -> Array[Officina::Tool]
 

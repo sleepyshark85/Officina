@@ -30,12 +30,12 @@ module Sleepyshark
         def initialize(server, allowed:)
           @server = server
           @secrets = Secrets.new(server.secrets)
-          # Guards the client, the client whose loss is recorded (so a loss many calls meet is recorded once) and
-          # whether it is closed. @connecting lets one connect or close at a time replace the client.
+          # Guards the client, the changes not yet taken, the client whose loss is recorded (so a loss many calls meet
+          # is recorded once) and whether it is closed. @connecting lets one connect or close at a time replace the
+          # client.
           @mutex = Mutex.new
           @connecting = Mutex.new
-          # Each change is pushed once and taken once.
-          @changes = Queue.new
+          @changes = []
           @tools = pin(connect_client(nil), allowed)
         end
 
@@ -50,14 +50,8 @@ module Sleepyshark
         def connect(cancel:) = @connecting.synchronize { reconnect(cancel) }
 
         # @return [Array<ToolSourceChange>] the connection changes since it was last called, oldest first
-        def take_changes
-          # @type var taken: Array[ToolSourceChange]
-          taken = []
-          while (change = @changes.pop(timeout: 0))
-            taken << change
-          end
-          taken
-        end
+        # mutant:disable -- see the class: the lock
+        def take_changes = @mutex.synchronize { @changes.tap { @changes = [] } }
 
         # Closes the connection (see Client#close); its tools then give error results, and runs fail to connect it.
         # mutant:disable -- see the class: the locks
@@ -128,8 +122,11 @@ module Sleepyshark
         def drop = swap(nil)&.close
 
         def change(state, detail = nil)
-          @changes << ToolSourceChange.new(state:, detail: detail && @secrets.redact(detail))
+          record(ToolSourceChange.new(state:, detail: detail && @secrets.redact(detail)))
         end
+
+        # mutant:disable -- see the class: the lock
+        def record(change) = @mutex.synchronize { @changes << change }
 
         # Pins the core's tool for each allowed tool of the server's list; on any failure, closes the connection.
         def pin(client, allowed)

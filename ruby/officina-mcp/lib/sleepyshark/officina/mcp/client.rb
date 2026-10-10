@@ -12,7 +12,7 @@ module Sleepyshark
         # The protocol version this client asks for, and those it accepts in answer.
         PROTOCOL_VERSION = '2025-06-18'
         PROTOCOL_VERSIONS = %w[2025-06-18 2025-03-26 2024-11-05].freeze
-        # How long connecting, or a ping, may take, in seconds.
+        # How long connecting, listing the tools (every page), or a ping may take, in seconds.
         TIMEOUT = 30
         private_constant :PROTOCOL_VERSION, :PROTOCOL_VERSIONS, :TIMEOUT
 
@@ -29,21 +29,10 @@ module Sleepyshark
 
         # Every tool the server lists, from every page of its list.
         #
-        # @raise [Mcp::Error] when the server has gone, fails, answers with an error, gives a page's cursor twice, or
-        #   cancel is cancelled.
+        # @raise [Mcp::Error] when the server has gone, fails, answers with an error, gives a page's cursor twice, has
+        #   not given every page within 30 seconds, or cancel is cancelled.
         def list_tools(cancel: nil)
-          # @type var cursors: Array[String]
-          cursors = []
-          # @type var pages: Array[Wire::Response]
-          pages = []
-          loop do
-            pages << request('tools/list', { 'cursor' => cursors.last }.compact, cancel:)
-            cursor = Results.next_cursor(pages.fetch(-1)) or break
-            raise Error, "MCP server #{@name} gave the cursor #{cursor.inspect} twice" if cursors.include?(cursor)
-
-            cursors << cursor
-          end
-          pages.flat_map { Results.tools(it) || unreadable('tools/list') }.freeze
+          tool_pages(cancel).flat_map { Results.tools(it) || unreadable('tools/list') }.freeze
         end
 
         # Calls the tool name on the server with arguments, a Hash that becomes its JSON input. A tool that fails
@@ -90,6 +79,23 @@ module Sleepyshark
         ensure
           # However it failed, a server it started does not outlive it.
           close unless connected
+        end
+
+        # Every page of tools/list, all within TIMEOUT.
+        def tool_pages(cancel)
+          deadline = @clock.call + TIMEOUT
+          # @type var cursors: Array[String]
+          cursors = []
+          # @type var pages: Array[Wire::Response]
+          pages = []
+          loop do
+            pages << request('tools/list', { 'cursor' => cursors.last }.compact, cancel:, deadline:)
+            cursor = Results.next_cursor(pages.fetch(-1)) or break
+            raise Error, "MCP server #{@name} gave the cursor #{cursor.inspect} twice" if cursors.include?(cursor)
+
+            cursors << cursor
+          end
+          pages
         end
 
         def agreed(version)

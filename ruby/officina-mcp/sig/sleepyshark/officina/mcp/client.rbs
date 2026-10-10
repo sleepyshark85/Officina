@@ -42,6 +42,8 @@ module Sleepyshark
 
         def handshake: (_Cancellation? cancel) -> void
 
+        def tool_pages: (_Cancellation? cancel) -> Array[Wire::Response]
+
         def agreed: (json version) -> String
 
         def request: (String method, Hash[String, untyped]? params, cancel: _Cancellation?, ?deadline: Numeric?)
