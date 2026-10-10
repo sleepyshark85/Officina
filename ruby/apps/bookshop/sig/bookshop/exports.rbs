@@ -1,0 +1,10 @@
+module Bookshop
+  module Exports
+    Mcp: singleton(Sleepyshark::Officina::Mcp)
+    NAME: String
+    ALLOWED: Array[Sleepyshark::Officina::Mcp::AllowedTool]
+    COMPOSE_URL: String
+
+    def self.from: (_Settings env) -> Sleepyshark::Officina::Mcp::ToolSource?
+  end
+end
