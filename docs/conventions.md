@@ -46,7 +46,7 @@ R15).
 | .NET | `.github/workflows/ci.yml`, `mutation.yml` | `ubuntu-latest`, `windows-latest`, `quality`, `mutation` |
 | Go | `.github/workflows/go.yml` | `go-changes`, `go-ubuntu`, `go-windows`, `go-quality`, `go-mutation` |
 | Ruby | `.github/workflows/ruby.yml` | `ruby-changes`, `ruby-ubuntu`, `ruby-windows`, `ruby-quality`, `ruby-mutation` |
-| All | `.github/workflows/review.yml` | `review`: the newest approving verdict names the PR's newest commit in full |
+| All | `.github/workflows/review.yml` | `review`: the newest verdict naming the PR's newest commit in full, by the owner or a collaborator, is an approval |
 
 - **Each implementation's CI runs only when the pull request changes it**: `.github/changes.py` says what belongs to
   which (Go's and Ruby's folders, spikes and workflows; the shared `testdata/` to all; the rest to .NET). The other
