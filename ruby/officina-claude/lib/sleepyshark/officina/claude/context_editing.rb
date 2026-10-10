@@ -10,7 +10,7 @@ module Sleepyshark
         COMPACTION = 'compact_20260112'
         COMPACTION_BETA = 'compact-2026-01-12'
         # The input of an iteration, which a compaction summarized.
-        READ = %i[input_tokens cache_read_input_tokens cache_creation_input_tokens].freeze
+        SUMMARIZED_INPUT = %i[input_tokens cache_read_input_tokens cache_creation_input_tokens].freeze
 
         # The request parameters of the context management, with the betas it needs: clearing, then threshold
         # compaction, never the on-demand kind, which has the client drop the compacted messages. None when it asks for
@@ -37,7 +37,7 @@ module Sleepyshark
           (message.usage[:iterations] || []).filter_map do |iteration|
             next unless iteration[:type] == :compaction
 
-            read = READ.sum { iteration[it] }
+            read = SUMMARIZED_INPUT.sum { iteration[it] }
             ConversationCompacted.new(tokens: read, summary_tokens: iteration[:output_tokens])
           end
         end

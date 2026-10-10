@@ -6,7 +6,7 @@ module Sleepyshark
         CLEARING_BETA: String
         COMPACTION: String
         COMPACTION_BETA: String
-        READ: Array[Symbol]
+        SUMMARIZED_INPUT: Array[Symbol]
 
         def self.params: (ContextManagement? settings) -> Hash[Symbol, untyped]
 

@@ -21,8 +21,6 @@ module Sleepyshark
 
       private
 
-      def thousands: (Integer count) -> String
-
       def written?: (_AuditSink sink, OpenTelemetry::Trace::Span span, AuditEntry entry) -> bool
 
       def ids: (OpenTelemetry::Trace::Span span) -> Hash[Symbol, String]?

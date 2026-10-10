@@ -42,7 +42,7 @@ class ContextEditingTest < ClaudeTestCase
     end
   end
 
-  def test_hist04_a_compaction_is_reported_from_its_iteration_and_priced_with_the_reply
+  def test_hist04_a_compaction_is_reported_from_its_iteration_and_counted_with_the_reply
     api = serve(FakeApi.recorded(testdata('claude/compaction-iterations.sse')))
 
     events, reply = collect(model(api), hi)
