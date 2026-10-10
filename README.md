@@ -11,9 +11,10 @@ PostgreSQL in Docker.
 - [`ARCHITECTURE.md`](ARCHITECTURE.md): concepts, components, contracts and flows.
 - [`docs/conventions.md`](docs/conventions.md): how we work, in every implementation.
 - [`docs/implementations/`](docs/implementations/): each implementation's platform decisions.
-- [`CLAUDE.md`](CLAUDE.md): working notes and the .NET rules; [`go/CLAUDE.md`](go/CLAUDE.md): the Go rules.
+- [`CLAUDE.md`](CLAUDE.md): working notes and the .NET rules; [`go/CLAUDE.md`](go/CLAUDE.md): the Go rules;
+  [`ruby/CLAUDE.md`](ruby/CLAUDE.md): the Ruby rules.
 
-- [`docs/plan/phase-1.md`](docs/plan/phase-1.md): the phase 1 slices, shared by the .NET and Go implementations.
+- [`docs/plan/phase-1.md`](docs/plan/phase-1.md): the phase 1 slices, shared by the .NET, Go and Ruby implementations.
 - [`docs/traceability.md`](docs/traceability.md): each phase 1 requirement and its tests.
 - [`docs/test-report.md`](docs/test-report.md): a dated summary of the tests, coverage, mutation scores, gates and open
   gaps.

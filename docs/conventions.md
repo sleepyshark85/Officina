@@ -1,9 +1,10 @@
 # Officina conventions
 
-How we work on Officina in every implementation (.NET at the repository root, Go in [`go/`](../go/)). Each
-implementation adds its own language rules: [`CLAUDE.md`](../CLAUDE.md) for .NET, [`go/CLAUDE.md`](../go/CLAUDE.md)
-for Go. Its platform decisions are in [`docs/implementations/`](implementations/). Where the two disagree, the
-language's own rules win for how code is written, and this page wins for what the code must do.
+How we work on Officina in every implementation (.NET at the repository root, Go in [`go/`](../go/), Ruby in
+[`ruby/`](../ruby/)). Each implementation adds its own language rules: [`CLAUDE.md`](../CLAUDE.md) for .NET,
+[`go/CLAUDE.md`](../go/CLAUDE.md) for Go, [`ruby/CLAUDE.md`](../ruby/CLAUDE.md) for Ruby. Its platform decisions are
+in [`docs/implementations/`](implementations/). Where the two disagree, the language's own rules win for how code is
+written, and this page wins for what the code must do.
 
 ## How we work
 

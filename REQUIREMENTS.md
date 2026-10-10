@@ -253,7 +253,7 @@ the architecture only keeps room for it.
 
 | # | Decision or question | Status |
 |---|---|---|
-| D1 | Each implementation records its platform, supported OSes, packages and libraries in [`docs/implementations/`](docs/implementations/): .NET 10 (`dotnet.md`), Go (`go.md`). This document and the architecture stay language-agnostic. | Decided (owner) |
+| D1 | Each implementation records its platform, supported OSes, packages and libraries in [`docs/implementations/`](docs/implementations/): .NET 10 (`dotnet.md`), Go (`go.md`), Ruby (`ruby.md`). This document and the architecture stay language-agnostic. | Decided (owner) |
 | D2 | Own model interface, not a general AI abstraction library. **Reason:** phase 1 has one provider, the interface is small, and principle 9 needs Claude features used directly. Revisit at NS-08. | Decided for phase 1 |
 | D3 | The core stores no conversations; the host persists them (AGT-06). Memory has a store interface (MEM-02). | Decided |
 | D4 | History compaction, memory and MCP are in phase 1. | Decided (owner) |

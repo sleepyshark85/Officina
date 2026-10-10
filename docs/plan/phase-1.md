@@ -1,13 +1,14 @@
 # Phase 1 plan
 
 Implements [`REQUIREMENTS.md`](../../REQUIREMENTS.md) phase 1 in 13 slices, the same for every implementation. A slice
-is cited with its implementation, such as `Go S03`; G1…G17 are Go's decisions in `go.md`, never slices. One slice = one
-branch (`slice/<id>-<slug>`: `slice/s03-run-loop` in .NET, `slice/g03-run-loop` in Go) = one PR. Every slice ends in something that runs, with offline tests. A slice's PR is stacked on
-the previous one until that one is merged.
+is cited with its implementation, such as `Go S03` or `Ruby S03`; G1…G17 and R1…R20 are the Go and Ruby decisions in
+`go.md` and `ruby.md`, never slices. One slice = one branch (`slice/<id>-<slug>`: `slice/s03-run-loop` in .NET,
+`slice/g03-run-loop` in Go, `slice/r03-run-loop` in Ruby) = one PR. Every slice ends in something that runs, with
+offline tests. A slice's PR is stacked on the previous one until that one is merged.
 
 **Done means, for every slice:** the implementation's gates green (its build, format, lint and test checks, listed
 in [`docs/implementations/`](../implementations/)), the tests offline, fast and deterministic; every required CI check
-green, the other implementation's included; the core within its line budget (principle 11); an Opus review approved
+green, the other implementations' included; the core within its line budget (principle 11); an Opus review approved
 against [`docs/conventions.md`](../conventions.md) and the implementation's language rules; then merged by the lead.
 From S06 on, each APP requirement with a console flow that a slice delivers has its offline end-to-end test (TEST-09).
 Each implementation maps requirement IDs to its tests in its own traceability page.
@@ -57,41 +58,42 @@ Every implementation after the first also meets these, so the implementations st
 ## Per implementation
 
 How each implementation realizes a slice, where it differs from the shared criteria. .NET decisions:
-[`dotnet.md`](../implementations/dotnet.md); Go decisions: [`go.md`](../implementations/go.md).
+[`dotnet.md`](../implementations/dotnet.md); Go decisions: [`go.md`](../implementations/go.md); Ruby decisions:
+[`ruby.md`](../implementations/ruby.md).
 
-| Slice | .NET (done) | Go |
-|---|---|---|
-| S01 | Solution and central package versions. From `~/sources/agentic-core` (ARCHITECTURE §13; spike notes in its `docs/spikes/`), ported, not copied wholesale: the dependency check and build props here, the scripted model and human in S03 and S05, the Claude provider in S04, the MCP client in S11 | `go.mod` (G1, G2), `doc.go` per package, `.golangci.yml`, `go.yml` with its own required checks (G15); hooks run the Go checks for files under `go/` and the .NET ones for the rest; a `go-rules.py` edit hook that flags a package without `doc.go` and requirement IDs in comments; the dependency test checks direct imports (G4, G6); checks `gremlins` runs on Go 1.27 (G12) |
-| S02 | [`docs/spikes/claude-features.md`](../spikes/claude-features.md) | [`go/docs/spikes/claude-features.md`](../../go/docs/spikes/claude-features.md): all seven features typed in the SDK; blocks stored in the canonical form and replayed through `param.Override` |
-| S03 | Events as `IAsyncEnumerable`; tool events through an unbounded channel | The run as `iter.Seq[RunEvent]` plus result (G10); `jsontext.Value` blocks in the canonical form (G9), pinned by a test that marshals, unmarshals and marshals again a conversation holding `<`, `&`, non-ASCII and `\u` escapes; `goleak` clean; a consumer that `break`s mid-run leaves no goroutine; 100 concurrent runs under `-race`; sets the core line budget (G13) |
-| S04 | `samples/hello` | Blocks stored canonical as they arrive; the model settings string the fingerprint uses agreed with .NET's (for Go S08); a reply's `tool_use` blocks never left in the conversation without results, as the real API rejects the next request; retries tested on `httptest.Server`; `examples/hello`. Conversation JSON compares across implementations as parsed JSON; only each block's raw JSON, and the request messages built from it, compare byte for byte |
-| S05 | CsCheck properties; Stryker.NET | Every `tool_use` block gets its result (until now a tool-use stop is Failed and its reply has none); Schema derived with `reflect` (the one place `go/CLAUDE.md` allows it); reads under a `sync.WaitGroup`; the event channel sized from the call count; a panicking tool becomes an error result; fuzz test of the validator; `rapid` properties; the first `gremlins` run sets the mutation threshold |
-| S06 | Npgsql | `cmd/bookshop` on `pgx` (G7); Ctrl+C through `signal.NotifyContext`; end-to-end tests with `testcontainers-go` |
-| S07 | `ActivitySource` and `Meter` | The OpenTelemetry API with host-passed providers (G6); the SDK's in-memory exporter in tests only |
-| S08 | | The fingerprint matches .NET's byte for byte (its JSON escaping, the tool schemas as given rather than re-encoded, and the model settings string agreed in Go S04). Cross-implementation resume is proven at the core level: shared fixtures in `testdata/session/`, a session each implementation saved mid-reply resuming in the other. The Bookshop sessions do not resume across implementations yet, as .NET's chat agent has more in its prefix: they wait for memory (Go S09), context management (Go S10, which brings the fingerprint's `contextManagement` part), the MCP export tools (Go S11) and typed output (Go S12, the `output` part) |
-| S09 | | Fuzz test of path scoping, besides the `rapid` property |
-| S10 | | Checks on-demand compaction and `clear_at` live before relying on them (Go S02 left them unproven) |
-| S11 | | Stdio through `os/exec`, Streamable HTTP through `net/http`; fuzz test of message parsing; the child process is stopped and waited for when the context ends |
-| S12 | | The output schema through S05's schema derivation |
-| S13 | `docs/demo.md` | `examples/` as runnable `Example` tests and programs; the live smoke test behind a build tag; `go/docs/traceability.md` complete; a Bookshop session the .NET application saved resumes in the Go one with the same prefix and cache reads (live, once; a live test builds and runs the .NET application). It found that the schemas Go derives must be .NET's bytes, description first and strings escaped as .NET's encoder does, as the fingerprint takes each schema as given |
+| Slice | .NET (done) | Go | Ruby |
+|---|---|---|---|
+| S01 | Solution and central package versions. From `~/sources/agentic-core` (ARCHITECTURE §13; spike notes in its `docs/spikes/`), ported, not copied wholesale: the dependency check and build props here, the scripted model and human in S03 and S05, the Claude provider in S04, the MCP client in S11 | `go.mod` (G1, G2), `doc.go` per package, `.golangci.yml`, `go.yml` with its own required checks (G15); hooks run the Go checks for files under `go/` and the .NET ones for the rest; a `go-rules.py` edit hook that flags a package without `doc.go` and requirement IDs in comments; the dependency test checks direct imports (G4, G6); checks `gremlins` runs on Go 1.27 (G12) | `ruby/` workspace with the four gems and `apps/bookshop` (R1, R2, R3), `.rubocop.yml`, `Steepfile` and `sig/` (R18), `ruby.yml` with its own required checks (R15); hooks run the Ruby checks for files under `ruby/` and stop running the .NET ones there; a `ruby-rules.py` edit hook that flags a missing `frozen_string_literal` comment and requirement IDs in comments; the dependency test parses requires with Prism and reads the gemspecs (R4, R6); checks `prop_check` reports a reproducible seed, mutant runs on the pinned Ruby, and the OpenTelemetry metrics API's version (R6, R12, R13) |
+| S02 | [`docs/spikes/claude-features.md`](../spikes/claude-features.md) | [`go/docs/spikes/claude-features.md`](../../go/docs/spikes/claude-features.md): all seven features typed in the SDK; blocks stored in the canonical form and replayed through `param.Override` | `ruby/docs/spikes/claude-features.md`: each feature typed in the `anthropic` gem or only as raw JSON; blocks stored canonical and replayed unchanged through the SDK |
+| S03 | Events as `IAsyncEnumerable`; tool events through an unbounded channel | The run as `iter.Seq[RunEvent]` plus result (G10); `jsontext.Value` blocks in the canonical form (G9), pinned by a test that marshals, unmarshals and marshals again a conversation holding `<`, `&`, non-ASCII and `\u` escapes; `goleak` clean; a consumer that `break`s mid-run leaves no goroutine; 100 concurrent runs under `-race`; sets the core line budget (G13) | `Agent#run` yields events and returns the result; `Cancellation` (R10); blocks as frozen canonical strings (R9), pinned by a test that parses and writes again a conversation holding `<`, `&`, non-ASCII and `\u` escapes; the thread-leak check (R11); a block that `break`s mid-run leaves no thread; 100 concurrent runs in threads; sets the core line budget (R14) |
+| S04 | `samples/hello` | Blocks stored canonical as they arrive; the model settings string the fingerprint uses agreed with .NET's (for Go S08); a reply's `tool_use` blocks never left in the conversation without results, as the real API rejects the next request; retries tested on `httptest.Server`; `examples/hello`. Conversation JSON compares across implementations as parsed JSON; only each block's raw JSON, and the request messages built from it, compare byte for byte | The model settings string the fingerprint uses, as .NET's and Go's; the shared golden request layouts; a reply's `tool_use` blocks never left without results; retries on recorded HTTP (`webmock`), `Retry-After` included; `examples/hello` |
+| S05 | CsCheck properties; Stryker.NET | Every `tool_use` block gets its result (until now a tool-use stop is Failed and its reply has none); Schema derived with `reflect` (the one place `go/CLAUDE.md` allows it); reads under a `sync.WaitGroup`; the event channel sized from the call count; a panicking tool becomes an error result; fuzz test of the validator; `rapid` properties; the first `gremlins` run sets the mutation threshold | Every `tool_use` block gets its result; the schema DSL (R19), its schemas in .NET's bytes; reads in threads; an exception in a handler becomes an error result; generated cases of the validator against `json_schemer`; `prop_check` properties; the first mutant run sets the threshold (R13) |
+| S06 | Npgsql | `cmd/bookshop` on `pgx` (G7); Ctrl+C through `signal.NotifyContext`; end-to-end tests with `testcontainers-go` | `apps/bookshop` on `pg` and `connection_pool` (R7); Ctrl+C through `trap("INT")` pushing to a queue that the console's own thread reads to cancel the reply (R10); end-to-end tests against PostgreSQL in Docker (R12) |
+| S07 | `ActivitySource` and `Meter` | The OpenTelemetry API with host-passed providers (G6); the SDK's in-memory exporter in tests only | The OpenTelemetry API with host-passed providers (R6), the metrics API's version rechecked; the SDK's in-memory exporter and reader in tests only; OTLP/HTTP to the dashboard (R16) |
+| S08 | | The fingerprint matches .NET's byte for byte (its JSON escaping, the tool schemas as given rather than re-encoded, and the model settings string agreed in Go S04). Cross-implementation resume is proven at the core level: shared fixtures in `testdata/session/`, a session each implementation saved mid-reply resuming in the other. The Bookshop sessions do not resume across implementations yet, as .NET's chat agent has more in its prefix: they wait for memory (Go S09), context management (Go S10, which brings the fingerprint's `contextManagement` part), the MCP export tools (Go S11) and typed output (Go S12, the `output` part) | The fingerprint matches .NET's and Go's byte for byte through the core's JSON writer (R9), pinned by `testdata/session/prefix.json`; cross-implementation resume at the core level: `testdata/session/ruby-session.json`, which the .NET and Go tests resume as well, and the .NET and Go sessions there resume in Ruby; money as `BigDecimal` (R17) |
+| S09 | | Fuzz test of path scoping, besides the `rapid` property | Generated traversal paths for the scope property |
+| S10 | | Checks on-demand compaction and `clear_at` live before relying on them (Go S02 left them unproven) | Checks threshold compaction and clearing live before relying on them, as Go S10 did |
+| S11 | | Stdio through `os/exec`, Streamable HTTP through `net/http`; fuzz test of message parsing; the child process is stopped and waited for when the context ends | Stdio through `Process.spawn` and pipes, Streamable HTTP through `net/http`; generated message-parsing cases; the child process is stopped and reaped when the run ends |
+| S12 | | The output schema through S05's schema derivation | The output schema through the schema DSL (R19) |
+| S13 | `docs/demo.md` | `examples/` as runnable `Example` tests and programs; the live smoke test behind a build tag; `go/docs/traceability.md` complete; a Bookshop session the .NET application saved resumes in the Go one with the same prefix and cache reads (live, once; a live test builds and runs the .NET application). It found that the schemas Go derives must be .NET's bytes, description first and strings escaped as .NET's encoder does, as the fingerprint takes each schema as given | `examples/` run as tests; the live smoke test behind `OFFICINA_LIVE_TESTS=1`; `ruby/docs/traceability.md` complete; a Bookshop session the .NET application saved resumes in the Ruby one with the same prefix and cache reads (live, once) |
 
 ## Progress
 
-| Slice | .NET | Go |
-|---|---|---|
-| S01 | Merged | Merged (#56) |
-| S02 | Merged | Merged (#55) |
-| S03 | Merged | Merged (#58) |
-| S04 | Merged | Merged (#59) |
-| S05 | Merged | Merged (#61) |
-| S06 | Merged | Merged (#63) |
-| S07 | Merged | Merged (#64) |
-| S08 | Merged | Merged (#68) |
-| S09 | Merged | Merged (#71) |
-| S10 | Merged | Merged (#70) |
-| S11 | Merged | Merged (#69) |
-| S12 | Merged | Merged (#72) |
-| S13 | Merged | Merged (#73) |
+| Slice | .NET | Go | Ruby |
+|---|---|---|---|
+| S01 | Merged | Merged (#56) | Not started |
+| S02 | Merged | Merged (#55) | Not started |
+| S03 | Merged | Merged (#58) | Not started |
+| S04 | Merged | Merged (#59) | Not started |
+| S05 | Merged | Merged (#61) | Not started |
+| S06 | Merged | Merged (#63) | Not started |
+| S07 | Merged | Merged (#64) | Not started |
+| S08 | Merged | Merged (#68) | Not started |
+| S09 | Merged | Merged (#71) | Not started |
+| S10 | Merged | Merged (#70) | Not started |
+| S11 | Merged | Merged (#69) | Not started |
+| S12 | Merged | Merged (#72) | Not started |
+| S13 | Merged | Merged (#73) | Not started |
 
 ## Team
 
@@ -99,6 +101,6 @@ How each implementation realizes a slice, where it differs from the shared crite
 |---|---|---|
 | Lead | Main session | Plans, dispatches, checks CI, merges approved PRs, reports to the owner |
 | Implementer | Opus subagent per slice, in its own worktree | Builds the slice, opens the PR |
-| Reviewer | A separate Opus subagent | Reviews each PR against `docs/conventions.md`, the implementation's language rules and this slice's criteria; at most 3 rounds. For Go, a breach of Go convention is a must-fix |
+| Reviewer | A separate Opus subagent | Reviews each PR against `docs/conventions.md`, the implementation's language rules and this slice's criteria; at most 3 rounds. For Go and Ruby, a breach of the language's convention is a must-fix |
 | Fixes | Sonnet subagent | Small, well-bounded review fixes only |
 | Owner | You | Sets direction; has delegated merges to the lead once the reviewer approves |
