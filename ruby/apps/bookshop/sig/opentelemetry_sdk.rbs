@@ -1,0 +1,93 @@
+# The few parts of the OpenTelemetry SDK and its OTLP exporters the application calls (R16), which ship no signatures
+# and have none in the collection; the telemetry test checks them against the SDK.
+module OpenTelemetry
+  module Trace
+    class Tracer
+      def in_span: [T] (String name) { (Span span, Context context) -> T } -> T
+    end
+  end
+
+  module SDK
+    module Resources
+      class Resource
+        def self.create: (?Hash[String, String] attributes) -> Resource
+      end
+    end
+
+    module Trace
+      class TracerProvider < OpenTelemetry::Trace::TracerProvider
+        def initialize: (?resource: Resources::Resource) -> void
+        def add_span_processor: (SpanProcessor processor) -> void
+        def shutdown: (?timeout: Numeric?) -> Integer
+      end
+
+      class SpanProcessor
+      end
+
+      module Export
+        class BatchSpanProcessor < SpanProcessor
+          def initialize: (untyped exporter) -> void
+        end
+      end
+    end
+
+    module Metrics
+      class MeterProvider < OpenTelemetry::Metrics::MeterProvider
+        def initialize: (?resource: Resources::Resource) -> void
+        def add_metric_reader: (Export::MetricReader reader) -> void
+        def shutdown: (?timeout: Numeric?) -> Integer
+      end
+
+      module Export
+        class MetricReader
+        end
+
+        class PeriodicMetricReader < MetricReader
+          def initialize: (exporter: MetricReader, export_interval_millis: Numeric) -> void
+        end
+      end
+    end
+
+    module Logs
+      class LoggerProvider
+        def initialize: (?resource: Resources::Resource) -> void
+        def add_log_record_processor: (LogRecordProcessor processor) -> void
+        def logger: (name: String) -> Logger
+        def shutdown: (?timeout: Numeric?) -> Integer
+      end
+
+      class Logger
+        def on_emit: (?timestamp: Time, ?severity_text: String, ?severity_number: Integer, ?body: String) -> void
+      end
+
+      class LogRecordProcessor
+      end
+
+      module Export
+        class BatchLogRecordProcessor < LogRecordProcessor
+          def initialize: (untyped exporter) -> void
+        end
+      end
+    end
+  end
+
+  module Exporter
+    module OTLP
+      class Exporter
+        def initialize: () -> void
+      end
+
+      module Metrics
+        class MetricsExporter < OpenTelemetry::SDK::Metrics::Export::MetricReader
+          def initialize: (?compression: String) -> void
+        end
+      end
+
+      module Logs
+        class LogsExporter
+          def initialize: (?compression: String) -> void
+        end
+      end
+    end
+  end
+end

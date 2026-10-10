@@ -1,0 +1,17 @@
+module Bookshop
+  class AuditRecord < Data
+    attr_reader time: Time
+    attr_reader run: String
+    attr_reader trace_id: String?
+    attr_reader kind: String
+    attr_reader tool: String?
+    attr_reader outcome: String?
+    attr_reader detail: String?
+    attr_reader duration: Float?
+    attr_reader usage: Sleepyshark::Officina::Usage?
+    attr_reader cost: BigDecimal?
+
+    def self.new: (time: Time, run: String, trace_id: String?, kind: String, tool: String?, outcome: String?,
+                   detail: String?, duration: Float?, usage: Sleepyshark::Officina::Usage?, cost: BigDecimal?) -> instance
+  end
+end

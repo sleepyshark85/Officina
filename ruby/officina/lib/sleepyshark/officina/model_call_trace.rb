@@ -55,7 +55,7 @@ module Sleepyshark
       # A call that reported no tokens, such as one that failed before its reply started, records none. Each
       # measurement gets attributes of its own, which the metrics SDK keeps.
       def measure(error_type)
-        input = @usage.input + @usage.cache_read + @usage.cache_write
+        input = @usage.all_input
         tokens(input) unless @usage == Usage.new
         hit_ratio(input) if input.positive?
         @run.record(:model_duration, @run.now - @started, { **chat, 'error.type' => error_type }.compact)

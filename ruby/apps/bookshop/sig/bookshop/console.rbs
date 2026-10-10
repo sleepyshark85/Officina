@@ -3,19 +3,22 @@ module Bookshop
     HELP: String
 
     @agent: Sleepyshark::Officina::Agent
+    @audit: AuditView
+    @telemetry: Telemetry
     @approvals: Approvals
     @clock: ^() -> Time
     @terminal: Terminal
     @interrupts: Interrupts
 
     def initialize: (agent: Sleepyshark::Officina::Agent, approvals: Approvals, input: IO, output: IO,
-                     clock: ^() -> Time) -> void
+                     clock: ^() -> Time, audit: AuditView, telemetry: Telemetry) -> void
     def run: () -> void
 
     private
 
     def ask_staff_member: () -> String?
     def converse: (Session session) -> void
+    def command: (String command, Session session) -> void
     def reply: (Session session, String message) -> void
   end
 end

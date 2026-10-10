@@ -16,6 +16,13 @@ Gem::Specification.new do |spec|
 
   spec.add_dependency 'bigdecimal', '~> 4.0'
   spec.add_dependency 'connection_pool', '~> 3.0'
+  # Telemetry to the compose file's dashboard over OTLP/HTTP (R16); the pre-1.0 gems pinned exactly.
+  spec.add_dependency 'opentelemetry-exporter-otlp', '= 0.37.0'
+  spec.add_dependency 'opentelemetry-exporter-otlp-logs', '= 0.6.0'
+  spec.add_dependency 'opentelemetry-exporter-otlp-metrics', '= 0.13.0'
+  spec.add_dependency 'opentelemetry-logs-sdk', '= 0.8.0'
+  spec.add_dependency 'opentelemetry-metrics-sdk', '= 0.20.0'
+  spec.add_dependency 'opentelemetry-sdk', '~> 1.13'
   spec.add_dependency 'pg', '~> 1.7'
   spec.add_dependency 'sleepyshark-officina', Sleepyshark::Officina::VERSION
   spec.add_dependency 'sleepyshark-officina-claude', Sleepyshark::Officina::VERSION

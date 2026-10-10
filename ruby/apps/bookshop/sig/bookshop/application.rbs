@@ -1,9 +1,10 @@
 module Bookshop
   class Application
-    @shop: Shop
+    @database: Database
+    @telemetry: Telemetry
     @console: Console
 
-    def initialize: (shop: Shop, console: Console) -> void
+    def initialize: (database: Database, telemetry: Telemetry, console: Console) -> void
     def run: () -> void
     def close: () -> void
   end

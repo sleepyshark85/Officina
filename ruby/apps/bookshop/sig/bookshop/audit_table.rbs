@@ -1,0 +1,21 @@
+module Bookshop
+  class AuditTable
+    INSERT: String
+    SELECT: String
+
+    @database: Database
+    @price: Sleepyshark::Officina::Price?
+
+    def initialize: (database: Database, price: Sleepyshark::Officina::Price?) -> void
+    def write: (Sleepyshark::Officina::AuditEntry entry) -> void
+    def entries: (String conversation) -> Array[AuditRecord]
+
+    private
+
+    def values: (Sleepyshark::Officina::AuditEntry entry) -> Array[untyped]
+    def spent: (Sleepyshark::Officina::Usage? usage) -> Array[untyped]
+    def kind: (Symbol symbol) -> String
+    def record: (Hash[Symbol, untyped] row) -> AuditRecord
+    def usage: (Hash[Symbol, untyped] row) -> Sleepyshark::Officina::Usage?
+  end
+end
