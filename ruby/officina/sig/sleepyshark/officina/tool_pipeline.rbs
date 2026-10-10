@@ -39,7 +39,7 @@ module Sleepyshark
 
       def invoke: (Tool tool, ToolCallTrace step) -> ToolResult
 
-      def finish: (ToolCall call, String content, Symbol outcome, ?step: ToolCallTrace?, ?started: Time?) -> ToolResult
+      def finish: (ToolCall call, String content, ?Symbol outcome, ?step: ToolCallTrace?, ?started: Time?) -> ToolResult
 
       def cut: (String content) -> String
 

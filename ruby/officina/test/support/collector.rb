@@ -4,7 +4,8 @@ require 'opentelemetry-sdk'
 require 'opentelemetry-metrics-sdk'
 
 # The OpenTelemetry SDK with an in-memory span exporter and metric reader: it collects the spans and metrics of the
-# agents given its telemetry. The SDK is for tests only; the core uses the API alone.
+# agents given its telemetry. The SDK is for tests only; the core uses the API alone. It fails a test whose
+# telemetry the SDK complained of, such as an attribute of no valid value, which the SDK drops with a log line.
 class Collector
   SDK = OpenTelemetry::SDK
   # One data point of a metric: its attributes, its sum (a counter's value) and its count (nil for a counter).
@@ -16,18 +17,26 @@ class Collector
   attr_reader :tracer_provider
 
   # @param content [Boolean] whether the telemetry carries text
-  def initialize(content: false)
+  # @param views [Boolean] whether views, as a host's may, add host.view to every measurement: +counter+ to a
+  #   counter's, +histogram+ to a histogram's
+  def initialize(content: false, views: false)
+    @log = StringIO.new
+    OpenTelemetry.logger = Logger.new(@log)
     @spans = SDK::Trace::Export::InMemorySpanExporter.new
     @tracer_provider = SDK::Trace::TracerProvider.new
     @tracer_provider.add_span_processor(SDK::Trace::Export::SimpleSpanProcessor.new(@spans))
     @reader = SDK::Metrics::Export::InMemoryMetricPullExporter.new
     meter_provider = SDK::Metrics::MeterProvider.new
     meter_provider.add_metric_reader(@reader)
+    add_views(meter_provider) if views
     @telemetry = Sleepyshark::Officina::Telemetry.new(tracer_provider: @tracer_provider, meter_provider:, content:)
   end
 
   # @return [Array<OpenTelemetry::SDK::Trace::SpanData>] the spans ended so far, in the order they ended
-  def spans = @spans.finished_spans
+  def spans
+    quiet!
+    @spans.finished_spans
+  end
 
   # The one span of the name; it raises NoMatchingPatternError when there is none or more than one.
   def span(name)
@@ -40,6 +49,7 @@ class Collector
 
   # @return [Array<OpenTelemetry::SDK::Metrics::State::MetricData>] the metrics as they stand
   def metrics
+    quiet!
     @reader.reset
     @reader.pull
     @reader.metric_snapshots
@@ -74,6 +84,18 @@ class Collector
   end
 
   private
+
+  def add_views(meter_provider)
+    aggregation = SDK::Metrics::Aggregation
+    meter_provider.add_view('*', type: :counter, aggregation: aggregation::Sum.new,
+                                 attribute_keys: { 'host.view' => 'counter' })
+    meter_provider.add_view('*', type: :histogram, aggregation: aggregation::ExplicitBucketHistogram.new,
+                                 attribute_keys: { 'host.view' => 'histogram' })
+  end
+
+  def quiet!
+    raise "The OpenTelemetry SDK logged:\n#{@log.string}" unless @log.string.empty?
+  end
 
   # Each key and value as text, each item of a list on its own.
   def flat(attributes) = attributes.to_a.flatten.map(&:to_s)

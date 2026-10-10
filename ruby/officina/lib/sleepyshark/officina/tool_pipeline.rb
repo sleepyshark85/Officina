@@ -44,7 +44,7 @@ module Sleepyshark
       def answer
         @calls.each_with_index { |call, index| start(call, index) unless @cancel.cancelled? }
         @results.merge!(@reads.join)
-        @calls.each_with_index.map { |call, index| @results[index] || finish(call, NOT_STARTED, :error) }
+        @calls.each_with_index.map { |call, index| @results[index] || finish(call, NOT_STARTED) }
       ensure
         begin
           @reads.stop
@@ -60,15 +60,15 @@ module Sleepyshark
         @events << ToolCallStarted.new(call: shown(call))
         return run_if_allowed(tool, step, index) if tool
 
-        @results[index] = finish(call, "There is no tool named #{call.name}.", :error, step:)
+        @results[index] = finish(call, "There is no tool named #{call.name}.", step:)
       end
 
       def run_if_allowed(tool, step, index)
         call = step.call
         refusal = tool.input_problem(call.input) || (@approvals.denial(tool, shown(call), step) if tool.needs_approval?)
-        return @results[index] = finish(call, refusal, :error, step:) if refusal
+        return @results[index] = finish(call, refusal, step:) if refusal
         # The host may have cancelled while the approver decided, or while this write waited for the reads.
-        return @results[index] = finish(call, NOT_STARTED, :error, step:) if @cancel.cancelled?
+        return @results[index] = finish(call, NOT_STARTED, step:) if @cancel.cancelled?
 
         if tool.write?
           @results[index] = write(tool, step)
@@ -96,17 +96,17 @@ module Sleepyshark
         content = tool.invoke(step.call.input, @cancel)
       rescue StandardError => e
         why = @cancel.cancelled? ? 'The call was cancelled while it ran' : 'The tool failed'
-        finish(step.call, "#{why}: #{e}", :error, step:, started:)
+        finish(step.call, "#{why}: #{e}", step:, started:)
       else
         finish(step.call, content, :ok, step:, started:)
       end
 
       # Redacts and cuts the call's result, records its outcome, ends its step, if it started, and reports it.
-      # +outcome+ is +:ok+, +:error+ or +:blocked+; +started+ is when the tool started running, nil when it did not
-      # run.
-      def finish(call, content, outcome, step: nil, started: nil)
+      # +outcome+ is +:ok+, +:error+ (by default) or +:blocked+; +started+ is when the tool started running, nil when
+      # it did not run.
+      def finish(call, content, outcome = :error, step: nil, started: nil)
         redacted = @agent.redact(content)
-        result = ToolResult.new(call_id: call.id, content: cut(redacted), error: outcome != :ok)
+        result = ToolResult.new(call_id: call.id, content: cut(redacted), error: (outcome in :error | :blocked))
         ran = started && (@agent.clock.call - started)
         @report.ended(ToolCallFinished.new(call: shown(call), result:), span: step&.span, duration: ran) do
           step&.finish(outcome, ran:, length: redacted.length, truncated: redacted.length > MAX_RESULT,

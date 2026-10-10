@@ -118,7 +118,7 @@ class TelemetryTraceTest < Minitest::Test
     order = tool('order', kind: :write, needs_approval: true) { |_, _| 'Ordered.' }
     model = Model.new(reply('Looking.', usage(100, 20, 300, 50), call('1', 'search'), call('2', 'order'),
                             stop: :tool_use),
-                      reply('Ordered.', usage(10, 5, 450)), info: ACME)
+                      reply('Ordered.', usage(10, 5, 450)), info: acme)
     traced(collector, model, name: 'clerk', tools: [search, order], audit_sink: sink, clock:,
                              approver: Waiting.new(clock:, seconds: 3, approved: true))
       .run(Conversation.new(id: 'session-1'), 'Order Dune.')

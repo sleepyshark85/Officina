@@ -55,10 +55,10 @@ module Sleepyshark
         false
       end
 
-      # The span's trace and span ids, which a span of no trace, as without a tracer provider or a host's span, lacks.
+      # The span's trace and span ids; nil for a span of no trace, as without a tracer provider or a host's span.
       def ids(span)
         context = span.context
-        context.valid? ? { trace_id: context.hex_trace_id, span_id: context.hex_span_id } : {}
+        { trace_id: context.hex_trace_id, span_id: context.hex_span_id } if context.valid?
       end
 
       def clean(text)

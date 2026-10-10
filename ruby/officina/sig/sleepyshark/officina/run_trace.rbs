@@ -5,12 +5,10 @@ module Sleepyshark
       @telemetry: Telemetry
       @info: ModelInfo
       @children: OpenTelemetry::Context
-      @call: ModelCallTrace?
+      @call: ModelCallTrace
 
       attr_reader run: String
       attr_reader span: OpenTelemetry::Trace::Span
-      attr_reader dimensions: Hash[String, String]
-
       def initialize: (agent: Agent, conversation: Conversation, input: String) -> void
 
       def model_call: () { () -> (Reply | Failed)? } -> (Reply | Failed)?
@@ -23,7 +21,9 @@ module Sleepyshark
 
       def audit_failed: (OpenTelemetry::Trace::Span span, Symbol kind) -> void
 
-      def start: (String name, attributes: Hash[String, untyped], ?kind: Symbol) -> OpenTelemetry::Trace::Span
+      def dimensions: () -> Hash[String, String]
+
+      def start: (String name, attributes: Hash[String, untyped], ?kind: Symbol?) -> OpenTelemetry::Trace::Span
 
       def add: (Symbol counter, Integer value, Hash[String, untyped] attributes) -> void
 
@@ -33,22 +33,23 @@ module Sleepyshark
 
       def usage_attributes: (Usage usage) -> Hash[String, untyped]
 
-      def cost: (Usage usage) -> BigDecimal
+      def cost: (Usage usage) -> Float
 
-      def content: (String name, String text, ?role: String?) -> Hash[String, String]
+      def content: (String name, String text, ?role: String?) -> Hash[String, String]?
 
       def stop: (OpenTelemetry::Trace::Span span, ?String? error_type, ?String? description) -> void
 
       private
 
-      def start_run: (Conversation conversation, String input, OpenTelemetry::Context parent)
-                   -> OpenTelemetry::Trace::Span
+      def start_run: (Conversation conversation, String input) -> OpenTelemetry::Trace::Span
 
-      def stop_run: (result? result, String? reason) -> void
+      def stop_run: (result? result) -> void
 
-      def answer: (result result) -> Hash[String, String]
+      def answer: (result result) -> Hash[String, String]?
 
-      def ended: (result? result) -> [String, String?]
+      def ended: (result? result) -> String
+
+      def reason: (result? result) -> String?
 
       def pascal: (Symbol symbol) -> String
     end

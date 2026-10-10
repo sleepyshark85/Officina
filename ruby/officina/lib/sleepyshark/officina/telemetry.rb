@@ -65,12 +65,13 @@ module Sleepyshark
       # Whether spans carry text.
       def content? = @content
 
-      # Starts a span under the parent context; it is not made current. The core's way in, as Ruby has no visibility
-      # between classes; a host has no need of it.
-      # @param kind [Symbol] +:internal+ or +:client+
+      # Starts a span under the parent context, the current one unless given; it is not made current. The core's way
+      # in, as Ruby has no visibility between classes; a host has no need of it.
+      # @param parent [OpenTelemetry::Context, nil]
+      # @param kind [Symbol, nil] +:client+, or nil for an internal span
       # @param at [Time] its start, from the agent's clock
       # @return [OpenTelemetry::Trace::Span]
-      def start_span(name, parent:, kind:, attributes:, at:)
+      def start_span(name, attributes:, at:, parent: nil, kind: nil)
         @tracer.start_span(name, with_parent: parent, kind:, attributes:, start_timestamp: at)
       end
 

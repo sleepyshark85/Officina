@@ -20,9 +20,13 @@ module Sleepyshark
 
       def measure: (String? error_type) -> void
 
-      def tokens: (Hash[String, String] dimensions, Hash[String, String] chat, Integer input) -> void
+      def tokens: (Integer input) -> void
 
-      def ended: (Hash[String, untyped] attributes, ?String? error_type, ?String? description) -> void
+      def hit_ratio: (Integer input) -> void
+
+      def chat: () -> Hash[String, String]
+
+      def ended: (Hash[String, untyped]? attributes, ?String? error_type, ?String? description) -> void
 
       def replied: (Reply reply) -> Hash[String, untyped]
     end

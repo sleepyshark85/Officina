@@ -15,6 +15,7 @@ class TelemetryContentTest < Minitest::Test
   def test_evt03_evt04_by_default_telemetry_carries_no_text_and_no_secret
     dump = searched(Collector.new).dump
 
+    refute_predicate Telemetry.new, :content?
     assert_empty(TEXTS.select { dump.include?(it) })
     refute_includes dump, 'hunter2'
   end
@@ -28,6 +29,9 @@ class TelemetryContentTest < Minitest::Test
     assert_equal(['[{"role":"user","parts":[{"type":"text","content":"question-text [redacted]"}]}]',
                   '[{"role":"assistant","parts":[{"type":"text","content":"answer-text [redacted]"}]}]'],
                  collector.span('invoke_agent').attributes.values_at('gen_ai.input.messages', 'gen_ai.output.messages'))
+    assert_equal(['[{"role":"assistant","parts":[{"type":"text","content":""}]}]',
+                  '[{"role":"assistant","parts":[{"type":"text","content":"answer-text [redacted]"}]}]'],
+                 collector.spans.select { it.name == 'chat scripted' }.map { it.attributes['gen_ai.output.messages'] })
     assert_equal(['{"title":"input-text [redacted]"}', 'result-text [redacted]'],
                  collector.span('execute_tool search').attributes.values_at('gen_ai.tool.call.arguments',
                                                                             'gen_ai.tool.call.result'))

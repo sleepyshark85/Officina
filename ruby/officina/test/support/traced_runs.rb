@@ -10,11 +10,6 @@ module TracedRuns
   include ToolCalls
 
   Officina = Sleepyshark::Officina
-  # A model of another provider, with a price: 4, 20, 0.20 and 5 dollars per million input, output, cache read and
-  # cache write tokens.
-  ACME = Officina::ModelInfo.new(provider: 'acme', name: 'acme-large', price: Officina::Price.new(
-    input: BigDecimal(4), output: BigDecimal(20), cache_read: BigDecimal('0.2'), cache_write: BigDecimal(5)
-  ))
 
   # The attributes of every measurement of an unnamed agent on the scripted model.
   SCRIPTED = { 'gen_ai.provider.name' => 'scripted', 'gen_ai.request.model' => 'scripted' }.freeze
@@ -32,6 +27,14 @@ module TracedRuns
   def reply(text, usage, *blocks, stop: :end)
     [Officina::TextDelta.new(text:), Officina::UsageReported.new(usage:),
      Officina::Reply.new(blocks: [Model.text_block(text), *blocks], stop:)]
+  end
+
+  # A model of another provider, with a price: 4, 20, 0.20 and 5 dollars per million input, output, cache read and
+  # cache write tokens. Made in the test, so that mutation testing sees it made.
+  def acme
+    Officina::ModelInfo.new(provider: 'acme', name: 'acme-large', price: Officina::Price.new(
+      input: BigDecimal(4), output: BigDecimal(20), cache_read: BigDecimal('0.2'), cache_write: BigDecimal(5)
+    ))
   end
 
   def usage(input, output, cache_read = 0, cache_write = 0)

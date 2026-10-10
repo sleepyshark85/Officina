@@ -21,7 +21,7 @@ module Sleepyshark
 
       def written?: (_AuditSink sink, OpenTelemetry::Trace::Span span, AuditEntry entry) -> bool
 
-      def ids: (OpenTelemetry::Trace::Span span) -> Hash[Symbol, String]
+      def ids: (OpenTelemetry::Trace::Span span) -> Hash[Symbol, String]?
 
       def clean: (String? text) -> String?
 

@@ -50,6 +50,15 @@ class TelemetryNamesTest < Minitest::Test
     assert_equal dotnet - NOT_YET, keys(collector)
   end
 
+  def test_evt02_the_spans_and_metrics_come_from_the_scope_of_officinas_name
+    collector = Collector.new
+
+    exercise(collector)
+
+    assert_equal(['Sleepyshark.Officina'],
+                 [*collector.spans, *collector.metrics].map { it.instrumentation_scope.name }.uniq)
+  end
+
   private
 
   def read(paths) = paths.map { File.read(File.join(ROOT, it)) }.join("\n")

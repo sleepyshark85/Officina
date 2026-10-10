@@ -39,10 +39,10 @@ class TelemetryToolCallTest < Minitest::Test
 
     blocked_save(collector)
 
-    assert_equal([{ 'officina.audit.kind' => 'RunStarted' }, { 'officina.audit.kind' => 'ToolStarted' }],
-                 collector.points_of('officina.audit.failures', SCRIPTED).map(&:attributes))
-    assert_equal([{ 'gen_ai.tool.name' => 'save', 'officina.tool.outcome' => 'blocked' }],
-                 collector.points_of('officina.tool.calls', SCRIPTED).map(&:attributes))
+    assert_equal([[{ 'officina.audit.kind' => 'RunStarted' }, 1], [{ 'officina.audit.kind' => 'ToolStarted' }, 1]],
+                 collector.points_of('officina.audit.failures', SCRIPTED).map { [it.attributes, it.sum] })
+    assert_equal([[{ 'gen_ai.tool.name' => 'save', 'officina.tool.outcome' => 'blocked' }, 1]],
+                 collector.points_of('officina.tool.calls', SCRIPTED).map { [it.attributes, it.sum] })
   end
 
   def test_evt02_a_call_cancelled_while_waiting_for_approval_records_the_wait_only
@@ -56,12 +56,31 @@ class TelemetryToolCallTest < Minitest::Test
   end
 
   def test_evt02_an_approval_given_as_the_run_was_cancelled_is_counted_and_the_call_ends_unrun
-    collector, = approval_cancelled(approved: true)
+    sink = Testing::RecordingAuditSink.new
+    collector, = approval_cancelled(approved: true, audit_sink: sink)
 
     assert_equal ['approved', 'error', nil],
                  collector.attributes('execute_tool save', 'officina.tool.approval', 'officina.tool.outcome',
                                       'officina.tool.ran')
     assert_equal [1], collector.points_of('officina.tool.approvals').map(&:sum)
+    assert_equal(1, sink.entries.count { it.kind == :tool_ended })
+  end
+
+  def test_evt02_a_tool_that_raises_ends_its_span_as_a_tool_error_after_running
+    collector = Collector.new
+    clock = FakeClock.new
+    lookup = tool('lookup') do |_, _|
+      clock.advance(2)
+      raise 'lookup is down'
+    end
+
+    traced(collector, Model.new(Model.tool_use(call('1', 'lookup')), Model.text('Sorry.')), tools: [lookup], clock:)
+      .run(Conversation.new, 'Look.')
+    span = collector.span('execute_tool lookup')
+
+    assert_equal ['error', 'tool_error', 2.0],
+                 span.attributes.values_at('officina.tool.outcome', 'error.type', 'officina.tool.ran')
+    assert_equal OpenTelemetry::Trace::Status::ERROR, span.status.code
   end
 
   def test_tool06_evt02_a_result_of_exactly_the_limit_is_kept_whole_and_one_longer_is_marked_truncated
@@ -98,12 +117,13 @@ class TelemetryToolCallTest < Minitest::Test
   end
 
   # A run whose save call waits two seconds for an approver who answers as the host cancels; the collector and clock.
-  def approval_cancelled(approved:)
+  def approval_cancelled(approved:, audit_sink: nil)
     collector = Collector.new
     clock = FakeClock.new
     save = tool('save', kind: :write, needs_approval: true) { |_, _| 'Saved.' }
     traced(collector, Model.new(Model.tool_use(call('1', 'save'))),
-           clock:, tools: [save], approver: Cancelled.new(clock:, approved:)).run(Conversation.new, 'Save.')
+           clock:, tools: [save], approver: Cancelled.new(clock:, approved:), audit_sink:)
+      .run(Conversation.new, 'Save.')
     [collector, clock]
   end
 

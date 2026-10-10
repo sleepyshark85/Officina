@@ -13,8 +13,6 @@ module Sleepyshark
       attr_reader :run
       # @return [OpenTelemetry::Trace::Span] the run's, which its audit entries name when no step's span does
       attr_reader :span
-      # @return [Hash{String => String}] the attributes of every measurement: the agent, provider and model
-      attr_reader :dimensions
 
       # @param input [String] the user's message
       def initialize(agent:, conversation:, input:)
@@ -22,55 +20,61 @@ module Sleepyshark
         @telemetry = agent.telemetry
         @info = agent.model.info
         @run = SecureRandom.hex
-        @dimensions = { 'gen_ai.agent.name' => agent.name, 'gen_ai.provider.name' => @info.provider,
-                        'gen_ai.request.model' => @info.name }.compact.freeze
-        parent = OpenTelemetry::Context.current
-        @span = start_run(conversation, input, parent)
-        @children = OpenTelemetry::Trace.context_with_span(@span, parent_context: parent)
+        @span = start_run(conversation, input)
+        @children = OpenTelemetry::Trace.context_with_span(@span)
       end
 
       # Traces the model call the block makes, which returns how it ended: its reply, the run's failure when it got
       # none, or nil when it was cancelled. The call's span ends with the block, also when the host leaves.
       # @return [Reply, Failed, nil] what the block returns
       def model_call
-        # @type var outcome: (Reply | Failed)?
-        # @type var call: ModelCallTrace?
         call = @call = ModelCallTrace.new(self, @info.name)
-        outcome = yield
-      ensure
-        call&.finish(outcome)
+        begin
+          # @type var outcome: (Reply | Failed)?
+          outcome = yield
+        ensure
+          call.finish(outcome)
+        end
       end
 
       # Notes what the model streamed in the call being made.
-      def observe(event) = @call&.observe(event)
+      def observe(event) = @call.observe(event)
 
       # The span of a tool call, from its start; +tool+ is nil for a call of a tool the agent does not have.
       def tool_call(tool, call) = ToolCallTrace.new(self, tool, call)
 
       # Counts the run and ends its span: how it ended (nil when the host left it), its usage and its calls.
       def finish(result, usage, model_calls:, tool_calls:)
-        kind, reason = ended(result)
-        outcome = { 'officina.run.result' => kind, 'officina.run.reason' => reason }.compact
-        add(:runs, 1, @dimensions.merge(outcome))
+        outcome = { 'officina.run.result' => ended(result), 'officina.run.reason' => reason(result) }.compact
+        add(:runs, 1, dimensions.merge(outcome))
         @span.add_attributes(outcome)
         if result
           @span.add_attributes({ 'officina.run.model_calls' => model_calls, 'officina.run.tool_calls' => tool_calls,
                                  **usage_attributes(usage), **answer(result) })
         end
-        stop_run(result, reason)
+        stop_run(result)
       end
 
       # Counts an audit entry the sink failed to write, and marks the span of the step it records.
       def audit_failed(span, kind)
         attributes = { 'officina.audit.kind' => pascal(kind) }
-        add(:audit_failures, 1, @dimensions.merge(attributes))
+        add(:audit_failures, 1, dimensions.merge(attributes))
         span.add_event('officina.audit.failed', attributes:, timestamp: now)
       end
 
       # What the call traces share.
 
+      # The attributes of every measurement: the agent, provider and model. A new hash each time, as the metrics SDK
+      # keeps the one it is given as its data point's key and a view merges its attributes into it.
+      # @return [Hash{String => String}]
+      def dimensions
+        { 'gen_ai.agent.name' => @agent.name, 'gen_ai.provider.name' => @info.provider,
+          'gen_ai.request.model' => @info.name }.compact
+      end
+
       # Starts a span under the run's.
-      def start(name, attributes:, kind: :internal)
+      # @param kind [Symbol, nil] +:client+, or nil for an internal span
+      def start(name, attributes:, kind: nil)
         @telemetry.start_span(name, parent: @children, kind:, attributes:, at: now)
       end
 
@@ -80,19 +84,19 @@ module Sleepyshark
 
       # The span attributes of the usage and its cost.
       def usage_attributes(usage)
-        { 'officina.usage.cost' => cost(usage).to_f,
+        { 'officina.usage.cost' => cost(usage),
           'gen_ai.usage.input_tokens' => usage.input + usage.cache_read + usage.cache_write,
           'gen_ai.usage.output_tokens' => usage.output, 'gen_ai.usage.cache_read.input_tokens' => usage.cache_read,
           'gen_ai.usage.cache_creation.input_tokens' => usage.cache_write }
       end
 
-      # @return [BigDecimal] nothing when the model's price is not known
-      def cost(usage) = @info.price&.cost(usage) || BigDecimal(0)
+      # @return [Float] in US dollars; nothing when the model's price is not known
+      def cost(usage) = @info.price&.cost(usage).to_f
 
-      # The content attribute of the text, without the agent's secrets, only when the host opted in: as one message of
-      # the role in the semantic conventions' format when a role is given.
+      # The content attribute of the text, without the agent's secrets, only when the host opted in (else nil): as one
+      # message of the role in the semantic conventions' format when a role is given.
       def content(name, text, role: nil)
-        return {} unless @telemetry.content?
+        return unless @telemetry.content?
 
         text = JSON.generate([{ role:, parts: [{ type: 'text', content: text }] }]) if role
         { name => @agent.redact(text) }
@@ -109,18 +113,19 @@ module Sleepyshark
 
       private
 
-      def start_run(conversation, input, parent)
+      # Starts the run's span under the current one.
+      def start_run(conversation, input)
         attributes = { 'gen_ai.operation.name' => 'invoke_agent', 'gen_ai.conversation.id' => conversation.id,
-                       'officina.run.id' => @run, **@dimensions,
+                       'officina.run.id' => @run, **dimensions,
                        **content('gen_ai.input.messages', input, role: 'user') }
         name = ['invoke_agent', @agent.name].compact.join(' ')
-        @telemetry.start_span(name, parent:, kind: :internal, attributes:, at: now)
+        @telemetry.start_span(name, attributes:, at: now)
       end
 
       # Ends the run's span, marked failed when the run failed.
-      def stop_run(result, reason)
+      def stop_run(result)
         case result
-        in Failed(detail:) then stop(@span, reason, detail)
+        in Failed(reason:, detail:) then stop(@span, pascal(reason), detail)
         else stop(@span)
         end
       end
@@ -128,16 +133,24 @@ module Sleepyshark
       def answer(result)
         case result
         in Completed(text:) then content('gen_ai.output.messages', text, role: 'assistant')
-        else {}
+        else nil
         end
       end
 
       def ended(result)
         case result
-        in Completed then ['completed']
-        in Stopped(reason:) then ['stopped', pascal(reason)]
-        in Failed(reason:) then ['failed', pascal(reason)]
-        in nil then ['abandoned']
+        in Completed then 'completed'
+        in Stopped then 'stopped'
+        in Failed then 'failed'
+        in nil then 'abandoned'
+        end
+      end
+
+      # Why the run stopped or failed, as .NET names it; nil when it did neither.
+      def reason(result)
+        case result
+        in Stopped | Failed then pascal(result.reason)
+        else nil
         end
       end
 

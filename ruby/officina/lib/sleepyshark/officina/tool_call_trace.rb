@@ -47,9 +47,8 @@ module Sleepyshark
       # @param truncated [Boolean] whether it was cut
       # @param result [String] the result as the model gets it
       def finish(outcome, ran:, length:, truncated:, result:)
-        dimensions = { **@run.dimensions, 'gen_ai.tool.name' => @call.name, 'officina.tool.outcome' => outcome.to_s }
-        @run.add(:tool_calls, 1, dimensions)
-        @run.record(:tool_duration, @run.now - @started, dimensions)
+        @run.add(:tool_calls, 1, measured(outcome))
+        @run.record(:tool_duration, @run.now - @started, measured(outcome))
         @span.add_attributes({ 'officina.tool.outcome' => outcome.to_s, 'officina.tool.ran' => ran,
                                'officina.tool.truncated' => truncated, 'officina.tool.result_length' => length,
                                **@run.content('gen_ai.tool.call.result', result) }.compact)
@@ -57,6 +56,11 @@ module Sleepyshark
       end
 
       private
+
+      # The attributes of a measurement of the call: new each time, as RunTrace#dimensions says.
+      def measured(outcome)
+        { **@run.dimensions, 'gen_ai.tool.name' => @call.name, 'officina.tool.outcome' => outcome.to_s }
+      end
 
       def started(tool)
         { 'gen_ai.operation.name' => 'execute_tool', 'gen_ai.tool.name' => @call.name,

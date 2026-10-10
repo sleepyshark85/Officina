@@ -12,7 +12,6 @@ module Sleepyshark
                                                                         **run.dimensions })
         @usage = Usage.new
         @retries = 0
-        @first_text = nil
       end
 
       # Notes what the model streamed. The time to first token is the wait for the first text of the attempt that
@@ -31,13 +30,14 @@ module Sleepyshark
       def finish(outcome)
         case outcome
         in Reply => reply then ended(replied(reply))
-        in Failed(detail:) then ended({}, 'model_error', detail)
-        in nil then ended({})
+        in Failed(detail:) then ended(nil, 'model_error', detail)
+        in nil then ended(nil)
         end
       end
 
       private
 
+      # @param attributes [Hash, nil] the reply's, if there is one
       def ended(attributes, error_type = nil, description = nil)
         measure(error_type)
         @span.add_attributes({ 'officina.model.retries' => @retries,
@@ -52,23 +52,25 @@ module Sleepyshark
         @run.add(:retries, 1, @run.dimensions)
       end
 
-      # A call that reported no tokens, such as one that failed before its reply started, records none.
+      # A call that reported no tokens, such as one that failed before its reply started, records none. Each
+      # measurement gets attributes of its own, which the metrics SDK keeps.
       def measure(error_type)
-        dimensions = @run.dimensions
-        chat = { **dimensions, 'gen_ai.operation.name' => 'chat' }
         input = @usage.input + @usage.cache_read + @usage.cache_write
-        tokens(dimensions, chat, input) unless @usage == Usage.new
-        @run.record(:cache_hit_ratio, @usage.cache_read.fdiv(input), dimensions) if input.positive?
+        tokens(input) unless @usage == Usage.new
+        hit_ratio(input) if input.positive?
         @run.record(:model_duration, @run.now - @started, { **chat, 'error.type' => error_type }.compact)
       end
 
-      def tokens(dimensions, chat, input)
+      def tokens(input)
         @run.record(:tokens, input, { **chat, 'gen_ai.token.type' => 'input' })
         @run.record(:tokens, @usage.output, { **chat, 'gen_ai.token.type' => 'output' })
-        @run.record(:cache_tokens, @usage.cache_read, { **dimensions, 'officina.cache.type' => 'read' })
-        @run.record(:cache_tokens, @usage.cache_write, { **dimensions, 'officina.cache.type' => 'write' })
-        @run.record(:cost, @run.cost(@usage).to_f, dimensions)
+        @run.record(:cache_tokens, @usage.cache_read, { **@run.dimensions, 'officina.cache.type' => 'read' })
+        @run.record(:cache_tokens, @usage.cache_write, { **@run.dimensions, 'officina.cache.type' => 'write' })
+        @run.record(:cost, @run.cost(@usage), @run.dimensions)
       end
+
+      def hit_ratio(input) = @run.record(:cache_hit_ratio, @usage.cache_read.fdiv(input), @run.dimensions)
+      def chat = { **@run.dimensions, 'gen_ai.operation.name' => 'chat' }
 
       # The reply's finish reason, its stop's word or the provider's own for an unknown one, and its text if the host
       # opted in.

@@ -27,8 +27,8 @@ module Sleepyshark
 
       def content?: () -> bool
 
-      def start_span: (String name, parent: OpenTelemetry::Context, kind: Symbol, attributes: Hash[String, untyped],
-                       at: Time) -> OpenTelemetry::Trace::Span
+      def start_span: (String name, attributes: Hash[String, untyped], at: Time, ?parent: OpenTelemetry::Context?,
+                       ?kind: Symbol?) -> OpenTelemetry::Trace::Span
 
       def add: (Symbol counter, Integer value, Hash[String, untyped] attributes) -> void
 
