@@ -12,5 +12,20 @@ included; these add what running beside other agents needs.
   case still fits; when the next one might not, stop and report the spend so far rather than make it.
 - **Ruby** commands run through `~/.local/bin/mise exec ruby@4.0.7 -- …` (the version in `ruby/.ruby-version`).
 - **Never merge** a pull request, and never turn on auto-merge: the lead does, after the review.
-- **Report** the PR, the head commit's full sha, the newest review verdict and the sha it names, the required checks'
-  state (`gh pr checks <n>`), and what is left open.
+- **Report** in this format, at most ten lines, since the lead reads every report and must keep a small context:
+
+  ```text
+  PR #<n> · head <full sha>
+  Verdict: <APPROVE|CHANGES REQUESTED|none> at <sha>
+  Checks: <passing|failing: names|pending>
+  Live spend: $<x>                  (only if you made live calls)
+  Needs the lead: <one line each, or "nothing">
+  Left open: <one line each>
+  ```
+
+  `Needs the lead` holds decisions, blocks, surprises, claims the lead must verify and anything a permission check
+  denied.
+
+  Everything else (what changed per finding, file lists, survivor tables, mutation counts) goes in the PR description
+  or a PR comment, which the lead reads only if it needs to. A hand-back at the context limit reports what the hook's
+  warning asks for instead: the commit or patch, the commit the patch applies to, and where you stopped.

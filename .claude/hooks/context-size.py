@@ -64,8 +64,15 @@ def crossed(previous, current):
     return passed[-1] if passed else None
 
 
-def warning(tokens, limit):
+def warning(tokens, limit, lead=False):
+    """The warning for an agent past the limit; the lead (the main session, which dispatches and merges) keeps a
+    status note and compacts instead of handing back."""
     head = f"Your context is large: {tokens:,} tokens, past {limit:,}. Every further step re-sends all of it. "
+    if lead:
+        if limit < max(THRESHOLDS):
+            return head + "Update your status note; consider asking the owner to /compact at the next milestone."
+        return head + ("Update your status note now and ask the owner to run /compact; keep dispatching nothing new "
+                       "until then.")
     if limit < max(THRESHOLDS):
         return head + ("Plan to finish at a natural point, and keep your work committed as you go, so a fresh agent "
                        "can pick it up.")
@@ -104,7 +111,7 @@ def on_tool_use(payload, session):
     append(log, {"time": now(), "agent_type": payload.get("agent_type") or MAIN, "tokens": tokens})
     if limit is None:
         return None
-    return {"hookSpecificOutput": {"hookEventName": "PostToolUse", "additionalContext": warning(tokens, limit)}}
+    return {"hookSpecificOutput": {"hookEventName": "PostToolUse", "additionalContext": warning(tokens, limit, lead=not agent)}}
 
 
 def report(sizes):

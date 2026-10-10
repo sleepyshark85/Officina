@@ -21,3 +21,11 @@ Kind asked for: `$0` (`developer`, `fix`, `review` or `merge-check`).
    - **Live cost cap:** a dollar figure, or "no live calls".
 4. Send it with the Agent tool, as the template says. When the agent reports, merging is the lead's step, under
    [How we work](../../../docs/conventions.md#how-we-work).
+
+## Lead's routine
+
+- Never read diffs, conflict hunks or full logs yourself: dispatch a merge-check, a fixer or a reviewer, and act on
+  its short report ([agent-rules.md](agent-rules.md), *Report*).
+- After each merge, update your status note (the project memory's status file, such as `ruby-port-status`); the
+  plan's Progress row goes in the next PR that touches the plan.
+- When the context hook warns you, update the note and ask the owner to run `/compact`.

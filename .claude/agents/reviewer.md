@@ -69,4 +69,5 @@ nothing must be fixed; nits alone never block.
 
 A PR gets at most three rounds. If the third still has a must-fix, say so in the verdict and stop: the owner decides.
 
-Reply to whoever asked with the verdict, the sha it names and the findings.
+Reply to whoever asked in the short report format of `.claude/skills/dispatch/agent-rules.md` (*Report*), with
+`Needs the lead:` naming only what the lead must decide; the findings stay in the verdict comment.
