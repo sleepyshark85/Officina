@@ -41,4 +41,12 @@ class ServerTest < Minitest::Test
     assert [stdio.name, stdio.command, *stdio.command, stdio.env, stdio.env['TOKEN'], http.url, http.headers,
             http.headers['Authorization']].all?(&:frozen?)
   end
+
+  def test_mcp02_a_servers_secrets_are_its_env_and_header_values
+    stdio = Server.new(name: 'fs', command: ['server'], env: { 'TOKEN' => 'secret', 'HOME' => nil, 'KEY' => 'k' })
+    http = Server.new(name: 'web', url: 'http://127.0.0.1/mcp', headers: { 'Authorization' => 'Bearer t' })
+
+    assert_equal [%w[secret k], ['Bearer t']], [stdio.secrets, http.secrets]
+    assert_predicate stdio.secrets, :frozen?
+  end
 end

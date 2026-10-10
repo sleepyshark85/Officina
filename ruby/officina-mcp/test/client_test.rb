@@ -91,6 +91,15 @@ class ClientTest < Minitest::Test
     end
   end
 
+  def test_mcp04_a_cancelled_ping_is_not_sent
+    # Only the handshake is answered: a ping sent would find the connection closed.
+    error = with_client(Scripted::HANDSHAKE) do |client|
+      assert_raises(Mcp::Error) { client.ping(cancel: CancelledAfter.new(1)) }
+    end
+
+    assert_equal 'MCP server web, ping: cancelled', error.message
+  end
+
   def test_mcp04_a_ping_is_answered_with_nothing_and_one_already_30_seconds_late_is_not_sent
     values = [0]
     clock = -> { values.size > 1 ? values.shift : values.first }

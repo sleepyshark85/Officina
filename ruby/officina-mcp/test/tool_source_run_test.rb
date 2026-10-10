@@ -100,15 +100,17 @@ class ToolSourceRunTest < Minitest::Test
     fake = FakeServer.new(tools: [ECHO])
     with_source(fake, allow('echo')) do |source|
       sink = Sink.new
-      agent = agent(source, audit_sink: sink)
+      agent = agent(source, Model.text('Hi.'), audit_sink: sink)
       cancel = Officina::Cancellation.new.tap(&:cancel)
       checking = agent.run(Officina::Conversation.new, 'Hi', cancel:)
+      agent.run(Officina::Conversation.new, 'Hi')
       fake.go_down
       agent.run(Officina::Conversation.new, 'Hi')
       reconnecting = agent.run(Officina::Conversation.new, 'Hi', cancel:)
 
       assert_equal %i[cancelled cancelled], [checking.reason, reconnecting.reason]
       assert_equal %w[connected disconnected failed], changes(sink).map(&:first)
+      assert_equal %w[initialize tools/list ping], fake.requests, 'only the run that was not cancelled pinged'
     end
   end
 end

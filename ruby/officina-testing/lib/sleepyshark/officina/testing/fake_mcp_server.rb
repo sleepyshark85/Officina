@@ -64,12 +64,15 @@ module Sleepyshark
             @protocol_version = protocol_version
             @mutex = Mutex.new
             @calls = []
+            @requests = []
             @client_info = nil
             @version = nil
             @initialized = false
           end
 
           def calls = @mutex.synchronize { @calls.dup.freeze }
+
+          def requests = @mutex.synchronize { @requests.dup.freeze }
 
           def client_info = @mutex.synchronize { @client_info }
 
@@ -80,6 +83,7 @@ module Sleepyshark
           # JSON-RPC 2.0 with an object of params, or for tools before the client said it initialized, is refused.
           def answer(message)
             id = message['id'] or return note(message)
+            @mutex.synchronize { @requests << message['method'] }
             # @type var params: message
             params = message['params'] || {}
             result = valid?(message) && result(message['method'], params)
@@ -137,10 +141,13 @@ module Sleepyshark
 
           def page(index)
             tools = @tools[index, 1].to_a.map do |tool|
-              { 'name' => tool.name, 'description' => tool.description, 'inputSchema' => tool.input_schema }
+              { 'name' => tool.name, 'description' => tool.description, 'inputSchema' => written(tool.input_schema) }
             end
             index + 1 < @tools.size ? { 'tools' => tools, 'nextCursor' => (index + 1).to_s } : { 'tools' => tools }
           end
+
+          # A schema given as text is sent as it is written.
+          def written(schema) = schema.is_a?(String) ? JSON::Fragment.new(schema) : schema
 
           def call(name, arguments)
             @mutex.synchronize { @calls << [name, arguments].freeze }
@@ -166,6 +173,9 @@ module Sleepyshark
 
         # The tool calls received, oldest first, each [name, arguments].
         def calls = @protocol.calls
+
+        # The methods of the requests received, oldest first; notifications are left out.
+        def requests = @protocol.requests
 
         # The client's name and version as it initialized, a Hash; nil until it has.
         def client_info = @protocol.client_info

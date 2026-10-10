@@ -26,12 +26,29 @@ class ToolSourceTest < Minitest::Test
     end
   end
 
-  def test_mcp03_an_allowed_tool_the_server_lacks_fails_the_connection_clearly
-    FakeServer.new(tools: [UPPER, ECHO]).serve_http do |url|
-      error = assert_raises(Mcp::Error) { Mcp::ToolSource.new(server(url), allowed: [allow('echo'), allow('nope')]) }
+  def test_mcp03_an_allowed_tool_the_server_lacks_fails_the_connection_clearly_and_stops_the_server
+    error = assert_raises(Mcp::Error) { Mcp::ToolSource.new(stdio_server, allowed: [allow('echo'), allow('nope')]) }
 
-      assert_equal 'MCP server fake has no tool nope; it has: echo, upper', error.message
+    assert_equal 'MCP server fs has no tool nope; it has: crash, cut, echo, fail, hang, stray, upper', error.message
+  end
+
+  def test_mcp02_agt06_a_tools_schema_enters_the_prefix_as_the_server_wrote_it
+    written = %({ "type": "object",\n  "properties": {"text": {"description": "caf\\u00e9", "type": "string"}} })
+    fake = FakeServer.new(tools: [FakeTool.new(name: 'echo', handler: ->(_) { '' }, input_schema: written)])
+    with_source(fake, allow('echo')) do |source|
+      same = Officina::Tool.new(name: 'fake__echo', description: 'The echo tool.', input: Officina::Schema.new(written),
+                                kind: :write) { '' }
+
+      assert_equal written, source.tools.first.input_schema
+      assert_equal Officina::Agent.new(model: Model.new, instructions: 'You help.', tools: [same]).fingerprint,
+                   agent(source).fingerprint
     end
+  end
+
+  def test_mcp02_an_allowed_tool_is_a_write_without_approval_unless_the_host_says_otherwise
+    allowed = Mcp::AllowedTool.new(name: +'echo')
+
+    assert_equal [:write, false, true], [allowed.kind, allowed.needs_approval, allowed.name.frozen?]
   end
 
   def test_mcp03_an_allowed_tool_whose_schema_the_core_cannot_use_fails_the_connect_with_why
@@ -56,6 +73,8 @@ class ToolSourceTest < Minitest::Test
 
       assert_same tools, source.tools
       assert_equal 4, conversation.messages.size, 'the second run reconnected, with the prefix the first bound'
+      # The second run's ping met the ended session, which the server refuses before it reads the request.
+      assert_equal %w[initialize tools/list ping initialize], fake.requests
     end
   end
 

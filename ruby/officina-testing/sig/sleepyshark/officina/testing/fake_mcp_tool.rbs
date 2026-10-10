@@ -3,15 +3,15 @@ module Sleepyshark
     module Testing
       class FakeMcpTool < Data
         attr_reader name: String
-        attr_reader handler: ^(Hash[String, untyped] arguments) -> String
+        attr_reader handler: ^((Hash[String, untyped] | String) arguments) -> String
         attr_reader description: String
-        attr_reader input_schema: Hash[String, untyped]
+        attr_reader input_schema: (Hash[String, untyped] | String)
 
-        def self.new: (name: String, handler: ^(Hash[String, untyped] arguments) -> String, ?description: String,
-                       ?input_schema: Hash[String, untyped]) -> instance
+        def self.new: (name: String, handler: ^((Hash[String, untyped] | String) arguments) -> String, ?description: String,
+                       ?input_schema: (Hash[String, untyped] | String)) -> instance
 
-        def initialize: (name: String, handler: ^(Hash[String, untyped] arguments) -> String, ?description: String,
-                         ?input_schema: Hash[String, untyped]) -> void
+        def initialize: (name: String, handler: ^((Hash[String, untyped] | String) arguments) -> String, ?description: String,
+                         ?input_schema: (Hash[String, untyped] | String)) -> void
       end
     end
   end

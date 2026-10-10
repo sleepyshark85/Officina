@@ -4,7 +4,7 @@ require 'test_helper'
 require_relative 'support/traced_runs'
 
 # A run connects the sources of its tools before its first model call, and audits their connection changes.
-class ToolSourceTest < Minitest::Test
+class ToolSourcesTest < Minitest::Test
   include Sleepyshark::Officina
   include TracedRuns
 
