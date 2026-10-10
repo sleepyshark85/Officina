@@ -118,15 +118,19 @@ class ContextSizeTest(unittest.TestCase):
         self.assertEqual(warned.returncode, 0)
         self.assertIn("past 150,000", json.loads(warned.stdout)["hookSpecificOutput"]["additionalContext"])
 
-    def test_the_two_warnings_say_different_things(self):
-        early, late = hook.warning(160_000, 150_000), hook.warning(310_000, 300_000)
-        self.assertIn("past 150,000", early)
-        self.assertIn("committed as you go", early)
-        self.assertNotIn("Hand back", early)
-        self.assertIn("past 300,000", late)
-        self.assertIn("Hand back now", late)
-        self.assertIn("git diff --binary HEAD", late)
-        self.assertIn("base commit", late)
+    def test_the_150k_warning_is_informational_and_asks_for_work_committed_as_you_go(self):
+        text = hook.warning(160_000, 150_000)
+        self.assertIn("past 150,000", text)
+        self.assertIn("committed as you go", text)
+        self.assertNotIn("Hand back", text)
+        self.assertNotIn("git diff", text)
+
+    def test_the_300k_warning_says_hand_back_now_and_how_to_save_the_work_as_a_patch(self):
+        text = hook.warning(310_000, 300_000)
+        self.assertIn("past 300,000", text)
+        self.assertIn("Hand back now", text)
+        for phrase in ("git diff --binary HEAD", "git add -N", "<prefix>-wip.patch", "git rev-parse HEAD"):
+            self.assertIn(phrase, text)
 
     def test_a_subagent_without_a_transcript_yet_is_not_logged(self):
         payload = {"transcript_path": self.main_transcript(assistant(1, 1_000)), "agent_id": "new"}

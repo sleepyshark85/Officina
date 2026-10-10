@@ -70,8 +70,9 @@ def warning(tokens, limit):
         return head + ("Plan to finish at a natural point, and keep your work committed as you go, so a fresh agent "
                        "can pick it up.")
     return head + ("Hand back now. Commit what passes the checks; save the rest with `git diff --binary HEAD > "
-                   "<your scratchpad>/<prefix>-wip.patch` (after `git add -N` for new files). Report the base "
-                   "commit, the patch path, exactly where you stopped and what is left.")
+                   "<your scratchpad>/<prefix>-wip.patch` (after `git add -N` for new files). Report the commit "
+                   "the patch applies to (`git rev-parse HEAD`, after your commits), the patch path, exactly where "
+                   "you stopped and what is left.")
 
 
 def previous_size(log):
