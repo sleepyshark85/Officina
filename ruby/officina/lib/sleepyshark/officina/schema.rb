@@ -46,6 +46,14 @@ module Sleepyshark
       #   valid.
       def validate(value) = problems(@root, value, '')
 
+      # A schema is the input type of a tool whose handler takes the JSON value itself, as a class from Input.define
+      # is of one whose handler takes that class's value.
+      # @return [Schema] itself
+      def schema = self
+
+      # @return [Object] the JSON value as it is
+      def from_json(value) = value
+
       private
 
       def parse(json)

@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require 'json'
+
 module Sleepyshark
   module Officina
     # An agent's secrets, and the redaction of every form of them a text may hold: as written, and as a JSON string
@@ -13,8 +15,7 @@ module Sleepyshark
 
       # @param secrets [Array<String>] the empty one is ignored
       def initialize(secrets)
-        @forms = secrets.reject(&:empty?).flat_map { |secret| forms(secret) }.uniq.freeze
-        freeze
+        @forms = secrets.reject(&:empty?).flat_map { |secret| forms(secret) }
       end
 
       # The text with every stretch that holds a form of a secret replaced by "[redacted]". Stretches that overlap or
@@ -24,25 +25,25 @@ module Sleepyshark
       def redact(text)
         # @type var spans: Array[[Integer, Integer]]
         spans = @forms.flat_map { |form| starts(text, form).map { |at| [at, at + form.length] } }
-        spans.empty? ? text : redacted(text, spans.sort)
+        merged(spans.sort).reverse_each.with_object(text.dup) { |(from, to), out| out[from...to] = REDACTED }
       end
 
       private
 
       def forms(secret)
-        escaped = ESCAPED.product(%w[%04x %04X]).map { |(pattern, hex)| json(secret, pattern, hex) }
+        escaped = ESCAPED.product(%w[%04x %04X]).map { |pattern, hex| json(secret, pattern, hex) }
         [secret, *escaped, *escaped.map { |form| form.gsub('/', '\/') }]
       end
 
       # The secret inside a JSON string, the characters the pattern matches escaped with the hex format.
       def json(secret, pattern, hex)
-        secret.each_char.map do |char|
+        secret.each_char.sum('') do |char|
           if pattern&.match?(char)
-            char.encode(Encoding::UTF_16BE).unpack('n*').map { |unit| "\\u#{format(hex, unit)}" }.join
+            char.encode(Encoding::UTF_16BE).unpack('n*').sum('') { |unit| "\\u#{format(hex, unit)}" }
           else
-            JSON.generate(char)[1...-1].to_s
+            JSON.generate(char).delete_prefix('"').delete_suffix('"')
           end
-        end.join
+        end
       end
 
       def starts(text, form)
@@ -57,15 +58,19 @@ module Sleepyshark
         found
       end
 
-      # The text with each span, sorted, replaced; spans that overlap or touch are replaced as one.
-      def redacted(text, spans)
-        out = +''
-        kept = 0
-        spans.each_with_index do |(from, to), index|
-          out << text[kept...from].to_s << REDACTED if index.zero? || from > kept
-          kept = [kept, to].max
+      # The spans, sorted, with those that overlap or touch joined.
+      def merged(spans)
+        # @type var joined: Array[[Integer, Integer]]
+        joined = []
+        spans.each do |(from, to)|
+          last = joined.last
+          if last && from <= last[1]
+            last[1] = [last[1], to].max
+          else
+            joined << [from, to]
+          end
         end
-        out << text[kept..].to_s
+        joined
       end
     end
     private_constant :Secrets

@@ -34,7 +34,7 @@ module Sleepyshark
 
       def join_reads: () -> void
 
-      def wait_for_reads: () -> void
+      def stop_reads: () -> void
 
       def write: (Tool tool, ToolCall call) -> ToolResult
 

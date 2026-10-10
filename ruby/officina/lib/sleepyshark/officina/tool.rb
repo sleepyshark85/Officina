@@ -23,7 +23,7 @@ module Sleepyshark
       #   and only once its attempt is in the audit trail, when the agent has one)
       attr_reader :kind
 
-      # @param input [Class, Schema] what the handler receives: a class from Input.define, whose value it gets, or a
+      # @param input [Class, Schema] the input's type: a class from Input.define, whose value the handler gets, or a
       #   Schema, whose JSON value (as JSON.parse returns it) it gets
       # @param kind [Symbol] one of KINDS
       # @param needs_approval [Boolean] whether the agent's approver must approve each call before it runs
@@ -33,9 +33,8 @@ module Sleepyshark
       #   writes it. An exception is the call's error result, with its message; the run goes on.
       # @raise [Error] when the name is blank, the kind unknown, the handler missing or the schema not an object's
       def initialize(name:, description:, input:, kind:, needs_approval: false, &handler)
-        @schema = input.is_a?(Schema) ? input : input.schema
+        @input = input
         check(name, kind, handler)
-        @value = input unless input.is_a?(Schema)
         @name = -name
         @description = -description
         @kind = kind
@@ -45,7 +44,7 @@ module Sleepyshark
       end
 
       # @return [String] the JSON Schema of the input, which reaches the model, and the prefix fingerprint, as given
-      def input_schema = @schema.to_s
+      def input_schema = @input.schema.to_s
 
       def needs_approval? = @needs_approval
 
@@ -55,10 +54,10 @@ module Sleepyshark
       # @param input [String] JSON text, as the model wrote it
       # @return [String, nil]
       def input_problem(input)
-        problems = @schema.validate(JSON.parse(input, allow_duplicate_key: false))
+        problems = @input.schema.validate(JSON.parse(input, allow_duplicate_key: false))
         "The input does not match the tool's schema:\n#{problems.join("\n")}" unless problems.empty?
       rescue JSON::ParserError => e
-        "The input is not valid JSON: #{e.message}"
+        "The input is not valid JSON: #{e}"
       end
 
       # Runs the handler on the input.
@@ -67,19 +66,20 @@ module Sleepyshark
       # @return [String] the result for the model
       # @raise [StandardError] whatever the handler raises
       def invoke(input, cancel)
-        json = JSON.parse(input, allow_duplicate_key: false)
-        value = @value
-        output = @handler.call(value ? value.from_json(json) : json, cancel)
-        output.is_a?(String) ? output : JSON.generate(output)
+        # #input_problem has refused duplicate keys already.
+        case @handler.call(@input.from_json(JSON.parse(input)), cancel)
+        in String => text then text
+        in output then JSON.generate(output)
+        end
       end
 
       private
 
       def check(name, kind, handler)
-        raise Error, 'A tool needs a name' if name.strip.empty?
+        raise Error, 'A tool needs a name' unless name.match?(/\S/)
         raise Error, "Tool #{name}'s kind must be :read or :write, not #{kind.inspect}" unless KINDS.include?(kind)
         raise Error, "Tool #{name} needs a handler" unless handler
-        raise Error, "The input schema of tool #{name} is not an object's" unless JSON.parse(@schema.to_s).is_a?(Hash)
+        raise Error, "The input schema of tool #{name} is not an object's" unless JSON.parse(input_schema) in Hash
       end
     end
   end

@@ -5,6 +5,10 @@ integration:
 includes:
   - lib
   - ../test
+# mutant sets Thread.abort_on_exception, so a mutation that makes one of the run's threads raise ends the test process
+# instead of failing a test; the tests caught it all the same.
+coverage_criteria:
+  process_abort: true
 hooks:
   - ../test/mutant_hooks.rb
 requires:

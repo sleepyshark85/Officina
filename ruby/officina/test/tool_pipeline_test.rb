@@ -221,8 +221,11 @@ class ToolPipelineTest < Minitest::Test
     agent = Agent.new(model: Model.new, instructions: 'You help.', secrets: ['abc', 'abcdef', 'cdefgh', '', 'é<&/'])
 
     assert_equal 'x[redacted]y cdef[redacted] z', agent.redact('xabcdefghy cdefabc z')
-    assert_equal '[redacted]|[redacted]|[redacted]|[redacted]|[redacted]',
-                 agent.redact('é<&/|é<&/|é<&/|é<&\/|é<&/')
+    # As written; non-ASCII escaped in lower case; .NET's escapes in upper case; .NET's in lower case with / escaped;
+    # Go's.
+    forms = ['é<&/', '\\u00e9<&/', '\\u00E9\\u003C\\u0026/', '\\u00e9\\u003c\\u0026\\/', 'é\\u003c\\u0026/']
+
+    assert_equal(['[redacted]'] * 5, forms.map { agent.redact(it) })
     assert_equal 'nothing here', agent.redact('nothing here')
   end
 
