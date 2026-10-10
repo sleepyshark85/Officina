@@ -39,7 +39,11 @@ class PrefixStabilityTest < Minitest::Test
                                     stdin_data: conversation.to_json, binmode: true)
 
     assert_predicate status, :success?
-    result, requests = Marshal.load(output) # rubocop:disable Security/MarshalLoad -- this test's own child wrote it
+    result, parts = Marshal.load(output) # rubocop:disable Security/MarshalLoad -- this test's own child wrote it
+    requests = parts.map do |(tools, instructions, messages)|
+      Request.new(tools: tools.map { |(name, description, schema)| tool(name, description, schema) }, instructions:,
+                  messages:)
+    end
 
     assert_equal 'Resumed.', result.text
     assert_stable_prefix [*model.requests, *requests]
@@ -48,7 +52,7 @@ class PrefixStabilityTest < Minitest::Test
   def test_test02_the_check_finds_a_changed_prefix
     request = Request.new(tools: [], instructions: 'You help.', messages: [user('Hi')])
     changed = [request.with(instructions: 'You help more.'), request.with(messages: [user('Hello')]),
-               request.with(tools: [Tool.new(name: 't', description: 'd', input_schema: '{}')]),
+               request.with(tools: [tool('t', 'd', '{}')]),
                request.with(messages: [])]
 
     changed.each do |later|
@@ -59,4 +63,8 @@ class PrefixStabilityTest < Minitest::Test
   private
 
   def user(text) = Message.new(role: :user, blocks: [Block.new(text:)])
+
+  def tool(name, description, schema)
+    Tool.new(name:, description:, input: Schema.new(schema), kind: :read) { 'Found.' }
+  end
 end

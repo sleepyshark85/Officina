@@ -39,6 +39,13 @@ class SchemaTest < Minitest::Test
     [{ properties: { a: false } }, {}, { 'a' => nil }, ['/a: is not allowed']]
   ].freeze
 
+  def test_tool01_a_schema_is_the_input_type_of_its_own_json_values
+    schema = Schema.new('{"type":"object"}')
+
+    assert_same schema, schema.schema
+    assert_equal({ 'id' => 7 }, schema.from_json({ 'id' => 7 }))
+  end
+
   def test_tool02_each_keyword_accepts_valid_input_and_names_the_problem_with_invalid_input
     EXAMPLES.each do |schema, valid, invalid, problems|
       checked = Schema.new(JSON.generate(schema))

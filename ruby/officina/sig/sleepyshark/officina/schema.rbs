@@ -13,6 +13,10 @@ module Sleepyshark
 
       def validate: (untyped value) -> Array[String]
 
+      def schema: () -> Schema
+
+      def from_json: (untyped value) -> untyped
+
       private
 
       def parse: (String json) -> untyped

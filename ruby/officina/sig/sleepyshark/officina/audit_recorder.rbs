@@ -1,0 +1,27 @@
+module Sleepyshark
+  module Officina
+    class AuditRecorder
+      MAX_TEXT: Integer
+
+      @agent: Agent
+      @conversation: String
+      @run: String
+      @sequence: Integer
+      @lock: Thread::Mutex
+
+      def initialize: (agent: Agent, conversation: Conversation) -> void
+
+      def record: (Symbol kind, ?call: ToolCall?, ?detail: String?, **untyped fields) -> bool
+
+      def record_end: (result? result, Usage usage) -> bool
+
+      private
+
+      def written?: (_AuditSink sink, AuditEntry entry) -> bool
+
+      def clean: (String? text) -> String?
+
+      def ended: (result? result) -> Hash[Symbol, String?]
+    end
+  end
+end

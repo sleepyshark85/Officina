@@ -1,18 +1,39 @@
 module Sleepyshark
   module Officina
-    class Tool < Data
+    class Tool
+      KINDS: Array[Symbol]
+
+      # A tool's input type: a Schema, or a class from Input.define.
+      interface _Input
+        def schema: () -> Schema
+
+        def from_json: (untyped value) -> untyped
+      end
+
+      @input: _Input
+      @needs_approval: bool
+      @handler: ^(untyped input, Cancellation cancel) -> untyped
+
       attr_reader name: String
       attr_reader description: String
-      attr_reader input_schema: String
+      attr_reader kind: Symbol
 
-      def self.new: (name: String, description: String, input_schema: String) -> instance
+      def initialize: (name: String, description: String, input: _Input, kind: Symbol,
+                       ?needs_approval: bool) { (untyped input, Cancellation cancel) -> untyped } -> void
 
+      def input_schema: () -> String
 
-      def initialize: (name: String, description: String, input_schema: String) -> void
+      def needs_approval?: () -> bool
+
+      def write?: () -> bool
+
+      def input_problem: (String input) -> String?
+
+      def invoke: (String input, Cancellation cancel) -> String
 
       private
 
-      def object?: (String json) -> bool
+      def check: (String name, Symbol kind, (^(untyped, Cancellation) -> untyped)? handler) -> void
     end
   end
 end

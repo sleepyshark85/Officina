@@ -13,8 +13,8 @@ class RequestTest < ClaudeTestCase
     claude = model(api, effort: :high, max_output_tokens: 8000, prefix_cache: '1h', conversation_cache: '5m')
     # The tools are given out of order: the request has them sorted.
     agent = Agent.new(model: claude, instructions: 'You are the assistant of a bookshop.', tools: [
-                        Tool.new(name: 'search', description: 'Searches the catalogue.', input_schema: SEARCH),
-                        Tool.new(name: 'add_to_cart', description: 'Adds a book to the cart.', input_schema: ADD)
+                        tool('search', 'Searches the catalogue.', SEARCH),
+                        tool('add_to_cart', 'Adds a book to the cart.', ADD)
                       ])
     conversation = Conversation.new
 
@@ -103,5 +103,11 @@ class RequestTest < ClaudeTestCase
 
     assert_equal expected, JSON.parse(api.bodies[0])['messages'][2]
     assert_includes api.bodies[0], esc('3 copies %u003Cnew%u003E')
+  end
+
+  private
+
+  def tool(name, description, schema)
+    Tool.new(name:, description:, input: Schema.new(schema), kind: :read) { 'Found.' }
   end
 end

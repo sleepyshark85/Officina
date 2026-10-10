@@ -1,0 +1,30 @@
+module Sleepyshark
+  module Officina
+    class AuditEntry < Data
+      KINDS: Array[Symbol]
+
+      attr_reader time: Time
+      attr_reader sequence: Integer
+      attr_reader run: String
+      attr_reader conversation: String
+      attr_reader agent: String?
+      attr_reader kind: Symbol
+      attr_reader tool: String?
+      attr_reader call_id: String?
+      attr_reader input: String?
+      attr_reader outcome: String?
+      attr_reader detail: String?
+      attr_reader duration: Float?
+      attr_reader usage: Usage?
+
+      def self.new: (time: Time, sequence: Integer, run: String, conversation: String, agent: String?, kind: Symbol,
+                     ?tool: String?, ?call_id: String?, ?input: String?, ?outcome: String?, ?detail: String?,
+                     ?duration: Float?, ?usage: Usage?) -> instance
+
+
+      def initialize: (time: Time, sequence: Integer, run: String, conversation: String, agent: String?, kind: Symbol,
+                       ?tool: String?, ?call_id: String?, ?input: String?, ?outcome: String?, ?detail: String?,
+                       ?duration: Float?, ?usage: Usage?) -> void
+    end
+  end
+end

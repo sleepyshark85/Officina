@@ -1,0 +1,11 @@
+module Sleepyshark
+  module Officina
+    module ReplyOutcome
+      STOP_REASONS: Hash[Symbol, Symbol]
+
+      def self.of: (Reply reply, Usage usage) -> result?
+
+      def self.unexpected: (Reply reply) -> String?
+    end
+  end
+end
