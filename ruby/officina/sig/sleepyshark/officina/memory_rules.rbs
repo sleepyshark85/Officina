@@ -1,0 +1,25 @@
+module Sleepyshark
+  module Officina
+    module MemoryRules
+      MAX_PATH_BYTES: Integer
+      MAX_PART_BYTES: Integer
+      MAX_SCOPE_BYTES: Integer
+      FORBIDDEN: Regexp
+      DEVICES: Set[String]
+
+      def self.valid_path?: (untyped path) -> bool
+
+      def self.valid_scope?: (untyped scope) -> bool
+
+      def self.check: (String scope, *String paths) -> void
+
+      def self.check_text: (String text) -> void
+
+      private
+
+      def self.utf8?: (untyped text) -> bool
+
+      def self.part?: (String part) -> bool
+    end
+  end
+end

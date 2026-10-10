@@ -1,0 +1,25 @@
+module Sleepyshark
+  module Officina
+    # Where an agent's memory files are kept: every operation is within one scope, which never sees another's files.
+    # A store refuses, with an Error, any scope or path MemoryRules refuses, so no path leaves its scope. Directories
+    # are implied by the files' paths. Many runs may share one store, so it guards its own state.
+    interface _MemoryStore
+      # Every file of the scope, in no particular order; none for a scope never written to.
+      def list: (String scope) -> Array[MemoryFile]
+
+      # The file's text, or nil when there is no such file.
+      def read: (String scope, String path) -> String?
+
+      # Creates the file, or replaces its text, which must be valid UTF-8. A path that is a directory, or runs through
+      # a file, is refused.
+      def write: (String scope, String path, String text) -> void
+
+      # Deletes the file; does nothing when there is none.
+      def delete: (String scope, String path) -> void
+
+      # Moves the file; refused when there is no file at the path, or the new path is taken, is a directory or runs
+      # through a file.
+      def rename: (String scope, String path, String new_path) -> void
+    end
+  end
+end

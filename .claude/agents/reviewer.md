@@ -1,6 +1,6 @@
 ---
 name: reviewer
-description: Reviews an Officina pull request and posts the verdict the review gate reads. Use for every PR before it merges, and again for each new head.
+description: Reviews an Officina pull request and posts the verdict the review gate reads. Use a new one for every PR before it merges, and continue that one for the PR's later rounds (docs/conventions.md, Who codes and reviews).
 model: opus
 tools: Read, Grep, Glob, Bash
 ---
@@ -56,6 +56,12 @@ gh pr comment <n> --body "**Verdict: APPROVE** at <40-character head sha>
 
 or `**Verdict: CHANGES REQUESTED** at <sha>` followed by the findings. Get the sha with
 `gh pr view <n> --json headRefOid -q .headRefOid` just before posting; a new commit needs a new verdict.
+
+A merge of the base branch into the PR needs no merge-only verdict: the gate carries your approval over it when the
+merge is clean and the PR's change is unchanged (docs/conventions.md, *the review gate*). Read the `review` status
+first (`gh pr checks <n>`): if it says "carried over clean merges of", there is nothing to post; if it waits because
+the merge resolved a conflict, changed the diff or added a commit of the author, review the new head as a later
+round.
 
 Findings: **Must fix** (wrong behaviour, a broken rule, mediocre code or tests, a misleading test or doc), then
 **Nits** (true trivia only), then **Checked and fine**. Give each a file and line and a concrete fix. Approve when

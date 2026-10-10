@@ -34,7 +34,10 @@ written, and this page wins for what the code must do.
 - **Who codes and reviews:** the agents in `.claude/agents/`: `developer` (Opus) for big or risky slices, `fixer`
   (Sonnet) only for small, well-bounded fixes, and `reviewer` (Opus), which approves each PR with a verdict comment the
   review gate reads, checking these conventions, the implementation's language rules, the design rules below and
-  over-complication; at most 3 review rounds, then stop and summarize for the owner.
+  over-complication; at most 3 review rounds, then stop and summarize for the owner. **Each PR gets a new reviewer**,
+  kept for that PR's rounds only, as one carrying many PRs' history approves too easily. A later PR gets another new
+  one, and so does a strict re-review: one the lead asks for when it doubts an approval, which counts as one of the
+  PR's three rounds. The lead writes each agent's brief with the `dispatch` skill (`.claude/skills/dispatch/`).
 - Review comments may arrive as a pending review: read them with GraphQL
   `pullRequest(number: N) { reviewThreads { … } }`, as the REST endpoints don't return them.
 
@@ -49,8 +52,19 @@ R15).
 | .NET | `.github/workflows/ci.yml`, `mutation.yml` | `ubuntu-latest`, `windows-latest`, `quality`, `mutation` |
 | Go | `.github/workflows/go.yml` | `go-changes`, `go-ubuntu`, `go-windows`, `go-quality`, `go-mutation` |
 | Ruby | `.github/workflows/ruby.yml` | `ruby-changes`, `ruby-ubuntu`, `ruby-windows`, `ruby-quality`, `ruby-mutation` |
-| All | `.github/workflows/review.yml` | `review`: the newest verdict naming the PR's newest commit in full, by the owner or a collaborator, is an approval |
+| All | `.github/workflows/review.yml` | `review`: an approval by the owner or a collaborator, as *the review gate* below says |
 
+- **The review gate** (`.github/review_gate.py`, tested in the `quality` job) counts as verdicts only comments starting
+  `**Verdict:` by the owner, a member or a collaborator; a verdict names each commit whose full sha it contains. It
+  passes when the newest verdict naming the PR's newest commit is `**Verdict: APPROVE** at <that sha>`, and fails
+  when that verdict is anything else. With no verdict naming the newest commit, it passes on an approval of an
+  earlier commit A only when all of these hold, and otherwise waits: the PR's base is the default branch (`main`);
+  that approval is the newest verdict naming any of the PR's commits; every commit after A is a merge whose second
+  parent is on `main` (no other commit of the author's); the newest commit has a single merge base with `main` and is
+  exactly git's clean merge of A's change onto it; and the PR's diff against `main` has the same patch id
+  (whitespace kept) as A's. A change of base re-runs it. Its status says which case passed ("Approved at"
+  or "carried over clean merges of"), or why it waits. It runs from `main` and reads the PR's commits as git data
+  only, never running them.
 - **Each implementation's CI runs only when the pull request changes it**: `.github/changes.py` says what belongs to
   which (Go's and Ruby's folders, spikes and workflows; the shared `testdata/` to all; the rest to .NET). The other
   implementations' jobs are skipped, which their required checks count as passing; never add a path filter, as a
