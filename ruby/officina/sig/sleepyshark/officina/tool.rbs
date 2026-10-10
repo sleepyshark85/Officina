@@ -17,9 +17,10 @@ module Sleepyshark
       attr_reader name: String
       attr_reader description: String
       attr_reader kind: Symbol
+      attr_reader source: _ToolSource?
 
       def initialize: (name: String, description: String, input: _Input, kind: Symbol,
-                       ?needs_approval: bool) { (untyped input, Cancellation cancel, String? memory_scope) -> untyped } -> void
+                       ?needs_approval: bool, ?source: _ToolSource?) { (untyped input, Cancellation cancel, String? memory_scope) -> untyped } -> void
 
       def input_schema: () -> String
 

@@ -1,0 +1,12 @@
+module Sleepyshark
+  module Officina
+    class ToolSourceChange < Data
+      attr_reader state: Symbol
+      attr_reader detail: String?
+
+      def self.new: (state: Symbol, ?detail: String?) -> instance
+
+      def initialize: (state: Symbol, ?detail: String?) -> void
+    end
+  end
+end
