@@ -13,9 +13,9 @@ module Sleepyshark
       ESCAPED = [nil, /[<>&]/, /[^\x00-\x7F]/, /[^\x20-\x7E]|["&'+<>`]/].freeze
       private_constant :REDACTED, :ESCAPED
 
-      # @param secrets [Array<String>] the empty one is ignored
+      # @param secrets [Array<String>] an empty one redacts nothing
       def initialize(secrets)
-        @forms = secrets.reject(&:empty?).flat_map { |secret| forms(secret) }
+        @forms = secrets.flat_map { |secret| forms(secret) }
       end
 
       # The text with every stretch that holds a form of a secret replaced by "[redacted]". Stretches that overlap or
@@ -23,8 +23,9 @@ module Sleepyshark
       # @param text [String]
       # @return [String]
       def redact(text)
-        text.each_char.zip(covered(text)).chunk_while { |one, other| one.last == other.last }.sum('') do |stretch|
-          stretch.first.last ? REDACTED : stretch.map(&:first).join
+        covered = covered(text)
+        text.each_char.with_index.chunk { |_, at| covered.fetch(at) }.sum('') do |hidden, stretch|
+          hidden ? REDACTED : stretch.map(&:first).join
         end
       end
 

@@ -39,12 +39,12 @@ bundle exec rake test                # the tests alone: one process, one test at
 
 A property test that fails prints its seed; `PROPERTY_SEED=<seed> bundle exec rake test` runs it again with the same
 inputs (CI always uses one fixed seed). `SEED=<n>` repeats Minitest's test order. `COVERAGE=1` writes a SimpleCov
-report to `coverage/`. Mutation testing of the core runs from its directory:
+report to `coverage/`. Mutation testing of the core runs from its directory, with CI's property seed:
 
 ```sh
 cd officina
-bundle exec mutant run                # every method, as on a push to main and weekly
-bundle exec mutant run --since main   # only the methods changed since main, as on a pull request
+PROPERTY_SEED=20261010 bundle exec mutant run               # every method, as on a push to main and weekly
+PROPERTY_SEED=20261010 bundle exec mutant run --since main  # the methods changed since main, as on a pull request
 ```
 
 The hooks in `../.claude/` run RuboCop and Steep before a commit that stages anything under `ruby/` but docs, and

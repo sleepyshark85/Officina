@@ -75,8 +75,8 @@ module Sleepyshark
       # @return [Completed, Stopped, Failed] how the run ended, after the last event
       # @raise [Error] when the message or the context is blank, or another run is using the conversation
       def run(conversation, input, context: nil, cancel: nil, &on_event)
-        raise Error, 'A run needs a message' if input.strip.empty?
-        raise Error, 'A run context cannot be blank' if context&.strip&.empty?
+        raise Error, 'A run needs a message' unless input.match?(/\S/)
+        raise Error, 'A run context cannot be blank' unless context.nil? || context.match?(/\S/)
 
         conversation.hold do |append|
           RunEngine.new(agent: self, conversation:, append:, cancel: cancel || Cancellation.new, on_event:)

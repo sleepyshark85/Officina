@@ -27,8 +27,9 @@ module Sleepyshark
       end
 
       # Yields each event as the pipeline sends it, until it has answered every call.
+      # mutant:disable -- its one surviving mutation swaps Queue#pop and Queue#shift, which are the same method
       def each_event
-        while (event = @events.shift)
+        while (event = @events.pop)
           yield event
         end
       end
