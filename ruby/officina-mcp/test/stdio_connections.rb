@@ -49,14 +49,11 @@ module StdioConnections
     refute running?(pid), "process #{pid} is still running"
   end
 
+  # On Linux a killed process is a zombie until reaped, which kill(0) still finds; elsewhere kill(0) is enough.
   def running?(pid)
     Process.kill(0, pid)
-    begin
-      File.read("/proc/#{pid}/stat")[/\) (\S)/, 1] != 'Z'
-    rescue Errno::ENOENT
-      false # the process exited between the kill check and the read
-    end
-  rescue Errno::ESRCH
+    !File.directory?('/proc') || File.read("/proc/#{pid}/stat")[/\) (\S)/, 1] != 'Z'
+  rescue Errno::ESRCH, Errno::ENOENT # reaped between the two checks
     false
   end
 
