@@ -8,6 +8,19 @@ require_relative 'console_session'
 class ConsoleTest < Minitest::Test
   include ConsoleSession
 
+  HELP = <<~TEXT
+    Commands:
+      /help          Show this help.
+      /new           Start a new session.
+      /sessions      List the latest sessions.
+      /resume <id>   Go on with the session with that id.
+      /cost          Show this session's tokens and cost.
+      /audit [<id>]  Show the audit trail of this session, or of the session with that id.
+      /memory        Show what the assistant remembers for you.
+      /quit          Leave the assistant.
+    Anything else is a message to the assistant. Ctrl+C stops a reply in progress.
+  TEXT
+
   def test_app01_the_reply_streams_with_text_between_tool_calls_and_each_tool_with_its_input_and_outcome
     search = call('c1', 'search_books', '{"title":"Winter Archive"}')
     model = ScriptedModel.new(say_then_call('Let me look that up.', search),
@@ -49,13 +62,7 @@ class ConsoleTest < Minitest::Test
     assert_in_order transcript, "Bookshop Assistant. Type /help for commands.\n",
                     "Who is using the assistant? Your name: \n", "Who is using the assistant? Your name:   \n",
                     "Who is using the assistant? Your name: Sam\n",
-                    "you> /help\nCommands:\n  /help          Show this help.\n  " \
-                    "/new           Start a new session.\n  /sessions      List the latest sessions.\n  " \
-                    "/resume <id>   Go on with the session with that id.\n  " \
-                    "/cost          Show this session's tokens and cost.\n  " \
-                    "/audit [<id>]  Show the audit trail of this session, or of the session with that id.\n  " \
-                    "/quit          Leave the assistant.\n" \
-                    "Anything else is a message to the assistant. Ctrl+C stops a reply in progress.\n",
+                    "you> /help\n#{HELP}",
                     "you> \nyou> /memo\nUnknown command /memo. Type /help for commands.\n", "you> /quit\n"
     refute_includes transcript, 'Not read.'
     assert_empty model.requests

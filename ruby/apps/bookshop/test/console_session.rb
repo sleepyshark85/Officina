@@ -107,11 +107,11 @@ module ConsoleSession
 
   # Runs a console session on the test's database, the staff member following the script, and returns its transcript.
   # Its telemetry is kept in memory, cleared when the session ends. +env+ adds to the settings. Sessions are not
-  # summarized unless a model for the summarizer is given.
+  # summarized unless a model for the summarizer is given, and remember in a memory of their own unless given one.
   def session(model, *script, interrupt_on: nil, clock: -> { Time.now }, telemetry: MemoryTelemetry.new, env: {},
-              summarizer: nil, demo: false)
+              summarizer: nil, memory: Officina::HashMemoryStore.new, demo: false)
     staff = Staff.new(script, interrupt_on:)
-    application = Bookshop.build(input: staff.input, output: staff, model:, summarizer:,
+    application = Bookshop.build(input: staff.input, output: staff, model:, summarizer:, memory:,
                                  env: { 'BOOKSHOP_DATABASE' => database_url, **env }, clock:,
                                  telemetry: telemetry.telemetry, demo:)
     begin

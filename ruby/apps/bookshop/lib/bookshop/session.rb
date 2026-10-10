@@ -43,8 +43,9 @@ module Bookshop
     # Whether the conversation grew since this console took it up, so leaving the session needs a new summary.
     def changed? = @changed
 
-    # Runs the chat agent on the message, yielding each event of the run but a clearing that repeats the session's
-    # last, and a SessionNotSaved the first time in the reply that a save fails.
+    # Runs the chat agent on the message, in the memory of the staff member at the counter, yielding each event of the
+    # run but a clearing that repeats the session's last, and a SessionNotSaved the first time in the reply that a
+    # save fails.
     #
     # @param cancel [Sleepyshark::Officina::Cancellation]
     # @param budget [Sleepyshark::Officina::Budget]
@@ -53,8 +54,8 @@ module Bookshop
       context = ChatAgent.context(@clock.call, @staff_member)
       @spent = Officina::Usage.new
       @told = false
-      result = @agent.run(@conversation, message, context: (context unless context == @context), cancel:,
-                                                  budget:) do |event|
+      result = @agent.run(@conversation, message, context: (context unless context == @context), cancel:, budget:,
+                                                  memory_scope: StaffMemory.scope(@staff_member)) do |event|
         repeated = repeated_clearing?(event)
         follow(event, context, &)
         yield event unless repeated

@@ -19,6 +19,7 @@ class BookshopTest < Minitest::Test
       /resume <id>   Go on with the session with that id.
       /cost          Show this session's tokens and cost.
       /audit [<id>]  Show the audit trail of this session, or of the session with that id.
+      /memory        Show what the assistant remembers for you.
       /quit          Leave the assistant.
     Anything else is a message to the assistant. Ctrl+C stops a reply in progress.
     you> /quit
