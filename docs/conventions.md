@@ -37,14 +37,16 @@ written, and this page wins for what the code must do.
 
 ## Required checks
 
-Every PR needs all of these green before it merges, whatever it changes. Why the Go and Ruby workflows run on every PR
-is in their decisions (G15, R15).
+Every PR needs all of these green before it merges, whatever it changes; branch protection on `main` requires all
+fifteen, and the branch to be up to date. Why the Go and Ruby workflows run on every PR is in their decisions (G15,
+R15).
 
 | Implementation | Workflow | Checks |
 |---|---|---|
 | .NET | `.github/workflows/ci.yml`, `mutation.yml` | `ubuntu-latest`, `windows-latest`, `quality`, `mutation` |
 | Go | `.github/workflows/go.yml` | `go-changes`, `go-ubuntu`, `go-windows`, `go-quality`, `go-mutation` |
 | Ruby | `.github/workflows/ruby.yml` | `ruby-changes`, `ruby-ubuntu`, `ruby-windows`, `ruby-quality`, `ruby-mutation` |
+| All | `.github/workflows/review.yml` | `review`: the newest approving verdict names the PR's newest commit in full |
 
 - **Each implementation's CI runs only when the pull request changes it**: `.github/changes.py` says what belongs to
   which (Go's and Ruby's folders, spikes and workflows; the shared `testdata/` to all; the rest to .NET). The other
