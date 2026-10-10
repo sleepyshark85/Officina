@@ -75,6 +75,13 @@ class SchemaTest < Minitest::Test
     assert_equal ['/: could not be matched against ^(a|a)*\\1$ in time'], schema.validate("#{'a' * 40}!")
   end
 
+  def test_tool02_a_nested_pattern_has_the_same_timeout
+    schema = Schema.new(JSON.generate({ properties: { a: { items: { pattern: '^(a|a)*\\1$' } } } }))
+
+    assert_equal ['/a/0: could not be matched against ^(a|a)*\\1$ in time'],
+                 schema.validate({ 'a' => ["#{'a' * 40}!"] })
+  end
+
   def test_tool01_the_schema_keeps_its_text_as_given_for_the_request
     text = '{ "type" : "object", "description": "caf\\u00e9" }'
 

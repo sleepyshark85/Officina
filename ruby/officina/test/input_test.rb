@@ -30,6 +30,16 @@ class InputTest < Minitest::Test
                  arrays.schema.to_s
   end
 
+  def test_tool01_an_integer_member_given_as_an_integral_float_becomes_an_integer
+    value = Input.define do
+      integer :count
+      array :sizes, of: :integer
+    end.from_json({ 'count' => 2.0, 'sizes' => [1.0, 3] })
+
+    assert_equal [2, [1, 3]], [value.count, value.sizes]
+    assert_equal [Integer] * 3, [value.count, *value.sizes].map(&:class)
+  end
+
   def test_tool01_an_array_becomes_a_frozen_array_and_an_absent_one_nil
     tagged = arrays.from_json({ 'tags' => [1, 2] })
     parted = arrays.from_json({ 'parts' => [{ 'n' => 3 }] })
