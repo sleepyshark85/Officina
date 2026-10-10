@@ -5,7 +5,8 @@
 A tool call inside a subagent reports the main session's transcript and the subagent's id; the subagent's own
 transcript sits beside it, in <session>/subagents/agent-<id>.jsonl. Each agent's sizes go to
 <session>/context-sizes/<agent>.jsonl, next to the transcripts, so no checkout or worktree is written to. The
-transcript is written a little after the tool call, so a size can lag the current step by one."""
+transcript is written a little after the tool call, so a size can lag the current step by one, and parallel tool
+calls of one agent can log, and warn about, the same size twice."""
 import json
 import os
 import sys
@@ -18,7 +19,6 @@ THRESHOLDS = (150_000, 300_000)
 CHUNK = 64 * 1024
 TAIL_LIMIT = 8 * 1024 * 1024
 SIZES = "context-sizes"
-ERRORS = "errors.log"
 MAIN = "main"
 
 
@@ -43,7 +43,9 @@ def entries(path):
 
 def context_size(transcript):
     """The tokens sent with the agent's latest model request (input, cache reads and cache writes), or None if the
-    transcript holds none yet."""
+    transcript holds none yet. A subagent's transcript may not exist until its first call is written."""
+    if not os.path.exists(transcript):
+        return None
     for entry in entries(transcript):
         message = entry.get("message")
         if entry.get("type") != "assistant" or not isinstance(message, dict):
@@ -104,20 +106,19 @@ def report(sizes):
     """One line per agent, largest context first, from the session's size logs."""
     rows = []
     for name in os.listdir(sizes):
-        if name.endswith(".jsonl"):
-            latest = next(entries(os.path.join(sizes, name)))
+        if latest := next(entries(os.path.join(sizes, name)), None):
             rows.append((latest["tokens"], name[:-len(".jsonl")], latest["agent_type"], latest["time"]))
     lines = [f"{'agent':<18} {'type':<16} {'tokens':>9}  updated"]
-    lines += [f"{agent:<18} {kind:<16} {tokens:>9,}  {time}" for tokens, agent, kind, time in sorted(rows, reverse=True)]
-    errors = os.path.join(sizes, ERRORS)
-    if os.path.exists(errors):
-        lines.append(f"hook errors: see {errors}")
+    lines += [f"{agent:<18} {kind:<16} {tokens:>9,}  {time}"
+              for tokens, agent, kind, time in sorted(rows, reverse=True)]
     return "\n".join(lines)
 
 
 def sizes_of(session_id):
-    """The size-log folder of the session with that id, under any project of the Claude config folder."""
+    """The size-log folder of the session with that id, under any project of the Claude config folder, or None."""
     projects = os.path.join(os.environ.get("CLAUDE_CONFIG_DIR") or os.path.expanduser("~/.claude"), "projects")
+    if not os.path.isdir(projects):
+        return None
     for project in os.listdir(projects):
         sizes = os.path.join(projects, project, session_id, SIZES)
         if os.path.isdir(sizes):
@@ -131,23 +132,11 @@ def main():
         sizes = sizes_of(session_id) if session_id else None
         print(report(sizes) if sizes else f"No context sizes logged for session {session_id or '(none given)'}.")
         return
-    # The hook must never fail the tool call it follows: a problem goes to the session's error log, or to stderr
-    # when there is no session to log it in.
-    try:
-        payload = json.load(sys.stdin)
-        session = os.path.splitext(payload["transcript_path"])[0]
-    except Exception as error:
-        print(f"context-size hook: {error!r}", file=sys.stderr)
-        return
-    try:
-        output = on_tool_use(payload, session)
-        if output:
-            print(json.dumps(output))
-    except Exception as error:
-        try:
-            append(os.path.join(session, SIZES, ERRORS), {"time": now(), "error": repr(error)})
-        except OSError:
-            print(f"context-size hook: {error!r}", file=sys.stderr)
+    # No error handling: the tool has already run, and an error exits 1, which Claude Code shows without blocking.
+    payload = json.load(sys.stdin)
+    output = on_tool_use(payload, os.path.splitext(payload["transcript_path"])[0])
+    if output:
+        print(json.dumps(output))
 
 
 if __name__ == "__main__":

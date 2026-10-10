@@ -44,7 +44,8 @@ class ContextSizeTest(unittest.TestCase):
         return self.write(os.path.join(self.session, "subagents", f"agent-{agent}.jsonl"), entries)
 
     def test_size_is_the_latest_requests_input_cache_reads_and_cache_writes(self):
-        path = self.main_transcript(assistant(5, 1_000, 200), tool_result(), assistant(2, 120_000, 3_000), tool_result())
+        path = self.main_transcript(assistant(5, 1_000, 200), tool_result(), assistant(2, 120_000, 3_000),
+                                    tool_result())
         self.assertEqual(hook.context_size(path), 123_002)
 
     def test_size_skips_requests_without_usage_and_a_line_still_being_written(self):
@@ -83,8 +84,9 @@ class ContextSizeTest(unittest.TestCase):
         self.assertEqual(output["hookSpecificOutput"]["hookEventName"], "PostToolUse")
         self.assertIn("past 150,000", output["hookSpecificOutput"]["additionalContext"])
         self.assertIsNone(hook.on_tool_use(payload, self.session))
-        logged = [entry["tokens"] for entry in hook.entries(os.path.join(self.session, "context-sizes", "a1.jsonl"))]
-        self.assertEqual(logged, [160_001, 160_001, 100_001])
+        logged = list(hook.entries(os.path.join(self.session, "context-sizes", "a1.jsonl")))
+        self.assertEqual([entry["tokens"] for entry in logged], [160_001, 160_001, 100_001])
+        self.assertEqual({entry["agent_type"] for entry in logged}, {"developer"})
 
     def test_the_main_agent_is_logged_from_the_session_transcript(self):
         payload = {"transcript_path": self.main_transcript(assistant(1, 2_000))}
@@ -101,20 +103,48 @@ class ContextSizeTest(unittest.TestCase):
         self.assertEqual([line.split()[:3] for line in lines[1:]], [["a1", "developer", "200,000"],
                                                                     ["main", "main", "40,000"]])
 
-    def test_a_failing_hook_still_exits_zero_and_logs_the_problem(self):
-        payload = {"transcript_path": self.session + ".jsonl", "agent_id": "missing"}
+    def test_report_skips_a_log_whose_only_line_is_still_being_written(self):
+        sizes = os.path.join(self.session, "context-sizes")
+        self.write(os.path.join(sizes, "main.jsonl"), [{"time": "t1", "agent_type": "main", "tokens": 40_000}])
+        self.write(os.path.join(sizes, "a1.jsonl"), [], tail='{"time": "t')
+        self.assertEqual(len(hook.report(sizes).splitlines()), 2)
+
+    def test_the_hook_prints_the_warning_only_when_a_threshold_is_passed(self):
+        payload = json.dumps({"transcript_path": self.main_transcript(assistant(1, 10_000))})
+        quiet = self.run_hook(payload)
+        self.assertEqual((quiet.returncode, quiet.stdout), (0, ""))
+        self.main_transcript(assistant(1, 200_000))
+        warned = self.run_hook(payload)
+        self.assertEqual(warned.returncode, 0)
+        self.assertIn("past 150,000", json.loads(warned.stdout)["hookSpecificOutput"]["additionalContext"])
+
+    def test_a_subagent_without_a_transcript_yet_is_not_logged(self):
+        payload = {"transcript_path": self.main_transcript(assistant(1, 1_000)), "agent_id": "new"}
         result = self.run_hook(json.dumps(payload))
         self.assertEqual((result.returncode, result.stdout), (0, ""))
-        errors = list(hook.entries(os.path.join(self.session, "context-sizes", "errors.log")))
-        self.assertIn("FileNotFoundError", errors[0]["error"])
+        self.assertFalse(os.path.exists(os.path.join(self.session, "context-sizes", "new.jsonl")))
 
-    def test_unreadable_input_still_exits_zero(self):
+    def test_a_hook_error_exits_one_so_claude_code_shows_it_without_blocking(self):
         result = self.run_hook("not json")
-        self.assertEqual((result.returncode, result.stdout), (0, ""))
-        self.assertIn("context-size hook", result.stderr)
+        self.assertEqual((result.returncode, result.stdout), (1, ""))
+        self.assertIn("JSONDecodeError", result.stderr)
+
+    def test_the_report_command_finds_the_session_under_the_claude_config_folder(self):
+        config = os.path.join(self.folder.name, "config")
+        sizes = os.path.join(config, "projects", "some-project", "s1", "context-sizes")
+        self.write(os.path.join(sizes, "main.jsonl"), [{"time": "t1", "agent_type": "main", "tokens": 40_000}])
+        self.assertIn("main               main                40,000  t1", self.run_report(config, "s1"))
+        self.assertEqual(self.run_report(config, "s2"), "No context sizes logged for session s2.\n")
+        self.assertEqual(self.run_report(os.path.join(self.folder.name, "none"), "s1"),
+                         "No context sizes logged for session s1.\n")
 
     def run_hook(self, stdin):
         return subprocess.run([sys.executable, SCRIPT], input=stdin, capture_output=True, text=True, check=False)
+
+    def run_report(self, config, session_id):
+        environment = dict(os.environ, CLAUDE_CONFIG_DIR=config)
+        return subprocess.run([sys.executable, SCRIPT, "--report", session_id], env=environment,
+                              capture_output=True, text=True, check=True).stdout
 
     def patch(self, name, value):
         original = getattr(hook, name)
