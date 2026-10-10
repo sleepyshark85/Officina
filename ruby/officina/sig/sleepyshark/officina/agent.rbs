@@ -33,6 +33,8 @@ module Sleepyshark
 
       private
 
+      def given: (String instructions) -> String
+
       def sorted: (Array[Tool] tools) -> Array[Tool]
 
       def prefix_fingerprint: (String settings) -> String

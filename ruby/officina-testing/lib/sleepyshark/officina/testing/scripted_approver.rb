@@ -23,7 +23,7 @@ module Sleepyshark
 
         # Records the call and gives the next answer.
         # @raise [Error] when no answer is left, which denies the call
-        def approve(_tool, call, cancel:) # rubocop:disable Lint/UnusedMethodArgument -- the approver contract's
+        def approve(_tool, call, **)
           @lock.synchronize do
             @asked << call
             raise Error, "Scripted approver: no answer left for call #{@asked.size}" if @answers.empty?

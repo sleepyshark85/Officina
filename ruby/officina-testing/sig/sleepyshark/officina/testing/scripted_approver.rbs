@@ -10,7 +10,7 @@ module Sleepyshark
 
         def asked: () -> Array[ToolCall]
 
-        def approve: (Tool tool, ToolCall call, cancel: Cancellation) -> Approval
+        def approve: (Tool tool, ToolCall call, **untyped) -> Approval
       end
     end
   end

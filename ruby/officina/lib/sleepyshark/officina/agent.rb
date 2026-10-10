@@ -43,13 +43,11 @@ module Sleepyshark
       #   and as a JSON string may escape them
       # @param clock [#call, nil] the real time unless given
       # @raise [Error] when the instructions are blank or two tools share a name
-      def initialize(model:, instructions:, tools: [], approver: nil, audit_sink: nil, name: nil, secrets: [], # rubocop:disable Metrics/ParameterLists, Metrics/MethodLength -- a keyword per optional part, an assignment per member
+      def initialize(model:, instructions:, tools: [], approver: nil, audit_sink: nil, name: nil, secrets: [],
                      clock: nil)
-        raise Error, 'An agent needs instructions' if instructions.strip.empty?
-
         @tools = sorted(tools)
         @model = model
-        @instructions = -instructions
+        @instructions = given(instructions)
         @fingerprint = prefix_fingerprint(model.settings)
         @approver = approver
         @audit_sink = audit_sink
@@ -92,6 +90,12 @@ module Sleepyshark
       end
 
       private
+
+      def given(instructions)
+        raise Error, 'An agent needs instructions' if instructions.strip.empty?
+
+        -instructions
+      end
 
       def sorted(tools)
         twin = tools.map(&:name).tally.find { |_, count| count > 1 }

@@ -24,7 +24,7 @@ module Sleepyshark
       # @param detail [String, nil] more: a call's result, a denial's reason, why a run stopped or failed
       # @param duration [Float, nil] seconds a tool ran, on +:tool_ended+ when it ran
       # @param usage [Usage, nil] the run's tokens, on +:run_ended+
-      def initialize(time:, sequence:, run:, conversation:, agent:, kind:, tool: nil, call_id: nil, input: nil, # rubocop:disable Metrics/ParameterLists -- one per member of the entry
+      def initialize(time:, sequence:, run:, conversation:, agent:, kind:, tool: nil, call_id: nil, input: nil,
                      outcome: nil, detail: nil, duration: nil, usage: nil)
         super
       end

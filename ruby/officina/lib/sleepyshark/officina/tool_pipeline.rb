@@ -21,6 +21,8 @@ module Sleepyshark
         @results = {}
         @reads = {}
         @events = Thread::Queue.new
+        @report = CallReport.new(audit:, events: @events)
+        @approvals = ApprovalDesk.new(approver: agent.approver, cancel:, report: @report)
         @thread = Thread.new { answer }
       end
 
@@ -45,7 +47,7 @@ module Sleepyshark
         join_reads
         @calls.each_with_index.map { |call, index| @results[index] || finish(call, NOT_STARTED, error: true) }
       ensure
-        @reads.each_value(&:join)
+        wait_for_reads
         @events.close
       end
 
@@ -53,13 +55,13 @@ module Sleepyshark
         tool = @agent.tool(call.name)
         join_reads if tool&.write?
         @events << ToolCallStarted.new(call: shown(call))
-        return run(tool, call, index) if tool
+        return run_if_allowed(tool, call, index) if tool
 
         @results[index] = finish(call, "There is no tool named #{call.name}.", error: true)
       end
 
-      def run(tool, call, index)
-        refusal = tool.input_problem(call.input) || (denial(tool, call) if tool.needs_approval?)
+      def run_if_allowed(tool, call, index)
+        refusal = tool.input_problem(call.input) || (@approvals.denial(tool, shown(call)) if tool.needs_approval?)
         return @results[index] = finish(call, refusal, error: true) if refusal
         # The host may have cancelled while the approver decided, or while this write waited for the reads.
         return if @cancel.cancelled?
@@ -70,6 +72,16 @@ module Sleepyshark
       def join_reads
         @results.merge!(@reads.transform_values(&:value))
         @reads.clear
+      end
+
+      # Waits for the reads still running when the pipeline ends early: an exception is already on its way, which a
+      # read's own failure, raised here again, must not replace.
+      def wait_for_reads
+        @reads.each_value do |read|
+          read.join
+        rescue StandardError
+          next
+        end
       end
 
       # Runs the write once its attempt is in the trail.
@@ -88,29 +100,6 @@ module Sleepyshark
         end
       end
 
-      # Why the approver denied the call, said for the model, or nil when it approved.
-      def denial(tool, call)
-        approver = @agent.approver
-        return 'The call needs approval, and this run is unattended, so it was denied.' unless approver
-
-        report(:approval_asked, ApprovalAsked.new(call: shown(call)))
-        approval = ask(approver, tool, call)
-        report(:approval_answered, ApprovalAnswered.new(call: shown(call), approved: approval.approved?),
-               outcome: approval.approved? ? 'approved' : 'denied', detail: approval.reason)
-        return if approval.approved?
-        return 'The call was cancelled while waiting for approval.' if @cancel.cancelled?
-
-        approval.reason ? "The call was denied: #{approval.reason}" : 'The call was denied.'
-      end
-
-      # The approver's answer. One that raises denies the call: the approver is the host's, and the host cannot
-      # rescue on this thread.
-      def ask(approver, tool, call)
-        approver.approve(tool, shown(call), cancel: @cancel)
-      rescue StandardError => e
-        Approval.new(approved: false, reason: "asking for approval failed: #{e.message}")
-      end
-
       def invoke(tool, call)
         started = @agent.clock.call
         content = tool.invoke(call.input, @cancel)
@@ -126,16 +115,9 @@ module Sleepyshark
       def finish(call, content, error:, started: nil)
         result = ToolResult.new(call_id: call.id, content: cut(@agent.redact(content)), error:)
         duration = started && (@agent.clock.call - started)
-        report(:tool_ended, ToolCallFinished.new(call: shown(call), result:),
-               outcome: error ? 'error' : 'ok', detail: result.content, duration:)
+        @report.call(:tool_ended, ToolCallFinished.new(call: shown(call), result:),
+                     outcome: error ? 'error' : 'ok', detail: result.content, duration:)
         result
-      end
-
-      # Records the event's step in the audit trail, then sends the event. A missing entry blocks nothing: only a
-      # write's attempt depends on the sink.
-      def report(kind, event, **fields)
-        @audit.record(kind, call: event.call, **fields)
-        @events << event
       end
 
       def cut(content)

@@ -14,6 +14,8 @@ module Sleepyshark
       @results: Hash[Integer, ToolResult]
       @reads: Hash[Integer, Thread]
       @events: Thread::Queue
+      @report: CallReport
+      @approvals: ApprovalDesk
       @thread: Thread
 
       def initialize: (agent: Agent, audit: AuditRecorder, cancel: Cancellation, calls: Array[ToolCall]) -> void
@@ -28,25 +30,21 @@ module Sleepyshark
 
       def start: (ToolCall call, Integer index) -> void
 
-      def run: (Tool tool, ToolCall call, Integer index) -> void
+      def run_if_allowed: (Tool tool, ToolCall call, Integer index) -> void
 
       def join_reads: () -> void
+
+      def wait_for_reads: () -> void
 
       def write: (Tool tool, ToolCall call) -> ToolResult
 
       def read: (Tool tool, ToolCall call) -> Thread
-
-      def denial: (Tool tool, ToolCall call) -> String?
-
-      def ask: (_Approver approver, Tool tool, ToolCall call) -> Approval
 
       def invoke: (Tool tool, ToolCall call) -> ToolResult
 
       def finish: (ToolCall call, String content, error: bool, ?started: Time?) -> ToolResult
 
       def cut: (String content) -> String
-
-      def report: (Symbol kind, tool_event event, **untyped fields) -> void
 
       def shown: (ToolCall call) -> ToolCall
     end
