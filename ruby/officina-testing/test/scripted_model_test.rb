@@ -24,6 +24,10 @@ class ScriptedModelTest < Minitest::Test
     assert_equal 'scripted fast', model.settings
   end
 
+  def test_hist01_a_compaction_block_holds_the_summary_in_the_canonical_form
+    assert_equal '{"type":"compaction","content":"\\u003CQ2\\u003E"}', Model.compaction_block('<Q2>').raw
+  end
+
   def test_test01_it_rejects_messages_the_provider_would_reject
     call = Model.tool_use_block('call_1', 'search', '{}')
     {

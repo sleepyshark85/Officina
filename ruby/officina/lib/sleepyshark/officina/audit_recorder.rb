@@ -48,11 +48,13 @@ module Sleepyshark
       # @param event [ConversationCompacted, ToolResultsCleared]
       def record_edit(event)
         case event
+        # format, as the mutation tester cannot rewrite these sentences interpolated
         in ConversationCompacted(tokens:, summary_tokens:)
-          record(:compacted, detail: "#{thousands(tokens)} tokens summarized into #{thousands(summary_tokens)}.")
+          record(:compacted, detail: format('%<tokens>s tokens summarized into %<summary>s.',
+                                            tokens: thousands(tokens), summary: thousands(summary_tokens)))
         in ToolResultsCleared(tokens:, tool_calls:)
-          calls = thousands(tool_calls)
-          record(:cleared, detail: "Results of #{calls} tool calls cleared: #{thousands(tokens)} tokens.")
+          record(:cleared, detail: format('Results of %<calls>s tool calls cleared: %<tokens>s tokens.',
+                                          calls: thousands(tool_calls), tokens: thousands(tokens)))
         end
       end
 
