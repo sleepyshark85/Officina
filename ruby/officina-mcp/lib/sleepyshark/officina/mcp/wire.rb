@@ -7,16 +7,17 @@ module Sleepyshark
     module Mcp
       # Reading what a server writes: JSON-RPC messages, and the event streams Streamable HTTP may answer with.
       module Wire
-        # The most a server may send for one message, in bytes: a line over stdio, its line end aside; the whole answer
-        # to a request over Streamable HTTP, with an event stream's framing and any messages before the response. More
+        # The most a server may send for one message: a line over stdio, its line end aside; the whole answer to a
+        # request over Streamable HTTP, with an event stream's framing and any messages before the response. More
         # loses the connection.
-        MAX_MESSAGE = 16 * 1024 * 1024
+        MAX_MESSAGE_MB = 16
+        MAX_MESSAGE = MAX_MESSAGE_MB * 1024 * 1024
 
         # The response that text holds, parsed and deeply frozen, or nil for anything else a server may write: a
-        # request or notification of its own, or what is not a response to a request of this client's, whose ids
-        # are positive integers.
+        # request or notification of its own, what is not a response to a request of this client's, whose ids are
+        # positive integers, or what is not JSON (JSON.parse refuses a key given twice).
         def self.response(text)
-          message = JSON.parse(text, allow_duplicate_key: false, freeze: true)
+          message = JSON.parse(text, freeze: true)
           message if message.is_a?(Hash) && response?(message)
         rescue JSON::ParserError, EncodingError
           nil
@@ -39,9 +40,10 @@ module Sleepyshark
         end
 
         def self.from_body(body, id)
+          # Bytes, as a chunk may end inside a character; JSON.parse reads them as UTF-8.
           text = String.new(encoding: Encoding::BINARY)
           each_chunk(body) { text << it }
-          message = response(text.force_encoding(Encoding::UTF_8))
+          message = response(text)
           return message if message && message['id'] == id
 
           raise Error, "the server's answer is not a response to the request"
@@ -51,7 +53,7 @@ module Sleepyshark
           size = 0
           body.read_body do |chunk|
             size += chunk.bytesize
-            raise Error, "it sent a message longer than #{MAX_MESSAGE / 1024 / 1024} MB" if size > MAX_MESSAGE
+            raise Error, "it sent a message longer than #{MAX_MESSAGE_MB} MB" if size > MAX_MESSAGE
 
             yield chunk
           end

@@ -23,7 +23,7 @@ module Sleepyshark
 
         def initialize: (Server server, clock: clock) -> void
 
-        def post: (String text, Integer? id, String _version) -> Pending
+        def post: (String text, Integer? id, String? _version) -> Pending
 
         def lost: () -> String?
 
@@ -33,7 +33,7 @@ module Sleepyshark
 
         private
 
-        def write: (String text, Integer? id) -> void
+        def write: (String text) -> void
 
         def dispatch: (String message) -> void
 

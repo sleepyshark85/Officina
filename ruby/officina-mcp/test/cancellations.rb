@@ -14,3 +14,8 @@ end
 CancelledOnceExists = Data.define(:path) do
   def cancelled? = File.exist?(path)
 end
+
+# A cancellation that is never cancelled, for a request that must run to its end although it could be cancelled.
+NeverCancelled = Data.define do
+  def cancelled? = false
+end

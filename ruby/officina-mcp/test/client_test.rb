@@ -34,52 +34,58 @@ class ClientTest < Minitest::Test
     refute_predicate errors.first, :error?
   end
 
-  def test_mcp04_a_tool_result_without_a_list_of_content_items_is_refused
-    unreadable = [{}, { 'content' => 'text' }, { 'content' => ['text'] }]
+  def test_mcp04_a_tool_result_without_a_list_of_typed_content_items_is_refused
+    unreadable = ['text', {}, { 'content' => 'text' }, { 'content' => ['text'] }, { 'content' => [{ 'text' => 'a' }] },
+                  { 'content' => [{ 'type' => 5 }] }, { 'content' => [{ 'type' => 'text' }] }]
     with_client(results(*unreadable)) do |client|
       messages = unreadable.map { assert_raises(Mcp::Error) { call(client) }.message }
 
-      assert_equal [format(UNREADABLE, 'tools/call')] * 3, messages
+      assert_equal [format(UNREADABLE, 'tools/call')] * unreadable.size, messages
     end
   end
 
   def test_mcp04_an_error_answer_raises_with_its_message_given_as_an_object_or_as_text
-    errors = [{ 'code' => -32_602, 'message' => 'no such tool' }, 'no such tool']
+    errors = [{ 'code' => -32_602, 'message' => 'no such tool' }, 'no such tool', { 'code' => -32_602 }]
     answers = errors.each_with_index.map { |error, index| Scripted.response(index + 2, error:) }
     with_client(Scripted::HANDSHAKE + answers) do |client|
       messages = errors.map { assert_raises(Mcp::Error) { call(client) }.message }
+      expected = 'MCP server web answered tools/call with an error: no such tool'
 
-      assert_equal ['MCP server web answered tools/call with an error: no such tool'] * 2, messages
+      assert_equal [expected, expected, expected.delete_suffix('no such tool')], messages
     end
   end
 
   def test_mcp01_a_listed_tool_without_a_description_has_an_empty_one
     tool = { 'name' => 'echo', 'inputSchema' => SCHEMA }
+    tools = with_client(results({ 'tools' => [tool] }), &:list_tools)
 
-    assert_equal [Mcp::Tool.new(name: 'echo', description: '', input_schema: SCHEMA)],
-                 with_client(results({ 'tools' => [tool] }), &:list_tools)
+    assert_equal [Mcp::Tool.new(name: 'echo', description: '', input_schema: SCHEMA)], tools
+    assert_predicate tools, :frozen?
   end
 
   def test_mcp04_a_tool_list_with_a_tool_that_has_no_name_or_input_schema_is_refused
-    pages = [{ 'tools' => [{ 'inputSchema' => SCHEMA }] }, { 'tools' => [{ 'name' => 'echo' }] },
-             { 'tools' => [{ 'name' => 'echo', 'inputSchema' => 'object' }] }, { 'tools' => 'echo' }]
+    pages = [{}, { 'tools' => 'echo' }, { 'tools' => [5] }, { 'tools' => [{ 'inputSchema' => SCHEMA }] },
+             { 'tools' => [{ 'name' => 5, 'inputSchema' => SCHEMA }] }, { 'tools' => [{ 'name' => 'echo' }] },
+             { 'tools' => [{ 'name' => 'echo', 'inputSchema' => 'object' }] }]
     with_client(results(*pages)) do |client|
       messages = pages.map { assert_raises(Mcp::Error) { client.list_tools }.message }
 
-      assert_equal [format(UNREADABLE, 'tools/list')] * 4, messages
+      assert_equal [format(UNREADABLE, 'tools/list')] * pages.size, messages
     end
   end
 
-  def test_mcp01_an_empty_cursor_ends_the_tool_list
-    answered = Scripted.serve(results({ 'tools' => [], 'nextCursor' => '' }, { 'tools' => [] })) do |url|
-      client = connect(url)
+  def test_mcp01_a_cursor_that_is_empty_or_not_text_ends_the_tool_list
+    ['', 5].each do |cursor|
+      requests = Scripted.serve(results({ 'tools' => [], 'nextCursor' => cursor }, { 'tools' => [] })) do |url|
+        client = connect(url)
 
-      assert_empty client.list_tools
-    ensure
-      client&.close
+        assert_empty client.list_tools
+      ensure
+        client&.close
+      end
+
+      assert_equal 3, requests.size, 'the handshake and one page'
     end
-
-    assert_equal 3, answered, 'the handshake and one page'
   end
 
   def test_mcp04_a_server_that_gives_a_cursor_twice_is_refused
@@ -87,6 +93,15 @@ class ClientTest < Minitest::Test
     error = with_client(results(page, page, page)) { |client| assert_raises(Mcp::Error) { client.list_tools } }
 
     assert_equal 'MCP server web gave the cursor "more" twice', error.message
+  end
+
+  def test_mcp04_a_server_that_names_no_protocol_version_is_refused
+    Scripted.serve([Scripted.response(1, Scripted::INITIALIZED.except('protocolVersion'))]) do |url|
+      error = assert_raises(Mcp::Error) { connect(url) }
+
+      assert_equal 'MCP server web speaks protocol nil; this client speaks 2025-06-18, 2025-03-26, 2024-11-05',
+                   error.message
+    end
   end
 
   private

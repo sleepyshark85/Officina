@@ -24,7 +24,8 @@ module Sleepyshark
           @clock = clock
           @mutex = Mutex.new
           @last_id = 0
-          @version = PROTOCOL_VERSION
+          # The version the handshake agrees on; none is sent before.
+          @version = nil
           handshake(cancel)
         end
 
@@ -33,14 +34,16 @@ module Sleepyshark
         # @raise [Mcp::Error] when the server has gone, fails, answers with an error, gives a page's cursor twice, or
         #   cancel is cancelled.
         def list_tools(cancel: nil)
-          pages = [request('tools/list', nil, cancel:)]
           # @type var cursors: Array[String]
           cursors = []
-          while (cursor = next_cursor(pages.fetch(-1)))
+          # @type var pages: Array[Hash[String, json]]
+          pages = []
+          loop do
+            pages << request('tools/list', cursors.empty? ? nil : { 'cursor' => cursors.fetch(-1) }, cancel:)
+            cursor = next_cursor(pages.fetch(-1)) or break
             raise Error, "MCP server #{@name} gave the cursor #{cursor.inspect} twice" if cursors.include?(cursor)
 
             cursors << cursor
-            pages << request('tools/list', { 'cursor' => cursor }, cancel:)
           end
           pages.flat_map { listed(it) }.freeze
         end
@@ -53,7 +56,7 @@ module Sleepyshark
         def call_tool(name, arguments, cancel: nil)
           result = request('tools/call', { 'name' => name, 'arguments' => arguments }, cancel:)
           content = result['content']
-          unreadable('tools/call') unless content.is_a?(Array) && content.all?(Hash)
+          unreadable('tools/call') unless content.is_a?(Array) && content.all? { content?(it) }
           text = content.map { |item| item['type'] == 'text' ? item['text'] : "[#{item['type']} content]" }
           CallResult.new(text: text.join("\n").freeze, error: result['isError'] == true)
         end
@@ -91,9 +94,7 @@ module Sleepyshark
         def listed(page)
           tools = page['tools']
           unreadable('tools/list') unless tools.is_a?(Array) && tools.all? { listed?(it) }
-          tools.map do |tool|
-            Tool.new(name: tool['name'], description: tool['description'].to_s, input_schema: tool['inputSchema'])
-          end
+          tools.map { Tool.new(name: it['name'], description: it['description'].to_s, input_schema: it['inputSchema']) }
         end
 
         def next_cursor(page)
@@ -101,8 +102,11 @@ module Sleepyshark
           cursor if cursor.is_a?(String) && !cursor.empty?
         end
 
-        def listed?(tool)
-          tool.is_a?(Hash) && tool['name'].is_a?(String) && tool['inputSchema'].is_a?(Hash)
+        def listed?(tool) = tool.is_a?(Hash) && tool['name'].is_a?(String) && tool['inputSchema'].is_a?(Hash)
+
+        # A content item has a type, and one of text its text.
+        def content?(item)
+          item.is_a?(Hash) && item['type'].is_a?(String) && (item['type'] != 'text' || item['text'].is_a?(String))
         end
 
         # Sends a request and returns its result.
@@ -123,7 +127,7 @@ module Sleepyshark
         # Sends a message, a request when id is not nil, and returns its response, waiting until cancel is
         # cancelled or, while connecting, the connect deadline passes.
         def exchange(method, params, id, cancel:, connect_deadline:)
-          raise_if_cancelled_or_late(method, cancel, nil)
+          raise_if_cancelled_or_late(method, cancel, connect_deadline)
           message = { 'jsonrpc' => '2.0', 'id' => id, 'method' => method, 'params' => params }.compact
           pending = @transport.post(JSON.generate(message), id, @version)
           begin

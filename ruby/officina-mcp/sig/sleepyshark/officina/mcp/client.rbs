@@ -10,7 +10,7 @@ module Sleepyshark
 
         # Stdio or Streamable HTTP.
         interface _Transport
-          def post: (String text, Integer? id, String version) -> _Pending
+          def post: (String text, Integer? id, String? version) -> _Pending
           def close: () -> void
         end
 
@@ -22,7 +22,7 @@ module Sleepyshark
         @clock: clock
         @mutex: Thread::Mutex
         @last_id: Integer
-        @version: String
+        @version: String?
         @transport: _Transport
 
         def initialize: (_Transport transport, name: String, cancel: _Cancellation?, clock: clock) -> void
@@ -44,6 +44,8 @@ module Sleepyshark
         def next_cursor: (Hash[String, json] page) -> String?
 
         def listed?: (json tool) -> bool
+
+        def content?: (json item) -> bool
 
         def request: (String method, Hash[String, untyped]? params, cancel: _Cancellation?, ?connect_deadline: Numeric?)
                    -> Hash[String, json]

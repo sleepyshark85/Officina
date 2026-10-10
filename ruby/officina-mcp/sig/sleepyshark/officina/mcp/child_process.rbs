@@ -32,7 +32,6 @@ module Sleepyshark
 
         @writing: Thread::Mutex
         @error_tail: ErrorTail
-        @pid: Integer
         @input: IO
         @exit: Process::Waiter
         @errors_reader: Reader
@@ -47,9 +46,7 @@ module Sleepyshark
 
         private
 
-        def spawn_with_pipes: (Server server) -> [Integer, IO, IO, IO]
-
-        def spawn_command: (Server server, **IO ends) -> Integer
+        def spawn_server: (Server server) -> [IO, IO, IO, Process::Waiter]
 
         def read_output: (IO output, ^(String message) -> void on_message, ^(String reason) -> void on_end) -> void
 

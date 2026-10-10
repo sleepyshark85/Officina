@@ -45,7 +45,7 @@ module Sleepyshark
 
             @waiting[id] = queue if id
           end
-          write(text, id)
+          write(text)
           queue.push(ACCEPTED) unless id
           Pending.new(self, id, queue)
         end
@@ -66,12 +66,12 @@ module Sleepyshark
 
         private
 
-        def write(text, id)
+        # A server that cannot be written to is lost, for the reason its output gave when it ended, if it has by now.
+        def write(text)
           @process.write(text)
         rescue IOError, SystemCallError => e
-          forget(id)
-          # The server has exited, most likely: the end of its output says why.
-          raise Error, lost || "MCP server #{@name} could not be written to: #{e.message}"
+          lose("it could not be written to: #{e.message}")
+          raise Error, lost.to_s
         end
 
         # Hands a response to the request waiting for it; anything else is skipped.

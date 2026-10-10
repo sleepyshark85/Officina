@@ -20,10 +20,10 @@ class StdioTest < Minitest::Test
 
   def test_mcp01_a_stdio_server_agrees_on_the_protocol_lists_every_page_of_its_tools_and_runs_them
     with_client do |client|
-      tools = client.list_tools
+      tools = client.list_tools(cancel: NeverCancelled.new)
       echo = { 'type' => 'object', 'properties' => { 'text' => { 'type' => 'string' } } }
 
-      assert_equal %w[echo upper fail crash hang], tools.map(&:name)
+      assert_equal %w[echo upper fail crash cut hang], tools.map(&:name)
       assert_equal Mcp::Tool.new(name: 'echo', description: 'The echo tool.', input_schema: echo), tools.first
       assert_equal Mcp::CallResult.new(text: 'HI', error: false), client.call_tool('upper', { 'text' => 'hi' })
     end
@@ -71,11 +71,30 @@ class StdioTest < Minitest::Test
     assert_match(/\AMCP server fs could not be started \(officina-no-such-program\): /, error.message)
   end
 
-  def test_mcp04_a_server_that_sends_a_message_longer_than_16_mb_is_lost
+  def test_mcp04_a_message_of_16_mb_is_read_and_a_longer_one_loses_the_server
     skip 'Moving 16 MB through a pipe takes seconds on Windows' if Gem.win_platform?
-    error = assert_raises(Mcp::Error) { connect('flood') }
+    with_client('flood') do |client|
+      error = assert_raises(Mcp::Error) { client.list_tools }
 
-    assert_equal 'MCP server fs could not be reached: it sent a message longer than 16 MB', error.message
+      assert_equal 'MCP server fs could not be reached: it sent a message longer than 16 MB', error.message
+    end
+  end
+
+  def test_mcp04_a_server_that_stops_reading_is_killed_and_raises_with_what_it_said
+    with_pid_file do |pid_file|
+      error = assert_raises(Mcp::Error) { connect('deaf', env: { 'FAKE_MCP_PID' => pid_file }) }
+
+      assert_equal 'MCP server fs could not be reached: it closed its connection: not listening', error.message
+      refute_running pid_file
+    end
+  end
+
+  def test_mcp04_an_answer_the_server_cut_short_as_it_exited_is_no_answer
+    with_client do |client|
+      error = assert_raises(Mcp::Error) { client.call_tool('cut', {}) }
+
+      assert_equal 'MCP server fs could not be reached: it closed its connection', error.message
+    end
   end
 
   def test_mcp04_a_server_that_exits_while_connecting_raises_with_what_it_said
@@ -87,10 +106,10 @@ class StdioTest < Minitest::Test
 
   def test_mcp04_a_server_silent_for_30_seconds_at_connect_raises_and_is_killed_and_reaped
     with_pid_file do |pid_file|
-      # Once the server has started, each reading of the clock is 10 seconds on, so the wait for the answer, and
-      # then for the exit, run out.
+      # Once the server has started, each reading of the clock is 7 seconds on, so the wait for the answer, and then
+      # for the exit, run out, and no reading falls on the 30 seconds exactly.
       now = 0
-      clock = -> { File.exist?(pid_file) ? now += 10 : now }
+      clock = -> { File.exist?(pid_file) ? now += 7 : now }
       error = assert_raises(Mcp::Error) { connect('stubborn', env: { 'FAKE_MCP_PID' => pid_file }, clock:) }
 
       assert_equal 'MCP server fs did not answer within 30 seconds', error.message
@@ -125,6 +144,15 @@ class StdioTest < Minitest::Test
     end
   end
 
+  def test_mcp01_closing_stops_what_the_server_started_that_holds_its_output
+    skip 'Windows has no process group to stop once the server has exited' if Gem.win_platform?
+    with_pid_file do |pid_file|
+      connect('parent', env: { 'FAKE_MCP_PID' => pid_file }).close
+
+      refute_running pid_file
+    end
+  end
+
   private
 
   def connect(*arguments, env: {}, **)
@@ -140,5 +168,14 @@ class StdioTest < Minitest::Test
 
   def with_pid_file = Dir.mktmpdir { |directory| yield File.join(directory, 'pid') }
 
-  def refute_running(pid_file) = assert_raises(Errno::ESRCH) { Process.kill(0, Integer(File.read(pid_file))) }
+  # A process the server started is reaped by whoever adopted it once the server exited, which may take a moment: on
+  # Linux, until then it is a zombie, which runs no more.
+  def refute_running(pid_file)
+    pid = Integer(File.read(pid_file))
+    Process.kill(0, pid)
+
+    assert_equal 'Z', File.read("/proc/#{pid}/stat")[/\) (\S)/, 1], "process #{pid} is still running"
+  rescue Errno::ESRCH
+    pass
+  end
 end

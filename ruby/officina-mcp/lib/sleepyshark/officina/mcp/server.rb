@@ -25,7 +25,8 @@ module Sleepyshark
 
         private
 
-        def frozen(pairs) = pairs.to_h.to_h { |key, value| [-key, value && -value] }.freeze
+        # A Hash freezes its String keys itself.
+        def frozen(pairs) = pairs.to_h.transform_values { it && -it }.freeze
       end
     end
   end

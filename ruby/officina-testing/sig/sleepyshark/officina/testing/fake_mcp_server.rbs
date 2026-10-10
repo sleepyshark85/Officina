@@ -7,13 +7,6 @@ module Sleepyshark
 
         NOTIFICATION: String
 
-        @tools: Array[FakeMcpTool]
-        @protocol_version: String?
-        @mutex: Thread::Mutex
-        @calls: Array[Array[untyped]]
-        @session: String
-        @down: bool
-
         module Http
           STATUS: Hash[Integer, String]
 
@@ -24,9 +17,52 @@ module Sleepyshark
           def self.read: (TCPSocket connection) -> [Hash[String, String], String]
         end
 
+        class Protocol
+          @tools: Array[FakeMcpTool]
+          @protocol_version: String?
+          @mutex: Thread::Mutex
+          @calls: Array[Array[untyped]]
+          @client_info: message?
+          @version: String?
+          @initialized: bool
+
+          def initialize: (Array[FakeMcpTool] tools, String? protocol_version) -> void
+
+          def calls: () -> Array[Array[untyped]]
+
+          def client_info: () -> message?
+
+          def version: () -> String?
+
+          def answer: (message message) -> message?
+
+          private
+
+          def note: (message message) -> nil
+
+          def valid?: (message message) -> bool
+
+          def initialized?: () -> bool
+
+          def result: (untyped method, message params) -> (message | bool | nil)
+
+          def initialized: (message params) -> message?
+
+          def page: (Integer index) -> message
+
+          def call: (untyped name, Hash[String, untyped] arguments) -> message?
+        end
+
+        @protocol: Protocol
+        @mutex: Thread::Mutex
+        @session: String
+        @down: bool
+
         def initialize: (tools: Array[FakeMcpTool], ?protocol_version: String?) -> void
 
         def calls: () -> Array[Array[untyped]]
+
+        def client_info: () -> message?
 
         def go_down: () -> void
 
@@ -38,23 +74,13 @@ module Sleepyshark
 
         private
 
-        def answer: (message request) -> message?
-
-        def result: (untyped method, message params) -> message?
-
-        def initialized: (message params) -> message?
-
-        def page: (Integer index) -> message
-
-        def call: (untyped name, Hash[String, untyped] arguments) -> message?
-
         def session: () -> String
 
         def down?: () -> bool
 
         def reply: (Hash[String, String] headers, String body) -> reply?
 
-        def handle: (Hash[String, String] headers, message request) -> reply
+        def handle: (Hash[String, String] headers, message message) -> reply
 
         def accepts?: (Hash[String, String] headers) -> bool
 

@@ -30,7 +30,7 @@ module Sleepyshark
 
         def initialize: (Server server) -> void
 
-        def post: (String text, Integer? id, String version) -> Pending
+        def post: (String text, Integer? id, String? version) -> Pending
 
         def lose: (String reason) -> String
 
@@ -40,7 +40,7 @@ module Sleepyshark
 
         def lost_reason: () -> String
 
-        def build: (String text, String version) -> Net::HTTP::Post
+        def build: (String text, String? version) -> Net::HTTP::Post
 
         def connection: () -> Net::HTTP
 

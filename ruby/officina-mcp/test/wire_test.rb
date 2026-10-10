@@ -46,7 +46,9 @@ class WireTest < Minitest::Test
   def test_mcp01_a_stream_that_ends_before_the_response_is_complete_raises
     Pbt.assert do
       Pbt.property(form, Pbt.boolean, cuts) do |last, crlf, lengths|
-        assert_raises(Error) { answer(event(RESPONSE, last).chomp, crlf, lengths) }
+        error = assert_raises(Error) { answer(event(RESPONSE, last).chomp, crlf, lengths) }
+
+        assert_equal 'the server ended its event stream without a response', error.message
       end
     end
   end
@@ -59,11 +61,39 @@ class WireTest < Minitest::Test
     end
   end
 
-  def test_mcp04_a_body_longer_than_16_mb_raises
-    chunk = ' ' * (1024 * 1024)
-    error = assert_raises(Error) { Wire.answer(Body.new([chunk] * 17), ID, events: false) }
+  def test_mcp01_a_body_that_is_not_the_response_raises
+    bodies = ['not JSON', JSON.generate(RESPONSE.merge('id' => ID + 1)), '{"jsonrpc":"2.0","method":"ping"}']
+    messages = bodies.map { |text| assert_raises(Error) { Wire.answer(Body.new([text]), ID, events: false) }.message }
 
+    assert_equal ["the server's answer is not a response to the request"] * 3, messages
+  end
+
+  def test_mcp04_a_body_of_16_mb_is_read_and_one_byte_more_raises
+    response = JSON.generate(RESPONSE).b
+    padded = response + (' ' * (Wire::MAX_MESSAGE - response.bytesize))
+    chunks = (0...padded.bytesize).step(1024 * 1024).map { padded.byteslice(it, 1024 * 1024) }
+    error = assert_raises(Error) { Wire.answer(Body.new(chunks + [' ']), ID, events: false) }
+
+    assert_equal RESPONSE, Wire.answer(Body.new(chunks), ID, events: false)
     assert_equal 'it sent a message longer than 16 MB', error.message
+  end
+
+  def test_mcp01_a_response_is_deeply_frozen
+    response = Wire.response(JSON.generate(RESPONSE))
+
+    assert_predicate response.dig('result', 'content', 0, 'text'), :frozen?
+  end
+
+  def test_mcp01_an_events_data_is_its_data_lines_without_one_leading_space_joined_as_utf8
+    stream = Wire.const_get(:EventStream).new
+    events = []
+    # Starting with a blank line, a character in a chunk of its own, then an event with no data.
+    ["\ndata:  two spaces\r\ndata:", 'é', "\n\n: comment\nevent: none\n\n"].each do |chunk|
+      stream.feed(chunk) { events << it }
+    end
+
+    assert_equal [" two spaces\né"], events
+    assert_equal Encoding::UTF_8, events.first.encoding
   end
 
   # Each byte is searched for a line end once: a 4 MB event in 256-byte chunks reads in about 0.03 s, where searching

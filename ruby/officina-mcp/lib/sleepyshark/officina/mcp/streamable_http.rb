@@ -102,10 +102,10 @@ module Sleepyshark
             @session
           end
           request = Net::HTTP::Post.new(@uri, @headers)
-          # Each chunk is read as it arrives, so none may be compressed.
+          # Each chunk is read as it arrives, so none may be compressed. A nil leaves its header out.
           { 'Content-Type' => 'application/json', 'Accept' => 'application/json, text/event-stream',
             'Accept-Encoding' => 'identity', 'MCP-Protocol-Version' => version, 'Mcp-Session-Id' => session }
-            .each { |name, value| request[name] = value if value }
+            .each { |name, value| request[name] = value }
           request.body = text
           request
         end
@@ -122,12 +122,11 @@ module Sleepyshark
           http
         end
 
-        # Runs on the request's own thread: opens the connection, sends the request and reads the answer.
-        # Net::HTTP#request's signature has its block return nothing, so Steep takes the method's value for a response,
-        # and refuses the break.
+        # Runs on the request's own thread: opens the connection (Net::HTTP#request does, as it is not open yet),
+        # sends the request and reads the answer. Net::HTTP#request's signature has its block return nothing, so Steep
+        # takes the method's value for a response, and refuses the break.
         def exchange(http, request, id) # steep:ignore MethodBodyTypeMismatch
           Thread.current.report_on_exception = false
-          http.start
           # Breaking out of the block leaves the rest of the body unread, as a stream may stay open after the response.
           http.request(request) do |response|
             raise_unless_ok(response, request)
@@ -152,8 +151,7 @@ module Sleepyshark
 
         # The response to request id, from an event stream or a JSON body.
         def answer(response, id)
-          events = response['Content-Type'].to_s.split(';').first.to_s.strip.casecmp?('text/event-stream')
-          Wire.answer(response, id, events:)
+          Wire.answer(response, id, events: response.content_type.to_s.casecmp?('text/event-stream'))
         end
       end
       private_constant :StreamableHttp

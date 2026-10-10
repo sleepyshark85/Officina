@@ -7,7 +7,7 @@ target :lib do
             'apps/bookshop/sig'
   check 'officina/lib', 'officina-claude/lib', 'officina-mcp/lib', 'officina-testing/lib', 'apps/bookshop/lib'
   # The standard library's signatures that are not in the collection's lock, as no gem of the lock needs them.
-  library 'net-http', 'openssl', 'socket'
+  library 'net-http', 'open3', 'openssl', 'socket'
 
   # Standard libraries that are not gems, so the collection does not list them.
   library 'digest'

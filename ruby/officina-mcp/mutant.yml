@@ -12,3 +12,7 @@ requires:
 matcher:
   subjects:
     - Sleepyshark::Officina::Mcp*
+mutation:
+  # The gem's tests take about a second; a mutation that leaves them waiting on a process or a socket is stopped
+  # here, and counts as killed.
+  timeout: 10.0

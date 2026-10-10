@@ -5,20 +5,55 @@ require 'sleepyshark/officina/mcp'
 require_relative 'cancellations'
 require_relative 'scripted_http_server'
 
-# The MCP client over Streamable HTTP, against the test kit's fake server on a local port.
+# The MCP client over Streamable HTTP, against the test kit's fake server on a local port, or a scripted one for what
+# the fake never sends.
 class StreamableHttpTest < Minitest::Test
   cover 'Sleepyshark::Officina::Mcp*'
 
   Mcp = Sleepyshark::Officina::Mcp
   Tool = Sleepyshark::Officina::Testing::FakeMcpTool
   FakeServer = Sleepyshark::Officina::Testing::FakeMcpServer
+  Scripted = ScriptedHttpServer
   ECHO = Tool.new(name: 'echo', handler: ->(input) { input.fetch('text') })
 
   def test_mcp01_an_http_server_agrees_on_the_protocol_in_a_session_and_runs_its_tools
     server = FakeServer.new(tools: [ECHO])
     with_client(server) do |client|
-      assert_equal Mcp::CallResult.new(text: 'hi', error: false), client.call_tool('echo', { 'text' => 'hi' })
+      result = client.call_tool('echo', { 'text' => 'hi' }, cancel: NeverCancelled.new)
+
+      assert_equal Mcp::CallResult.new(text: 'hi', error: false), result
       assert_equal [['echo', { 'text' => 'hi' }]], server.calls
+      assert_equal({ 'name' => 'officina', 'version' => Sleepyshark::Officina::VERSION }, server.client_info)
+    end
+  end
+
+  def test_mcp01_every_request_carries_the_servers_headers_and_once_agreed_the_version_and_session
+    initialized = Scripted.answer(Scripted.message(1, Scripted::INITIALIZED), headers: ['Mcp-Session-Id: s1'])
+    answers = [initialized, Scripted::ACCEPTED, Scripted.response(2, { 'content' => [] })]
+    requests = Scripted.serve(answers) do |url|
+      client = Mcp.connect(Mcp::Server.new(name: 'web', url:, headers: { 'Authorization' => 'Bearer t' }))
+      echo(client)
+    ensure
+      client&.close
+    end
+    always = { 'content-type' => 'application/json', 'accept' => 'application/json, text/event-stream',
+               'accept-encoding' => 'identity', 'authorization' => 'Bearer t' }
+    agreed = { 'mcp-protocol-version' => '2025-06-18', 'mcp-session-id' => 's1' }
+
+    assert_equal([always, always.merge(agreed), always.merge(agreed)],
+                 requests.map { it.slice(*always.keys, *agreed.keys) })
+  end
+
+  def test_mcp01_an_answer_is_an_event_stream_only_when_its_content_type_says_so
+    text = ->(id, text) { Scripted.message(id, { 'content' => [{ 'type' => 'text', 'text' => text }] }) }
+    event = Scripted.answer("data: #{text.call(2, 'event')}\n\n", type: 'Text/Event-Stream ; charset=utf-8')
+    plain = Scripted.answer(text.call(3, 'plain'), type: nil)
+    Scripted.serve(Scripted::HANDSHAKE + [event, plain]) do |url|
+      client = connect(url)
+
+      assert_equal %w[event plain], Array.new(2) { echo(client) }
+    ensure
+      client&.close
     end
   end
 
@@ -45,8 +80,12 @@ class StreamableHttpTest < Minitest::Test
   def test_mcp04_an_http_server_that_goes_down_mid_call_raises_and_stays_lost
     server = FakeServer.new(tools: [ECHO, Tool.new(name: 'crash', handler: ->(_) { server.go_down })])
     with_client(server) do |client|
-      messages = [['crash', {}], ['echo', { 'text' => 'hi' }]].map do |name, arguments|
-        assert_raises(Mcp::Error) { client.call_tool(name, arguments) }.message
+      messages = []
+      # The request's own thread ends with the failure, and says nothing of it.
+      assert_silent do
+        messages = [['crash', {}], ['echo', { 'text' => 'hi' }]].map do |name, arguments|
+          assert_raises(Mcp::Error) { client.call_tool(name, arguments) }.message
+        end
       end
 
       assert_match(/\AMCP server web could not be reached: /, messages.first)
@@ -67,9 +106,9 @@ class StreamableHttpTest < Minitest::Test
   def test_mcp04_a_server_that_answers_with_what_is_not_http_raises_and_stays_lost
     garbage = ["garbage\r\n\r\n", "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: many\r\n\r\n{}"]
     garbage.each do |answer|
-      answers = ScriptedHttpServer::HANDSHAKE + [answer, ScriptedHttpServer.response(3, { 'content' => [] })]
+      answers = Scripted::HANDSHAKE + [answer, Scripted.response(3, { 'content' => [] })]
       messages = []
-      answered = ScriptedHttpServer.serve(answers) do |url|
+      requests = Scripted.serve(answers) do |url|
         client = connect(url)
         messages = Array.new(2) { assert_raises(Mcp::Error) { echo(client) }.message }
       ensure
@@ -77,12 +116,12 @@ class StreamableHttpTest < Minitest::Test
       end
 
       assert_match(/\AMCP server web could not be reached: wrong/, messages.first)
-      assert_equal [messages.first, 3], [messages.last, answered], 'the second call is not sent'
+      assert_equal [messages.first, 3], [messages.last, requests.size], 'the second call is not sent'
     end
   end
 
   def test_mcp04_a_404_before_a_session_is_a_wrong_url_not_an_ended_session
-    ScriptedHttpServer.serve(["HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"]) do |url|
+    Scripted.serve(["HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"]) do |url|
       error = assert_raises(Mcp::Error) { connect(url) }
 
       assert_equal 'MCP server web could not be reached: the server answered HTTP 404 Not Found', error.message
@@ -112,8 +151,20 @@ class StreamableHttpTest < Minitest::Test
     end
   end
 
+  def test_mcp04_a_call_cancelled_before_it_starts_is_not_sent
+    server = FakeServer.new(tools: [ECHO])
+    with_client(server) do |client|
+      error = assert_raises(Mcp::Error) { client.call_tool('echo', { 'text' => 'hi' }, cancel: CancelledAfter.new(1)) }
+
+      assert_equal 'MCP server web, tools/call: cancelled', error.message
+      assert_empty server.calls
+    end
+  end
+
   def test_mcp01_a_url_that_is_not_http_is_refused
-    assert_raises(ArgumentError) { connect('ftp://127.0.0.1/mcp') }
+    error = assert_raises(ArgumentError) { connect('ftp://127.0.0.1/mcp') }
+
+    assert_equal 'MCP server web: ftp://127.0.0.1/mcp is not an http or https URL', error.message
   end
 
   private

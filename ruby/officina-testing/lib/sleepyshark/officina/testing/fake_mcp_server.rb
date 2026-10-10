@@ -10,9 +10,9 @@ module Sleepyshark
       # An MCP server with tools given in advance, over stdio (#serve, run by a program the test starts) or Streamable
       # HTTP on a local port (#serve_http). It lists one tool per page, sends a notification before each tool's result
       # (over HTTP, in an event stream) that clients must skip, and records the calls. It requires what the protocol
-      # does, stricter than a real server: the client's capabilities and name and version when it initializes, and over
-      # HTTP both content types accepted, then the protocol version and the session. It can go down, or end its
-      # session.
+      # does, stricter than a real server: JSON-RPC 2.0 with params that are an object; the client's capabilities, name
+      # and version when it initializes, and its notice that it has before any tool request; over HTTP, both content
+      # types accepted, then the agreed protocol version and the session. It can go down, or end its session.
       class FakeMcpServer
         NOTIFICATION = JSON.generate({ 'jsonrpc' => '2.0', 'method' => 'notifications/message',
                                        'params' => { 'level' => 'info', 'data' => 'working' } })
@@ -55,21 +55,111 @@ module Sleepyshark
           end
           private_class_method :answer, :read
         end
-        private_constant :Http
+
+        # The server's side of JSON-RPC, whatever carries it: its answers, the calls and what the client said.
+        class Protocol
+          def initialize(tools, protocol_version)
+            @tools = tools
+            @protocol_version = protocol_version
+            @mutex = Mutex.new
+            @calls = []
+            @client_info = nil
+            @version = nil
+            @initialized = false
+          end
+
+          def calls = @mutex.synchronize { @calls.dup.freeze }
+
+          def client_info = @mutex.synchronize { @client_info }
+
+          # The protocol version agreed on; nil until the client has initialized.
+          def version = @mutex.synchronize { @version }
+
+          # The response to a JSON-RPC message, a Hash; nil for a notification, which it notes. A request that is not
+          # JSON-RPC 2.0 with an object of params, or for tools before the client said it initialized, is refused.
+          def answer(message)
+            id = message['id'] or return note(message)
+            # @type var params: message
+            params = message['params'] || {}
+            result = valid?(message) && result(message['method'], params)
+            return { 'jsonrpc' => '2.0', 'id' => id, 'result' => result } if result
+
+            { 'jsonrpc' => '2.0', 'id' => id,
+              'error' => { 'code' => -32_601, 'message' => 'Method or tool not found.' } }
+          end
+
+          private
+
+          def note(message)
+            initialized = valid?(message) && message['method'] == 'notifications/initialized'
+            @mutex.synchronize { @initialized = true } if initialized
+            nil
+          end
+
+          def valid?(message)
+            params = message['params']
+            message['jsonrpc'] == '2.0' && (params.nil? || params.is_a?(Hash))
+          end
+
+          def initialized? = @mutex.synchronize { @initialized }
+
+          def result(method, params)
+            case method
+            when 'initialize' then initialized(params)
+            when 'tools/list' then initialized? && page(Integer(params.fetch('cursor', '0')))
+            when 'tools/call' then initialized? && call(params['name'], params['arguments'] || {})
+            end
+          end
+
+          # nil, as for an unknown method, unless the client says what the protocol asks of it.
+          def initialized(params)
+            client = params['clientInfo']
+            return unless params['capabilities'].is_a?(Hash) && client.is_a?(Hash) &&
+                          client.values_at('name', 'version').all?(String)
+
+            version = @protocol_version || params['protocolVersion']
+            @mutex.synchronize do
+              @client_info = client
+              @version = version
+            end
+            { 'protocolVersion' => version, 'capabilities' => { 'tools' => { 'listChanged' => false } },
+              'serverInfo' => { 'name' => 'fake', 'version' => '1.0.0' } }
+          end
+
+          def page(index)
+            tools = @tools[index, 1].to_a.map do |tool|
+              { 'name' => tool.name, 'description' => tool.description, 'inputSchema' => tool.input_schema }
+            end
+            index + 1 < @tools.size ? { 'tools' => tools, 'nextCursor' => (index + 1).to_s } : { 'tools' => tools }
+          end
+
+          def call(name, arguments)
+            @mutex.synchronize { @calls << [name, arguments].freeze }
+            tool = @tools.find { it.name == name } or return
+            begin
+              { 'content' => [{ 'type' => 'text', 'text' => tool.handler.call(arguments) }], 'isError' => false }
+            rescue StandardError => e
+              # A failing tool is an error result, as a server reports it.
+              { 'content' => [{ 'type' => 'text', 'text' => e.message }], 'isError' => true }
+            end
+          end
+        end
+        private_constant :Http, :Protocol
 
         # tools are FakeMcpTools; protocol_version is the version the server answers with, by default the one the
         # client asks for.
         def initialize(tools:, protocol_version: nil)
-          @tools = tools.dup.freeze
-          @protocol_version = protocol_version
+          @protocol = Protocol.new(tools.dup.freeze, protocol_version)
           @mutex = Mutex.new
-          @calls = []
           @session = SecureRandom.hex
           @down = false
         end
 
         # The tool calls received, oldest first, each [name, arguments].
-        def calls = @mutex.synchronize { @calls.dup.freeze }
+        def calls = @protocol.calls
+
+        # The client's name and version as it initialized, a Hash; nil until it has.
+        def client_info = @protocol.client_info
 
         # From now on, closes each HTTP connection without an answer, as a server that went down; a tool may call it
         # to fail mid-call.
@@ -81,9 +171,9 @@ module Sleepyshark
         # Serves over stdio, one JSON-RPC message per line, until input ends.
         def serve(input, output)
           input.each_line do |line|
-            request = JSON.parse(line)
-            output.puts(NOTIFICATION) if request['method'] == 'tools/call'
-            response = answer(request)
+            message = JSON.parse(line)
+            output.puts(NOTIFICATION) if message['method'] == 'tools/call'
+            response = @protocol.answer(message)
             output.puts(JSON.generate(response)) if response
             output.flush
           end
@@ -105,53 +195,6 @@ module Sleepyshark
 
         private
 
-        # The response to a JSON-RPC request, a Hash; nil for a notification.
-        def answer(request)
-          id = request['id'] or return
-          result = result(request['method'], request['params'] || {})
-          return { 'jsonrpc' => '2.0', 'id' => id, 'result' => result } if result
-
-          { 'jsonrpc' => '2.0', 'id' => id, 'error' => { 'code' => -32_601, 'message' => 'Method or tool not found.' } }
-        end
-
-        def result(method, params)
-          case method
-          when 'initialize' then initialized(params)
-          when 'ping' then {}
-          when 'tools/list' then page(Integer(params.fetch('cursor', '0')))
-          when 'tools/call' then call(params['name'], params['arguments'] || {})
-          end
-        end
-
-        # nil, as for an unknown method, unless the client says what the protocol asks of it.
-        def initialized(params)
-          client = params['clientInfo']
-          return unless params['capabilities'].is_a?(Hash) && client.is_a?(Hash) &&
-                        client.values_at('name', 'version').all?(String)
-
-          { 'protocolVersion' => @protocol_version || params['protocolVersion'],
-            'capabilities' => { 'tools' => { 'listChanged' => false } },
-            'serverInfo' => { 'name' => 'fake', 'version' => '1.0.0' } }
-        end
-
-        def page(index)
-          tools = @tools[index, 1].to_a.map do |tool|
-            { 'name' => tool.name, 'description' => tool.description, 'inputSchema' => tool.input_schema }
-          end
-          index + 1 < @tools.size ? { 'tools' => tools, 'nextCursor' => (index + 1).to_s } : { 'tools' => tools }
-        end
-
-        def call(name, arguments)
-          @mutex.synchronize { @calls << [name, arguments].freeze }
-          tool = @tools.find { it.name == name } or return
-          begin
-            { 'content' => [{ 'type' => 'text', 'text' => tool.handler.call(arguments) }], 'isError' => false }
-          rescue StandardError => e
-            # A failing tool is an error result, as a server reports it.
-            { 'content' => [{ 'type' => 'text', 'text' => e.message }], 'isError' => true }
-          end
-        end
-
         def session = @mutex.synchronize { @session }
 
         def down? = @mutex.synchronize { @down }
@@ -165,13 +208,14 @@ module Sleepyshark
           [status, extra, text] unless down?
         end
 
-        def handle(headers, request)
-          initializing = request['method'] == 'initialize'
-          return [400, {}, ''] unless accepts?(headers) && (initializing || headers.key?('mcp-protocol-version'))
+        def handle(headers, message)
+          initializing = message['method'] == 'initialize'
+          agreed = headers['mcp-protocol-version'] == @protocol.version
+          return [400, {}, ''] unless accepts?(headers) && (initializing || agreed)
           return [404, {}, ''] unless initializing || headers['mcp-session-id'] == session
 
-          response = answer(request) or return [202, {}, '']
-          content(request['method'], JSON.generate(response))
+          response = @protocol.answer(message) or return [202, {}, '']
+          content(message['method'], JSON.generate(response))
         end
 
         def accepts?(headers)
