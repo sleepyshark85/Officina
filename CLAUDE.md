@@ -3,7 +3,7 @@
 Officina is a purpose-neutral library for building agentic applications. Phase 1 is accepted against one reference
 application, **Bookshop Assistant**: an interactive console chatbot over PostgreSQL in Docker. It has three
 implementations: **.NET 10** at the repository root (done), **Go** in [`go/`](go/) (done) and **Ruby** in
-[`ruby/`](ruby/) (planned), each tracked in [`docs/plan/phase-1.md`](docs/plan/phase-1.md). Working in `go/` loads
+[`ruby/`](ruby/) (in progress), each tracked in [`docs/plan/phase-1.md`](docs/plan/phase-1.md). Working in `go/` loads
 [`go/CLAUDE.md`](go/CLAUDE.md) as well, and working in `ruby/` loads [`ruby/CLAUDE.md`](ruby/CLAUDE.md).
 
 The conventions every implementation follows (workflow, tests, design rules, Claude API notes):
@@ -31,14 +31,15 @@ reused (ARCHITECTURE §13).
   ARCHITECTURE.md it names types, so update it when a change moves what it shows. Each diagram's `.html` is the source;
   the `.svg` beside it is exported from it. `docs/traceability.md` maps the .NET tests to requirement IDs.
 - Prerequisites: Docker, the .NET 10 SDK, an Anthropic API key or `ant auth login` for live tests.
-- Required checks before a merge: `ubuntu-latest`, `windows-latest`, `quality`, `mutation`, and the Go ones
-  (`go-changes`, `go-ubuntu`, `go-windows`, `go-quality`, `go-mutation`): every PR needs all nine, and the five Ruby
-  ones too once Ruby S01 is merged (R15).
+- Required checks before a merge: `ubuntu-latest`, `windows-latest`, `quality`, `mutation`, the Go ones
+  (`go-changes`, `go-ubuntu`, `go-windows`, `go-quality`, `go-mutation`) and the Ruby ones (`ruby-changes`,
+  `ruby-ubuntu`, `ruby-windows`, `ruby-quality`, `ruby-mutation`): every PR needs all fourteen.
 - Hooks: before a commit that stages .NET code, `dotnet format --verify-no-changes` and the Release build (warnings
   are errors), and the staged files shown; before a push that changes more than docs outside `go/` and `ruby/`, the
-  tests. After an edit to a `.cs` file, one type per file named after it, and no requirement IDs in comments. The Go checks run
-  only for files under `go/` ([`go/README.md`](go/README.md)), and from Ruby S01 the Ruby checks only for files under
-  `ruby/`.
+  tests. After an edit to a `.cs` file, one type per file named after it, and no requirement IDs in comments. The Go
+  checks run only for files under `go/` ([`go/README.md`](go/README.md)). The Ruby ones only for files under `ruby/`
+  ([`ruby/README.md`](ruby/README.md)): RuboCop and Steep before a commit, the tests before a push, and after an edit
+  to a `.rb` file, `# frozen_string_literal: true` first and no requirement IDs in comments.
 - **One class, record, struct, interface or enum per file**, named after it. Related types share a folder (in the
   core: `Conversations`, `Models`, `Runs`, `Tools`, `Memory`, `Audit`…); the namespace stays the package's.
 - **Dependencies:** no Microsoft Agent Framework or `Microsoft.Extensions.AI`. The Anthropic C# SDK is used only in the

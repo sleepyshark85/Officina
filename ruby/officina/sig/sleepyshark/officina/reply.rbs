@@ -1,0 +1,16 @@
+module Sleepyshark
+  module Officina
+    class Reply < Data
+      STOPS: Array[Symbol]
+
+      attr_reader blocks: Array[Block]
+      attr_reader stop: Symbol
+      attr_reader detail: String?
+
+      def self.new: (blocks: Array[Block], stop: Symbol, ?detail: String?) -> instance
+
+
+      def initialize: (blocks: Array[Block], stop: Symbol, ?detail: String?) -> void
+    end
+  end
+end

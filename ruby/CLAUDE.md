@@ -19,7 +19,8 @@ would do), rewrite it.
 ## Tooling (enforced by hooks and CI)
 
 - `bundle exec rubocop` and `bundle exec steep check` before a commit; `bundle exec rake test`, with warnings on and
-  none printed, before a push, as for .NET and Go. `bundler-audit` runs in `ruby-quality`, as it needs the network.
+  any warning about the workspace's own files failing them, before a push, as for .NET and Go. `bundler-audit` runs in
+  `ruby-quality`, as it needs the network.
 - Required checks before a merge, from `.github/workflows/ruby.yml`: `ruby-changes`, `ruby-ubuntu`, `ruby-windows`,
   `ruby-quality`, `ruby-mutation`, besides the .NET and Go ones.
 - Every file starts with `# frozen_string_literal: true`.
@@ -82,7 +83,7 @@ would do), rewrite it.
   in random order (Minitest's default), one at a time: no `parallelize_me!`, as the thread-leak check needs it.
 - Fakes only at the boundaries (docs/conventions.md); never a stub of an Officina object. `assert_equal expected,
   actual`, expected first.
-- Property tests with `prop_check` for TEST-07, generated inputs for every parser and validator (JSON Schema subset,
+- Property tests with `pbt` for TEST-07, generated inputs for every parser and validator (JSON Schema subset,
   MCP messages, memory paths); CI runs a fixed seed, and a failure prints the seed that reproduces it.
 - Each sample in `examples/` runs as a test.
 - Golden files under the gem's `test/fixtures/`, updated only with `UPDATE_GOLDEN=1`, reviewed like code. The shared

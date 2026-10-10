@@ -1,0 +1,25 @@
+module Sleepyshark
+  module Officina
+    # What a run yields to the host, in the order it happened.
+    type run_event = TextDelta | UsageReported | ConversationAppended
+
+    # How a run ended.
+    type result = Completed | Stopped | Failed
+
+    class Agent
+      attr_reader model: _Model
+      attr_reader instructions: String
+      attr_reader tools: Array[Tool]
+      attr_reader fingerprint: String
+
+      def initialize: (model: _Model, instructions: String, ?tools: Array[Tool]) -> void
+
+      def run: (Conversation conversation, String input, ?context: String?, ?cancel: Cancellation?)
+             ?{ (run_event event) -> void } -> result
+
+      private
+
+      def prefix_fingerprint: (String settings) -> String
+    end
+  end
+end

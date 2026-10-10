@@ -1,0 +1,22 @@
+# frozen_string_literal: true
+
+require 'minitest/test_task'
+require 'rubocop/rake_task'
+
+RuboCop::RakeTask.new
+
+desc 'Check the code against its signatures with Steep'
+task :steep do
+  sh 'steep', 'check'
+end
+
+# One process for every gem's tests, one test at a time in random order, with warnings on; test_helper turns each
+# warning into an error.
+Minitest::TestTask.create do |task|
+  task.libs = %w[test .]
+  # Before any test file, which Ruby parses, warnings and all, before its own require of the helper.
+  task.test_prelude = 'require "test_helper"'
+  task.test_globs = %w[test/**/*_test.rb {officina,officina-*,apps/*}/test/**/*_test.rb]
+end
+
+task default: %i[rubocop steep test]

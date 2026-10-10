@@ -1,0 +1,14 @@
+module Sleepyshark
+  module Officina
+    class Cancellation
+      @lock: Thread::Mutex
+      @cancelled: bool
+
+      def initialize: () -> void
+
+      def cancel: () -> nil
+
+      def cancelled?: () -> bool
+    end
+  end
+end

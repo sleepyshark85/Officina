@@ -1,0 +1,20 @@
+module Sleepyshark
+  module Officina
+    # What a model streams while it replies.
+    type model_event = TextDelta | UsageReported
+
+    # A provider's model with fixed settings: the only way the core reaches a model. Many runs may stream from one
+    # model at once.
+    interface _Model
+      # The model and every setting that shapes its requests, as text that changes when any of them does. It is part
+      # of the prefix fingerprint, so it must not change during the model's life.
+      def settings: () -> String
+
+      # Sends one request and yields its events as they arrive. Returns the reply once the model has stopped, or nil
+      # when the cancellation cut the reply off. Retries transient failures itself; raises a StandardError for a
+      # failure that remains, or a stream that ends without a stop reason. What the block raises, or a break from it,
+      # passes through: it is the host's, never a failure of the model, and the stream releases what it holds.
+      def stream: (Request request, cancel: Cancellation) { (model_event event) -> void } -> Reply?
+    end
+  end
+end

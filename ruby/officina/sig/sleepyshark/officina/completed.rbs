@@ -1,0 +1,13 @@
+module Sleepyshark
+  module Officina
+    class Completed < Data
+      attr_reader text: String
+      attr_reader usage: Usage
+
+      def self.new: (text: String, usage: Usage) -> instance
+
+
+      def initialize: (text: String, usage: Usage) -> void
+    end
+  end
+end

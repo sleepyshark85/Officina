@@ -1,0 +1,18 @@
+module Sleepyshark
+  module Officina
+    class Tool < Data
+      attr_reader name: String
+      attr_reader description: String
+      attr_reader input_schema: String
+
+      def self.new: (name: String, description: String, input_schema: String) -> instance
+
+
+      def initialize: (name: String, description: String, input_schema: String) -> void
+
+      private
+
+      def object?: (String json) -> bool
+    end
+  end
+end
