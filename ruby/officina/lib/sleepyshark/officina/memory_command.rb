@@ -66,10 +66,10 @@ module Sleepyshark
       end
 
       def replace_once(text, old)
-        case MemoryView.occurrences(text, old)
+        case starts = MemoryView.occurrences(text, old)
         in [] then failure("No replacement was performed, old_str `#{old}` did not appear verbatim in #{@path}.")
         in [start] then replace(text, start, old)
-        in starts
+        else
           failure("No replacement was performed. Multiple occurrences of old_str `#{old}` in lines: " \
                   "#{starts.map { MemoryView.line_of(text, it) }.uniq.join(', ')}. Please ensure it is unique")
         end
