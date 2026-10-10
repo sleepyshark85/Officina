@@ -6,10 +6,22 @@ require 'test_helper'
 
 # The Bookshop Assistant command.
 class BookshopTest < Minitest::Test
-  def test_the_command_says_the_application_is_not_built_yet_and_fails
-    _, error, status = Open3.capture3(RbConfig.ruby, File.expand_path('../exe/bookshop', __dir__))
+  def test_app02_the_command_runs_the_console_without_reaching_the_database_or_the_model_until_a_reply_needs_them
+    env = { 'ANTHROPIC_API_KEY' => nil, 'BOOKSHOP_DATABASE' => 'postgres://nobody@127.0.0.1:1/nowhere' }
+    output, status = Open3.capture2e(env, RbConfig.ruby, File.expand_path('../exe/bookshop', __dir__),
+                                     stdin_data: "Sam\n/help\n/quit\n")
 
-    refute_predicate status, :success?
-    assert_match 'comes with Ruby S06', error
+    assert_predicate status, :success?, output
+    assert_equal <<~TEXT, output
+      Bookshop Assistant. Type /help for commands.
+      Who is using the assistant? Your name: Sam
+      Hello, Sam.
+      you> /help
+      Commands:
+        /help          Show this help.
+        /quit          Leave the assistant.
+      Anything else is a message to the assistant. Ctrl+C stops a reply in progress.
+      you> /quit
+    TEXT
   end
 end

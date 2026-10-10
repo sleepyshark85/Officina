@@ -1,0 +1,8 @@
+module Bookshop
+  module ChatAgent
+    INSTRUCTIONS: String
+
+    def self.context: (Time now, String staff_member) -> String
+    def self.claude: () -> Sleepyshark::Officina::Claude::Model
+  end
+end

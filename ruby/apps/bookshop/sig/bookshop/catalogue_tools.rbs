@@ -1,0 +1,19 @@
+module Bookshop
+  module CatalogueTools
+    Tool: singleton(Sleepyshark::Officina::Tool)
+    Input: singleton(Sleepyshark::Officina::Input)
+    SEARCH: Sleepyshark::Officina::Tool::_Input
+    BOOK: Sleepyshark::Officina::Tool::_Input
+    RESTOCK: Sleepyshark::Officina::Tool::_Input
+
+    def self.all: (Catalogue catalogue) -> Array[Sleepyshark::Officina::Tool]
+
+    private
+
+    def self.search_books_tool: (Catalogue catalogue) -> Sleepyshark::Officina::Tool
+    def self.get_book_tool: (Catalogue catalogue) -> Sleepyshark::Officina::Tool
+    def self.restock_book_tool: (Catalogue catalogue) -> Sleepyshark::Officina::Tool
+    def self.filter: (untyped input) -> BookFilter
+    def self.book: (Book book) -> Hash[Symbol, untyped]
+  end
+end

@@ -1,0 +1,26 @@
+module Bookshop
+  class Terminal
+    @input: IO
+    @output: IO
+    @echo: bool
+    @lines: Thread::Queue[String | Sleepyshark::Officina::Cancellation | nil]
+    @reading: Thread?
+    @held: String?
+    @at_line_start: bool
+
+    def initialize: (input: IO, output: IO) -> void
+    def read: (String prompt, ?cancel: Sleepyshark::Officina::Cancellation?) -> String?
+    def write: (String text) -> void
+    def write_line: (String text) -> void
+    def end_line: () -> void
+    def end_input: () -> void
+    def close: () -> void
+
+    private
+
+    def next_line: (Sleepyshark::Officina::Cancellation? cancel) -> String?
+    def read_ended: (String? line) -> String?
+    def entered: (String line) -> String
+    def read_line: () -> String?
+  end
+end

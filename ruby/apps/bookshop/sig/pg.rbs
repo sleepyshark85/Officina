@@ -1,6 +1,6 @@
 # The parts of the pg gem the application uses: neither the gem nor the community collection has signatures for it.
 module PG
-  def self.connect: (String url) -> Connection
+  def self.connect: (String url, **untyped options) -> Connection
 
   class Error < StandardError
   end
@@ -9,6 +9,8 @@ module PG
   end
 
   class Connection
+    def self.conninfo_parse: (String conninfo) -> Array[Hash[Symbol, untyped]]
+
     def exec_params: (String sql, Array[untyped] params) -> Result
     def transaction: [T] () { (Connection) -> T } -> T
     def check_socket: () -> self

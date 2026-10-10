@@ -1,0 +1,22 @@
+module Bookshop
+  class ReplyView
+    Officina: singleton(Sleepyshark::Officina)
+    DECLINED: Sleepyshark::Officina::Approval
+
+    @terminal: Terminal
+    @approvals: Approvals
+    @cancel: Sleepyshark::Officina::Cancellation
+    @labelled: bool
+
+    def initialize: (terminal: Terminal, approvals: Approvals, cancel: Sleepyshark::Officina::Cancellation) -> void
+    def show: (Sleepyshark::Officina::run_event event) -> void
+    def finish: (Sleepyshark::Officina::result result) -> void
+
+    private
+
+    def stream: (String text) -> void
+    def ask: (Sleepyshark::Officina::ToolCall call) -> void
+    def outcome: (Sleepyshark::Officina::ToolResult result) -> String
+    def ending: (Sleepyshark::Officina::result result) -> String?
+  end
+end

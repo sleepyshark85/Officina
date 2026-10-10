@@ -44,11 +44,11 @@ module Bookshop
     # The books the filter keeps, cheapest first. Text filters take their wildcards literally; a blank one keeps
     # every book.
     #
-    # @param limit [Integer] the most books to return, kept between 1 and MAX_SEARCH_RESULTS
-    def search(filter = BookFilter.new, limit: SEARCH_RESULTS)
+    # @param limit [Integer, nil] the most books to return, kept between 1 and MAX_SEARCH_RESULTS; 20 if nil
+    def search(filter = BookFilter.new, limit: nil)
       values = [Database.containing(filter.title), Database.containing(filter.author),
                 Database.nil_if_blank(filter.genre), filter.max_price, filter.in_stock,
-                limit.clamp(1, MAX_SEARCH_RESULTS)]
+                (limit || SEARCH_RESULTS).clamp(1, MAX_SEARCH_RESULTS)]
       @database.with { |connection| connection.exec_params(SEARCH, values).map { |row| book(row) } }
     end
 

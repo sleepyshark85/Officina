@@ -18,8 +18,8 @@ written, and this page wins for what the code must do.
   files in their own command before `git commit` (no `add` in the same line, no `commit -a`): the hook runs before the
   line, so it sees only what is already staged. A blocked action says why; fix the cause, never work around the hook.
   After each tool call, a hook logs the agent's context size and tells it, once it passes each of the script's
-  thresholds, to finish its step and hand back; `python3 .claude/hooks/context-size.py --report` shows each agent's
-  latest size.
+  thresholds, to plan its finish (150k) or hand back now, work committed or saved as a patch (300k);
+  `python3 .claude/hooks/context-size.py --report` shows each agent's latest size.
 - **The simplest thing that works.** Build only what the slice's acceptance criteria need: no abstraction without a
   current user, no setting without a known case (until then, a constant), no optimization without a measured target.
   Prefer a platform or standard-library feature over custom code. Simplicity never at the cost of separation of
