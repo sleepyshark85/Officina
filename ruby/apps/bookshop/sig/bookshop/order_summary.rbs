@@ -1,0 +1,11 @@
+module Bookshop
+  class OrderSummary < Data
+    attr_reader id: Integer
+    attr_reader status: String
+    attr_reader placed_at: Time
+    attr_reader total: BigDecimal
+    attr_reader copies: Integer
+
+    def self.new: (id: Integer, status: String, placed_at: Time, total: BigDecimal, copies: Integer) -> instance
+  end
+end

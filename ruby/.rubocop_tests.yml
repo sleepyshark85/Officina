@@ -1,0 +1,11 @@
+# The rules for tests, which the .rubocop.yml of every test directory inherits. A test reads top to bottom as one
+# example: its setup, the call, then each thing it checks. So it may run to 15 lines and check five things, and its
+# assertions, which add calls without adding branches, are not held to the ABC size of library code.
+inherit_from: .rubocop.yml
+
+Metrics/AbcSize:
+  Enabled: false
+Metrics/MethodLength:
+  Max: 15
+Minitest/MultipleAssertions:
+  Max: 5

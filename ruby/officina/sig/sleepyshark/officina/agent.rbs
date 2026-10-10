@@ -7,9 +7,6 @@ module Sleepyshark
     type result = Completed | Stopped | Failed
 
     class Agent
-      ESCAPED: Regexp
-      SHORT: Hash[String, String]
-
       attr_reader model: _Model
       attr_reader instructions: String
       attr_reader tools: Array[Tool]
@@ -23,8 +20,6 @@ module Sleepyshark
       private
 
       def prefix_fingerprint: (String settings) -> String
-
-      def string: (String text) -> String
     end
   end
 end

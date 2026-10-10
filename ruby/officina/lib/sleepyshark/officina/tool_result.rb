@@ -13,7 +13,9 @@ module Sleepyshark
         super(call_id: -call_id, content: -content, error:)
       end
 
-      def error? = error
+      # @return [Boolean] whether the call failed
+      alias error? error
+      private :error
     end
   end
 end

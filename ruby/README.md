@@ -23,7 +23,7 @@ Layout (R2, R3); each gem has `lib/`, `sig/` (its RBS signatures), `test/` and i
 | `apps/bookshop/` | Bookshop Assistant (from Ruby S06), run by `exe/bookshop` |
 | `examples/` | `hello`, a live chat; the GEN-06 samples `extraction`, `chat` and `background` (planned) |
 | `docs/` | Design notes ([`design.md`](docs/design.md): choices, and how Ruby realizes ARCHITECTURE's runtime model), spike notes and traceability |
-| `.rubocop.yml`, `Steepfile`, `rbs_collection.yaml`, `Rakefile` | RuboCop, Steep and the gems' signatures it reads (R13, R18); the tasks |
+| `.rubocop.yml` (with `.rubocop_tests.yml`, which each `test/` inherits), `Steepfile`, `rbs_collection.yaml`, `Rakefile` | RuboCop, Steep and the gems' signatures it reads (R13, R18); the tasks |
 
 ## Build and test
 

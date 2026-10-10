@@ -1,0 +1,14 @@
+module Bookshop
+  class Book < Data
+    attr_reader id: Integer
+    attr_reader title: String
+    attr_reader author: String
+    attr_reader genre: String
+    attr_reader price: BigDecimal
+    attr_reader year: Integer
+    attr_reader stock: Integer
+
+    def self.new: (id: Integer, title: String, author: String, genre: String, price: BigDecimal, year: Integer,
+                   stock: Integer) -> instance
+  end
+end
