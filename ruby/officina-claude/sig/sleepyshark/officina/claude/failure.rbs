@@ -1,0 +1,32 @@
+module Sleepyshark
+  module Officina
+    module Claude
+      class Failure
+        TRANSIENT_TYPES: Array[Symbol]
+        TRANSIENT_STATUSES: Array[Integer]
+        AUTHENTICATION_TYPES: Array[Symbol]
+        AUTHENTICATION_STATUSES: Array[Integer]
+        LONGEST_WAIT: Float
+
+        def self.prompt_too_long?: (Anthropic::Errors::APIStatusError answer) -> bool
+
+        @failure: StandardError
+        @answer: Anthropic::Errors::APIStatusError?
+
+        def initialize: (StandardError failure) -> void
+
+        def transient?: () -> bool
+
+        def wait: (Integer attempt) -> Float
+
+        def to_raise: (Integer attempts) -> Error
+
+        private
+
+        def authentication?: () -> bool
+
+        def retry_after: () -> Integer?
+      end
+    end
+  end
+end
