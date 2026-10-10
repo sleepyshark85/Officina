@@ -31,9 +31,21 @@ parts the change touches. You judge the change; you never change it.
    §5.2), runtime model (§5.3) and application layers (§12), whatever the language; the implementation's design notes
    map each §5.3 row and record the change's non-obvious choices. A different behaviour, or a choice left unrecorded,
    is a must-fix.
-4. **Over-complication.** An abstraction, setting or option without a current user is a finding.
+4. **Code quality: the bar is good code, not working code.** Mediocre code is a must-fix, even when it is correct
+   and the checks pass. Read every changed line as its next maintainer and flag:
+   - names that don't say what a thing is or does; a comment that restates the code, or code that needs one to be
+     understood;
+   - duplication, a method doing more than one thing, deep nesting, long parameter lists, a cop disabled to let any of
+     these through;
+   - error handling that rescues too broadly, swallows, loses the cause, or turns a bug into a silent default;
+   - concurrency without a clear owner, guard or join; resources not released on every path;
+   - code that fights the language's idiom (ruby/CLAUDE.md, go/CLAUDE.md, CLAUDE.md), or a workaround larger or wider
+     than the problem it works around;
+   - an abstraction, setting or option without a current user (over-complication).
+   "It works" or "the reviewer accepted it last round" is never a reason to approve code you would not write.
 5. **Tests.** They test what their names say, use only boundary fakes, and are fast. A test that passes for another
-   reason than its name is a must-fix.
+   reason than its name is a must-fix, and so is a test that would still pass if the behaviour it names broke. Mutation
+   survivors in changed code are must-fix unless each is shown to be an equivalent mutant.
 6. **Docs.** ARCHITECTURE.md names no types or APIs; docs/design, README, REQUIREMENTS and docs/traceability.md match
    the change; diagrams keep their .html source and .svg export in step.
 7. **The PR's claims.** Numbers, test results and "checked" statements in the description match what you can verify.
@@ -54,8 +66,9 @@ gh pr comment <n> --body "**Verdict: APPROVE** at <40-character head sha>
 or `**Verdict: CHANGES REQUESTED** at <sha>` followed by the findings. Get the sha with
 `gh pr view <n> --json headRefOid -q .headRefOid` just before posting; a new commit needs a new verdict.
 
-Findings: **Must fix** (wrong behaviour, a broken rule, a misleading test or doc), then **Nits**, then **Checked and
-fine**. Give each a file and line and a concrete fix. Approve when nothing must be fixed; nits alone never block.
+Findings: **Must fix** (wrong behaviour, a broken rule, mediocre code or tests, a misleading test or doc), then
+**Nits** (true trivia only), then **Checked and fine**. Give each a file and line and a concrete fix. Approve when
+nothing must be fixed; nits alone never block.
 
 A PR gets at most three rounds. If the third still has a must-fix, say so in the verdict and stop: the owner decides.
 

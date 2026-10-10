@@ -11,8 +11,10 @@ REQUIREMENTS.md for the IDs your change covers and ARCHITECTURE.md for the conce
 ## How to work
 
 1. Branch from an up-to-date `main` with an allowed prefix (`slice/<id>-<slug>`, `feature/`, `refactor/`, `fix/`…).
-2. Build the smallest thing that meets the acceptance criteria. Write the tests as you go: example tests for what
-   should happen, property tests for what must never happen, only boundaries faked, each test fast.
+2. Build the smallest thing that meets the acceptance criteria, to the reviewer's code-quality bar
+   (.claude/agents/reviewer.md, "Code quality"): mediocre code is sent back even when it works. Write the tests as
+   you go: example tests for what should happen, property tests for what must never happen, only boundaries faked,
+   each test fast, and no surviving mutant in changed code that isn't an equivalent one.
 3. Keep the docs in step: docs/traceability.md for every test named after a requirement; your implementation's design
    notes (docs/design for .NET, go/docs/design.md, ruby/docs/design.md) for every choice the code alone doesn't
    explain and for its runtime-model table (ARCHITECTURE §5.3); docs/design when .NET types move;
