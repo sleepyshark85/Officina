@@ -74,7 +74,8 @@ loses at most the step in flight: `/sessions` lists the latest, `/resume <id>` g
 (a call a crash left unanswered is told to the model as interrupted), `/new` starts another. After each reply a status
 line shows its tokens, the share read from the cache, its cost and the session's; `/cost` shows the session's. A
 reply may spend $0.50 and a session $5; reaching either stops the reply and says why. `BOOKSHOP_REPLY_BUDGET`, in US
-dollars, such as `0.01`, lowers the reply's budget to show a stop.
+dollars, such as `0.01`, lowers the reply's budget to show a stop; a value that is not an amount above zero stops the
+start with a message.
 `/audit` shows the session's audit trail, each run with a link to its trace on the compose file's telemetry dashboard,
 <http://localhost:18888>, where each reply is one trace (the reply, its run, model calls and tool calls) with its log
 record; the application sends its traces, metrics and logs there over OTLP/HTTP, port 4318.
