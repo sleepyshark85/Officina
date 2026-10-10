@@ -41,6 +41,20 @@ class StreamTest < ClaudeTestCase
     assert_equal UsageReported.new(usage: Usage.new(input: 10, output: 3, cache_read: 7, cache_write: 4)), events.last
   end
 
+  def test_ctx05_the_cache_writes_kept_an_hour_are_counted_apart_as_part_of_the_writes
+    api = serve(FakeApi.sse(START.sub('"input_tokens":10', '"input_tokens":10,"cache_creation_input_tokens":30,' \
+                                                           '"cache_creation":{"ephemeral_5m_input_tokens":10,' \
+                                                           '"ephemeral_1h_input_tokens":20}'),
+                            *text_events('Hi'),
+                            '{"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":3}}',
+                            '{"type":"message_stop"}'))
+
+    events, = collect(model(api), hi)
+
+    assert_equal UsageReported.new(usage: Usage.new(input: 10, output: 3, cache_write: 30, cache_write_hour: 20)),
+                 events.last
+  end
+
   def test_ctx05_a_message_deltas_counts_replace_those_the_call_started_with
     api = serve(FakeApi.sse(START, *text_events('Hi'),
                             '{"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"input_tokens":4,' \

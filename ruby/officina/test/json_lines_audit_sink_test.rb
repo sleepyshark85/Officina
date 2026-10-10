@@ -18,7 +18,8 @@ class JsonLinesAuditSinkTest < Minitest::Test
     assert_equal({ 'time' => '2026-10-10T07:00:00.500000Z', 'sequence' => 1, 'run' => 'r', 'conversation' => 'c',
                    'agent' => 'shop', 'kind' => 'tool_ended', 'tool' => 'search', 'callId' => 'call_1', 'input' => '{}',
                    'outcome' => 'ok', 'detail' => 'Found.', 'duration' => 0.25 }, lines[0])
-    assert_equal({ 'input' => 3, 'output' => 0, 'cache_read' => 0, 'cache_write' => 0 }, lines[1]['usage'])
+    assert_equal({ 'input' => 3, 'output' => 0, 'cache_read' => 0, 'cache_write' => 0, 'cache_write_hour' => 0 },
+                 lines[1]['usage'])
   end
 
   def test_aud03_aud04_an_entrys_trace_and_span_are_written_in_camel_case_after_its_kind

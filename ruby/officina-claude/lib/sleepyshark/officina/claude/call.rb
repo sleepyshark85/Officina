@@ -103,10 +103,12 @@ module Sleepyshark
         end
 
         # The usage a message starts with: the API always counts its input and output tokens, not always the cache's.
+        # Only the start breaks the cache writes down by how long they are kept.
         def usage(reported)
           Usage.new(input: reported[:input_tokens], output: reported[:output_tokens],
                     cache_read: reported[:cache_read_input_tokens] || 0,
-                    cache_write: reported[:cache_creation_input_tokens] || 0)
+                    cache_write: reported[:cache_creation_input_tokens] || 0,
+                    cache_write_hour: reported[:cache_creation]&.[](:ephemeral_1h_input_tokens) || 0)
         end
 
         # The usage after a message delta, which carries the final output count and repeats the input counts it has.

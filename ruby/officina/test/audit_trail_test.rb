@@ -131,8 +131,7 @@ class AuditTrailTest < Minitest::Test
 
   private
 
-  # A clock that moves one second on each reading.
-  # A clock a second later at each call, which keeps what it told in +ticks+.
+  # A clock a second later at each reading, which keeps what it told in +ticks+.
   def clock(ticks = [])
     now = START
     lock = Mutex.new

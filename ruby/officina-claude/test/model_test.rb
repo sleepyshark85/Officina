@@ -38,7 +38,7 @@ class ModelTest < ClaudeTestCase
     opus = Claude::Model.new(name: 'claude-opus-5-5', effort: :low, api_key: 'test-key').info
     other = Claude::Model.new(name: 'claude-other', effort: :low, api_key: 'test-key').info
 
-    assert_equal ['anthropic', 'claude-opus-5-5', [4, 20, BigDecimal('0.2'), 5]],
+    assert_equal ['anthropic', 'claude-opus-5-5', [4, 20, BigDecimal('0.2'), 5, 8]],
                  [opus.provider, opus.name, opus.price.to_h.values]
     assert_equal ['anthropic', 'claude-other', nil], [other.provider, other.name, other.price]
   end

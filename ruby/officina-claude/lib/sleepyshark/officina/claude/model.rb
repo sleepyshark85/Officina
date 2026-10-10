@@ -30,11 +30,11 @@ module Sleepyshark
           cancel.on_cancel { woken.close }
           woken.pop(timeout: seconds)
         }.freeze
-        # Prices by model, in US dollars per million tokens. A cache write is priced at five minutes' rate, 1.25 times
-        # input; an hour's costs twice input.
+        # Prices by model, in US dollars per million tokens. A cache write kept five minutes costs 1.25 times input,
+        # one kept an hour twice input.
         PRICES = {
           'claude-opus-5-5' => Price.new(input: BigDecimal(4), output: BigDecimal(20), cache_read: BigDecimal('0.20'),
-                                         cache_write: BigDecimal(5))
+                                         cache_write: BigDecimal(5), cache_write_hour: BigDecimal(8))
         }.freeze
         private_constant :ATTEMPTS, :WAIT, :PRICES
 

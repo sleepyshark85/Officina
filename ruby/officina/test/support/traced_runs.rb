@@ -29,17 +29,17 @@ module TracedRuns
      Officina::Reply.new(blocks: [Model.text_block(text), *blocks], stop:)]
   end
 
-  # A model of another provider, with a price: 4, 20, 0.20 and 5 dollars per million input, output, cache read and
-  # cache write tokens. Made in the test, so that mutation testing sees it made.
+  # A model of another provider, with a price: 4, 20, 0.20, 5 and 8 dollars per million input, output, cache read,
+  # five-minute and one-hour cache write tokens. Made in the test, so that mutation testing sees it made.
   def acme
     Officina::ModelInfo.new(provider: 'acme', name: 'acme-large', price: Officina::Price.new(
-      input: BigDecimal(4), output: BigDecimal(20), cache_read: BigDecimal('0.2'), cache_write: BigDecimal(5)
+      input: BigDecimal(4), output: BigDecimal(20), cache_read: BigDecimal('0.2'), cache_write: BigDecimal(5),
+      cache_write_hour: BigDecimal(8)
     ))
   end
 
-  def usage(input, output, cache_read = 0, cache_write = 0)
-    Officina::Usage.new(input:, output:, cache_read:,
-                        cache_write:)
+  def usage(input, output, cache_read = 0, cache_write = 0, cache_write_hour = 0)
+    Officina::Usage.new(input:, output:, cache_read:, cache_write:, cache_write_hour:)
   end
 
   # An agent of the model, its telemetry gathered by the collector.

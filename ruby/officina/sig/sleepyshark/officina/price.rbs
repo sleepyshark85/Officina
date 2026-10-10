@@ -5,11 +5,19 @@ module Sleepyshark
       attr_reader output: BigDecimal
       attr_reader cache_read: BigDecimal
       attr_reader cache_write: BigDecimal
+      attr_reader cache_write_hour: BigDecimal
 
-      def self.new: (input: BigDecimal, output: BigDecimal, cache_read: BigDecimal, cache_write: BigDecimal) -> instance
+      def self.new: (input: BigDecimal, output: BigDecimal, cache_read: BigDecimal, cache_write: BigDecimal,
+                     cache_write_hour: BigDecimal) -> instance
 
 
       def cost: (Usage usage) -> BigDecimal
+
+      private
+
+      def read: (Usage usage) -> BigDecimal
+
+      def written: (Usage usage) -> BigDecimal
     end
   end
 end
