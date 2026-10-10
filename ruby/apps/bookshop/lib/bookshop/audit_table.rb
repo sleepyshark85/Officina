@@ -6,11 +6,11 @@ module Bookshop
   # session's id is its conversation's. Thread-safe.
   class AuditTable
     INSERT = <<~SQL
-      insert into audit (time, sequence, run, conversation, agent, trace_id, span_id, kind, tool, call_id, input,
-                         outcome, detail, duration, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
-                         cost)
-      values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, make_interval(secs => $14::float8), $15, $16,
-              $17, $18, $19)
+      insert into audit (time, sequence, run, conversation, agent, memory_scope, trace_id, span_id, kind, tool, call_id,
+                         input, outcome, detail, duration, input_tokens, output_tokens, cache_read_tokens,
+                         cache_write_tokens, cost)
+      values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, make_interval(secs => $15::float8), $16,
+              $17, $18, $19, $20)
     SQL
 
     SELECT = <<~SQL
@@ -28,7 +28,7 @@ module Bookshop
       freeze
     end
 
-    # Inserts the entry as a row; its memory scope is left out until the agent has a memory.
+    # Inserts the entry as a row.
     #
     # @param entry [Sleepyshark::Officina::AuditEntry]
     # @raise [PG::Error] when the database cannot be reached
@@ -51,9 +51,9 @@ module Bookshop
 
     # The row's values, in the insert's order.
     def values(entry)
-      [entry.time, entry.sequence, entry.run, entry.conversation, entry.agent, entry.trace_id, entry.span_id,
-       kind(entry.kind), entry.tool, entry.call_id, entry.input, entry.outcome, entry.detail, entry.duration,
-       *spent(entry)]
+      [entry.time, entry.sequence, entry.run, entry.conversation, entry.agent, entry.memory_scope, entry.trace_id,
+       entry.span_id, kind(entry.kind), entry.tool, entry.call_id, entry.input, entry.outcome, entry.detail,
+       entry.duration, *spent(entry)]
     end
 
     # The tokens and cost columns, which only a run's end, the entry with usage and cost, fills.
