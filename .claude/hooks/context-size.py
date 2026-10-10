@@ -71,8 +71,7 @@ def warning(tokens, limit, lead=False):
     if lead:
         if limit < max(THRESHOLDS):
             return head + "Update your status note; consider asking the owner to /compact at the next milestone."
-        return head + ("Update your status note now and ask the owner to run /compact; keep dispatching nothing new "
-                       "until then.")
+        return head + "Update your status note now and ask the owner to run /compact; dispatch nothing new until then."
     if limit < max(THRESHOLDS):
         return head + ("Plan to finish at a natural point, and keep your work committed as you go, so a fresh agent "
                        "can pick it up.")
@@ -111,7 +110,8 @@ def on_tool_use(payload, session):
     append(log, {"time": now(), "agent_type": payload.get("agent_type") or MAIN, "tokens": tokens})
     if limit is None:
         return None
-    return {"hookSpecificOutput": {"hookEventName": "PostToolUse", "additionalContext": warning(tokens, limit, lead=not agent)}}
+    text = warning(tokens, limit, lead=not agent)
+    return {"hookSpecificOutput": {"hookEventName": "PostToolUse", "additionalContext": text}}
 
 
 def report(sizes):

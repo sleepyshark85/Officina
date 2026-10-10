@@ -112,7 +112,7 @@ class ContextSizeTest(unittest.TestCase):
         self.assertIn("past 300,000", text)
         self.assertIn("Update your status note now", text)
         self.assertIn("ask the owner to run /compact", text)
-        self.assertIn("dispatching nothing new", text)
+        self.assertIn("dispatch nothing new", text)
 
     def test_report_lists_the_latest_size_per_agent_largest_first(self):
         sizes = os.path.join(self.session, "context-sizes")
