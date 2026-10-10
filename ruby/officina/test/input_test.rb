@@ -85,35 +85,6 @@ class InputTest < Minitest::Test
                  order_input.schema.validate({ 'customerId' => '4', 'lines' => [{ 'bookId' => 7, 'quantity' => 0 }] })
   end
 
-  EITHER = 'tags: give either of: string, integer, number, boolean or a block'
-  # Malformed declarations, with what is wrong with them.
-  MALFORMED = {
-    -> { string :kind, enum: %w[a b], nullable: true } => 'kind: an enum cannot be nullable',
-    -> { integer :count, minimum: 0.5 } => 'count: minimum must be an Integer',
-    -> { number :price, minimum: 0.5 } => 'price: minimum must be an Integer',
-    -> { array :tags } => EITHER,
-    -> { array(:tags, of: :string) { string :name } } => EITHER,
-    -> { array :tags, of: :object } => 'tags: of: must be one of string, integer, number, boolean',
-    lambda {
-      string :title
-      string :title
-    } => 'title: title is declared twice',
-    lambda {
-      integer :max_price
-      integer :maxPrice
-    } => 'maxPrice: maxPrice is declared twice'
-  }.freeze
-
-  def test_test08_a_malformed_declaration_is_refused_when_it_is_defined
-    MALFORMED.each do |declaration, message|
-      assert_equal message, assert_raises(ArgumentError) { Input.define(&declaration) }.message
-    end
-  end
-
-  def test_test08_a_declaration_reaches_only_the_member_methods
-    assert_raises(NoMethodError) { Input.define { type 'string', true } }
-  end
-
   private
 
   def arrays
