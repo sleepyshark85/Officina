@@ -1,0 +1,12 @@
+module Bookshop
+  module Transcript
+    RESULT_LENGTH: Integer
+
+    def self.of: (Sleepyshark::Officina::Conversation conversation) -> String
+
+    private
+
+    def self.line: (Symbol role, Sleepyshark::Officina::Block block, Hash[String, String] calls) -> String?
+    def self.cut: (String text) -> String
+  end
+end

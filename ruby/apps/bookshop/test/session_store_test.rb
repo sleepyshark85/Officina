@@ -2,14 +2,14 @@
 
 require 'test_helper'
 require_relative 'database_server'
+require_relative 'stored_conversations'
 
 # The session store against the real database: a session reads back byte for byte with its totals, and a save never
 # loses what another console saved.
 class SessionStoreTest < Minitest::Test
   include DatabaseServer
+  include StoredConversations
 
-  Officina = Sleepyshark::Officina
-  ScriptedModel = Officina::Testing::ScriptedModel
   # Private to the application, which hands them only to the console.
   SessionStore = Bookshop.const_get(:SessionStore)
   SessionChangedError = Bookshop.const_get(:SessionChangedError)
@@ -130,14 +130,6 @@ class SessionStoreTest < Minitest::Test
   # Saves the conversation as the store's other tests do, unless told otherwise.
   def save(conversation, previous: nil, staff_member: 'Sam', usage: USAGE, cost: BigDecimal(0))
     @store.save(conversation, staff_member:, usage:, cost:, previous:)
-  end
-
-  # A new conversation after a run in which the model answered the message with the reply.
-  def conversation_after(message, reply) = Officina::Conversation.new.tap { chat(it, message, reply) }
-
-  def chat(conversation, message, reply)
-    agent = Officina::Agent.new(model: ScriptedModel.new(ScriptedModel.text(reply)), instructions: 'Help.')
-    agent.run(conversation, message) { nil }
   end
 
   # Sets the session's time to the start of 2026, as if it was saved then.

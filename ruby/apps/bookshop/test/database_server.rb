@@ -55,22 +55,17 @@ module DatabaseServer
                    '--env', "POSTGRES_DB=#{SEEDED}", '--publish', '127.0.0.1::5432',
                    '--volume', "#{SCRIPTS}:/docker-entrypoint-initdb.d:ro", IMAGE)
       port = Docker.port(CONTAINER, '5432/tcp')
-      wait_until_ready(port)
+      Docker.wait_until_ready(STARTUP) { ready?(port) }
       port
     end
 
     # The server listens on TCP only once the scripts have run and it has restarted, so the first connection that
     # succeeds finds it ready.
-    def wait_until_ready(port)
-      deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + STARTUP
-      begin
-        PG.connect("postgres://#{USER}:#{PASSWORD}@127.0.0.1:#{port}/#{SEEDED}").close
-      rescue PG::ConnectionBad
-        raise if Process.clock_gettime(Process::CLOCK_MONOTONIC) > deadline
-
-        sleep 0.2
-        retry
-      end
+    def ready?(port)
+      PG.connect("postgres://#{USER}:#{PASSWORD}@127.0.0.1:#{port}/#{SEEDED}").close
+      true
+    rescue PG::ConnectionBad
+      false
     end
   end
 

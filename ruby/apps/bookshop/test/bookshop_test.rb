@@ -66,10 +66,11 @@ class BookshopTest < Minitest::Test
     why, how = output.lines
 
     assert_equal 1, status.exitstatus
-    assert_match(/\AThe export server at #{NO_SERVER} is not available: MCP server filesystem could not be reached: /o,
+    assert_match(/\AThe export server at #{NO_SERVER} cannot be used: MCP server filesystem could not be reached: /o,
                  why)
-    assert_equal 'Start it with ./start.sh (or pwsh -File start.ps1) in apps/BookshopAssistant, or set ' \
-                 "BOOKSHOP_EXPORTS to its endpoint, or to nothing to go without exports.\n", how
+    assert_equal 'If it is not running, start it with ./start.sh (or pwsh -File start.ps1) in ' \
+                 'apps/BookshopAssistant; or set BOOKSHOP_EXPORTS to its endpoint, or to nothing to go without ' \
+                 "exports.\n", how
   end
 
   def test_app12_the_command_refuses_an_export_server_setting_that_is_not_an_http_url_and_fails

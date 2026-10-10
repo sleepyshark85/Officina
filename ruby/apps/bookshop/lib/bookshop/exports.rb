@@ -33,9 +33,10 @@ module Bookshop
     rescue ArgumentError => e # the transport's refusal of the URL
       raise SettingError, "BOOKSHOP_EXPORTS #{url.inspect} cannot be used: #{e.message}"
     rescue Mcp::Error => e
-      raise ExportServerError, "The export server at #{url} is not available: #{e.message}\nStart it with " \
-                               './start.sh (or pwsh -File start.ps1) in apps/BookshopAssistant, or set ' \
-                               'BOOKSHOP_EXPORTS to its endpoint, or to nothing to go without exports.'
+      raise ExportServerError, "The export server at #{url} cannot be used: #{e.message}\n" \
+                               'If it is not running, start it with ./start.sh (or pwsh -File start.ps1) in ' \
+                               'apps/BookshopAssistant; or set BOOKSHOP_EXPORTS to its endpoint, or to nothing to go ' \
+                               'without exports.'
     end
   end
   private_constant :Exports

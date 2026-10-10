@@ -5,6 +5,7 @@ module Bookshop
     STORED: String
     LOAD: String
     LIST: String
+    SUMMARY: String
 
     @database: Database
 
@@ -13,6 +14,8 @@ module Bookshop
                usage: Sleepyshark::Officina::Usage, cost: BigDecimal, previous: String?) -> String
     def load: (String id) -> StoredSession?
     def list: (Integer count) -> Array[SessionListing]
+    def save_summary: (String id, SessionSummary summary, usage: Sleepyshark::Officina::Usage, cost: BigDecimal)
+                    -> void
 
     private
 

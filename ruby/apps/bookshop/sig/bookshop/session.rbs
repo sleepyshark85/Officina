@@ -11,21 +11,25 @@ module Bookshop
     @context: String?
     @spent: Sleepyshark::Officina::Usage
     @told: bool
+    @changed: bool
     @cleared: Integer?
 
     attr_reader staff_member: String
     attr_reader usage: Sleepyshark::Officina::Usage
     attr_reader cost: BigDecimal
+    attr_reader conversation: Sleepyshark::Officina::Conversation
 
     def initialize: (agent: Sleepyshark::Officina::Agent, store: SessionStore, clock: ^() -> Time,
-                     staff_member: String, stored: StoredSession) -> void
+                     staff_member: String, stored: StoredSession, ?changed: bool) -> void
     def id: () -> String
     def length: () -> Integer
+    def changed?: () -> bool
     def reply: (String message, cancel: Sleepyshark::Officina::Cancellation, budget: Sleepyshark::Officina::Budget)
                { (Sleepyshark::Officina::run_event | SessionNotSaved event) -> void } -> Sleepyshark::Officina::result
 
     private
 
+    def take_up: (StoredSession stored) -> void
     def add: (Sleepyshark::Officina::result result) { (SessionNotSaved event) -> void } -> Sleepyshark::Officina::result
     def repeated_clearing?: (Sleepyshark::Officina::run_event event) -> bool
     def follow: (Sleepyshark::Officina::run_event event, String context)

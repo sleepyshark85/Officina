@@ -36,17 +36,8 @@ module ExportServer
       # The filesystem server starts with each MCP session, and refuses a folder that does not exist.
       Docker.run('exec', CONTAINER, 'mkdir', '-p', FOLDER)
       port = Docker.port(CONTAINER, '8000/tcp')
-      wait_until_healthy(port)
+      Docker.wait_until_ready(STARTUP) { healthy?(port) }
       "http://127.0.0.1:#{port}/mcp"
-    end
-
-    def wait_until_healthy(port)
-      deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + STARTUP
-      until healthy?(port)
-        raise 'the export server did not start' if Process.clock_gettime(Process::CLOCK_MONOTONIC) > deadline
-
-        sleep 0.2
-      end
     end
 
     def healthy?(port)
