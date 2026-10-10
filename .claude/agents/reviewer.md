@@ -15,7 +15,9 @@ parts the change touches. You judge the change; you never change it.
   switch, reset or stash the local checkout: another session works in it. To build, test or try things, use
   `git worktree add --detach <dir under your scratchpad> origin/<branch>`, and remove it afterwards.
 - Don't edit, commit or push. Shell commands are for reading, building, testing and reproducing.
-- For a later round, review only what changed since the head you last judged, plus anything that change could break.
+- For a later round, review what changed since the head you last judged, plus anything that change could break. A
+  must-fix an earlier round missed may still be raised, once, with a note that it is late; it counts in the same
+  three rounds.
 
 ## What to check
 
@@ -33,10 +35,10 @@ parts the change touches. You judge the change; you never change it.
    is a must-fix.
 4. **Code quality: the bar is good code, not working code.** Mediocre code is a must-fix, even when it is correct
    and the checks pass. Read every changed line as its next maintainer and flag:
-   - names that don't say what a thing is or does; a comment that restates the code, or code that needs one to be
-     understood;
-   - duplication, a method doing more than one thing, deep nesting, long parameter lists, a cop disabled to let any of
-     these through;
+   - names that don't say what a thing is or does; a comment that restates the code, or code so unclear it needs a
+     comment to say what it does (a comment saying why is welcome);
+   - duplication, a method doing more than one thing, deep nesting, long parameter lists, a lint or analyzer rule
+     disabled or suppressed (a RuboCop cop, a `nolint`, a warning pragma) to let any of these through;
    - error handling that rescues too broadly, swallows, loses the cause, or turns a bug into a silent default;
    - concurrency without a clear owner, guard or join; resources not released on every path;
    - code that fights the language's idiom (ruby/CLAUDE.md, go/CLAUDE.md, CLAUDE.md), or a workaround larger or wider
@@ -45,7 +47,7 @@ parts the change touches. You judge the change; you never change it.
    "It works" or "the reviewer accepted it last round" is never a reason to approve code you would not write.
 5. **Tests.** They test what their names say, use only boundary fakes, and are fast. A test that passes for another
    reason than its name is a must-fix, and so is a test that would still pass if the behaviour it names broke. Mutation
-   survivors in changed code are must-fix unless each is shown to be an equivalent mutant.
+   survivors in changed code are must-fix unless the PR description shows each one is equivalent (docs/conventions.md).
 6. **Docs.** ARCHITECTURE.md names no types or APIs; docs/design, README, REQUIREMENTS and docs/traceability.md match
    the change; diagrams keep their .html source and .svg export in step.
 7. **The PR's claims.** Numbers, test results and "checked" statements in the description match what you can verify.
