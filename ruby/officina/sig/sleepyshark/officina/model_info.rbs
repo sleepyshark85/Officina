@@ -5,10 +5,20 @@ module Sleepyshark
       attr_reader name: String
       attr_reader price: Price?
 
-      def self.new: (provider: String, name: String, ?price: Price?) -> instance
+      def self.new: (provider: String, name: String, ?price: Price?, ?compacts: bool, ?clears_tool_results: bool)
+                  -> instance
 
+      def initialize: (provider: String, name: String, ?price: Price?, ?compacts: bool, ?clears_tool_results: bool)
+                      -> void
 
-      def initialize: (provider: String, name: String, ?price: Price?) -> void
+      def compacts?: () -> bool
+
+      def clears_tool_results?: () -> bool
+
+      private
+
+      attr_reader compacts: bool
+      attr_reader clears_tool_results: bool
     end
   end
 end

@@ -1,0 +1,14 @@
+module Sleepyshark
+  module Officina
+    class ContextManagement < Data
+      attr_reader compact_at: Integer?
+      attr_reader clear_tool_results: ToolResultClearing?
+
+      def self.new: (?compact_at: Integer?, ?clear_tool_results: ToolResultClearing?) -> instance
+
+      def initialize: (?compact_at: Integer?, ?clear_tool_results: ToolResultClearing?) -> void
+
+      def fingerprint: () -> String
+    end
+  end
+end

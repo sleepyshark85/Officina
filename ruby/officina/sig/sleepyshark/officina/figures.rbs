@@ -1,0 +1,7 @@
+module Sleepyshark
+  module Officina
+    module Figures
+      def self.thousands: (Integer count) -> String
+    end
+  end
+end

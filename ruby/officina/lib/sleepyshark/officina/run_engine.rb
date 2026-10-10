@@ -19,6 +19,7 @@ module Sleepyshark
         @spending = Spending.new(budget:, price: agent.model.info.price, clock: agent.clock)
         @trace = trace
         @audit = AuditRecorder.new(agent:, conversation:, trace:)
+        @model_call = ModelCall.new(agent:, cancel:, spending: @spending, trace:, audit: @audit, reporter: @reporter)
         @tool_step = ToolStep.new(agent:, audit: @audit, trace:, cancel:, reporter: @reporter)
       end
 
@@ -66,45 +67,10 @@ module Sleepyshark
       # or nil when the loop goes on.
       def step(pending)
         limit = @spending.output_limit
-        case call_model(@conversation.messages + pending, limit)
+        case @model_call.call(@conversation.messages + pending, limit)
         in Reply => reply then after_reply(reply, pending, limit)
         in result then result
         end
-      end
-
-      # The reply, the result of a call that got none, or nil when the run was cancelled, which the loop then stops.
-      def call_model(messages, limit)
-        @spending.count_model_call
-        request = Request.new(tools: @agent.tools, instructions: @agent.instructions,
-                              output_schema: @agent.output&.schema&.to_s, messages:, max_output_tokens: limit)
-        @trace.model_call { stream(request) || no_reply("The model's reply ended without a stop reason") }
-      end
-
-      # The reply; nil for a stream that ended without one; what #no_reply makes of a stream that failed. What the
-      # host's block raised passes through.
-      def stream(request)
-        @agent.model.stream(request, cancel: @cancel) { |event| relay(event) }
-      rescue StandardError => e
-        raise if @host_raised
-
-        no_reply(e.message)
-      end
-
-      def relay(event)
-        # @type var usage: Usage
-        case event
-        in UsageReported(usage:) then @spending.add(usage)
-        else nil
-        end
-        @trace.observe(event)
-        @reporter.emit(event)
-      rescue StandardError
-        @host_raised = true
-        raise
-      end
-
-      def no_reply(why)
-        failed(:model_error, why) unless @cancel.cancelled?
       end
 
       # Keeps the reply, with the messages it answers and its calls' results, unless the provider would reject it, and

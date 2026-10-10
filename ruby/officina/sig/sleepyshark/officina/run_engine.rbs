@@ -10,8 +10,8 @@ module Sleepyshark
       @cancel: Cancellation
       @spending: Spending
       @trace: RunTrace
-      @host_raised: bool?
       @audit: AuditRecorder
+      @model_call: ModelCall
       @tool_step: ToolStep
 
       def initialize: (agent: Agent, conversation: Conversation, append: ^(Array[Message], String) -> void,
@@ -26,14 +26,6 @@ module Sleepyshark
       def call_until_stopped: (Array[Message] pending) -> result
 
       def step: (Array[Message] pending) -> result?
-
-      def call_model: (Array[Message] messages, Integer? limit) -> (Reply | Failed | nil)
-
-      def stream: (Request request) -> (Reply | Failed | nil)
-
-      def relay: (model_event event) -> void
-
-      def no_reply: (String why) -> Failed?
 
       def after_reply: (Reply reply, Array[Message] pending, Integer? limit) -> result?
 

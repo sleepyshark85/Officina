@@ -1,7 +1,8 @@
 module Sleepyshark
   module Officina
     # What a run yields to the host, in the order it happened.
-    type run_event = TextDelta | UsageReported | Retried | ConversationAppended | tool_event
+    type run_event = TextDelta | UsageReported | Retried | ConversationCompacted | ToolResultsCleared
+                   | ConversationAppended | tool_event
 
     # How a run ended.
     type result = Completed | Stopped | Failed
@@ -17,12 +18,13 @@ module Sleepyshark
       attr_reader name: String?
       attr_reader clock: ^() -> Time
       attr_reader telemetry: Telemetry
+      attr_reader context_management: ContextManagement?
 
       @secrets: Secrets
 
       def initialize: (model: _Model, instructions: String, ?tools: Array[Tool], ?output: Input::_Class?,
                        ?approver: _Approver?, ?audit_sink: _AuditSink?, ?name: String?, ?secrets: Array[String],
-                       ?clock: (^() -> Time)?, ?telemetry: Telemetry?) -> void
+                       ?clock: (^() -> Time)?, ?telemetry: Telemetry?, ?context_management: ContextManagement?) -> void
 
       def tool: (String name) -> Tool?
 
@@ -35,7 +37,10 @@ module Sleepyshark
 
       def check_run: (String input, String? context, Budget? budget) -> void
 
-      def keep_prefix: (_Model model, String instructions, Array[Tool] tools, Input::_Class? output) -> void
+      def keep_prefix: (_Model model, String instructions, Array[Tool] tools, Input::_Class? output,
+                        ContextManagement? context_management) -> void
+
+      def supported: (ContextManagement? context_management, ModelInfo info) -> ContextManagement?
 
       def given: (String instructions) -> String
 

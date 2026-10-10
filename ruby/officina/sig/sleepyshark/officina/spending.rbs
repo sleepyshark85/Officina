@@ -47,7 +47,6 @@ module Sleepyshark
 
       def dollars: (BigDecimal value) -> String
 
-      def thousands: (Integer value) -> String
     end
   end
 end

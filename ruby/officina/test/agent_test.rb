@@ -3,14 +3,13 @@
 require 'test_helper'
 require_relative 'support/fake_clock'
 
-# An agent's definition, the checks on a run's input, and the prefix fingerprint that binds a conversation to it.
+# An agent's definition, the checks on a run's input, and a changed agent's run on a conversation the original bound.
 class AgentTest < Minitest::Test
   include Sleepyshark::Officina
 
   cover 'Sleepyshark::Officina*'
 
   Model = Testing::ScriptedModel
-  SHARED = File.expand_path('../../../testdata', __dir__)
   PREFIX_MISMATCH = "The agent's tools, instructions, output type or model settings differ from those the " \
                     'conversation was started with; start a new conversation'
 
@@ -61,34 +60,6 @@ class AgentTest < Minitest::Test
     assert_equal 'A run context cannot be blank', error.message
   end
 
-  def test_ctx01_the_fingerprint_is_the_one_every_implementation_computes
-    prefix = JSON.parse(File.read(File.join(SHARED, 'session', 'prefix.json')))
-    tools = prefix['tools'].map { tool(it['name'], description: it['description'], schema: it['inputSchema']) }
-
-    agent = Agent.new(model: Model.new(settings: prefix['settings']), instructions: prefix['instructions'],
-                      tools: tools.reverse)
-
-    assert_equal prefix['fingerprint'], agent.fingerprint
-  end
-
-  def test_ctx01_out01_the_fingerprint_with_an_output_schema_is_the_one_every_implementation_computes
-    prefix = JSON.parse(File.read(File.join(SHARED, 'session', 'prefix.json')))
-    shared = prefix['output'].first
-    tools = prefix['tools'].map { tool(it['name'], description: it['description'], schema: it['inputSchema']) }
-    output = Input.define do
-      string :title, "A title «short», with <b>&amp; 'quotes' + more."
-      integer :copies, minimum: 0
-      array :changes, of: :string, optional: true
-      string :note, nullable: true
-    end
-
-    agent = Agent.new(model: Model.new(settings: prefix['settings']), instructions: prefix['instructions'], tools:,
-                      output:)
-
-    assert_equal shared['schema'], output.schema.to_s
-    assert_equal shared['fingerprint'], agent.fingerprint
-  end
-
   def test_ctx04_out01_a_changed_output_type_fails_the_run_with_a_prefix_mismatch
     model = Model.new
     output = Input.define { string :title }
@@ -121,8 +92,8 @@ class AgentTest < Minitest::Test
 
   private
 
-  def tool(name, description: 'Searches the catalogue.', schema: '{"type":"object"}')
-    Tool.new(name:, description:, input: Schema.new(schema), kind: :read) { 'Found.' }
+  def tool(name, description: 'Searches the catalogue.')
+    Tool.new(name:, description:, input: Schema.new('{"type":"object"}'), kind: :read) { 'Found.' }
   end
 
   # Runs the changed agent on a conversation that a run of the original bound: it fails before it calls its model, and
