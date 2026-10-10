@@ -1,0 +1,12 @@
+module Bookshop
+  class Budgets < Data
+    attr_reader reply: BigDecimal
+    attr_reader session: BigDecimal
+
+    def self.new: (reply: BigDecimal, session: BigDecimal) -> instance
+    def self.from: (Bookshop::_Settings env) -> Budgets
+
+    def for_reply: (BigDecimal spent) -> Sleepyshark::Officina::Budget
+    def reached: (BigDecimal spent) -> String
+  end
+end

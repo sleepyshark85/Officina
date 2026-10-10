@@ -6,11 +6,13 @@ module Bookshop
     @terminal: Terminal
     @approvals: Approvals
     @cancel: Sleepyshark::Officina::Cancellation
+    @budget_reached: String
     @labelled: bool
 
-    def initialize: (terminal: Terminal, approvals: Approvals, cancel: Sleepyshark::Officina::Cancellation) -> void
-    def show: (Sleepyshark::Officina::run_event event) -> void
-    def finish: (Sleepyshark::Officina::result result) -> void
+    def initialize: (terminal: Terminal, approvals: Approvals, cancel: Sleepyshark::Officina::Cancellation,
+                     budget_reached: String) -> void
+    def show: (Sleepyshark::Officina::run_event | SessionNotSaved event) -> void
+    def finish: (Sleepyshark::Officina::result result, session_cost: BigDecimal) -> void
 
     private
 
@@ -18,5 +20,6 @@ module Bookshop
     def ask: (Sleepyshark::Officina::ToolCall call) -> void
     def outcome: (Sleepyshark::Officina::ToolResult result) -> String
     def ending: (Sleepyshark::Officina::result result) -> String?
+    def stopped: (Symbol reason) -> String
   end
 end

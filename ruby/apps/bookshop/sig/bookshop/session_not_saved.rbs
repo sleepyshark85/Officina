@@ -1,0 +1,7 @@
+module Bookshop
+  class SessionNotSaved < Data
+    attr_reader message: String
+
+    def self.new: (message: String) -> instance
+  end
+end
