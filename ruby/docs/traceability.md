@@ -30,7 +30,7 @@ Tests are under `ruby/`, shortened as:
 | Rules | `officina/test/memory_rules_test.rb` (`MemoryRulesTest`) |
 | Long | `officina/test/long_conversation_test.rb` (`LongConversationTest`) |
 | CtxMgmt | `officina/test/context_management_test.rb` (`ContextManagementTest`) |
-| CLong | `officina-claude/test/long_conversation_test.rb` (`LongConversationTest`), with the shared `testdata/claude/compaction-iterations.sse` and `clearing.sse` |
+| CLong | `officina-claude/test/context_editing_test.rb` (`ContextEditingTest`), with the shared `testdata/claude/compaction-iterations.sse` and `clearing.sse` |
 | Core | `officina/test/` |
 | Loop | `officina/test/run_loop_test.rb` (`RunLoopTest`) |
 | Leave | `officina/test/run_leaving_test.rb` (`RunLeavingTest`) |

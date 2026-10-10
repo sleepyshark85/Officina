@@ -4,7 +4,7 @@ require_relative 'claude_test_case'
 
 # Claude's server-side context management: what a request asks for, what a reply reports, and the compaction block
 # kept and sent back as received.
-class LongConversationTest < ClaudeTestCase
+class ContextEditingTest < ClaudeTestCase
   # Context management that asks for clearing and compaction, as .NET's tests do.
   BOTH = ContextManagement.new(compact_at: 50_000, clear_tool_results: ToolResultClearing.new(
     after: 3, keep: 1, at_least_tokens: 5_000
