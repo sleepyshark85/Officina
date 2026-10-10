@@ -29,7 +29,9 @@ module Bookshop
     # @param budgets [Budgets]
     # @param audit [AuditView] what /audit shows
     # @param telemetry [Telemetry] which traces and logs each reply
-    def initialize(agent:, approvals:, input:, output:, clock:, store:, budgets:, audit:, telemetry:)
+    # @param demo [Boolean] whether to say at the start that the agent compacts and clears early (ChatAgent::DEMO)
+    def initialize(agent:, approvals:, input:, output:, clock:, store:, budgets:, audit:, telemetry:, demo:)
+      @demo = demo
       @audit = audit
       @telemetry = telemetry
       @approvals = approvals
@@ -44,6 +46,7 @@ module Bookshop
     def run
       @interrupts.watch do
         @terminal.write_line('Bookshop Assistant. Type /help for commands.')
+        @terminal.write_line(ChatAgent::DEMO_ANNOUNCEMENT) if @demo
         staff_member = ask_staff_member
         converse(@sessions.start(staff_member)) if staff_member
       end

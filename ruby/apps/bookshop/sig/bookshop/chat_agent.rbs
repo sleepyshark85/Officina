@@ -1,8 +1,12 @@
 module Bookshop
   module ChatAgent
     INSTRUCTIONS: String
+    LONG_CONVERSATIONS: Sleepyshark::Officina::ContextManagement
+    DEMO: Sleepyshark::Officina::ContextManagement
+    DEMO_ANNOUNCEMENT: String
 
     def self.context: (Time now, String staff_member) -> String
-    def self.claude: () -> Sleepyshark::Officina::Claude::Model
+    def self.context_management: (demo: bool) -> Sleepyshark::Officina::ContextManagement
+    def self.claude: (demo: bool) -> Sleepyshark::Officina::Claude::Model
   end
 end

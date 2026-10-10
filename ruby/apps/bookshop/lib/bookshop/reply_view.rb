@@ -2,9 +2,10 @@
 
 module Bookshop
   # Shows one reply on the terminal as its run's events come: the text as it streams, each tool call with its input and
-  # outcome, a note when the reply starts again, and one when the session could not be saved. It asks the staff member
-  # about each call that needs approval, and ends with how the reply ended when that is not its text, and a status
-  # line of the reply's tokens and cost and the session's cost.
+  # outcome, a note when the reply starts again, one when the provider compacts the conversation or clears old tool
+  # results, and one when the session could not be saved. It asks the staff member about each call that needs
+  # approval, and ends with how the reply ended when that is not its text, and a status line of the reply's tokens and
+  # cost and the session's cost.
   class ReplyView
     Officina = Sleepyshark::Officina
     DECLINED = Officina::Approval.new(approved: false, reason: 'the staff member declined')
@@ -18,18 +19,15 @@ module Bookshop
       @cancel = cancel
       @budget_reached = budget_reached
       @labelled = false
+      @compacted = false
     end
 
     # @param event [Sleepyshark::Officina::run_event, SessionNotSaved]
     def show(event)
       case event
       in Officina::TextDelta(text:) then stream(text)
-      in Officina::Retried then @terminal.write_line('[The reply was interrupted and starts again.]')
-      in Officina::ToolCallStarted(call:) then @terminal.write_line("  > #{call.name} #{call.input}")
-      in Officina::ApprovalAsked(call:) then ask(call)
-      in Officina::ToolCallFinished(call:, result:) then @terminal.write_line("  < #{call.name}: #{outcome(result)}")
-      in SessionNotSaved(message:) then @terminal.write_line(message)
-      else nil # usage and appends show nothing yet
+      in Officina::ToolCallStarted | Officina::ApprovalAsked | Officina::ToolCallFinished then tool(event)
+      else note(event)
       end
     end
 
@@ -56,6 +54,38 @@ module Bookshop
       @terminal.write(text)
     end
 
+    # A tool call's line, or its approval prompt.
+    def tool(event)
+      case event
+      in Officina::ToolCallStarted(call:) then @terminal.write_line("  > #{call.name} #{call.input}")
+      in Officina::ApprovalAsked(call:) then ask(call)
+      in Officina::ToolCallFinished(call:, result:) then @terminal.write_line("  < #{call.name}: #{outcome(result)}")
+      end
+    end
+
+    # A note on what happened to the reply or its conversation besides the model's text and tool calls.
+    def note(event)
+      case event
+      in Officina::Retried then @terminal.write_line('[The reply was interrupted and starts again.]')
+      in Officina::ConversationCompacted then compacted(event)
+      in Officina::ToolResultsCleared then cleared(event)
+      in SessionNotSaved(message:) then @terminal.write_line(message)
+      else nil # usage and appends show nothing yet
+      end
+    end
+
+    # Says how much the compaction summarized, and remembers it: a reply without text after one may be its doing.
+    def compacted(event)
+      @compacted = true
+      @terminal.write_line("  ~ Conversation compacted: #{Spent.thousands(event.tokens)} tokens summarized into " \
+                           "#{Spent.thousands(event.summary_tokens)}.")
+    end
+
+    def cleared(event)
+      @terminal.write_line("  ~ Old tool results cleared: #{event.tool_calls} tool calls, " \
+                           "#{Spent.thousands(event.tokens)} tokens.")
+    end
+
     # Shows the call's exact input and gives the staff member's answer to the pipeline, which waits for it. Ctrl+C at
     # the prompt stops the wait at once, and the line being typed is the next message.
     def ask(call)
@@ -75,9 +105,17 @@ module Bookshop
 
     def ending(result)
       case result
-      in Officina::Completed(text:) then ('[The reply has no text. Please ask again.]' if text.strip.empty?)
+      in Officina::Completed(text:) then without_text if text.strip.empty?
       in Officina::Stopped(reason:) then stopped(reason)
       in Officina::Failed(detail:) then "[Failed: #{detail}]"
+      end
+    end
+
+    def without_text
+      if @compacted
+        '[The conversation was compacted and the reply has no text. Please ask again.]'
+      else
+        '[The reply has no text. Please ask again.]'
       end
     end
 

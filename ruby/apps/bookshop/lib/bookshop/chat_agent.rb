@@ -40,11 +40,39 @@ module Bookshop
       "Today is #{now.strftime('%A %-d %B %Y')}. The staff member using the assistant is #{staff_member}."
     end
 
-    # Claude Opus 5.5 at medium effort, its caches kept an hour: staff reply minutes apart, and the instructions and
-    # tools serve every session. The API key comes from ANTHROPIC_API_KEY, where the SDK finds it.
-    def self.claude
+    # How the provider shortens a long conversation, .NET's and Go's settings, so a session one implementation saved
+    # resumes in another: compaction at Claude's default threshold, and old tool results cleared only when that frees
+    # about two broad searches' worth, as each clearing rewrites the cached tail.
+    LONG_CONVERSATIONS = Sleepyshark::Officina::ContextManagement.new(
+      compact_at: 150_000,
+      clear_tool_results: Sleepyshark::Officina::ToolResultClearing.new(after: 20, keep: 5, at_least_tokens: 20_000)
+    )
+
+    # Demo mode's: compaction at Claude's minimum, which the demo's four 10–15k-token searches reach, and clearing
+    # above 12 tool calls (the provider clears above the threshold, not at it). Clearing counts every tool call, so a
+    # lower threshold clears the searches before they can compact; keeping the 10 latest results means a turn of 8
+    # lookups never loses what it just fetched.
+    DEMO = Sleepyshark::Officina::ContextManagement.new(
+      compact_at: 50_000, clear_tool_results: Sleepyshark::Officina::ToolResultClearing.new(after: 12, keep: 10)
+    )
+
+    # What the console says at the start of demo mode.
+    DEMO_ANNOUNCEMENT = 'Demo mode: compaction from 50,000 input tokens, and old tool results cleared above 12 ' \
+                        'tool calls.'
+
+    # @param demo [Boolean] whether compaction and clearing come early enough to see in a short session
+    # @return [Sleepyshark::Officina::ContextManagement]
+    def self.context_management(demo:) = demo ? DEMO : LONG_CONVERSATIONS
+
+    # Claude Opus 5.5 at medium effort. Staff reply minutes apart, and the instructions and tools serve every session,
+    # so its caches last an hour; a demo is one sitting, and its large searches would cost 60% more to cache for an
+    # hour, so in demo mode they last five minutes. The API key comes from ANTHROPIC_API_KEY, where the SDK finds it.
+    #
+    # @param demo [Boolean]
+    def self.claude(demo:)
+      cache = demo ? '5m' : '1h'
       Sleepyshark::Officina::Claude::Model.new(name: 'claude-opus-5-5', effort: :medium, max_output_tokens: 16_000,
-                                               prefix_cache: '1h', conversation_cache: '1h')
+                                               prefix_cache: cache, conversation_cache: cache)
     end
   end
   private_constant :ChatAgent

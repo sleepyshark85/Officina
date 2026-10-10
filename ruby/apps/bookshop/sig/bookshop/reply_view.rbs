@@ -8,6 +8,7 @@ module Bookshop
     @cancel: Sleepyshark::Officina::Cancellation
     @budget_reached: String
     @labelled: bool
+    @compacted: bool
 
     def initialize: (terminal: Terminal, approvals: Approvals, cancel: Sleepyshark::Officina::Cancellation,
                      budget_reached: String) -> void
@@ -17,9 +18,15 @@ module Bookshop
     private
 
     def stream: (String text) -> void
+    def tool: (Sleepyshark::Officina::ToolCallStarted | Sleepyshark::Officina::ApprovalAsked
+               | Sleepyshark::Officina::ToolCallFinished event) -> void
+    def note: (Sleepyshark::Officina::run_event | SessionNotSaved event) -> void
+    def compacted: (Sleepyshark::Officina::ConversationCompacted event) -> void
+    def cleared: (Sleepyshark::Officina::ToolResultsCleared event) -> void
     def ask: (Sleepyshark::Officina::ToolCall call) -> void
     def outcome: (Sleepyshark::Officina::ToolResult result) -> String
     def ending: (Sleepyshark::Officina::result result) -> String?
+    def without_text: () -> String
     def stopped: (Symbol reason) -> String
   end
 end

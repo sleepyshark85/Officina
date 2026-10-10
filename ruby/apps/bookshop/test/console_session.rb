@@ -11,13 +11,15 @@ module ConsoleSession
   include DatabaseServer
 
   Officina = Sleepyshark::Officina
-  # A model priced as Claude Opus 5.5 is, in dollars per million tokens.
+  # A model priced as Claude Opus 5.5 is, in dollars per million tokens, whose provider compacts and clears as
+  # Claude's does.
   PRICED = Officina::ModelInfo.new(provider: 'scripted', name: 'scripted', price: Officina::Price.new(
     input: BigDecimal('5'), output: BigDecimal('25'), cache_read: BigDecimal('0.5'), cache_write: BigDecimal('6.25'),
     cache_write_hour: BigDecimal('10')
-  ))
+  ), compacts: true, clears_tool_results: true)
 
-  # The test kit's scripted model, priced unless told otherwise, as the console gives each reply a cost budget.
+  # The test kit's scripted model, priced unless told otherwise, as the console gives each reply a cost budget, and
+  # compacting and clearing, as the chat agent asks its provider to.
   class ScriptedModel < Officina::Testing::ScriptedModel
     def initialize(*replies, settings: 'scripted', info: PRICED)
       super
@@ -100,11 +102,12 @@ module ConsoleSession
 
   # Runs a console session on the test's database, the staff member following the script, and returns its transcript.
   # Its telemetry is kept in memory, cleared when the session ends. +env+ adds to the settings.
-  def session(model, *script, interrupt_on: nil, clock: -> { Time.now }, telemetry: MemoryTelemetry.new, env: {})
+  def session(model, *script, interrupt_on: nil, clock: -> { Time.now }, telemetry: MemoryTelemetry.new, env: {},
+              demo: false)
     staff = Staff.new(script, interrupt_on:)
     application = Bookshop.build(input: staff.input, output: staff, model:,
                                  env: { 'BOOKSHOP_DATABASE' => database_url, **env }, clock:,
-                                 telemetry: telemetry.telemetry)
+                                 telemetry: telemetry.telemetry, demo:)
     begin
       application.run
     ensure

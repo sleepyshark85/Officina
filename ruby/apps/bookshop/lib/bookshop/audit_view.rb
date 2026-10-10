@@ -52,6 +52,7 @@ module Bookshop
         "#{record.outcome}  #{spent(usage, record.cost || BigDecimal(0))}"
       in { kind: 'ApprovalAnswered', detail: String => reason } then "#{record.outcome}: #{reason}"
       in { kind: 'ToolEnded', duration: Float => seconds } then "#{record.outcome}  #{milliseconds(seconds)}"
+      in { kind: 'Compacted' | 'Cleared' } then record.detail.to_s
       else record.outcome.to_s
       end
     end

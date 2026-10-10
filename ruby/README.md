@@ -76,6 +76,8 @@ line shows its tokens, the share read from the cache, its cost and the session's
 reply may spend $0.50 and a session $5; reaching either stops the reply and says why. `BOOKSHOP_REPLY_BUDGET`, in US
 dollars, such as `0.01`, lowers the reply's budget to show a stop; a value that is not an amount above zero stops the
 start with a message.
+`--demo` (`bundle exec apps/bookshop/exe/bookshop --demo`) compacts the conversation from 50,000 input tokens and
+clears old tool results above 12 tool calls, so a short session shows both; the console says when each happens.
 `/audit` shows the session's audit trail, each run with a link to its trace on the compose file's telemetry dashboard,
 <http://localhost:18888>, where each reply is one trace (the reply, its run, model calls and tool calls) with its log
 record; the application sends its traces, metrics and logs there over OTLP/HTTP, port 4318.

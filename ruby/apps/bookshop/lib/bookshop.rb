@@ -74,25 +74,27 @@ module Bookshop
   #   BOOKSHOP_REPLY_BUDGET, a reply's budget in US dollars, $0.50 if not set or empty
   # @param clock [#call] returns the current Time, for the run context, the audit trail and telemetry
   # @param telemetry [Telemetry, nil] where traces, metrics and logs go; OTLP to the compose file's dashboard if nil
+  # @param demo [Boolean] demo mode: compaction and clearing early enough to see in a short session, which the console
+  #   says at the start, and Claude's caches kept five minutes
   # @return [Application]
   # @raise [SettingError] when BOOKSHOP_REPLY_BUDGET is not an amount above zero
   # rubocop:disable-next Metrics/AbcSize, Metrics/MethodLength -- the composition root names every part in one place
-  def self.build(input:, output:, model: nil, env: ENV, clock: -> { Time.now }, telemetry: nil)
+  def self.build(input:, output:, model: nil, env: ENV, clock: -> { Time.now }, telemetry: nil, demo: false)
     budgets = Budgets.from(env)
     url = env.fetch('BOOKSHOP_DATABASE', COMPOSE_DATABASE)
     database = Database.new(url)
-    model ||= ChatAgent.claude
+    model ||= ChatAgent.claude(demo:)
     telemetry ||= Telemetry.otlp
     approvals = Approvals.new
     audit = AuditTable.new(database:)
     agent = Sleepyshark::Officina::Agent.new(
       name: 'bookshop', model:, instructions: ChatAgent::INSTRUCTIONS, tools: Tools.all(Shop.new(database:)),
       approver: approvals, audit_sink: audit, secrets: [Database.password(url)].compact, clock:,
-      telemetry: telemetry.officina
+      telemetry: telemetry.officina, context_management: ChatAgent.context_management(demo:)
     )
     view = AuditView.new(table: audit, dashboard: env.fetch('BOOKSHOP_DASHBOARD', COMPOSE_DASHBOARD))
     console = Console.new(agent:, approvals:, input:, output:, clock:, store: SessionStore.new(database:),
-                          budgets:, audit: view, telemetry:)
+                          budgets:, audit: view, telemetry:, demo:)
     Application.new(database:, telemetry:, console:)
   end
 end
