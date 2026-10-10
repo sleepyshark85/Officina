@@ -19,7 +19,7 @@ module Sleepyshark
 
       # @param input [String] the user's message
       # @param memory_scope [String, nil]
-      def initialize(agent:, conversation:, input:, memory_scope: nil)
+      def initialize(agent:, conversation:, input:, memory_scope:)
         @agent = agent
         @memory_scope = memory_scope
         @telemetry = agent.telemetry

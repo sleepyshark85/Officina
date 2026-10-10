@@ -40,4 +40,14 @@ class MemoryToolListingTest < Minitest::Test
                  "1.0M\t/memories\n1023B\t/memories/a.md\n1.0K\t/memories/b.md\n1024.0K\t/memories/c.md",
                  run_memory(store, 'sam', { command: 'view', path: '/memories' })[0].content
   end
+
+  def test_mem01_a_listing_shows_a_mebibyte_and_more_in_m
+    # A store that lists files too big to write in a test.
+    store = Object.new
+    def store.list(_) = [MemoryFile.new(path: 'a.md', size: 1024 * 1024), MemoryFile.new(path: 'b.md', size: 100 << 20)]
+
+    assert_equal "Here're the files and directories up to 2 levels deep in /memories, excluding hidden items:\n" \
+                 "101.0M\t/memories\n1.0M\t/memories/a.md\n100.0M\t/memories/b.md",
+                 run_memory(store, 'sam', { command: 'view', path: '/memories' })[0].content
+  end
 end

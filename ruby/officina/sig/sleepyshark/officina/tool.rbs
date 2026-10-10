@@ -12,7 +12,7 @@ module Sleepyshark
 
       @input: _Input
       @needs_approval: bool
-      @handler: ^(untyped input, Cancellation cancel, String? memory_scope) -> untyped
+      @handler: Proc
 
       attr_reader name: String
       attr_reader description: String
@@ -36,6 +36,8 @@ module Sleepyshark
       def invoke: (String input, Cancellation cancel, ?String? memory_scope) -> (String | ToolFailure)
 
       private
+
+      def with_scope: (Proc handler) -> Proc
 
       def check: (String name, Symbol kind, (^(untyped, Cancellation, String?) -> untyped)? handler) -> void
     end

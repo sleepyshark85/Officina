@@ -31,8 +31,9 @@ module Sleepyshark
       # @param store [_MemoryStore] where the files are kept; one store may serve many agents and runs
       # @param needs_approval [Boolean] whether the agent's approver must approve each command that changes memory
       def initialize(store, needs_approval: false)
-        super(name: 'memory', description: DESCRIPTION, input: SCHEMA, kind: :write,
-              needs_approval:) { |input, _, scope| command(store, scope, input) }
+        # A lambda, not a block: Steep 2.1 crashes on a block given to super with arguments and skips the file.
+        handler = ->(input, _cancel, scope) { command(store, scope, input) }
+        super(name: 'memory', description: DESCRIPTION, input: SCHEMA, kind: :write, needs_approval:, &handler)
       end
 
       def memory? = true
@@ -47,7 +48,7 @@ module Sleepyshark
       def command(store, scope, input)
         raise Error, 'The memory tool needs the memory scope of a run' unless scope
 
-        named = input['command'] == 'rename' ? input.values_at('old_path', 'new_path') : [input['path']]
+        named = input.fetch('command') == 'rename' ? input.values_at('old_path', 'new_path') : [input['path']]
         # @type var scoped: Hash[String, String]
         scoped = {}
         named.each do |path|

@@ -60,13 +60,14 @@ module Sleepyshark
 
       # Lines +from+ to +to+, numbered from 1, six wide.
       def self.numbered(lines, from, to)
-        (from..to).map { format("%<line>6d\t%<text>s", line: it, text: lines[it - 1]) }.join("\n")
+        (from..to).map { format("%<line>6d\t%<text>s", line: it, text: lines.fetch(it - 1)) }.join("\n")
       end
 
       # The size of each entry of the listing: its path within the directory, one or two levels deep.
       def self.sizes(files, at)
         files.each_with_object(Hash.new(0)) do |file, sizes|
-          parts = file.path.delete_prefix(at.empty? ? '' : "#{at}/").split('/').take(2)
+          # A path never starts with "/", so the memory directory's prefix, "/", removes nothing.
+          parts = file.path.delete_prefix("#{at}/").split('/').take(2)
           parts.take_while { !it.start_with?('.') }.each_index { sizes[parts.take(it + 1).join('/')] += file.size }
         end
       end

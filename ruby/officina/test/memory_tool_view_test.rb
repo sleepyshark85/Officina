@@ -17,6 +17,7 @@ class MemoryToolViewTest < Minitest::Test
     store.write('sam', 'a.md', "a\nb")
     store.write('sam', 'long.md', (1..12).map { "line #{it}" }.join("\n"))
     store.write('sam', 'empty.md', '')
+    store.write('sam', 'many.md', (1..200).map { "line #{it}" }.join("\n"))
 
     results = run_memory(store, 'sam', *EDGES.keys)
 
@@ -45,8 +46,12 @@ class MemoryToolViewTest < Minitest::Test
       'The file /memories/a.md has been edited.',
     { command: 'insert', path: '/memories/empty.md', insert_line: 2, insert_text: "first\n" } =>
       'Error: Invalid `insert_line` parameter: 2. It should be within the range of lines of the file: [0, 1]',
+    { command: 'insert', path: '/memories/empty.md', insert_line: 2.0, insert_text: "first\n" } =>
+      'Error: Invalid `insert_line` parameter: 2. It should be within the range of lines of the file: [0, 1]',
     { command: 'insert', path: '/memories/empty.md', insert_line: 0, insert_text: "first\n" } =>
       'The file /memories/empty.md has been edited.',
+    { command: 'view', path: '/memories/many.md', view_range: [200, -1] } =>
+      "Here's the content of /memories/many.md with line numbers:\n   200\tline 200",
     { command: 'str_replace', path: '/memories/long.md', old_str: 'line 7', new_str: "seven\nand a half" } =>
       "The memory file has been edited. A snippet of /memories/long.md with line numbers:\n     " \
       "3\tline 3\n     4\tline 4\n     5\tline 5\n     6\tline 6\n     7\tseven\n     8\tand a half\n     " \

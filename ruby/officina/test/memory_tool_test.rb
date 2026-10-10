@@ -48,6 +48,23 @@ class MemoryToolTest < Minitest::Test
     end
   end
 
+  def test_mem01_a_file_is_renamed_and_deleted_on_its_own_and_one_above_a_new_path_refuses_it
+    each_store do |store|
+      { 'a.md' => 'a', 'notes/b.md' => 'b', 'notes/c.md' => 'c' }.each { store.write('sam', *it) }
+
+      results = run_memory(store, 'sam',
+                           { command: 'rename', old_path: '/memories/a.md', new_path: '/memories/notes/a.md' },
+                           { command: 'delete', path: '/memories/notes/b.md' },
+                           { command: 'create', path: '/memories/notes/c.md/d/e.md', file_text: 'e' })
+
+      assert_equal ['Successfully renamed /memories/a.md to /memories/notes/a.md',
+                    'Successfully deleted /memories/notes/b.md',
+                    'Error: Cannot create /memories/notes/c.md/d/e.md: /memories/notes/c.md is a file.'],
+                   results.map(&:content)
+      assert_equal({ 'notes/a.md' => 'a', 'notes/c.md' => 'c' }, contents(store, 'sam'))
+    end
+  end
+
   def test_mem03_a_path_outside_the_scope_is_refused_with_an_error_result
     ['/etc/passwd', '/memories/../secrets.env', '/memories/notes/../../x', '/memories/%2e%2e/x', '/memories/..\\x',
      '/memories//x', '/memoriesx/a', 'memories/a', '/memories/C:/a', '/memories/./a', '/memories/ ', '/memories/NUL',
@@ -89,8 +106,8 @@ class MemoryToolTest < Minitest::Test
     memory = MemoryTool.new(HashMemoryStore.new)
 
     assert_equal ['memory', :write, true], [memory.name, memory.kind, memory.memory?]
-    refute_predicate Tool.new(name: 'search', description: 'Searches.', input: Schema.new('{}'), kind: :read) { '' },
-                     :memory?
+    assert_same false, Tool.new(name: 'search', description: 'Searches.', input: Schema.new('{}'), kind: :read) { '' }
+                           .memory?
     assert_match %r{directory of text files under /memories}, memory.description
     refused = assert_raises(Error) { memory.invoke('{"command":"view","path":"/memories"}', Cancellation.new) }
 

@@ -24,7 +24,7 @@ module Sleepyshark
 
       # @return [String, ToolFailure]
       def run
-        case @input['command']
+        case @input.fetch('command')
         in 'view' then view
         in 'create' then create
         in 'str_replace' then str_replace
@@ -38,7 +38,7 @@ module Sleepyshark
 
       def view
         text = @files.read(@at)
-        return MemoryView.file(@path, text, @input['view_range']&.map(&:to_i)) if text
+        return MemoryView.file(@path, text, @input['view_range']&.map(&:to_int)) if text
         return failure(missing) unless @files.directory?(@at)
 
         MemoryView.listing(@at.empty? ? ROOT : "#{ROOT}/#{@at}", @files.under(@at), @at)
@@ -82,7 +82,7 @@ module Sleepyshark
       end
 
       def insert
-        line = @input['insert_line']&.to_i
+        line = @input['insert_line']&.to_int
         text = @input['insert_text']
         unless line && text
           return failure('Error: Parameters `insert_line` and `insert_text` are required for command: insert')
