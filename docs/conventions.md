@@ -45,6 +45,8 @@ written, and this page wins for what the code must do.
 - **Tests are the agent's check on its own work.** Example tests say what should happen; property tests say what
   must never happen. Tests are fast and deterministic: a flaky test, or one slow enough to notice (over a second
   offline), is a bug to fix, never something to retry.
+- **Mutation thresholds in CI are a floor, not the bar.** Review asks that every surviving mutant in the code a PR
+  changes is killed, or shown in the PR description to be equivalent.
 
 ## Design rules that code must keep
 
