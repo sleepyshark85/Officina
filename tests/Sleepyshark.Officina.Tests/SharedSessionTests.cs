@@ -117,7 +117,7 @@ public class SharedSessionTests
     [Theory]
     [InlineData("go-session.json", "go_02")]
     [InlineData("ruby-session.json", "rb_02")]
-    public async Task A_session_another_implementation_saved_mid_reply_resumes_with_its_prefix_and_interrupted_calls_answered(string file, string interruptedCallId)
+    public async Task APP_10_A_session_another_implementation_saved_mid_reply_resumes_with_its_prefix_and_interrupted_calls_answered(string file, string interruptedCallId)
     {
         var stored = Fixture(file);
         var conversation = JsonSerializer.Deserialize<Conversation>(stored)!;
