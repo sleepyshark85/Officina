@@ -82,7 +82,7 @@ class ContextSizeTest(unittest.TestCase):
         self.subagent_transcript("a1", assistant(1, 160_000))
         output = hook.on_tool_use(payload, self.session)
         self.assertEqual(output["hookSpecificOutput"]["hookEventName"], "PostToolUse")
-        self.assertIn("past 150,000", output["hookSpecificOutput"]["additionalContext"])
+        self.assertIn("committed as you go", output["hookSpecificOutput"]["additionalContext"])
         self.assertIsNone(hook.on_tool_use(payload, self.session))
         logged = list(hook.entries(os.path.join(self.session, "context-sizes", "a1.jsonl")))
         self.assertEqual([entry["tokens"] for entry in logged], [160_001, 160_001, 100_001])
@@ -93,6 +93,26 @@ class ContextSizeTest(unittest.TestCase):
         hook.on_tool_use(payload, self.session)
         latest = next(hook.entries(os.path.join(self.session, "context-sizes", "main.jsonl")))
         self.assertEqual((latest["agent_type"], latest["tokens"]), ("main", 2_001))
+
+    def test_the_main_session_is_warned_as_the_lead(self):
+        payload = {"transcript_path": self.main_transcript(assistant(1, 310_000))}
+        text = hook.on_tool_use(payload, self.session)["hookSpecificOutput"]["additionalContext"]
+        self.assertIn("past 300,000", text)
+        self.assertIn("run /compact", text)
+        self.assertNotIn("Hand back", text)
+
+    def test_the_leads_150k_warning_asks_for_the_status_note_and_a_compact_at_the_next_milestone(self):
+        text = hook.warning(160_000, 150_000, lead=True)
+        self.assertIn("past 150,000", text)
+        self.assertIn("Update your status note;", text)
+        self.assertIn("/compact at the next milestone", text)
+
+    def test_the_leads_300k_warning_asks_for_the_status_note_and_a_compact_now_and_no_new_dispatch(self):
+        text = hook.warning(310_000, 300_000, lead=True)
+        self.assertIn("past 300,000", text)
+        self.assertIn("Update your status note now", text)
+        self.assertIn("ask the owner to run /compact", text)
+        self.assertIn("dispatch nothing new", text)
 
     def test_report_lists_the_latest_size_per_agent_largest_first(self):
         sizes = os.path.join(self.session, "context-sizes")
