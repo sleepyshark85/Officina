@@ -1,0 +1,11 @@
+module Sleepyshark
+  module Officina
+    module TypedOutput
+      def self.read: (result result, Input::_Class? output) -> result
+
+      def self.parse: (Completed result, Input::_Class output) -> (Completed | Failed)
+
+      def self.invalid: (String detail) -> Failed
+    end
+  end
+end
