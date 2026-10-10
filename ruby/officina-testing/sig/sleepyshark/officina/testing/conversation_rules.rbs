@@ -1,0 +1,17 @@
+module Sleepyshark
+  module Officina
+    module Testing
+      module ConversationRules
+        FOLLOWS: Array[Array[Symbol]]
+
+        def self.problem: (Array[Message] messages) -> String?
+
+        def self.pair_problem: (Message previous, Message message) -> String?
+
+        def self.role_problem: (Message previous, Message message) -> String?
+
+        def self.answer_problem: (Message previous, Message message) -> String?
+      end
+    end
+  end
+end

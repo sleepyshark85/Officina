@@ -1,0 +1,11 @@
+module Sleepyshark
+  module Officina
+    # Where an agent's audit trail goes. A run's entries arrive one at a time, in sequence order, from any of its
+    # threads; many runs may write at once.
+    interface _AuditSink
+      # Stores the entry durably before it returns; raises a StandardError when it cannot, never dropping an entry
+      # silently.
+      def write: (AuditEntry entry) -> void
+    end
+  end
+end

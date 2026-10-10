@@ -20,7 +20,7 @@ module Sleepyshark
       end
 
       # The text of its blocks, joined.
-      def text = blocks.map { it.text.to_s }.join
+      def text = blocks.map { |block| block.text.to_s }.join
     end
   end
 end

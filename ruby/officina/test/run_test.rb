@@ -27,7 +27,7 @@ class RunTest < Minitest::Test
   def test_agt02_each_tool_call_gets_a_result_and_the_model_is_called_again
     conversation = Conversation.new
     call = Model.tool_use_block('call_1', 'search', '{"query":"Gaudy Night"}')
-    agent = agent_of(Model.tool_use(call), Model.text('None of my tools can run.'))
+    agent = agent_of(Model.tool_use(call), Model.text('I have no search tool.'))
 
     result = agent.run(conversation, 'Search for Gaudy Night.')
 
@@ -35,7 +35,7 @@ class RunTest < Minitest::Test
     assert_equal %i[user assistant user assistant], conversation.messages.map(&:role)
     answer = conversation.messages[2].blocks.first.tool_result
 
-    assert_equal ['call_1', 'No tool named search can run.', true], [answer.call_id, answer.content, answer.error?]
+    assert_equal ['call_1', 'There is no tool named search.', true], [answer.call_id, answer.content, answer.error?]
     assert_equal conversation.messages.first(3), @model.requests.last.messages
   end
 

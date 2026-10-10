@@ -29,8 +29,7 @@ class AgentTest < Minitest::Test
   def test_agt01_a_definition_that_cannot_work_is_refused
     assert_raises(Error) { Agent.new(model: Model.new, instructions: ' ') }
     assert_raises(Error) { Agent.new(model: Model.new, instructions: 'Hi', tools: [tool('search'), tool('search')]) }
-    assert_raises(Error) { tool('search', schema: '[]') }
-    assert_raises(Error) { tool('search', schema: '{"type":') }
+    ['[]', '{"type":', 'true'].each { |schema| assert_raises(Error) { tool('search', schema:) } }
     assert_raises(Error) { tool(' ') }
   end
 
@@ -69,6 +68,6 @@ class AgentTest < Minitest::Test
   private
 
   def tool(name, description: 'Searches the catalogue.', schema: '{"type":"object"}')
-    Tool.new(name:, description:, input_schema: schema)
+    Tool.new(name:, description:, input: Schema.new(schema), kind: :read) { 'Found.' }
   end
 end

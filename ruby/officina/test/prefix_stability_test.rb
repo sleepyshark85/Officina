@@ -20,10 +20,15 @@ class PrefixStabilityTest < Minitest::Test
     require 'sleepyshark/officina/testing'
     officina = Sleepyshark::Officina
     model = officina::Testing::ScriptedModel.new(officina::Testing::ScriptedModel.text('Resumed.'))
-    tools = [officina::Tool.new(name: 'search', description: 'Searches «the» catalogue.', input_schema: '{ "type": "object" }')]
+    tools = [officina::Tool.new(name: 'search', description: 'Searches «the» catalogue.',
+                                input: officina::Schema.new('{ "type": "object" }'), kind: :read) { 'Found.' }]
     agent = officina::Agent.new(model:, instructions: 'You help <customers> & staff.', tools:)
     result = agent.run(officina::Conversation.from_json($stdin.read), 'And now?', context: 'Today is Saturday.')
-    $stdout.binmode.write(Marshal.dump([result, model.requests]))
+    # A tool's handler cannot be dumped, so its parts that reach the model stand for it.
+    requests = model.requests.map do |request|
+      [request.tools.map { [it.name, it.description, it.input_schema] }, request.instructions, request.messages]
+    end
+    $stdout.binmode.write(Marshal.dump([result, requests]))
   RUBY
 
   def test_test02_the_prefix_is_stable_across_the_calls_of_a_run_and_across_runs
@@ -48,7 +53,11 @@ class PrefixStabilityTest < Minitest::Test
                                     stdin_data: conversation.to_json, binmode: true)
 
     assert_predicate status, :success?
-    result, requests = Marshal.load(output) # rubocop:disable Security/MarshalLoad -- this test's own child wrote it
+    result, parts = Marshal.load(output) # rubocop:disable Security/MarshalLoad -- this test's own child wrote it
+    requests = parts.map do |(tools, instructions, messages)|
+      Request.new(tools: tools.map { |(name, description, schema)| tool(name, description, schema) }, instructions:,
+                  messages:)
+    end
 
     assert_equal 'Resumed.', result.text
     assert_stable_prefix [*model.requests, *requests]
@@ -57,7 +66,7 @@ class PrefixStabilityTest < Minitest::Test
   def test_test02_the_check_finds_a_changed_prefix
     request = Request.new(tools: [], instructions: 'You help.', messages: [user('Hi')])
     changed = [request.with(instructions: 'You help more.'), request.with(messages: [user('Hello')]),
-               request.with(tools: [Tool.new(name: 't', description: 'd', input_schema: '{}')]),
+               request.with(tools: [tool('t', 'd', '{}')]),
                request.with(messages: [])]
 
     changed.each do |later|
@@ -68,9 +77,13 @@ class PrefixStabilityTest < Minitest::Test
   private
 
   def agent_of(model)
-    tools = [Tool.new(name: 'search', description: 'Searches «the» catalogue.', input_schema: '{ "type": "object" }')]
+    tools = [tool('search', 'Searches «the» catalogue.', '{ "type": "object" }')]
     Agent.new(model:, instructions: 'You help <customers> & staff.', tools:)
   end
 
   def user(text) = Message.new(role: :user, blocks: [Block.new(text:)])
+
+  def tool(name, description, schema)
+    Tool.new(name:, description:, input: Schema.new(schema), kind: :read) { 'Found.' }
+  end
 end

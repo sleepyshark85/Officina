@@ -7,6 +7,8 @@ module Sleepyshark
         private
 
         def assert_same_prefix: (Request previous, Request request, Integer number) -> void
+
+        def model_view: (Array[Tool] tools) -> Array[[String, String, String]]
       end
     end
   end

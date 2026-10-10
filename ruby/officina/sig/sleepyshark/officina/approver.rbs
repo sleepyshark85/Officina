@@ -1,0 +1,12 @@
+module Sleepyshark
+  module Officina
+    # Answers approval requests: a person or a policy. An agent without one runs unattended, and calls that need
+    # approval are denied.
+    interface _Approver
+      # Decides whether the call (its input redacted) of the tool may run. Calls are asked about one at a time, on the
+      # run's tool thread; the approval-asked event may reach the host before or after. Should return soon once the
+      # cancellation is cancelled. An exception denies the call, its message the reason.
+      def approve: (Tool tool, ToolCall call, cancel: Cancellation) -> Approval
+    end
+  end
+end

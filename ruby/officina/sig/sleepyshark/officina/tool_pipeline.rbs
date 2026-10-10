@@ -1,0 +1,54 @@
+module Sleepyshark
+  module Officina
+    # What the pipeline sends the run while it answers a reply's calls.
+    type tool_event = ToolCallStarted | ApprovalAsked | ApprovalAnswered | ToolCallFinished
+
+    class ToolPipeline
+      MAX_RESULT: Integer
+      NOT_STARTED: String
+
+      @agent: Agent
+      @audit: AuditRecorder
+      @cancel: Cancellation
+      @calls: Array[ToolCall]
+      @results: Hash[Integer, ToolResult]
+      @reads: Hash[Integer, Thread]
+      @events: Thread::Queue
+      @thread: Thread
+
+      def initialize: (agent: Agent, audit: AuditRecorder, cancel: Cancellation, calls: Array[ToolCall]) -> void
+
+      def each_event: () { (tool_event event) -> void } -> void
+
+      def results: () -> Array[ToolResult]
+
+      private
+
+      def answer: () -> Array[ToolResult]
+
+      def start: (ToolCall call, Integer index) -> void
+
+      def run: (Tool tool, ToolCall call, Integer index) -> void
+
+      def join_reads: () -> void
+
+      def write: (Tool tool, ToolCall call) -> ToolResult
+
+      def read: (Tool tool, ToolCall call) -> Thread
+
+      def denial: (Tool tool, ToolCall call) -> String?
+
+      def ask: (_Approver approver, Tool tool, ToolCall call) -> Approval
+
+      def invoke: (Tool tool, ToolCall call) -> ToolResult
+
+      def finish: (ToolCall call, String content, error: bool, ?started: Time?) -> ToolResult
+
+      def cut: (String content) -> String
+
+      def report: (Symbol kind, tool_event event, **untyped fields) -> void
+
+      def shown: (ToolCall call) -> ToolCall
+    end
+  end
+end

@@ -13,6 +13,7 @@ module Sleepyshark
       @usage: Usage
       @model_calls: Integer
       @host_failure: StandardError?
+      @audit: AuditRecorder
 
       def initialize: (agent: Agent, conversation: Conversation, append: ^(Array[Message], String) -> void,
                        cancel: Cancellation, on_event: (^(run_event) -> void)?) -> void
@@ -20,6 +21,8 @@ module Sleepyshark
       def run: (String input, String? context) -> result
 
       private
+
+      def decide: (String input, String? context) -> result
 
       def call_until_stopped: (Array[Message] pending) -> result
 
@@ -35,11 +38,13 @@ module Sleepyshark
 
       def answer_after: (Array[ToolCall] calls) { () -> void } -> void
 
+      def answer: (ToolPipeline? pipeline, Array[ToolCall] calls, bool reported) -> void
+
       def finish:(Reply reply, Array[ToolCall] calls) -> result?
 
       def append: (*Message messages) -> void
 
-      def unrunnable: (ToolCall call) -> Block
+      def tools: (Array[ToolCall] calls) -> ToolPipeline
 
       def text_message: (Symbol role, String text) -> Message
 
