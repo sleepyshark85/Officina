@@ -182,5 +182,5 @@ jobs:
           gremlins unleash --coverpkg ./officina/... --timeout-coefficient 20 --output-statuses lctkv \
             --diff "origin/${{ github.base_ref }}" 2>&1 | tee "$RUNNER_TEMP/gremlins.log" || {
             grep -qx 'Killed: 0, Lived: 0, Not covered: 0' "$RUNNER_TEMP/gremlins.log"
-            echo "The changed lines hold no mutant: nothing to test, so the threshold error above does not count."
+            echo "No mutant on the changed lines was killed, lived or left uncovered, so the threshold error above does not count."
           }
