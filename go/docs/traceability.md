@@ -110,7 +110,7 @@ Tests are under `go/`, shortened as:
 
 | ID | Tests | Also checked by |
 |---|---|---|
-| TOOL-01 | Core: `TestNewTool_TOOL01_DerivesTheSchemaFromTheInputType` (an `enum` tag on a string field included), `TestNewTool_TOOL01_RefusesATypeWithoutASchema`, `TestNewTool_TOOL01_RunsOnTheDecodedInputAndSendsItsResultAsJSON`; `ExampleNewTool` | |
+| TOOL-01 | Core: `TestNewTool_TOOL01_DerivesTheSchemaFromTheInputType` (an `enum` tag on a string field included, written as .NET writes an enum: its values, no type), `TestNewTool_TOOL01_RefusesATypeWithoutASchema`, `TestNewTool_TOOL01_RunsOnTheDecodedInputAndSendsItsResultAsJSON`; `ExampleNewTool` | |
 | TOOL-02 | Core: `TestRun_TOOL02_TOOL04_TOOL05_FailuresComeBackAsErrorResultsAndTheRunContinues` (input not JSON, invalid input, unknown tool), `TestValidate_TOOL02_ChecksEachKeywordOfTheSubset`, `FuzzValidate_TOOL02_NeverPanicsAndIsDeterministic` | |
 | TOOL-03 | Core: `TestRun_TOOL03_ReadsOverlapAndWritesRunAloneInOrder` (under `testing/synctest`: reads that wait for each other would deadlock if run one after the other) | |
 | TOOL-04 | Core: `TestRun_TOOL02_TOOL04_TOOL05_FailuresComeBackAsErrorResultsAndTheRunContinues` (denied, with and without a reason; a failing and a panicking approver), `TestRun_TOOL04_EVT01_AnApprovedCallRunsAndEachStepIsAnEvent` | |
@@ -139,7 +139,7 @@ Tests are under `go/`, shortened as:
 
 | ID | Tests | Also checked by |
 |---|---|---|
-| OUT-01 | Core: `TestNewOutput_OUT01_SendsTheSchemaDerivedFromTheTypeAndReturnsTheReplyAsAValueOfIt` (the schema derived as a typed tool's), `TestNewOutput_OUT01_TEST08_RefusesATypeWithoutAClosedSchema` (a map, nested or not; not a struct; an embedded struct), `TestNewAgent_OUT01_RefusesAnOutputNotMadeByNewOutput`, `TestAgent_CTX04_OUT01_TheOutputSchemaIsPartOfThePrefix`, `TestAgent_CTX04_OUT01_TheFingerprintWithAnOutputSchemaIsDotNetsByteForByte` (shared `testdata/session/prefix.json`: the schema Go derives, the fingerprint .NET computed; .NET's `SharedSessionTests` checks it too), `ExampleNewOutput`; Claude: `TestModel_OUT01_AWrittenSchemaIsClosedAndStrippedOfWhatTheAPIRejectsAsDotNetSendsIt` (shared `testdata/claude/output-written.json`), `TestModel_OUT01_DotNetsExportedSchemaGoesOutAsDotNetSendsItAndToolChoiceIsNeverForced` (shared `output-exported.json`), `TestModel_OUT01_GEN05_ATypesSchemaGoesOutAsDotNetsAndTheStructuredReplyComesBackAsTheTypedOutput`, `TestModel_OUT01_AnOpenObjectIsRefusedRatherThanClosed`, `FuzzOutputSchema_OUT01_ClosesEveryObjectDropsWhatTheAPIRejectsAndIsIdempotent` | Live, once: a structured-output run (Go S12's pull request) |
+| OUT-01 | Core: `TestNewOutput_OUT01_SendsTheSchemaDerivedFromTheTypeAndReturnsTheReplyAsAValueOfIt` (the schema derived as a typed tool's), `TestNewOutput_OUT01_TheSchemaOfATypeLikeDotNetsIsTheSchemaDotNetExportsByteForByte` (shared `testdata/claude/output-exported.json`: an enum, a description, a nullable object), `TestNewOutput_OUT01_TEST08_RefusesATypeWithoutAClosedSchema` (a map, nested or not; not a struct; an embedded struct), `TestNewAgent_OUT01_RefusesAnOutputNotMadeByNewOutput`, `TestAgent_CTX04_OUT01_TheOutputSchemaIsPartOfThePrefix`, `TestAgent_CTX04_OUT01_TheFingerprintWithAnOutputSchemaIsDotNetsByteForByte` (shared `testdata/session/prefix.json`: the schema Go derives, the fingerprint .NET computed; .NET's `SharedSessionTests` checks it too), `ExampleNewOutput`; Claude: `TestModel_OUT01_AWrittenSchemaIsClosedAndStrippedOfWhatTheAPIRejectsAsDotNetSendsIt` (shared `testdata/claude/output-written.json`), `TestModel_OUT01_DotNetsExportedSchemaGoesOutAsDotNetSendsItAndToolChoiceIsNeverForced` (shared `output-exported.json`), `TestModel_OUT01_GEN05_ATypesSchemaGoesOutAsDotNetsAndTheStructuredReplyComesBackAsTheTypedOutput`, `TestModel_OUT01_AnOpenObjectIsRefusedRatherThanClosed`, `FuzzOutputSchema_OUT01_ClosesEveryObjectDropsWhatTheAPIRejectsAndIsIdempotent` | Live, once: a structured-output run (Go S12's pull request) |
 | OUT-02 | Core: `TestRun_OUT02_OutputThatFailsToDecodeOrValidateFailsTheRunWithTheErrors` (not JSON, a property missing, several problems, a value the type cannot hold; one model call, no correction round), `TestRun_OUT02_TEST08_AGeneratedReplyCompletesOnlyIfTheReferenceValidatorAcceptsIt` (`rapid`, against `santhosh-tekuri/jsonschema/v6`: validity drawn first, an invalid reply breaking one thing; the test fails unless both outcomes occur) | |
 
 ## Budgets (BUD)
@@ -147,7 +147,7 @@ Tests are under `go/`, shortened as:
 | ID | Tests | Also checked by |
 |---|---|---|
 | BUD-01 | Core: `TestRun_BUD01_ACostBudgetUsedUpStopsTheRunBeforeTheNextCallWithItsReason`, `TestRun_BUD01_EachCallsOutputLimitIsLoweredToWhatTheRemainingCostAndTokensAllow`, `TestRun_BUD01_AReplyCutShortByTheLoweredLimitStopsForTheBudgetAndOneCutByTheModelsOwnDoesNot`, `TestRun_BUD01_ModelCallTimeAndTokenLimitsStopTheRunBeforeTheNextCall`, `TestRun_BUD01_AUsedUpBudgetStopsBeforeTheFirstCallAndAppendsNothing`, `TestRun_BUD01_ACostBudgetIsUsedUpWhenWhatIsLeftBuysLessThanOneOutputToken`, `TestRun_BUD01_ACostBudgetNeedsAModelWithAPrice`, `TestRun_BUD01_ACallBudgetUsedUpOnTheLastAllowedCallStopsForTheBudgetNotTheIterationLimit`, `TestRun_BUD01_AReplyCutByTheModelsOwnLimitStopsForThatLimitEvenWhenACallBudgetIsUsedUp`, `TestRun_BUD01_ATimeBudgetIsUsedUpTheMomentItIsReached`, `TestRun_BUD01_ATokenBudgetAloneLowersTheOutputLimitToTheTokensLeft`, `TestRun_BUD01_TheCostBudgetAtItsBoundaries` (one output token left; nothing left; output that costs nothing), `TestRun_TEST07_ABudgetIsOvershotByAtMostOneCallsInputOrTwiceThatWhenItCompacts`, `ExampleLimits`; Claude: `TestModel_BUD01_AnOutputLimitTheBudgetLowersIsSentAndAHigherOneIsNot` | |
-| BUD-02 | Core: `TestRun_BUD02_BUD03_AResultReportsTokensCostCallsAndDurationAndEachUsageEventItsCost`; Claude: `TestModel_EVT02_InfoNamesTheProviderAndModelWithItsListPrice` | A host prices a model through its `Info`, as the tests' scripted models do |
+| BUD-02 | Core: `TestRun_BUD02_BUD03_AResultReportsTokensCostCallsAndDurationAndEachUsageEventItsCost`; Claude: `TestModel_EVT02_HIST03_InfoNamesTheProviderAndModelWithItsListPriceAndContextManagement` | A host prices a model through its `Info`, as the tests' scripted models do |
 | BUD-03 | Core: `TestRun_BUD02_BUD03_AResultReportsTokensCostCallsAndDurationAndEachUsageEventItsCost` | |
 
 ## Audit (AUD)
@@ -166,6 +166,7 @@ Tests are under `go/`, shortened as:
 | Principle | Tests |
 |---|---|
 | 11, small core | Deps: `TestCoreSize_StaysWithinItsLineBudget` (G13) |
+| This page | Deps: `TestTraceability_EveryTestThePageNamesExists` |
 
 ## Tests (TEST)
 
