@@ -1,0 +1,14 @@
+module Sleepyshark
+  module Officina
+    module Claude
+      class TransientError < Error
+      end
+
+      class AuthenticationError < Error
+      end
+
+      class InvalidRequestError < Error
+      end
+    end
+  end
+end
