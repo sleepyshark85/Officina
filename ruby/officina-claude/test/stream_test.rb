@@ -47,7 +47,8 @@ class StreamTest < ClaudeTestCase
 
   def test_mdl01_stop_reasons_map_by_their_word_and_an_unknown_one_keeps_it
     words = { 'end_turn' => [:end, nil], 'max_tokens' => [:max_tokens, nil],
-              'model_context_window_exceeded' => [:context_full, nil], 'pause_turn' => [:unknown, 'pause_turn'] }
+              'model_context_window_exceeded' => [:context_full, nil], 'refusal' => [:refusal, nil],
+              'pause_turn' => [:unknown, 'pause_turn'] }
     api = serve(*words.keys.map { text_reply(it) })
     claude = model(api)
 
@@ -60,20 +61,50 @@ class StreamTest < ClaudeTestCase
   end
 
   def test_ctx05_a_message_delta_without_input_counts_keeps_those_the_call_started_with
-    api = serve(FakeApi.sse(START.sub('"input_tokens":10', '"input_tokens":10,"cache_read_input_tokens":7'),
+    api = serve(FakeApi.sse(START.sub('"input_tokens":10',
+                                      '"input_tokens":10,"cache_read_input_tokens":7,"cache_creation_input_tokens":4'),
                             *text_events('Hi'),
                             '{"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":3}}',
                             '{"type":"message_stop"}'))
 
     events, = collect(model(api), hi)
 
-    assert_equal UsageReported.new(usage: Usage.new(input: 10, output: 3, cache_read: 7)), events.last
+    assert_equal UsageReported.new(usage: Usage.new(input: 10, output: 3, cache_read: 7, cache_write: 4)), events.last
   end
 
-  def test_agt05_cancelling_mid_stream_ends_the_call_with_no_reply
-    api = serve(FakeApi.sse(START, *text_events('one', 'two', 'three'),
-                            '{"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":3}}',
+  def test_ctx05_a_message_deltas_counts_replace_those_the_call_started_with
+    api = serve(FakeApi.sse(START, *text_events('Hi'),
+                            '{"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"input_tokens":4,' \
+                            '"output_tokens":2,"cache_read_input_tokens":3,"cache_creation_input_tokens":1}}',
                             '{"type":"message_stop"}'))
+
+    events, = collect(model(api), hi)
+
+    assert_equal UsageReported.new(usage: Usage.new(input: 4, output: 2, cache_read: 3, cache_write: 1)), events.last
+  end
+
+  def test_mdl06_a_refusal_with_no_category_stops_with_no_detail
+    api = serve(FakeApi.sse(START, *text_events('No.'),
+                            '{"type":"message_delta","delta":{"stop_reason":"refusal","stop_details":' \
+                            '{"type":"refusal","category":null}},"usage":{"output_tokens":2}}',
+                            '{"type":"message_stop"}'))
+
+    _, reply = collect(model(api), hi)
+
+    assert_equal [:refusal, nil], [reply.stop, reply.detail]
+  end
+
+  def test_mdl01_a_reply_returns_once_it_stops_and_closes_the_connection
+    api = serve(text_reply(ending: :hold))
+
+    _, reply = collect(model(api), hi)
+
+    assert_equal :end, reply.stop
+    assert_predicate api, :closed_by_client?
+  end
+
+  def test_agt05_cancelling_mid_stream_ends_the_call_with_no_reply_and_closes_the_connection
+    api = serve(FakeApi.sse(START, *text_events('one', 'two', 'three'), ending: :hold))
     cancel = Cancellation.new
     events = []
 
@@ -84,6 +115,7 @@ class StreamTest < ClaudeTestCase
 
     assert_nil reply
     assert_equal [TextDelta.new(text: 'one')], events
+    assert_predicate api, :closed_by_client?
   end
 
   def test_agt05_a_call_cancelled_before_it_starts_sends_nothing
@@ -96,19 +128,18 @@ class StreamTest < ClaudeTestCase
     assert_equal [[], nil, []], [events, reply, api.requests]
   end
 
-  def test_evt01_what_the_consumers_block_raises_passes_through_and_is_not_retried
+  def test_evt01_what_the_consumers_block_raises_passes_through_is_not_retried_and_closes_the_connection
     host = Class.new(StandardError)
-    api = serve(text_reply, text_reply)
+    api = serve(text_reply(ending: :hold), text_reply)
 
     raised = assert_raises(host) { model(api).stream(hi, cancel: Cancellation.new) { raise host, 'the host failed' } }
 
     assert_equal ['the host failed', 1], [raised.message, api.requests.size]
+    assert_predicate api, :closed_by_client?
   end
 
-  def test_evt01_a_consumer_that_leaves_the_block_ends_the_call
-    api = serve(FakeApi.sse(START, *text_events('one', 'two'),
-                            '{"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":3}}',
-                            '{"type":"message_stop"}'))
+  def test_evt01_a_consumer_that_leaves_the_block_ends_the_call_and_closes_the_connection
+    api = serve(FakeApi.sse(START, *text_events('one', 'two'), ending: :hold))
     seen = []
 
     model(api).stream(hi, cancel: Cancellation.new) do |event|
@@ -117,5 +148,6 @@ class StreamTest < ClaudeTestCase
     end
 
     assert_equal [TextDelta.new(text: 'one')], seen
+    assert_predicate api, :closed_by_client?
   end
 end

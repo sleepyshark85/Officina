@@ -22,6 +22,7 @@ class RequestTest < ClaudeTestCase
       assert_instance_of Completed, agent.run(conversation, message, context: 'Today is 2026-10-05.')
     end
 
+    assert_equal '/v1/messages?beta=true', api.requests[1].target
     sent = JSON.parse(api.bodies[1])
 
     assert sent.delete('stream')

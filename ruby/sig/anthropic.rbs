@@ -12,8 +12,14 @@ module Anthropic
     class Error < StandardError
     end
 
+    class ConfigurationError < Error
+    end
+
     class APIError < Error
       def headers: () -> Hash[String, String]?
+    end
+
+    class APIConnectionError < APIError
     end
 
     class APIStatusError < APIError

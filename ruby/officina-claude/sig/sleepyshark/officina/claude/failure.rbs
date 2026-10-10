@@ -6,23 +6,24 @@ module Sleepyshark
         TRANSIENT_STATUSES: Array[Integer]
         AUTHENTICATION_TYPES: Array[Symbol]
         AUTHENTICATION_STATUSES: Array[Integer]
-        FIRST_BACKOFF: Float
         LONGEST_WAIT: Float
 
-        @error: StandardError
+        def self.prompt_too_long?: (Anthropic::Errors::APIStatusError answer) -> bool
+
+        @failure: StandardError
         @answer: Anthropic::Errors::APIStatusError?
 
-        def initialize: (StandardError error) -> void
+        def initialize: (StandardError failure) -> void
 
         def transient?: () -> bool
 
-        def prompt_too_long?: () -> bool
-
         def wait: (Integer attempt) -> Float
 
-        def error: (Integer attempts) -> Error
+        def to_raise: (Integer attempts) -> Error
 
         private
+
+        def authentication?: () -> bool
 
         def retry_after: () -> Integer?
       end

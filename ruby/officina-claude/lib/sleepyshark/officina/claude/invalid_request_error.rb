@@ -3,7 +3,8 @@
 module Sleepyshark
   module Officina
     module Claude
-      # A call the API rejected as it is, which sending again cannot help. Its cause is the API's answer.
+      # A call the API rejected as it is, or whose answer the SDK could not read: sending it again cannot help. Its
+      # cause is the SDK's error.
       class InvalidRequestError < Error
       end
     end

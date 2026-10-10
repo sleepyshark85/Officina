@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require 'test_helper'
 require 'json'
 require 'sleepyshark/officina/claude'
 require_relative 'fake_api'
@@ -8,6 +9,8 @@ require_relative 'fake_api'
 # nothing between attempts, and the requests and replies they use.
 class ClaudeTestCase < Minitest::Test
   include Sleepyshark::Officina
+
+  cover 'Sleepyshark::Officina::Claude*'
 
   TESTDATA = File.expand_path('../../../testdata', __dir__)
   START = '{"type":"message_start","message":{"id":"msg_01","type":"message","role":"assistant",' \
@@ -59,10 +62,10 @@ class ClaudeTestCase < Minitest::Test
      %({"type":"content_block_stop","index":#{index}})]
   end
 
-  # A whole reply of one text block that stops for the API's word given.
-  def text_reply(stop = 'end_turn', text: 'Hello.')
+  # A whole reply of one text block that stops for the API's word given, its response ending as FakeApi's do.
+  def text_reply(stop = 'end_turn', text: 'Hello.', ending: :close)
     FakeApi.sse(START, *text_events(text),
                 %({"type":"message_delta","delta":{"stop_reason":"#{stop}"},"usage":{"output_tokens":5}}),
-                '{"type":"message_stop"}')
+                '{"type":"message_stop"}', ending:)
   end
 end

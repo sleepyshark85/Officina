@@ -27,19 +27,15 @@ module Sleepyshark
         # stops for +:context_full+. A failure, reported after the usage of what streamed before it, is raised as the
         # SDK raised it, or as an IncompleteError. What the block raises passes through as it is.
         def reply(&)
-          # @type var stream: untyped
-          stream = @client.beta.messages.stream(**@params)
-          read(stream, &)
+          read(@client.beta.messages.stream(**@params), &)
         rescue Anthropic::Errors::BadRequestError => e
-          raise unless Failure.new(e).prompt_too_long?
+          raise unless Failure.prompt_too_long?(e)
 
           Reply.new(blocks: [], stop: :context_full)
         rescue Anthropic::Errors::Error, IncompleteError
           # The tokens of an attempt that failed mid-stream are billed, so they are reported too.
           report(&)
           raise
-        ensure
-          stream&.close
         end
 
         private
@@ -49,6 +45,7 @@ module Sleepyshark
           blocks = []
           # @type var reply: Reply?
           reply = nil
+          # However the loop is left (a break, a raise, the end), the SDK's enumerator closes the connection itself.
           stream.each do |event|
             break if @cancel.cancelled?
 
@@ -66,17 +63,19 @@ module Sleepyshark
           when :message_start then @usage = usage(event.message.usage)
           when :text then yield TextDelta.new(text: event.text)
           when :content_block_stop then blocks << block(event.content_block)
-          when :message_delta then @usage = delta(event.usage)
-          when :message_stop then return finish(event.message[:stop_reason], event.message, blocks, &)
+          when :message_delta then @usage = usage_after_delta(event.usage)
+          when :message_stop then return finish(event.message, blocks, &)
           end
           nil
         end
 
-        def finish(word, message, blocks, &)
+        def finish(message, blocks, &)
+          word = message[:stop_reason]
           raise IncompleteError, "Claude's reply stopped without a stop reason" unless word
 
           report(&)
-          stop = STOPS.fetch(word.to_sym, :unknown)
+          # The gem gives a stop reason as a Symbol.
+          stop = STOPS.fetch(word, :unknown)
           detail = case stop
                    when :refusal then message[:stop_details]&.[](:category)&.to_s
                    when :unknown then word.to_s
@@ -103,17 +102,19 @@ module Sleepyshark
           end
         end
 
+        # The usage a message starts with: the API always counts its input and output tokens, not always the cache's.
         def usage(reported)
-          Usage.new(input: reported[:input_tokens] || 0, output: reported[:output_tokens] || 0,
+          Usage.new(input: reported[:input_tokens], output: reported[:output_tokens],
                     cache_read: reported[:cache_read_input_tokens] || 0,
                     cache_write: reported[:cache_creation_input_tokens] || 0)
         end
 
         # The usage after a message delta, which carries the final output count and repeats the input counts it has.
-        def delta(reported)
-          (@usage || Usage.new).with(**{ input: reported[:input_tokens], output: reported[:output_tokens],
-                                         cache_read: reported[:cache_read_input_tokens],
-                                         cache_write: reported[:cache_creation_input_tokens] }.compact)
+        # The SDK raises on a delta before the message's start, so there is a usage to update.
+        def usage_after_delta(reported)
+          @usage&.with(**{ input: reported[:input_tokens], output: reported[:output_tokens],
+                           cache_read: reported[:cache_read_input_tokens],
+                           cache_write: reported[:cache_creation_input_tokens] }.compact)
         end
       end
       private_constant :Call

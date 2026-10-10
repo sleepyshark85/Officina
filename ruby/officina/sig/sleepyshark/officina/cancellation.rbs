@@ -7,11 +7,11 @@ module Sleepyshark
 
       def initialize: () -> void
 
-      def cancel: () -> nil
+      def cancel: () -> void
 
       def cancelled?: () -> bool
 
-      def on_cancel: () { () -> void } -> nil
+      def on_cancel: () { () -> void } -> void
     end
   end
 end

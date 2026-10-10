@@ -24,7 +24,7 @@ module Sleepyshark
 
         private
 
-        def pause: (Float seconds, Cancellation cancel) { (model_event event) -> void } -> void
+        def wait_to_retry: (Failure failure, Integer attempt, Cancellation cancel) { (model_event event) -> void } -> void
         def check: (String name, Symbol effort, Integer max_output_tokens, String prefix_cache,
                    String conversation_cache) -> void
         def check_cache: (String prefix, String conversation) -> void

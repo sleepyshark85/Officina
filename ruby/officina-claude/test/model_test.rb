@@ -18,22 +18,26 @@ class ModelTest < ClaudeTestCase
 
   def test_mdl03_an_invalid_setting_is_refused
     {
-      { name: ' ' } => 'needs a name',
-      { effort: nil } => 'effort is one of',
-      { effort: :huge } => 'not :huge',
-      { max_output_tokens: 0 } => 'must be positive',
-      { prefix_cache: '1d' } => 'cache lifetimes are 5m or 1h',
-      { conversation_cache: '1h' } => 'may not be shorter'
+      { name: ' ' } => 'A Claude model needs a name',
+      { effort: nil } => "Claude's effort is one of low, medium, high, xhigh, max, not nil",
+      { effort: :huge } => "Claude's effort is one of low, medium, high, xhigh, max, not :huge",
+      { max_output_tokens: 0 } => "Claude's max output tokens must be positive, not 0",
+      { prefix_cache: '1d' } => %(Claude's cache lifetimes are 5m or 1h, not "1d" and "5m"),
+      { conversation_cache: '1d' } => %(Claude's cache lifetimes are 5m or 1h, not "5m" and "1d"),
+      { conversation_cache: '1h' } => "Claude's prefix cache may not be shorter than its conversation cache"
     }.each do |setting, message|
       error = assert_raises(Error) do
         Claude::Model.new(name: 'claude-opus-5-5', effort: :low, api_key: 'test-key', **setting)
       end
 
-      assert_includes error.message, message
+      assert_equal message, error.message
     end
   end
 
-  def test_agt01_a_model_is_frozen
-    assert_predicate Claude::Model.new(name: 'claude-opus-5-5', effort: :low, api_key: 'test-key'), :frozen?
+  def test_agt01_a_model_and_its_settings_are_frozen
+    claude = Claude::Model.new(name: 'claude-opus-5-5', effort: :low, api_key: 'test-key')
+
+    assert_predicate claude, :frozen?
+    assert_predicate claude.settings, :frozen?
   end
 end

@@ -30,6 +30,17 @@ class CancellationCallbackTest < Minitest::Test
     assert_equal [:late], calls
   end
 
+  def test_agt05_a_callback_given_after_cancelling_is_not_called_again
+    cancel = Cancellation.new
+    cancel.cancel
+    calls = []
+    cancel.on_cancel { calls << :late }
+
+    cancel.cancel
+
+    assert_equal [:late], calls
+  end
+
   def test_agt05_no_callback_runs_until_cancelling
     cancel = Cancellation.new
     calls = []

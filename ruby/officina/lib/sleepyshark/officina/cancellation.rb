@@ -22,7 +22,6 @@ module Sleepyshark
           waiting
         end
         callbacks.each(&:call)
-        nil
       end
 
       def cancelled?
@@ -38,7 +37,6 @@ module Sleepyshark
           @cancelled
         end
         yield if already
-        nil
       end
     end
   end

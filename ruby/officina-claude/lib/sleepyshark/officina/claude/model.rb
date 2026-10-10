@@ -71,14 +71,12 @@ module Sleepyshark
         # @return [Reply, nil] nil when +cancel+ stopped the call
         # @raise [TransientError, AuthenticationError, InvalidRequestError] when no attempt passed
         def stream(request, cancel:, &)
+          params = params(request)
           attempt = 1
           begin
-            Call.new(client: @client, params: params(request), cancel:).reply(&) unless cancel.cancelled?
+            Call.new(client: @client, params:, cancel:).reply(&) unless cancel.cancelled?
           rescue Anthropic::Errors::Error, Call::IncompleteError => e
-            failure = Failure.new(e)
-            raise failure.error(attempt) unless failure.transient? && attempt < ATTEMPTS
-
-            pause(failure.wait(attempt), cancel, &)
+            wait_to_retry(Failure.new(e), attempt, cancel, &)
             attempt += 1
             retry
           end
@@ -86,9 +84,13 @@ module Sleepyshark
 
         private
 
-        def pause(seconds, cancel)
+        # Waits before the attempt after +attempt+, or raises what remains when another attempt cannot pass or none is
+        # left; called where the failure is rescued, so that is the cause of what it raises.
+        def wait_to_retry(failure, attempt, cancel)
+          raise failure.to_raise(attempt) unless failure.transient? && attempt < ATTEMPTS
+
           yield Retried.new
-          @wait.call(seconds, cancel)
+          @wait.call(failure.wait(attempt), cancel)
         end
 
         def check(name, effort, max_output_tokens, prefix_cache, conversation_cache)
@@ -120,7 +122,6 @@ module Sleepyshark
             tools: request.tools.map { tool(it) },
             system: [{ type: :text, text: request.instructions,
                        cache_control: { type: :ephemeral, ttl: @prefix_cache } }],
-            messages: [],
             request_options: { extra_body: { messages: request.messages.map { JSON::Fragment.new(message(it)) } } } }
         end
 
