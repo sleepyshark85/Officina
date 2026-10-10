@@ -17,7 +17,7 @@ module Sleepyshark
 
       def tool_call: (Tool? tool, ToolCall call) -> ToolCallTrace
 
-      def finish: (result? result, Usage usage, model_calls: Integer, tool_calls: Integer) -> void
+      def finish: (result? result) -> void
 
       def audit_failed: (OpenTelemetry::Trace::Span span, Symbol kind) -> void
 

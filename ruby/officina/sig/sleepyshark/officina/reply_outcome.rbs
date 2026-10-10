@@ -3,7 +3,7 @@ module Sleepyshark
     module ReplyOutcome
       STOP_REASONS: Hash[Symbol, Symbol]
 
-      def self.of: (Reply reply, Usage usage) -> result?
+      def self.of: (Reply reply, ?budget_used_up: String?) -> result?
 
       def self.unexpected: (Reply reply) -> String?
     end

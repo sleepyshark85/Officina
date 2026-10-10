@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'test_helper'
+require_relative 'support/fake_clock'
 
 # Many runs of one agent at once, and one run per conversation.
 class RunConcurrencyTest < Minitest::Test
@@ -17,7 +18,7 @@ class RunConcurrencyTest < Minitest::Test
     threads = conversations.map { |conversation| Thread.new { agent.run(conversation, 'Hi') } }
     results = threads.map(&:value)
 
-    assert_equal [Completed.new(text: 'Hello', usage: Usage.new)], results.uniq
+    assert_equal [Completed.new(text: 'Hello', model_calls: 1)], results.uniq
     assert(conversations.all? { it.messages.map(&:text) == %w[Hi Hello] })
   ensure
     threads&.each(&:join)
@@ -38,5 +39,5 @@ class RunConcurrencyTest < Minitest::Test
 
   private
 
-  def agent_of(model) = Agent.new(model:, instructions: 'You help customers of a bookshop.')
+  def agent_of(model) = Agent.new(model:, instructions: 'You help customers of a bookshop.', clock: FakeClock.new)
 end

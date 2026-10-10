@@ -43,14 +43,14 @@ module Sleepyshark
       # The span of a tool call, from its start; +tool+ is nil for a call of a tool the agent does not have.
       def tool_call(tool, call) = ToolCallTrace.new(self, tool, call)
 
-      # Counts the run and ends its span: how it ended (nil when the host left it), its usage and its calls.
-      def finish(result, usage, model_calls:, tool_calls:)
+      # Counts the run and ends its span: how it ended, with what it used; nil when the host left it.
+      def finish(result)
         outcome = { 'officina.run.result' => ended(result), 'officina.run.reason' => reason(result) }.compact
         add(:runs, 1, dimensions.merge(outcome))
         @span.add_attributes(outcome)
         if result
-          @span.add_attributes({ 'officina.run.model_calls' => model_calls, 'officina.run.tool_calls' => tool_calls,
-                                 **usage_attributes(usage), **answer(result) })
+          calls = { 'officina.run.model_calls' => result.model_calls, 'officina.run.tool_calls' => result.tool_calls }
+          @span.add_attributes({ **calls, **usage_attributes(result.usage), **answer(result) })
         end
         stop_run(result)
       end

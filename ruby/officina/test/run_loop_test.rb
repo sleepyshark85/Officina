@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'test_helper'
+require_relative 'support/fake_clock'
 
 # The run loop on a scripted model: its model calls, what it appends, and the result each way it ends.
 class RunLoopTest < Minitest::Test
@@ -10,22 +11,21 @@ class RunLoopTest < Minitest::Test
 
   Model = Testing::ScriptedModel
   CALL = Model.tool_use_block('call_1', 'search', '{}')
-  NONE = Usage.new
-  OUTPUT_LIMIT = Stopped.new(reason: :output_limit, detail: nil, usage: NONE)
-  UNEXPECTED = ->(detail) { Failed.new(reason: :unexpected_stop, detail:, usage: NONE) }
-  MODEL_ERROR = ->(detail) { Failed.new(reason: :model_error, detail:, usage: NONE) }
+  OUTPUT_LIMIT = Stopped.new(reason: :output_limit, detail: nil, model_calls: 1)
+  UNEXPECTED = ->(detail) { Failed.new(reason: :unexpected_stop, detail:, model_calls: 1) }
+  MODEL_ERROR = ->(detail) { Failed.new(reason: :model_error, detail:, model_calls: 1) }
   # Each reply that ends a run: the result it ends the run with, and how many messages the conversation keeps.
   ENDINGS = {
     Model.stop(:max_tokens) => [OUTPUT_LIMIT, 2],
-    Model.stop(:refusal, detail: 'cyber') => [Stopped.new(reason: :refusal, detail: 'cyber', usage: NONE), 2],
-    Model.stop(:context_full) => [Stopped.new(reason: :context_full, detail: nil, usage: NONE), 2],
+    Model.stop(:refusal, detail: 'cyber') => [Stopped.new(reason: :refusal, detail: 'cyber', model_calls: 1), 2],
+    Model.stop(:context_full) => [Stopped.new(reason: :context_full, detail: nil, model_calls: 1), 2],
     Model.stop(:unknown, detail: 'pause_turn') => [UNEXPECTED["The run cannot act on the model's stop: pause_turn"], 2],
     Model.stop(:tool_use) => [UNEXPECTED['The model stopped to use tools but called none'], 2],
     [Reply.new(blocks: [CALL],
                stop: :end)] => [UNEXPECTED["The model's reply called tools but did not stop for them"],
                                 0],
     [Reply.new(blocks: [CALL], stop: :max_tokens)] => [OUTPUT_LIMIT, 0],
-    Model.stop(:end, text: nil) => [Completed.new(text: '', usage: NONE), 0],
+    Model.stop(:end, text: nil) => [Completed.new(text: '', model_calls: 1), 0],
     [TextDelta.new(text: 'Hel'), RuntimeError.new('overloaded')] => [MODEL_ERROR['overloaded'], 0],
     [TextDelta.new(text: 'Hel'), nil] => [MODEL_ERROR["The model's reply ended without a stop reason"], 0]
   }.freeze
@@ -37,8 +37,8 @@ class RunLoopTest < Minitest::Test
     first = agent.run(conversation, 'Is Gaudy Night in stock?')
     second = agent.run(conversation, 'Order one.')
 
-    assert_equal Completed.new(text: 'Yes, 3 copies.', usage: NONE), first
-    assert_equal Completed.new(text: 'Ordered.', usage: NONE), second
+    assert_equal Completed.new(text: 'Yes, 3 copies.', model_calls: 1), first
+    assert_equal Completed.new(text: 'Ordered.', model_calls: 1), second
     assert_equal ['Is Gaudy Night in stock?', 'Yes, 3 copies.', 'Order one.', 'Ordered.'],
                  conversation.messages.map(&:text)
   end
@@ -49,7 +49,7 @@ class RunLoopTest < Minitest::Test
 
     result = agent_of(model).run(conversation, 'Search for Gaudy Night.')
 
-    assert_equal Completed.new(text: 'I have no search tool.', usage: NONE), result
+    assert_equal Completed.new(text: 'I have no search tool.', model_calls: 2, tool_calls: 1), result
     assert_equal %i[user assistant user assistant], conversation.messages.map(&:role)
     assert_equal ToolResult.new(call_id: 'call_1', content: 'There is no tool named search.', error: true),
                  conversation.messages[2].blocks.first.tool_result
@@ -78,7 +78,7 @@ class RunLoopTest < Minitest::Test
     usage = Usage.new(input: 7, output: 1)
     model = Model.new([UsageReported.new(usage:), RuntimeError.new('overloaded')])
 
-    assert_equal Failed.new(reason: :model_error, detail: 'overloaded', usage:),
+    assert_equal Failed.new(reason: :model_error, detail: 'overloaded', usage:, model_calls: 1),
                  agent_of(model).run(Conversation.new, 'Hello')
   end
 
@@ -88,7 +88,7 @@ class RunLoopTest < Minitest::Test
 
     result = agent_of(model).run(conversation, 'Hello')
 
-    assert_equal Stopped.new(reason: :iteration_limit, detail: nil, usage: NONE), result
+    assert_equal Stopped.new(reason: :iteration_limit, detail: nil, model_calls: 25, tool_calls: 25), result
     assert_equal 25, model.requests.size
     assert_equal 51, conversation.messages.size
     assert_predicate conversation.messages.last.blocks.first, :tool_result
@@ -126,5 +126,5 @@ class RunLoopTest < Minitest::Test
 
   private
 
-  def agent_of(model) = Agent.new(model:, instructions: 'You help customers of a bookshop.')
+  def agent_of(model) = Agent.new(model:, instructions: 'You help customers of a bookshop.', clock: FakeClock.new)
 end

@@ -128,10 +128,12 @@ module Sleepyshark
           raise Error, "Claude's prefix cache may not be shorter than its conversation cache"
         end
 
-        # The request as the API takes it. The messages go through the SDK's one raw field, each as a JSON fragment
-        # it writes as it is: its typed messages parameter would write stored blocks anew.
+        # The request as the API takes it, its output limit the lower of the model's and the request's. The messages go
+        # through the SDK's one raw field, each as a JSON fragment it writes as it is: its typed messages parameter
+        # would write stored blocks anew.
         def params(request)
           { **@fixed,
+            max_tokens: [@fixed.fetch(:max_tokens), request.max_output_tokens].compact.min,
             tools: request.tools.map { tool(it) },
             system: [{ type: :text, text: request.instructions,
                        cache_control: { type: :ephemeral, ttl: @prefix_cache } }],

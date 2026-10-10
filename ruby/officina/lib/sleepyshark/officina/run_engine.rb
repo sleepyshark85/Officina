@@ -10,28 +10,27 @@ module Sleepyshark
                         'started with; start a new conversation'
 
       # @param trace [RunTrace] the run's, whose span has started
-      def initialize(agent:, conversation:, append:, cancel:, on_event:, trace:)
+      # @param budget [Budget, nil]
+      def initialize(agent:, conversation:, append:, cancel:, on_event:, trace:, budget:)
         @agent = agent
         @conversation = conversation
         @reporter = Reporter.new(append:, fingerprint: agent.fingerprint, on_event:)
         @cancel = cancel
-        @usage = Usage.new
-        @model_calls = 0
-        @tool_calls = 0
+        @spending = Spending.new(budget:, price: agent.model.info.price, clock: agent.clock)
         @trace = trace
         @audit = AuditRecorder.new(agent:, conversation:, trace:)
         @tool_step = ToolStep.new(agent:, audit: @audit, trace:, cancel:, reporter: @reporter)
       end
 
-      # The run's result, its text and detail without the agent's secrets, between the run's two audit entries, and
-      # its span's end; a run the host left has none, and its end is recorded as abandoned.
+      # The run's result, its text and detail without the agent's secrets, with what the run used, between the run's
+      # two audit entries, and its span's end; a run the host left has none, and its end is recorded as abandoned.
       def run(input, context)
         # @type var result: result?
         @audit.record(:run_started)
-        result = redacted(decide(input, context))
+        result = @spending.report(redacted(decide(input, context)))
       ensure
-        @audit.record_end(result, @usage)
-        @trace.finish(result, @usage, model_calls: @model_calls, tool_calls: @tool_calls)
+        @audit.record_end(result, @spending.usage, @spending.cost)
+        @trace.finish(result)
       end
 
       private
@@ -40,6 +39,8 @@ module Sleepyshark
         bound = @conversation.fingerprint
         return failed(:prefix_mismatch, PREFIX_MISMATCH) unless bound.nil? || bound == @agent.fingerprint
 
+        interrupted = InterruptedCalls.answer(@conversation.messages, @audit)
+        @reporter.append(interrupted) if interrupted
         pending = [text_message(:user, input)]
         pending << text_message(:operator, context) if context
         call_until_stopped(pending)
@@ -48,7 +49,10 @@ module Sleepyshark
       def call_until_stopped(pending)
         loop do
           return stopped(:cancelled) if @cancel.cancelled?
-          return stopped(:iteration_limit) if @model_calls == MAX_MODEL_CALLS
+          return stopped(:iteration_limit) if @spending.model_calls == MAX_MODEL_CALLS
+
+          reached = @spending.reached
+          return stopped(:budget, reached) if reached
 
           result = step(pending)
           return result if result
@@ -57,21 +61,22 @@ module Sleepyshark
         end
       end
 
-      # One model call and what follows it: the run's result, or nil when the loop goes on.
+      # One model call, its output limit lowered to what the budget has left, and what follows it: the run's result,
+      # or nil when the loop goes on.
       def step(pending)
-        case call_model(@conversation.messages + pending)
-        in Reply => reply then after_reply(reply, pending)
+        limit = @spending.output_limit
+        case call_model(@conversation.messages + pending, limit)
+        in Reply => reply then after_reply(reply, pending, limit)
         in result then result
         end
       end
 
       # The reply, the result of a call that got none, or nil when the run was cancelled, which the loop then stops.
-      def call_model(messages)
-        @model_calls += 1
-        @trace.model_call do
-          stream(Request.new(tools: @agent.tools, instructions: @agent.instructions, messages:)) ||
-            no_reply("The model's reply ended without a stop reason")
-        end
+      def call_model(messages, limit)
+        @spending.count_model_call
+        request = Request.new(tools: @agent.tools, instructions: @agent.instructions, messages:,
+                              max_output_tokens: limit)
+        @trace.model_call { stream(request) || no_reply("The model's reply ended without a stop reason") }
       end
 
       # The reply; nil for a stream that ended without one; what #no_reply makes of a stream that failed. What the
@@ -87,7 +92,7 @@ module Sleepyshark
       def relay(event)
         # @type var usage: Usage
         case event
-        in UsageReported(usage:) then @usage += usage
+        in UsageReported(usage:) then @spending.add(usage)
         else nil
         end
         @trace.observe(event)
@@ -103,9 +108,9 @@ module Sleepyshark
 
       # Keeps the reply, with the messages it answers and its calls' results, unless the provider would reject it, and
       # returns the run's result, or nil when the loop goes on.
-      def after_reply(reply, pending)
+      def after_reply(reply, pending, limit)
         calls = reply.blocks.filter_map(&:tool_call)
-        result = ReplyOutcome.of(reply, @usage)
+        result = ReplyOutcome.of(reply, budget_used_up: limit && @spending.reached)
         keep(reply, pending, calls) unless rejected?(reply, calls, result)
         result
       end
@@ -115,7 +120,7 @@ module Sleepyshark
 
       def keep(reply, pending, calls)
         assistant = Message.new(role: :assistant, blocks: reply.blocks)
-        @tool_calls += calls.size
+        @spending.count_tool_calls(calls.size)
         if calls.empty?
           @reporter.append(*pending, assistant)
         else
@@ -132,8 +137,8 @@ module Sleepyshark
       end
 
       def text_message(role, text) = Message.new(role:, blocks: [Block.new(text:)])
-      def stopped(reason) = Stopped.new(reason:, detail: nil, usage: @usage)
-      def failed(reason, detail) = Failed.new(reason:, detail:, usage: @usage)
+      def stopped(reason, detail = nil) = Stopped.new(reason:, detail:)
+      def failed(reason, detail) = Failed.new(reason:, detail:)
     end
     private_constant :RunEngine
   end

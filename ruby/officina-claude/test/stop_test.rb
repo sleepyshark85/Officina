@@ -42,10 +42,12 @@ class StopTest < ClaudeTestCase
 
   def test_mdl06_a_refusal_stops_the_run_with_its_category
     api = serve(FakeApi.recorded(testdata('claude/refusal.sse')))
-    agent = Agent.new(model: model(api), instructions: 'Answer briefly.')
+    agent = Agent.new(model: model(api), instructions: 'Answer briefly.', clock: -> { Time.at(0) })
 
     result = agent.run(Conversation.new, 'Hi')
 
-    assert_equal Stopped.new(reason: :refusal, detail: 'cyber', usage: Usage.new(input: 9, output: 7)), result
+    # Opus 5.5's price: $4 per million input tokens and $20 per million output tokens.
+    assert_equal Stopped.new(reason: :refusal, detail: 'cyber', usage: Usage.new(input: 9, output: 7),
+                             cost: BigDecimal('0.000176'), model_calls: 1), result
   end
 end

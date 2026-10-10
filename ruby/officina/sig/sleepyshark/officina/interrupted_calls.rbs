@@ -1,0 +1,9 @@
+module Sleepyshark
+  module Officina
+    module InterruptedCalls
+      RESULT: String
+
+      def self.answer: (Array[Message] messages, AuditRecorder audit) -> Message?
+    end
+  end
+end

@@ -13,6 +13,8 @@ module Sleepyshark
       def initialize: (?input: Integer, ?output: Integer, ?cache_read: Integer, ?cache_write: Integer,
                        ?cache_write_hour: Integer) -> void
 
+      def total: () -> Integer
+
       def +: (Usage other) -> Usage
     end
   end
