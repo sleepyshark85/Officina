@@ -1,0 +1,9 @@
+module Bookshop
+  class Shop < Data
+    attr_reader catalogue: Catalogue
+    attr_reader customers: Customers
+    attr_reader orders: Orders
+
+    def self.new: (catalogue: Catalogue, customers: Customers, orders: Orders) -> instance
+  end
+end

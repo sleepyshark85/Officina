@@ -1,0 +1,10 @@
+module Bookshop
+  class OrderLine < Data
+    attr_reader book_id: Integer
+    attr_reader title: String
+    attr_reader quantity: Integer
+    attr_reader unit_price: BigDecimal
+
+    def self.new: (book_id: Integer, title: String, quantity: Integer, unit_price: BigDecimal) -> instance
+  end
+end

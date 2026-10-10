@@ -1,0 +1,4 @@
+module Bookshop
+  class RefusedError < StandardError
+  end
+end

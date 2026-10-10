@@ -1,0 +1,20 @@
+module Bookshop
+  class Database
+    POOL_SIZE: Integer
+    CHECKOUT_TIMEOUT: Integer
+
+    def self.containing: (String? part) -> String?
+
+    def initialize: (String url) -> void
+    def with: [T] () { (PG::Connection) -> T } -> T
+    def transaction: [T] () { (PG::Connection) -> T } -> T
+    def close: () -> void
+
+    private
+
+    @pool: ConnectionPool[PG::Connection]
+
+    def connect: (String url) -> PG::Connection
+    def revive: (PG::Connection connection) -> void
+  end
+end

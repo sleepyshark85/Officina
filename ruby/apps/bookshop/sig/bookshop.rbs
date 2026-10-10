@@ -1,2 +1,11 @@
 module Bookshop
+  COMPOSE_DATABASE: String
+
+  def self.build: (?env: _Settings) -> Shop
+  def self.shop: (Database database) -> Shop
+
+  # The settings build reads: ENV, or a Hash in tests.
+  interface _Settings
+    def fetch: (String name, String default) -> String
+  end
 end
