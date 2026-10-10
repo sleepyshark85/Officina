@@ -16,6 +16,16 @@ module MemoryConcurrencyContract
     assert_equal [[], []], [failures, store.list('alice')]
   end
 
+  # Threads are switched at every block call, so one walks the files while another adds or moves one.
+  def test_mem02_writes_renames_and_lists_interleaved_inside_each_call_lose_no_file
+    failures = switching_at_every_block { on_threads(6) { |worker| write_rename_or_list(worker, 20) } }
+    written = Array.new(20) { "#{it}.md" }.sort
+
+    assert_empty failures
+    assert_equal [written, written, ['20.md'], ['20.md'], [], []],
+                 Array.new(6) { store.list("t#{it}").map(&:path).sort }
+  end
+
   private
 
   # Runs the work on that many threads at once, joins every one, and returns what they raised.
@@ -37,6 +47,25 @@ module MemoryConcurrencyContract
       store.write('alice', "w#{writer}/#{n}.md", "#{writer}-#{n}")
       store.rename('alice', "w#{writer}/#{n}.md", "done/#{writer}-#{n}.md")
       store.write('alice', 'shared.md', "#{writer}-#{n}")
+    end
+  end
+
+  # Runs the block with a switch to another thread at every block call, so that threads interleave inside a store's
+  # calls (a walk over its files, a check and the change it allows), not only between them.
+  def switching_at_every_block(&)
+    TracePoint.new(:b_call) { Thread.pass }.enable(target_thread: nil, &)
+  end
+
+  # In a scope of its own, by its number: writes new files (0 and 1), moves one file along 0.md, 1.md and so on (2
+  # and 3), or lists (the others).
+  def write_rename_or_list(worker, count)
+    scope = "t#{worker}"
+    case worker / 2
+    when 0 then count.times { store.write(scope, "#{it}.md", 'x') }
+    when 1
+      store.write(scope, '0.md', 'x')
+      count.times { store.rename(scope, "#{it}.md", "#{it + 1}.md") }
+    else count.times { store.list(scope) }
     end
   end
 
