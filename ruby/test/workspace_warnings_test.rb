@@ -1,5 +1,8 @@
 # frozen_string_literal: true
 
+require 'open3'
+require 'rbconfig'
+require 'tmpdir'
 require 'test_helper'
 
 # Which warnings fail the tests.
@@ -13,5 +16,16 @@ class WorkspaceWarningsTest < Minitest::Test
     _, printed = capture_io { Warning.warn(warning) }
 
     assert_equal warning, printed
+  end
+
+  def test_a_workspace_file_loaded_after_the_helper_that_warns_fails_the_run
+    Dir.mktmpdir(nil, __dir__) do |directory|
+      warns = File.join(directory, 'warns.rb')
+      File.write(warns, "def probe = (unused = 1; nil)\n")
+      _, error, status = Open3.capture3(RbConfig.ruby, '-w', '-I', __dir__, '-r', 'test_helper', warns)
+
+      refute_predicate status, :success?
+      assert_match 'Minitest::UnexpectedWarning', error
+    end
   end
 end

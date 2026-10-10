@@ -3,7 +3,8 @@
 require 'minitest'
 
 # Turns a Ruby warning about a file of the workspace into a test failure. A warning from a gem it uses, which the
-# workspace cannot fix (the pinned Anthropic SDK warns as it loads), is printed as usual.
+# workspace cannot fix (the pinned Anthropic SDK warns as it loads), is printed as usual, as is one naming no file
+# (Kernel#warn without uplevel:).
 module WorkspaceWarnings
   WORKSPACE = File.expand_path('..', __dir__) + File::SEPARATOR
   # Where CI's Bundler installs the gems, inside the workspace.

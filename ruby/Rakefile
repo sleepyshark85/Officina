@@ -14,6 +14,8 @@ end
 # warning into an error.
 Minitest::TestTask.create do |task|
   task.libs = %w[test .]
+  # Before any test file, which Ruby parses, warnings and all, before its own require of the helper.
+  task.test_prelude = 'require "test_helper"'
   task.test_globs = %w[test/**/*_test.rb {officina,officina-*,apps/*}/test/**/*_test.rb]
 end
 
