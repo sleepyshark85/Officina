@@ -4,6 +4,8 @@ module Sleepyshark
       module RawJson
         SCALAR: Regexp
         BETWEEN: Regexp
+        OPENING: Regexp
+        CLOSING: Regexp
 
         def self.members: (String text) -> Hash[String, String]
 
@@ -11,7 +13,7 @@ module Sleepyshark
 
         def self.opened: (String text) -> StringScanner
 
-        def self.closed?: (StringScanner scanner) -> bool
+        def self.closing: (StringScanner scanner) -> Integer?
 
         def self.value: (StringScanner scanner) -> String
 

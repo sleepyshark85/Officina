@@ -10,6 +10,9 @@ module Sleepyshark
       # Server#secrets) never leave it: its results and the reasons it reports have them redacted. Many runs may share
       # it. Close it when done.
       #
+      # Mutation testing leaves out the methods that only take its locks: a test cannot make two threads meet inside a
+      # lock under the VM lock.
+      #
       # @example
       #   source = Mcp::ToolSource.new(Mcp::Server.new(name: 'files', url:),
       #                                allowed: [Mcp::AllowedTool.new(name: 'write_file', needs_approval: true)])
@@ -20,20 +23,20 @@ module Sleepyshark
 
         # Connects to server, and pins its allowed tools.
         # @param allowed [Array<AllowedTool>]
-        # @param cancel [#cancelled?, nil] checked while it connects
         # @raise [Mcp::Error] when the server cannot be started or reached, does not answer, speaks another protocol
         #   version, lacks an allowed tool or gives one a schema the core cannot validate against; the server is
         #   stopped by then
         # @raise [Officina::Error] when an allowed tool's kind is not :read or :write
-        def initialize(server, allowed:, cancel: nil)
+        def initialize(server, allowed:)
           @server = server
           @secrets = Secrets.new(server.secrets)
-          # Guards the client, the changes, the client whose loss is recorded (so a loss many calls meet is recorded
-          # once) and whether it is closed. @connecting lets one connect or close at a time replace the client.
+          # Guards the client, the client whose loss is recorded (so a loss many calls meet is recorded once) and
+          # whether it is closed. @connecting lets one connect or close at a time replace the client.
           @mutex = Mutex.new
           @connecting = Mutex.new
-          @changes = []
-          @tools = pin(connect_client(cancel), allowed, cancel)
+          # Each change is pushed once and taken once.
+          @changes = Queue.new
+          @tools = pin(connect_client(nil), allowed)
         end
 
         # @return [String] the server's name, which prefixes its tools' names
@@ -43,18 +46,21 @@ module Sleepyshark
         # calls it before its first model call.
         # @param cancel [#cancelled?]
         # @raise [Mcp::Error] when the server cannot be reached again, cancel is cancelled, or the source is closed
+        # mutant:disable -- see the class: the lock, which keeps two runs from each starting a server
         def connect(cancel:) = @connecting.synchronize { reconnect(cancel) }
 
         # @return [Array<ToolSourceChange>] the connection changes since it was last called, oldest first
         def take_changes
-          @mutex.synchronize do
-            taken = @changes.freeze
-            @changes = []
-            taken
+          # @type var taken: Array[ToolSourceChange]
+          taken = []
+          while (change = @changes.pop(timeout: 0))
+            taken << change
           end
+          taken
         end
 
         # Closes the connection (see Client#close); its tools then give error results, and runs fail to connect it.
+        # mutant:disable -- see the class: the locks
         def close
           @connecting.synchronize do
             @mutex.synchronize { @closed = true }
@@ -74,9 +80,15 @@ module Sleepyshark
           connect_client(cancel)
         end
 
+        # mutant:disable -- see the class: the lock
         def current = @mutex.synchronize { @client }
 
+        # mutant:disable -- see the class: the lock
         def closed? = @mutex.synchronize { @closed }
+
+        # Makes client the current one, and returns the one it replaces.
+        # mutant:disable -- see the class: the lock
+        def swap(client) = @mutex.synchronize { @client.tap { @client = client } }
 
         # Connects a new client, and records whether it did; one whose connect was cancelled records nothing.
         def connect_client(cancel)
@@ -85,7 +97,7 @@ module Sleepyshark
           change(:failed, e.message) unless cancel&.cancelled?
           raise
         else
-          @mutex.synchronize { @client = client }
+          swap(client)
           change(:connected)
           client
         end
@@ -102,6 +114,7 @@ module Sleepyshark
         end
 
         # Records the client's loss, once however many calls meet it.
+        # mutant:disable -- see the class: the lock
         def lost(client, reason)
           @mutex.synchronize do
             return if @lost_client.equal?(client)
@@ -112,20 +125,16 @@ module Sleepyshark
         end
 
         # Closes the client, if any, once calls no longer find it.
-        def drop
-          client = @mutex.synchronize { @client.tap { @client = nil } }
-          client&.close
-        end
+        def drop = swap(nil)&.close
 
         def change(state, detail = nil)
-          change = ToolSourceChange.new(state:, detail: detail && @secrets.redact(detail))
-          @mutex.synchronize { @changes << change }
+          @changes << ToolSourceChange.new(state:, detail: detail && @secrets.redact(detail))
         end
 
         # Pins the core's tool for each allowed tool of the server's list; on any failure, closes the connection.
-        def pin(client, allowed, cancel)
+        def pin(client, allowed)
           # @type var pinned: Array[Officina::Tool]?
-          listed = client.list_tools(cancel:).to_h { [it.name, it] }
+          listed = client.list_tools.to_h { [it.name, it] }
           pinned = allowed.map { pinned_tool(it, listed) }.freeze
         ensure
           close unless pinned

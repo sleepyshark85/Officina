@@ -13,7 +13,9 @@ module Sleepyshark
         SCALAR = /"(?:[^"\\]++|\\.)*+"|[-+.\w]++/
         # What lies between the brackets of an object or array: strings, whole, and anything but brackets and quotes.
         BETWEEN = /(?:"(?:[^"\\]++|\\.)*+"|[^"\[\]{}]++)*+/
-        private_constant :SCALAR, :BETWEEN
+        OPENING = /[\[{]/
+        CLOSING = /[\]}]/
+        private_constant :SCALAR, :BETWEEN, :OPENING, :CLOSING
 
         # @param text [String] an object's JSON text
         # @return [Hash{String => String}] its members' names to their values' text
@@ -21,8 +23,8 @@ module Sleepyshark
           scanner = opened(text)
           # @type var members: Hash[String, String]
           members = {}
-          until closed?(scanner)
-            name = JSON.parse(scanner.scan(SCALAR).to_s)
+          until closing(scanner)
+            name = JSON.parse(value(scanner))
             scanner.skip(/\s*:\s*/)
             members[name] = value(scanner)
           end
@@ -35,40 +37,43 @@ module Sleepyshark
           scanner = opened(text)
           # @type var elements: Array[String]
           elements = []
-          elements << value(scanner) until closed?(scanner)
+          elements << value(scanner) until closing(scanner)
           elements
         end
 
         def self.opened(text)
           scanner = StringScanner.new(text)
-          scanner.skip(/\s*[\[{]/)
+          scanner.skip(/\s+/)
+          scanner.skip(OPENING)
           scanner
         end
 
-        # Skips what comes before the next item, and says whether the closing bracket came instead.
-        def self.closed?(scanner)
+        # Skips what comes before the next item, and the closing bracket if it comes instead: its length, else nil.
+        def self.closing(scanner)
           scanner.skip(/\s*,?\s*/)
-          scanner.skip(/[\]}]/) ? true : false
+          scanner.skip(CLOSING)
         end
 
-        # The text of the value the scanner is at, which it then skips.
-        def self.value(scanner)
+        # The text of the value the scanner is at, which it then skips. The slice is within the text, never nil, which
+        # String#byteslice's signature allows.
+        def self.value(scanner) # steep:ignore MethodBodyTypeMismatch
           start = scanner.pos
           skip_nested(scanner) unless scanner.skip(SCALAR)
           # Byte positions, as StringScanner counts them.
-          scanner.string.byteslice(start, scanner.pos - start).to_s
+          scanner.string.byteslice(start, scanner.pos - start)
         end
 
-        # Skips an object or an array, counting brackets outside strings.
+        # Skips an object or an array, from its opening bracket, counting the brackets after it outside strings.
         def self.skip_nested(scanner)
-          depth = 0
-          loop do
+          scanner.skip(OPENING)
+          depth = 1
+          until depth.zero?
             scanner.skip(BETWEEN)
-            depth += scanner.getch.to_s.match?(/[\[{]/) ? 1 : -1
-            break if depth.zero?
+            depth += 1 if scanner.skip(OPENING)
+            depth -= 1 if scanner.skip(CLOSING)
           end
         end
-        private_class_method :opened, :closed?, :value, :skip_nested
+        private_class_method :opened, :closing, :value, :skip_nested
       end
       private_constant :RawJson
     end

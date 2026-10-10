@@ -13,7 +13,7 @@ module Sleepyshark
           return unless tools.instance_of?(Array)
 
           written = RawJson.elements(RawJson.members(RawJson.members(page.text).fetch('result')).fetch('tools'))
-          tools.zip(written).map { |item, text| tool(item, text.to_s) or return nil }
+          written.zip(tools).map { |text, item| tool(item, text) or return nil }
         end
 
         # The cursor of the page after this one; nil on the last page.

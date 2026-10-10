@@ -17,10 +17,10 @@ class ClientTest < Minitest::Test
   # As the server wrote it, spaces, key order, escapes and number forms included: what every implementation hashes
   # into the prefix fingerprint.
   WRITTEN_SCHEMA = %({ "type" : "object",\n  "properties": {"q": {"type": "string", "pattern": "[{\\"\\u00e9]",
-    "maxLength": 1E2}},\t"required": [ "q" ] })
+    "description": "Café", "maxLength": 1E2}},\t"required": [ "q" ] })
 
   def test_mcp01_agt06_a_listed_tool_keeps_its_input_schema_as_written_and_without_a_description_an_empty_one
-    page = %({"jsonrpc": "2.0", "id": 2, "result": {"tools": [ {"inputSchema": #{WRITTEN_SCHEMA}, "name": "echo"},
+    page = %(\n {"jsonrpc": "2.0", "id": 2, "result": {"tools": [ {"inputSchema": #{WRITTEN_SCHEMA}, "name": "echo"},
       {"name":"upper","inputSchema":{}} ] } })
     tools = with_client(Scripted::HANDSHAKE + [Scripted.answer(page)], &:list_tools)
 
@@ -53,6 +53,14 @@ class ClientTest < Minitest::Test
 
       assert_equal 3, requests.size, 'the handshake and one page'
     end
+  end
+
+  def test_mcp04_a_response_with_neither_a_result_nor_an_error_is_unreadable
+    error = with_client(Scripted::HANDSHAKE + [Scripted.answer('{"jsonrpc":"2.0","id":2,"error":null}')]) do |client|
+      assert_raises(Mcp::Error) { client.list_tools }
+    end
+
+    assert_equal 'MCP server web answered tools/list with an unreadable result', error.message
   end
 
   def test_mcp04_a_server_that_gives_a_cursor_twice_is_refused

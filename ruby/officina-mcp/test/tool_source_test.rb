@@ -32,6 +32,13 @@ class ToolSourceTest < Minitest::Test
     assert_equal 'MCP server fs has no tool nope; it has: crash, cut, echo, fail, hang, stray, upper', error.message
   end
 
+  def test_mcp04_a_server_that_cannot_start_fails_the_source_clearly
+    server = Mcp::Server.new(name: 'fs', command: ['officina-no-such-server'])
+    error = assert_raises(Mcp::Error) { Mcp::ToolSource.new(server, allowed: [allow('echo')]) }
+
+    assert_match(/\AMCP server fs could not be started \(officina-no-such-server\): /, error.message)
+  end
+
   def test_mcp02_agt06_a_tools_schema_enters_the_prefix_as_the_server_wrote_it
     written = %({ "type": "object",\n  "properties": {"text": {"description": "caf\\u00e9", "type": "string"}} })
     fake = FakeServer.new(tools: [FakeTool.new(name: 'echo', handler: ->(_) { '' }, input_schema: written)])
@@ -88,6 +95,7 @@ class ToolSourceTest < Minitest::Test
       assert_equal Officina::ToolFailure.new(message: 'MCP server fake, tools/call: cancelled'),
                    tool.invoke('{}', Officina::Cancellation.new.tap(&:cancel))
       assert_equal broke, tool.invoke('{}', Officina::Cancellation.new)
+      assert_equal [:connected], source.take_changes.map(&:state), 'nothing was lost'
     end
   end
 
@@ -98,6 +106,7 @@ class ToolSourceTest < Minitest::Test
     result = agent(source).run(Officina::Conversation.new, 'Hi')
 
     assert_equal 'The tool source fs is not available: MCP server fs: the tool source is closed', result.detail
+    assert_raises(Mcp::Error) { source.connect(cancel: Officina::Cancellation.new) }
     assert_equal Officina::ToolFailure.new(message: 'MCP server fs is not connected'),
                  source.tools.first.invoke('{"text":"hi"}', Officina::Cancellation.new)
   end

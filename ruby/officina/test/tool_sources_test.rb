@@ -63,13 +63,17 @@ class ToolSourcesTest < Minitest::Test
       'Read.'
     end
 
-    ran = run_calls([read], call('1', 'files__read'), audit_sink: sink)
+    ran = run_calls([read, sourced('files__list', files)], call('1', 'files__read'), audit_sink: sink)
 
     assert_instance_of Completed, ran.result
     assert_equal([[:run_started, nil, nil, nil], [:tool_source, 'files', 'connected', nil],
                   [:tool_started, 'files__read', nil, nil], [:tool_ended, 'files__read', 'ok', 'Read.'],
                   [:tool_source, 'files', 'disconnected', 'it went away'], [:run_ended, nil, 'completed', nil]],
                  sink.entries.map { [it.kind, it.tool, it.outcome, it.detail] })
+  end
+
+  def test_aud01_a_changes_detail_is_frozen
+    assert_predicate ToolSourceChange.new(state: :failed, detail: +'down').detail, :frozen?
   end
 
   def test_agt05_a_run_cancelled_while_its_sources_connect_stops_as_cancelled

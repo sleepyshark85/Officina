@@ -7,13 +7,13 @@ module Sleepyshark
         @mutex: Thread::Mutex
         @connecting: Thread::Mutex
         @client: Client?
-        @changes: Array[ToolSourceChange]
+        @changes: Thread::Queue[ToolSourceChange]
         @lost_client: Client?
         @closed: bool?
 
         attr_reader tools: Array[Officina::Tool]
 
-        def initialize: (Server server, allowed: Array[AllowedTool], ?cancel: _Cancellation?) -> void
+        def initialize: (Server server, allowed: Array[AllowedTool]) -> void
 
         def name: () -> String
 
@@ -31,6 +31,8 @@ module Sleepyshark
 
         def closed?: () -> bool?
 
+        def swap: (Client? client) -> Client?
+
         def connect_client: (_Cancellation? cancel) -> Client
 
         def answers?: (Client client, _Cancellation cancel) -> bool
@@ -41,7 +43,7 @@ module Sleepyshark
 
         def change: (Symbol state, ?String? detail) -> void
 
-        def pin: (Client client, Array[AllowedTool] allowed, _Cancellation? cancel) -> Array[Officina::Tool]
+        def pin: (Client client, Array[AllowedTool] allowed) -> Array[Officina::Tool]
 
         def pinned_tool: (AllowedTool allowed, Hash[String, Tool] listed) -> Officina::Tool
 

@@ -17,7 +17,7 @@ module Sleepyshark
         @sources.each do |source|
           source.connect(cancel:)
         rescue StandardError => e
-          return "The tool source #{source.name} is not available: #{e.message}" unless cancel.cancelled?
+          return "The tool source #{source.name} is not available: #{e}" unless cancel.cancelled?
 
           break
         end
