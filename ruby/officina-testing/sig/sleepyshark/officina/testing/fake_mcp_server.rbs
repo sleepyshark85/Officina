@@ -1,0 +1,91 @@
+module Sleepyshark
+  module Officina
+    module Testing
+      class FakeMcpServer
+        type message = Hash[String, untyped]
+        type reply = [Integer, Hash[String, String], String]
+
+        NOTIFICATION: String
+
+        module Http
+          STATUS: Hash[Integer, String]
+
+          def self.serve: (TCPServer listener) { (Hash[String, String] headers, String body) -> reply? } -> void
+
+          def self.answer: (TCPSocket connection) { (Hash[String, String] headers, String body) -> reply? } -> void
+
+          def self.read: (TCPSocket connection) -> [Hash[String, String], String]
+        end
+
+        class Protocol
+          @tools: Array[FakeMcpTool]
+          @protocol_version: String?
+          @mutex: Thread::Mutex
+          @calls: Array[Array[untyped]]
+          @client_info: message?
+          @version: String?
+          @initialized: bool
+
+          def initialize: (Array[FakeMcpTool] tools, String? protocol_version) -> void
+
+          def calls: () -> Array[Array[untyped]]
+
+          def client_info: () -> message?
+
+          def version: () -> String?
+
+          def answer: (message message) -> message?
+
+          private
+
+          def note: (message message) -> nil
+
+          def valid?: (message message) -> bool
+
+          def initialized?: () -> bool
+
+          def result: (untyped method, message params) -> (message | bool | nil)
+
+          def initialized: (message params) -> message?
+
+          def page: (Integer index) -> message
+
+          def call: (untyped name, Hash[String, untyped] arguments) -> message?
+        end
+
+        @protocol: Protocol
+        @mutex: Thread::Mutex
+        @session: String
+        @down: bool
+
+        def initialize: (tools: Array[FakeMcpTool], ?protocol_version: String?) -> void
+
+        def calls: () -> Array[Array[untyped]]
+
+        def client_info: () -> message?
+
+        def go_down: () -> void
+
+        def end_session: () -> void
+
+        def serve: (IO input, IO output) -> void
+
+        def serve_http: () { (String url) -> void } -> void
+
+        private
+
+        def session: () -> String
+
+        def down?: () -> bool
+
+        def reply: (Hash[String, String] headers, String body) -> reply?
+
+        def handle: (Hash[String, String] headers, message message) -> reply
+
+        def accepts?: (Hash[String, String] headers) -> bool
+
+        def content: (untyped method, String body) -> reply
+      end
+    end
+  end
+end

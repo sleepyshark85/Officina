@@ -1,0 +1,17 @@
+module Sleepyshark
+  module Officina
+    module Mcp
+      module Results
+        def self.tools: (Hash[String, json] page) -> Array[Tool]?
+
+        def self.next_cursor: (Hash[String, json] page) -> String?
+
+        def self.call_result: (Hash[String, json] result) -> CallResult?
+
+        def self.tool: (json item) -> Tool?
+
+        def self.content_text: (json item) -> String?
+      end
+    end
+  end
+end

@@ -1,0 +1,23 @@
+module Sleepyshark
+  module Officina
+    module Mcp
+      class Server < Data
+        attr_reader name: String
+        attr_reader command: Array[String]?
+        attr_reader env: Hash[String, String?]
+        attr_reader url: String?
+        attr_reader headers: Hash[String, String]
+
+        def self.new: (name: String, ?command: Array[String]?, ?env: Hash[String, String?]?, ?url: String?,
+                       ?headers: Hash[String, String]?) -> instance
+
+        def initialize: (name: String, ?command: Array[String]?, ?env: Hash[String, String?]?, ?url: String?,
+                         ?headers: Hash[String, String]?) -> void
+
+        private
+
+        def frozen: (Hash[String, String?]? pairs) -> Hash[String, String?]
+      end
+    end
+  end
+end

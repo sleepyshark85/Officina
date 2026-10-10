@@ -1,0 +1,45 @@
+module Sleepyshark
+  module Officina
+    module Mcp
+      class Stdio
+        class Pending < Data
+          attr_reader transport: Stdio
+          attr_reader id: Integer?
+          attr_reader queue: Thread::Queue[Hash[String, json]]
+
+          def self.new: (Stdio transport, Integer? id, Thread::Queue[Hash[String, json]] queue) -> instance
+
+          def take: (Float? timeout) -> Hash[String, json]?
+
+          def release: () -> void
+        end
+
+        @name: String
+        @mutex: Thread::Mutex
+        @waiting: Hash[Integer, Thread::Queue[Hash[String, json]]]
+        @lost: String?
+        @process: ChildProcess
+
+        def initialize: (Server server, clock: clock) -> void
+
+        def post: (String text, Integer? id, String? _version) -> Pending
+
+        def lost: () -> String
+
+        def forget: (Integer? id) -> Thread::Queue[Hash[String, json]]?
+
+        def close: () -> void
+
+        private
+
+        def write: (String text) -> void
+
+        def dispatch: (String message) -> void
+
+        def lose: (String reason) -> void
+
+        def lost_reason: () -> String
+      end
+    end
+  end
+end

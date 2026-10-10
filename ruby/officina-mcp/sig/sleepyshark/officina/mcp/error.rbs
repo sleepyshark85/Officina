@@ -1,0 +1,8 @@
+module Sleepyshark
+  module Officina
+    module Mcp
+      class Error < Officina::Error
+      end
+    end
+  end
+end

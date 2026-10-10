@@ -1,0 +1,41 @@
+module Sleepyshark
+  module Officina
+    module Mcp
+      module Wire
+        # A body read in chunks as they arrive.
+        interface _Body
+          def read_body: () { (String chunk) -> void } -> void
+        end
+
+        MAX_MESSAGE_MB: Integer
+        MAX_MESSAGE: Integer
+
+        def self.response: (String text) -> [Integer, Hash[String, json]]?
+
+        def self.answer: (_Body body, Integer id, events: bool) -> Hash[String, json]
+
+        def self.from_events: (_Body body, Integer id) -> Hash[String, json]
+
+        def self.from_body: (_Body body, Integer id) -> Hash[String, json]
+
+        def self.each_chunk: (_Body body) { (String chunk) -> void } -> void
+
+        def self.response_id: (Hash[String, json] message) -> Integer?
+
+        class EventStream
+          @buffer: String
+          @searched: Integer
+          @data: Array[String]
+
+          def initialize: () -> void
+
+          def feed: (String chunk) { (String data) -> void } -> void
+
+          private
+
+          def line: (String text) { (String data) -> void } -> void
+        end
+      end
+    end
+  end
+end

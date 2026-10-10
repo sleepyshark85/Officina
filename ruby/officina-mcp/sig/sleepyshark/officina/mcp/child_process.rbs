@@ -1,0 +1,52 @@
+module Sleepyshark
+  module Officina
+    module Mcp
+      class ChildProcess
+        EXIT_WAIT: Integer
+        ERRORS_WAIT: Integer
+        ERRORS_KEPT: Integer
+        WINDOWS: bool
+        GROUP: Hash[Symbol, bool]
+
+        @clock: clock
+        @input: IO
+        @output: IO
+        @errors: IO
+        @exit: Process::Waiter
+        @errors_reader: Thread
+        @output_reader: Thread
+
+        def initialize: (Server server, clock: clock, on_message: ^(String message) -> void,
+                         on_end: ^(String reason) -> void) -> void
+
+        def write: (String message) -> void
+
+        def stop: () -> void
+
+        private
+
+        def spawn_server: (Server server) -> [IO, IO, IO, Process::Waiter]
+
+        def read: (IO pipe) { (IO pipe) -> untyped } -> Thread
+
+        def read_output: (IO output, ^(String message) -> void on_message, ^(String reason) -> void on_end) -> void
+
+        def too_long: (^(String reason) -> void on_end) -> void
+
+        def last_line: (IO errors) -> String?
+
+        def last_error_line: () -> String?
+
+        def ended_within?: (Thread thread, Numeric seconds) -> bool
+
+        def end_reader: (IO pipe, Thread reader) -> void
+
+        def kill: () -> void
+
+        def kill_group: () -> void
+
+        def signal: (Integer pid) -> void
+      end
+    end
+  end
+end
