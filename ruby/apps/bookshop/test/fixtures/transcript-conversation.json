@@ -1,0 +1,10 @@
+{"id":"s1","messages":[
+{"role":"user","blocks":[{"text":"Order Emma."}]},
+{"role":"operator","blocks":[{"text":"Today is Friday."}]},
+{"role":"assistant","blocks":[{"text":"Looking."},
+{"raw":"{}","toolCall":{"id":"c1","name":"search_books","input":"{\"title\":\"Emma\"}"}},
+{"raw":"{}","toolCall":{"id":"c2","name":"place_order","input":"{}"}}]},
+{"role":"user","blocks":[{"toolResult":{"callId":"c1","content":"<long>","isError":false}},
+{"toolResult":{"callId":"c2","content":"Not enough stock.","isError":true}},
+{"toolResult":{"callId":"c9","content":"Gone.","isError":true}}]},
+{"role":"assistant","blocks":[{"text":"Emma is out of stock."}]}]}

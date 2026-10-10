@@ -55,13 +55,25 @@ module Bookshop
     # @param conversation [String] the conversation's id
     # @return [Sleepyshark::Officina::Completed, Sleepyshark::Officina::Stopped, Sleepyshark::Officina::Failed] what
     #   the block returns
-    def reply(conversation)
-      @traces.tracer(SCOPE).in_span('reply') do
-        result = yield
-        log(conversation, result)
-        result
-      end
-    end
+    def reply(conversation, &run) = traced('reply', run) { log(conversation, it) }
+
+    # Runs the block, the summary of a session, in a span of its own, current while it runs so that the summarizer's run
+    # and what the block logs are in its trace.
+    #
+    # @return [Object] what the block returns
+    def summary = @traces.tracer(SCOPE).in_span('summary') { |_span| yield }
+
+    # Logs, in the current span, that something went as it should.
+    #
+    # @param message [String]
+    # @return [void]
+    def info(message) = @logger.info(message)
+
+    # Logs, in the current span, a failure the application goes on from, such as a summary that is not written.
+    #
+    # @param message [String]
+    # @return [void]
+    def warn(message) = @logger.warn(message)
 
     # Sends what is left and stops exporting. The three providers shut down at once, and closing returns once they
     # have or the timeout has passed, whichever is first; a shutdown still waiting on its exporter ends with the
@@ -78,6 +90,12 @@ module Bookshop
     private
 
     def now = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+
+    # Calls the run in a span of the name, current while it runs, and yields its result before the span ends, so what
+    # the block logs is in its trace.
+    def traced(name, run)
+      @traces.tracer(SCOPE).in_span(name) { run.call.tap { yield it } }
+    end
 
     def log(conversation, result)
       case result
