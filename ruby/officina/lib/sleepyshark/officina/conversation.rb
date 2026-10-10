@@ -45,7 +45,7 @@ module Sleepyshark
         JSON.parse(json, allow_duplicate_key: false, symbolize_names: true) => { id: String => id, **rest }
         rest => { messages: Array => messages }
         rest[:fingerprint] => String | nil => fingerprint
-        new(id:, fingerprint:, messages: messages.map { read_message(it) })
+        new(id:, fingerprint:, messages: messages.map { |message| read_message(message) })
       rescue JSON::ParserError => e
         raise Error, "Not a conversation's JSON: #{e.message}"
       rescue NoMatchingPatternError
@@ -58,7 +58,7 @@ module Sleepyshark
       # @return [String]
       def to_json(*)
         state = @state
-        messages = state.messages.map { message_json(it) }
+        messages = state.messages.map { |message| message_json(message) }
         JSON.generate({ id:, fingerprint: state.fingerprint, messages: }.compact)
       end
 
@@ -80,7 +80,7 @@ module Sleepyshark
         # @type var role: String
         # @type var blocks: Array[untyped]
         json => { role: 'user' | 'assistant' | 'operator' => role, blocks: Array => blocks }
-        Message.new(role: role.to_sym, blocks: blocks.map { read_block(it) })
+        Message.new(role: role.to_sym, blocks: blocks.map { |block| read_block(block) })
       end
 
       def self.read_block(json)
@@ -117,15 +117,15 @@ module Sleepyshark
       end
 
       def message_json(message)
-        { role: message.role, blocks: message.blocks.map { block_json(it) } }
+        { role: message.role, blocks: message.blocks.map { |block| block_json(block) } }
       end
 
       # The text is left out when empty in a block that has raw JSON or a tool result, as the other implementations
       # write it.
       def block_json(block)
         text = block.text unless block.text.to_s.empty? && (block.raw || block.tool_result)
-        { text:, raw: block.raw, toolCall: block.tool_call&.then { call_json(it) },
-          toolResult: block.tool_result&.then { result_json(it) } }.compact
+        { text:, raw: block.raw, toolCall: block.tool_call&.then { |call| call_json(call) },
+          toolResult: block.tool_result&.then { |result| result_json(result) } }.compact
       end
 
       def call_json(call) = { id: call.id, name: call.name, input: call.input }

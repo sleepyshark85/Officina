@@ -52,7 +52,7 @@ module Sleepyshark
       def call_model(messages)
         @model_calls += 1
         request = Request.new(tools: @agent.tools, instructions: @agent.instructions, messages:)
-        reply = @agent.model.stream(request, cancel: @cancel) { relay(it) }
+        reply = @agent.model.stream(request, cancel: @cancel) { |event| relay(event) }
         reply || cut_off("The model's reply ended without a stop reason")
       rescue StandardError => e
         raise if e.equal?(@host_failure)
@@ -98,7 +98,7 @@ module Sleepyshark
         yield
         reported = true
       ensure
-        answer = Message.new(role: :user, blocks: calls.map { unrunnable(it) })
+        answer = Message.new(role: :user, blocks: calls.map { |call| unrunnable(call) })
         @append.call([answer], @agent.fingerprint)
         emit(ConversationAppended.new(message: answer)) if reported
       end
@@ -106,7 +106,7 @@ module Sleepyshark
       # The result a reply's stop leads to, or nil when its calls are to be answered.
       def finish(reply, calls)
         case [reply.stop, calls.empty?]
-        in [:end, true] then Completed.new(text: reply.blocks.map { it.text.to_s }.join, usage: @usage)
+        in [:end, true] then Completed.new(text: text(reply), usage: @usage)
         in [:end, false] then failed(:unexpected_stop, "The model's reply called tools but did not stop for them")
         in [:tool_use, true] then failed(:unexpected_stop, 'The model stopped to use tools but called none')
         in [:tool_use, false] then nil
@@ -115,11 +115,13 @@ module Sleepyshark
         end
       end
 
+      def text(reply) = reply.blocks.map(&:text).join
+
       # Every message is appended before the first is reported, so a host that stops reading midway still holds a
       # conversation where the reply follows the messages it answers.
       def append(*messages)
         @append.call(messages, @agent.fingerprint)
-        messages.each { emit(ConversationAppended.new(message: it)) }
+        messages.each { |message| emit(ConversationAppended.new(message:)) }
       end
 
       # Until the tool pipeline runs tools, every call gets an error result, which the model reads.

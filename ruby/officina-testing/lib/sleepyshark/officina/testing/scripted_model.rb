@@ -21,7 +21,7 @@ module Sleepyshark
         # @param settings [String]
         def initialize(*replies, settings: 'scripted')
           @settings = -settings
-          @replies = replies.map { it.dup.freeze }
+          @replies = replies.map { |reply| reply.dup.freeze }
           @requests = []
           @lock = Mutex.new
         end
@@ -105,8 +105,8 @@ module Sleepyshark
         end
 
         def answer_problem(previous, message)
-          calls = previous.blocks.filter_map { it.tool_call&.id }
-          answers = message.blocks.filter_map { it.tool_result&.call_id }
+          calls = previous.blocks.filter_map { |block| block.tool_call&.id }
+          answers = message.blocks.filter_map { |block| block.tool_result&.call_id }
           "it answers the calls #{answers} instead of #{calls}" unless answers == calls
         end
       end
