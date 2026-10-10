@@ -8,7 +8,8 @@ module Sleepyshark
     # One durable record of a run: when, in which order, of which run, conversation and agent, in which trace and
     # span, and what. Its text has the agent's secrets redacted and is cut at 4,000 characters with its length noted.
     class AuditEntry
-      KINDS = %i[run_started run_ended tool_started tool_ended approval_asked approval_answered].freeze
+      KINDS = %i[run_started run_ended tool_started tool_ended approval_asked approval_answered compacted
+                 cleared].freeze
 
       # @param time [Time] from the agent's clock
       # @param sequence [Integer] the entry's place in its run, from 1; a gap is an entry the sink failed to write
@@ -16,7 +17,8 @@ module Sleepyshark
       # @param conversation [String] the conversation's id
       # @param agent [String, nil] the agent's name
       # @param kind [Symbol] one of KINDS: +:tool_started+ is a call's attempt, which a write needs before it runs;
-      #   +:tool_ended+ a call's outcome, which every call has, whether it ran or not
+      #   +:tool_ended+ a call's outcome, which every call has, whether it ran or not; +:compacted+ and +:cleared+ what
+      #   the provider did to shorten the conversation during a model call
       # @param trace_id [String, nil] the run's trace, in W3C hex form, so the entry opens as its trace; nil when the
       #   run has none, as without a tracer provider or a host's span
       # @param span_id [String, nil] the span of the step it records: the tool call's for a call and its approval,
@@ -26,7 +28,8 @@ module Sleepyshark
       # @param outcome [String, nil] how it went, in a word or two: +completed+, +stopped: cancelled+, +failed:
       #   model_error+ or +abandoned+ for a run; +ok+, +error+ or +interrupted+ (the application stopped before its
       #   result was recorded) for a call; +approved+ or +denied+ for an approval
-      # @param detail [String, nil] more: a call's result, a denial's reason, why a run stopped or failed
+      # @param detail [String, nil] more: a call's result, a denial's reason, why a run stopped or failed, how much a
+      #   compaction summarized or a clearing cleared
       # @param duration [Float, nil] seconds a tool ran, on +:tool_ended+ when it ran
       # @param usage [Usage, nil] the run's tokens, on +:run_ended+
       # @param cost [BigDecimal, nil] what they cost, in US dollars at the model's price, on +:run_ended+

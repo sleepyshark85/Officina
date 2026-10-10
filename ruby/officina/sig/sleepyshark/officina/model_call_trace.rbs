@@ -16,6 +16,8 @@ module Sleepyshark
 
       private
 
+      def edited: (Symbol counter, Hash[String, Integer] attributes) -> void
+
       def retried: () -> void
 
       def measure: (String? error_type) -> void

@@ -5,12 +5,13 @@ module Sleepyshark
       attr_reader instructions: String
       attr_reader messages: Array[Message]
       attr_reader max_output_tokens: Integer?
+      attr_reader context_management: ContextManagement?
 
-      def self.new: (tools: Array[Tool], instructions: String, messages: Array[Message], ?max_output_tokens: Integer?)
-                  -> instance
+      def self.new: (tools: Array[Tool], instructions: String, messages: Array[Message], ?max_output_tokens: Integer?,
+                     ?context_management: ContextManagement?) -> instance
 
       def initialize: (tools: Array[Tool], instructions: String, messages: Array[Message],
-                       ?max_output_tokens: Integer?) -> void
+                       ?max_output_tokens: Integer?, ?context_management: ContextManagement?) -> void
     end
   end
 end

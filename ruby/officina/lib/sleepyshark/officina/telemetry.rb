@@ -42,6 +42,10 @@ module Sleepyshark
       }.freeze
       COUNTERS = {
         retries: Instrument.new('officina.model.retries', '{retry}', 'Model call retries.'),
+        compactions: Instrument.new('officina.model.compactions', '{compaction}',
+                                    'Compactions of the conversation by the provider.'),
+        clearings: Instrument.new('officina.model.clearings', '{clearing}',
+                                  'Model calls for which the provider cleared old tool results.'),
         tool_calls: Instrument.new('officina.tool.calls', '{call}', 'Tool calls, by outcome.'),
         approvals: Instrument.new('officina.tool.approvals', '{approval}', 'Approvals, by answer.'),
         runs: Instrument.new('officina.runs', '{run}', 'Runs, by result.'),
