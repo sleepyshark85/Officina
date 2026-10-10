@@ -1,0 +1,14 @@
+module Sleepyshark
+  module Officina
+    class Message < Data
+      ROLES: Array[Symbol]
+
+      attr_reader role: Symbol
+      attr_reader blocks: Array[Block]
+
+      def initialize: (role: Symbol, blocks: Array[Block]) -> void
+
+      def text: () -> String
+    end
+  end
+end

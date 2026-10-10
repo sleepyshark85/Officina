@@ -1,0 +1,14 @@
+module Sleepyshark
+  module Officina
+    class Usage < Data
+      attr_reader input: Integer
+      attr_reader output: Integer
+      attr_reader cache_read: Integer
+      attr_reader cache_write: Integer
+
+      def initialize: (?input: Integer, ?output: Integer, ?cache_read: Integer, ?cache_write: Integer) -> void
+
+      def +: (Usage other) -> Usage
+    end
+  end
+end

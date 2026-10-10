@@ -1,0 +1,5 @@
+# RBS's core signature of Data leaves out its initialize, which takes the members as keywords, so a Data class that
+# overrides initialize (to freeze or check its members) could not call super. This declares what Ruby does.
+class Data
+  def initialize: (**untyped) -> void
+end
