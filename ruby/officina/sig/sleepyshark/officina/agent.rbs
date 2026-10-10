@@ -27,12 +27,14 @@ module Sleepyshark
 
       def redact: (String text) -> String
 
-      def run: (Conversation conversation, String input, ?context: String?, ?cancel: Cancellation?, ?budget: Budget?)
-             ?{ (run_event event) -> void } -> result
+      def run: (Conversation conversation, String input, ?context: String?, ?cancel: Cancellation?, ?budget: Budget?,
+                ?memory_scope: String?) ?{ (run_event event) -> void } -> result
 
       private
 
       def check_run: (String input, String? context, Budget? budget) -> void
+
+      def check_memory: (String? scope) -> void
 
       def keep_prefix: (_Model model, String instructions, Array[Tool] tools) -> void
 

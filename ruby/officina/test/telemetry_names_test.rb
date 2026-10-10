@@ -14,10 +14,9 @@ class TelemetryNamesTest < Minitest::Test
   ROOT = File.expand_path('../../..', __dir__)
   DOTNET = %w[src/Sleepyshark.Officina/Telemetry/Telemetry.cs src/Sleepyshark.Officina/Runs/RunEngine.cs].freeze
   GO = %w[go/officina/telemetry.go go/officina/run.go].freeze
-  # The instruments and attributes of what Ruby does not have yet: compaction and clearing, and memory scopes.
+  # The instruments and attributes of what Ruby does not have yet: compaction and clearing.
   NOT_YET = %w[officina.model.compactions officina.model.clearings officina.compaction.tokens
-               officina.compaction.summary_tokens officina.clearing.tokens officina.clearing.tool_calls
-               officina.memory.scope].freeze
+               officina.compaction.summary_tokens officina.clearing.tokens officina.clearing.tool_calls].freeze
   # An instrument as .NET makes one: kind, name, unit and description.
   DOTNET_INSTRUMENT = /Create(Histogram|Counter)<\w+>\(\s*"([^"]+)",\s*"([^"]+)",\s*"([^"]+)"\)/
   # As Go does, its description perhaps in pieces joined with +.
@@ -74,7 +73,7 @@ class TelemetryNamesTest < Minitest::Test
   end
 
   # Runs that make every instrument and attribute the core has: a retry, text, usage, an approved write blocked as its
-  # attempt cannot be audited, a read that runs, with content on; then a model call that fails.
+  # attempt cannot be audited, a read that runs, with content on, in a memory scope; then a model call that fails.
   def exercise(collector)
     model = Model.new([Retried.new, *reply('Saving.', usage(1, 1), call('1', 'save'), call('2', 'search'),
                                            stop: :tool_use)], Model.text('Done.'))
@@ -83,7 +82,7 @@ class TelemetryNamesTest < Minitest::Test
                              audit_sink: Testing::RecordingAuditSink.new(fails: lambda { |entry|
                                entry.kind == :tool_started
                              }))
-      .run(Conversation.new, 'Save.')
+      .run(Conversation.new, 'Save.', memory_scope: 'sam')
     traced(collector, Model.new([RuntimeError.new('down')]), name: 'clerk').run(Conversation.new, 'Again.')
   end
 end

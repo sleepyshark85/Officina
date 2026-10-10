@@ -8,7 +8,7 @@ module Sleepyshark
     # returns. Safe for concurrent runs within one process. The core uses it only when the host passes it to an agent.
     class JsonLinesAuditSink
       # The members whose names are more than one word, in camel case.
-      CAMEL_CASE = { call_id: :callId, trace_id: :traceId, span_id: :spanId }.freeze
+      CAMEL_CASE = { memory_scope: :memoryScope, call_id: :callId, trace_id: :traceId, span_id: :spanId }.freeze
       private_constant :CAMEL_CASE
 
       # @param path [String] the file, created when the first entry is written

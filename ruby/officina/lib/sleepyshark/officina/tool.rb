@@ -29,6 +29,7 @@ module Sleepyshark
       # @param needs_approval [Boolean] whether the agent's approver must approve each call before it runs
       # @yieldparam input [Data, Object] the call's input, valid against the schema
       # @yieldparam cancel [Cancellation] the run's, to stop at the next check once the host cancels
+      # @yieldparam memory_scope [String, nil] whose memory the run sees, as the host named it; a block may leave it out
       # @yieldreturn [String, ToolFailure, Object] the result for the model: a String as it is, a ToolFailure as an
       #   error result with its message as written, anything else as JSON.generate writes it. An exception is an error
       #   result saying the tool failed, with its message; the run goes on either way.
@@ -49,6 +50,13 @@ module Sleepyshark
 
       def needs_approval? = @needs_approval
 
+      # Whether this call needs approval: every call of a tool that needs it, unless the tool says a call only reads.
+      # @param input [String] JSON text that #input_problem accepts
+      def needs_approval_for?(_input) = @needs_approval
+
+      # Whether it is the memory tool, which a provider with a memory tool of its own sends as that.
+      def memory? = false
+
       def write? = @kind == :write
 
       # Why the input cannot be given to the handler, said for the model, or nil when it can.
@@ -64,10 +72,11 @@ module Sleepyshark
       # Runs the handler on the input.
       # @param input [String] JSON text that #input_problem accepts
       # @param cancel [Cancellation]
+      # @param memory_scope [String, nil] the run's
       # @return [String, ToolFailure] the result for the model, or the failure the handler returned
       # @raise [StandardError] whatever the handler raises
-      def invoke(input, cancel)
-        case @handler.call(@input.from_json(JSON.parse(input)), cancel)
+      def invoke(input, cancel, memory_scope = nil)
+        case @handler.call(@input.from_json(JSON.parse(input)), cancel, memory_scope)
         in String | ToolFailure => given then given
         in output then JSON.generate(output)
         end

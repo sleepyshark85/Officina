@@ -9,7 +9,9 @@ module Sleepyshark
 
       attr_reader run: String
       attr_reader span: OpenTelemetry::Trace::Span
-      def initialize: (agent: Agent, conversation: Conversation, input: String) -> void
+      attr_reader memory_scope: String?
+
+      def initialize: (agent: Agent, conversation: Conversation, input: String, ?memory_scope: String?) -> void
 
       def model_call: () { () -> (Reply | Failed)? } -> (Reply | Failed)?
 

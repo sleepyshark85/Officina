@@ -9,14 +9,19 @@ module Sleepyshark
     # if any, and makes the spans of the run's model and tool calls under it. Spans are parented explicitly and never
     # made current, as tool calls end on other threads. Every time comes from the agent's clock.
     class RunTrace
-      # @return [String] the run's id, which its span and audit entries carry
-      attr_reader :run
-      # @return [OpenTelemetry::Trace::Span] the run's, which its audit entries name when no step's span does
-      attr_reader :span
+      # @!attribute [r] run
+      #   @return [String] the run's id, which its span and audit entries carry
+      # @!attribute [r] span
+      #   @return [OpenTelemetry::Trace::Span] the run's, which its audit entries name when no step's span does
+      # @!attribute [r] memory_scope
+      #   @return [String, nil] whose memory the run sees, which its span, audit entries and tools are given
+      attr_reader :run, :span, :memory_scope
 
       # @param input [String] the user's message
-      def initialize(agent:, conversation:, input:)
+      # @param memory_scope [String, nil]
+      def initialize(agent:, conversation:, input:, memory_scope: nil)
         @agent = agent
+        @memory_scope = memory_scope
         @telemetry = agent.telemetry
         @info = agent.model.info
         @run = SecureRandom.hex
@@ -116,10 +121,10 @@ module Sleepyshark
       # Starts the run's span under the current one.
       def start_run(conversation, input)
         attributes = { 'gen_ai.operation.name' => 'invoke_agent', 'gen_ai.conversation.id' => conversation.id,
-                       'officina.run.id' => @run, **dimensions,
+                       'officina.run.id' => @run, 'officina.memory.scope' => @memory_scope, **dimensions,
                        **content('gen_ai.input.messages', input, role: 'user') }
         name = ['invoke_agent', @agent.name].compact.join(' ')
-        @telemetry.start_span(name, attributes:, at: now)
+        @telemetry.start_span(name, attributes: attributes.compact, at: now)
       end
 
       # Ends the run's span, marked failed when the run failed.

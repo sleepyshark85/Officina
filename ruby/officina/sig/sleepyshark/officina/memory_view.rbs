@@ -1,0 +1,31 @@
+module Sleepyshark
+  module Officina
+    module MemoryView
+      MAX_VIEW: Integer
+
+      def self.file: (String path, String text, Array[Integer]? range) -> (String | ToolFailure)
+
+      def self.listing: (String shown, Array[MemoryFile] files, String at) -> String
+
+      def self.snippet: (String path, String text, Integer line, Integer added) -> String
+
+      def self.lines: (String text) -> Array[String]
+
+      def self.line_of: (String text, Integer index) -> Integer
+
+      def self.occurrences: (String text, String old) -> Array[Integer]
+
+      def self.numbered: (Array[String] lines, Integer from, Integer to) -> String
+
+      private
+
+      def self.sizes: (Array[MemoryFile] files, String at) -> Hash[String, Integer]
+
+      def self.valid_range?: (Array[Integer] range, Integer size) -> bool
+
+      def self.cut: (String view) -> String
+
+      def self.size: (Integer bytes) -> String
+    end
+  end
+end

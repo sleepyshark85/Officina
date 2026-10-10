@@ -1,0 +1,22 @@
+module Sleepyshark
+  module Officina
+    class MemoryTool < Tool
+      DESCRIPTION: String
+      SCHEMA: Schema
+
+      def initialize: (_MemoryStore store, ?needs_approval: bool) -> void
+
+      def memory?: () -> true
+
+      def needs_approval_for?: (String input) -> bool
+
+      private
+
+      def command: (_MemoryStore store, String? scope, Hash[String, untyped] input) -> (String | ToolFailure)
+
+      def outside: (String? path) -> ToolFailure
+
+      def within: (String? path) -> String?
+    end
+  end
+end

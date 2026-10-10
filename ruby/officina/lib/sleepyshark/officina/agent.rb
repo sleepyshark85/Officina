@@ -78,13 +78,17 @@ module Sleepyshark
       # @param cancel [Cancellation, nil] the host's way to stop the run
       # @param budget [Budget, nil] limits on the run; none unless given. A host may give each run what is left of a
       #   session's budget
+      # @param memory_scope [String, nil] whose memory the run sees, such as a user's id: the memory tool keeps its
+      #   files there, and the run's audit entries and span name it. A run of an agent with the memory tool needs one
       # @return [Completed, Stopped, Failed] how the run ended, with what it used, after the last event
-      # @raise [Error] when the message or the context is blank, a cost budget is given for a model with no price, or
-      #   another run is using the conversation
-      def run(conversation, input, context: nil, cancel: nil, budget: nil, &on_event)
+      # @raise [Error] when the message or the context is blank, a cost budget is given for a model with no price, the
+      #   memory scope is missing for an agent with memory or is one a memory store refuses, or another run is using
+      #   the conversation
+      def run(conversation, input, context: nil, cancel: nil, budget: nil, memory_scope: nil, &on_event)
         check_run(input, context, budget)
+        check_memory(memory_scope)
         conversation.hold do |append|
-          trace = RunTrace.new(agent: self, conversation:, input:)
+          trace = RunTrace.new(agent: self, conversation:, input:, memory_scope:)
           RunEngine.new(agent: self, conversation:, append:, cancel: cancel || Cancellation.new, on_event:, trace:,
                         budget:).run(input, context)
         end
@@ -96,6 +100,12 @@ module Sleepyshark
         raise Error, 'A run needs a message' unless input.match?(/\S/)
         raise Error, 'A run context cannot be blank' unless context.nil? || context.match?(/\S/)
         raise Error, 'A cost budget needs a model with a price' if budget&.cost && !@model.info.price
+      end
+
+      def check_memory(scope)
+        raise Error, 'The agent has memory, so a run needs a memory scope' if scope.nil? && @tools.any?(&:memory?)
+
+        MemoryRules.check(scope) if scope
       end
 
       # Keeps what the prefix holds, and its fingerprint.

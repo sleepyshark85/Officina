@@ -19,6 +19,9 @@ module Sleepyshark
 
       private
 
+      def entry: (Symbol kind, ToolCall? call, OpenTelemetry::Trace::Span span, String? detail, Hash[Symbol, untyped] fields)
+                -> AuditEntry
+
       def written?: (_AuditSink sink, OpenTelemetry::Trace::Span span, AuditEntry entry) -> bool
 
       def ids: (OpenTelemetry::Trace::Span span) -> Hash[Symbol, String]?

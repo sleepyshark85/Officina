@@ -1,0 +1,35 @@
+module Sleepyshark
+  module Officina
+    class MemoryFiles
+      MAX_FILE: Integer
+
+      @store: _MemoryStore
+      @scope: String
+      @files: Array[MemoryFile]
+
+      def initialize: (_MemoryStore store, String scope) -> void
+
+      def file?: (String at) -> bool
+
+      def directory?: (String at) -> bool
+
+      def exists?: (String at) -> bool
+
+      def under: (String at) -> Array[MemoryFile]
+
+      def file_above: (String at) -> String?
+
+      def read: (String at) -> String?
+
+      def write: (String at, String text) -> String?
+
+      def delete: (String at) -> void
+
+      def rename: (String at, String to) -> void
+
+      private
+
+      def affected: (String at) -> Array[String]
+    end
+  end
+end

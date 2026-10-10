@@ -2,11 +2,12 @@
 
 module Sleepyshark
   module Officina
-    AuditEntry = Data.define(:time, :sequence, :run, :conversation, :agent, :kind, :trace_id, :span_id, :tool, :call_id,
-                             :input, :outcome, :detail, :duration, :usage, :cost)
+    AuditEntry = Data.define(:time, :sequence, :run, :conversation, :agent, :memory_scope, :kind, :trace_id, :span_id,
+                             :tool, :call_id, :input, :outcome, :detail, :duration, :usage, :cost)
 
-    # One durable record of a run: when, in which order, of which run, conversation and agent, in which trace and
-    # span, and what. Its text has the agent's secrets redacted and is cut at 4,000 characters with its length noted.
+    # One durable record of a run: when, in which order, of which run, conversation, agent and memory scope, in which
+    # trace and span, and what. Its text has the agent's secrets redacted and is cut at 4,000 characters with its
+    # length noted.
     class AuditEntry
       KINDS = %i[run_started run_ended tool_started tool_ended approval_asked approval_answered].freeze
 
@@ -15,6 +16,7 @@ module Sleepyshark
       # @param run [String] the run's random id
       # @param conversation [String] the conversation's id
       # @param agent [String, nil] the agent's name
+      # @param memory_scope [String, nil] whose memory the run sees; nil when it sees none
       # @param kind [Symbol] one of KINDS: +:tool_started+ is a call's attempt, which a write needs before it runs;
       #   +:tool_ended+ a call's outcome, which every call has, whether it ran or not
       # @param trace_id [String, nil] the run's trace, in W3C hex form, so the entry opens as its trace; nil when the
@@ -30,8 +32,9 @@ module Sleepyshark
       # @param duration [Float, nil] seconds a tool ran, on +:tool_ended+ when it ran
       # @param usage [Usage, nil] the run's tokens, on +:run_ended+
       # @param cost [BigDecimal, nil] what they cost, in US dollars at the model's price, on +:run_ended+
-      def initialize(time:, sequence:, run:, conversation:, agent:, kind:, trace_id: nil, span_id: nil, tool: nil,
-                     call_id: nil, input: nil, outcome: nil, detail: nil, duration: nil, usage: nil, cost: nil)
+      def initialize(time:, sequence:, run:, conversation:, agent:, kind:, memory_scope: nil, trace_id: nil,
+                     span_id: nil, tool: nil, call_id: nil, input: nil, outcome: nil, detail: nil, duration: nil,
+                     usage: nil, cost: nil)
         super
       end
     end
