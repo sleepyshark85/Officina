@@ -23,11 +23,8 @@ module Bookshop
 
     private_constant :INSERT, :SELECT
 
-    # @param price [Sleepyshark::Officina::Price, nil] the agent's model's, which prices a run's end; nil leaves its
-    #   cost out
-    def initialize(database:, price:)
+    def initialize(database:)
       @database = database
-      @price = price
       freeze
     end
 
@@ -56,14 +53,13 @@ module Bookshop
     def values(entry)
       [entry.time, entry.sequence, entry.run, entry.conversation, entry.agent, entry.trace_id, entry.span_id,
        kind(entry.kind), entry.tool, entry.call_id, entry.input, entry.outcome, entry.detail, entry.duration,
-       *spent(entry.usage)]
+       *spent(entry)]
     end
 
-    # The tokens and cost columns, which only a run's end, the entry with usage, fills.
-    def spent(usage)
-      return [nil] * 5 unless usage
-
-      [usage.input, usage.output, usage.cache_read, usage.cache_write, @price&.cost(usage)]
+    # The tokens and cost columns, which only a run's end, the entry with usage and cost, fills.
+    def spent(entry)
+      usage = entry.usage
+      [usage&.input, usage&.output, usage&.cache_read, usage&.cache_write, entry.cost]
     end
 
     # The kind as .NET writes it, such as ToolStarted, so the table reads the same from every implementation.

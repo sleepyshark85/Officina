@@ -1,0 +1,4 @@
+module Bookshop
+  class SettingError < StandardError
+  end
+end

@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'test_helper'
+require_relative 'clock'
 require_relative 'database_server'
 require_relative 'memory_telemetry'
 
@@ -15,6 +16,7 @@ class AuditTableTest < Minitest::Test
   AuditTable = Bookshop.const_get(:AuditTable)
   PRICE = Officina::Price.new(input: BigDecimal('5'), output: BigDecimal('25'), cache_read: BigDecimal('0.5'),
                               cache_write: BigDecimal('6.25'), cache_write_hour: BigDecimal('10'))
+  PRICED = Officina::ModelInfo.new(provider: 'scripted', name: 'scripted', price: PRICE)
   START = Time.utc(2026, 10, 10, 8)
 
   def setup
@@ -59,20 +61,20 @@ class AuditTableTest < Minitest::Test
     conversation, = search_run
     search_run
 
-    records = AuditTable.new(database: @database, price: PRICE).entries(conversation.id)
+    records = AuditTable.new(database: @database).entries(conversation.id)
 
     assert_equal %w[RunStarted ToolStarted ToolEnded RunEnded], records.map(&:kind)
-    assert_equal [START + 3, START + 11, START + 14, START + 24], records.map(&:time)
+    assert_equal [START, START, START + 1, START + 1], records.map(&:time)
     assert_equal [nil, nil, 1.0, nil], records.map(&:duration)
     assert_equal [Officina::Usage.new(input: 1000, output: 200, cache_read: 3000), BigDecimal('0.0115')],
                  records.last.to_h.values_at(:usage, :cost)
-    assert_equal [], AuditTable.new(database: @database, price: PRICE).entries('another')
+    assert_equal [], AuditTable.new(database: @database).entries('another')
   end
 
   def test_aud06_a_sink_that_cannot_reach_the_database_is_seen_in_telemetry_and_the_run_goes_on
     take_database_down
 
-    _, result = run_agent(ScriptedModel.new(ScriptedModel.text('Hello.')), price: nil)
+    _, result = run_agent(ScriptedModel.new(ScriptedModel.text('Hello.')))
 
     assert_instance_of Officina::Completed, result
     run = @telemetry.spans.find { it.name.start_with?('invoke_agent') }
@@ -90,18 +92,29 @@ class AuditTableTest < Minitest::Test
   def search_run
     call = ScriptedModel.tool_use_block('c1', 'search_books', '{"title":"Winter Archive"}')
     usage = Officina::Usage.new(input: 1000, output: 200, cache_read: 3000)
-    run_agent(ScriptedModel.new(ScriptedModel.tool_use(call), ScriptedModel.text('Twelve copies.', usage:)))
+    run_agent(ScriptedModel.new(ScriptedModel.tool_use(call), ScriptedModel.text('Twelve copies.', usage:),
+                                info: PRICED))
   end
 
-  # Runs the agent, auditing to the table, on a clock that ticks a second each time it is read; returns the
+  # Runs the agent, auditing to the table, on a clock that moves only while the search runs, by a second; returns the
   # conversation and the result.
-  def run_agent(model, price: PRICE)
-    now = START
-    agent = Officina::Agent.new(name: 'bookshop', model:, instructions: 'Help the staff.', tools: Bookshop::Tools.all(shop),
-                                audit_sink: AuditTable.new(database: @database, price:), clock: -> { now += 1 },
+  def run_agent(model)
+    clock = Clock.new(START)
+    tools = Bookshop::Tools.all(shop).map { it.name == 'search_books' ? taking_a_second(it, clock) : it }
+    agent = Officina::Agent.new(name: 'bookshop', model:, instructions: 'Help the staff.', tools:,
+                                audit_sink: AuditTable.new(database: @database), clock:,
                                 telemetry: @telemetry.telemetry.officina)
     conversation = Officina::Conversation.new
     [conversation, agent.run(conversation, 'Do we have The Winter Archive?') { nil }]
+  end
+
+  # The tool, which moves the clock on a second as it runs.
+  def taking_a_second(tool, clock)
+    Officina::Tool.new(name: tool.name, description: tool.description, input: Officina::Schema.new(tool.input_schema),
+                       kind: tool.kind) do |input, cancel|
+      clock.advance(1)
+      tool.invoke(JSON.generate(input), cancel)
+    end
   end
 
   # The audit table's rows, as text, in the order they were written.

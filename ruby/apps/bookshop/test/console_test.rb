@@ -50,6 +50,9 @@ class ConsoleTest < Minitest::Test
                     "Who is using the assistant? Your name: \n", "Who is using the assistant? Your name:   \n",
                     "Who is using the assistant? Your name: Sam\n",
                     "you> /help\nCommands:\n  /help          Show this help.\n  " \
+                    "/new           Start a new session.\n  /sessions      List the latest sessions.\n  " \
+                    "/resume <id>   Go on with the session with that id.\n  " \
+                    "/cost          Show this session's tokens and cost.\n  " \
                     "/audit [<id>]  Show the audit trail of this session, or of the session with that id.\n  " \
                     "/quit          Leave the assistant.\n" \
                     "Anything else is a message to the assistant. Ctrl+C stops a reply in progress.\n",
