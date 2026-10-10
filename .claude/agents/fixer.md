@@ -13,4 +13,4 @@ mechanical rules.
 - Keep or add the test that shows the fix; run the affected tests, then the whole suite.
 - Stage in its own command, then commit; check the staged files the hook shows. Push to the branch you were given, or a
   new `fix/<slug>` branch.
-- Report what you changed, the commit, and the test results.
+- Report in the short format of `.claude/skills/dispatch/agent-rules.md` (*Report*); the detail goes in the PR.

@@ -26,4 +26,5 @@ REQUIREMENTS.md for the IDs your change covers and ARCHITECTURE.md for the conce
    End it with the attribution line the session gives.
 6. Stop there and report: the lead dispatches the reviewer and merges.
 
-Check the `claude-api` skill before writing provider code. Report what you built, the PR, and anything left open.
+Check the `claude-api` skill before writing provider code. Report in the short format of
+`.claude/skills/dispatch/agent-rules.md` (*Report*); the detail goes in the PR.
