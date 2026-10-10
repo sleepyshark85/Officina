@@ -107,19 +107,19 @@ python3 -B scripts/agent-usage.py
 |---|---|---|---|---|---|---|---|---|---|
 | lead | lead | This session's main conversation | 2026-10-06 07:38 | 2026-10-06 07:44 | 13 | 598k | 572k | 49k | 7 |
 
-## Session 882087f6 (2026-10-10 02:00 to 2026-10-10 18:22 UTC)
+## Session 882087f6 (2026-10-10 02:00 to 2026-10-10 18:52 UTC)
 
 | Role | Agents | Input processed |
 |---|---|---|
-| lead | 1 | 329,643k |
-| reviewer | 56 | 200,614k |
-| developer | 56 | 1,140,641k |
-| fixer | 13 | 25,981k |
+| lead | 1 | 333,999k |
+| reviewer | 57 | 202,867k |
+| developer | 56 | 1,142,296k |
+| fixer | 15 | 27,639k |
 | claude-code-guide | 2 | 115k |
 
 | Agent | Role | Task | Start (UTC) | End (UTC) | Calls | Input processed | Of which cache reads | Peak context | Active minutes |
 |---|---|---|---|---|---|---|---|---|---|
-| lead | lead | This session's main conversation | 2026-10-10 02:00 | 2026-10-10 18:22 | 756 | 329,643k | 328,214k | 960k | 771 |
+| lead | lead | This session's main conversation | 2026-10-10 02:00 | 2026-10-10 18:52 | 786 | 333,999k | 332,546k | 960k | 802 |
 | a8eb4164 | reviewer | Review Ruby plan and licence PRs | 2026-10-10 02:10 | 2026-10-10 08:57 | 190 | 41,017k | 38,076k | 384k | 152 |
 | a033fe44 | developer | Ruby S02 Claude features spike | 2026-10-10 04:36 | 2026-10-10 04:56 | 96 | 18,555k | 18,276k | 279k | 19 |
 | a9bee389 | reviewer | Review PR #83 Ruby S02 | 2026-10-10 04:50 | 2026-10-10 04:55 | 28 | 1,676k | 1,593k | 83k | 5 |
@@ -241,9 +241,12 @@ python3 -B scripts/agent-usage.py
 | a64eb13f | reviewer | Merge-check verdict for PR #117 | 2026-10-10 16:44 | 2026-10-10 17:42 | 35 | 1,329k | 1,065k | 60k | 58 |
 | ae1bc73e | developer | Ruby S11 part B-2 CSV export | 2026-10-10 17:07 | 2026-10-10 17:43 | 91 | 13,378k | 12,810k | 206k | 35 |
 | a60cb98a | reviewer | Review PR #123 Ruby S11B-2 | 2026-10-10 17:19 | 2026-10-10 18:19 | 61 | 5,117k | 4,658k | 122k | 61 |
-| aaf14983 | developer | Ruby S09 part B-2 Bookshop memory | 2026-10-10 17:42 | 2026-10-10 18:21 | 96 | 13,788k | 13,222k | 204k | 39 |
-| a26ba814 | reviewer | Review PR #124 Ruby S09B-2 | 2026-10-10 17:53 | 2026-10-10 18:18 | 44 | 2,831k | 2,588k | 90k | 25 |
+| aaf14983 | developer | Ruby S09 part B-2 Bookshop memory | 2026-10-10 17:42 | 2026-10-10 18:35 | 104 | 15,443k | 14,664k | 209k | 53 |
+| a26ba814 | reviewer | Review PR #124 Ruby S09B-2 | 2026-10-10 17:53 | 2026-10-10 18:35 | 55 | 3,921k | 3,570k | 104k | 42 |
 | a9cf94ab | fixer | Fix missing require in transcript_test | 2026-10-10 18:09 | 2026-10-10 18:13 | 18 | 886k | 828k | 58k | 4 |
-| ad37fade | reviewer | Review PR #125 test require fix | 2026-10-10 18:14 | 2026-10-10 18:16 | 7 | 127k | 109k | 22k | 3 |
-| adcbcec8 | fixer | Add start/end times to agent-usage | 2026-10-10 18:20 | 2026-10-10 18:22 | 8 | 334k | 288k | 46k | 2 |
-| a936aa5f | reviewer | Review PR #126 agent-usage times | 2026-10-10 18:21 | 2026-10-10 18:22 | 10 | 223k | 199k | 29k | 1 |
+| ad37fade | reviewer | Review PR #125 test require fix | 2026-10-10 18:14 | 2026-10-10 18:30 | 15 | 334k | 286k | 34k | 16 |
+| adcbcec8 | fixer | Add start/end times to agent-usage | 2026-10-10 18:20 | 2026-10-10 18:23 | 13 | 569k | 520k | 48k | 3 |
+| a936aa5f | reviewer | Review PR #126 agent-usage times | 2026-10-10 18:21 | 2026-10-10 18:23 | 21 | 587k | 556k | 36k | 2 |
+| aa49468f | fixer | Document lead cost strategy in dispatch skill | 2026-10-10 18:30 | 2026-10-10 18:43 | 26 | 1,387k | 1,264k | 67k | 12 |
+| a5093f28 | reviewer | Review PR #127 lead cost strategy | 2026-10-10 18:32 | 2026-10-10 18:43 | 18 | 592k | 552k | 45k | 11 |
+| a5534ae2 | fixer | Regenerate agent-usage at session end | 2026-10-10 18:52 | 2026-10-10 18:52 | 1 | 36k | 0 | 36k | 0 |
