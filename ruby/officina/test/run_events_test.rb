@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'test_helper'
+require_relative 'support/fake_clock'
 
 # What a run reports to its host's block, and in which order.
 class RunEventsTest < Minitest::Test
@@ -18,7 +19,7 @@ class RunEventsTest < Minitest::Test
 
     assert_equal [TextDelta.new(text: 'Hello'), UsageReported.new(usage:)], events.first(2)
     assert_equal(%i[user assistant], events.drop(2).map { it.message.role })
-    assert_equal Completed.new(text: 'Hello', usage:), result
+    assert_equal Completed.new(text: 'Hello', usage:, model_calls: 1), result
   end
 
   def test_evt01_a_retry_the_model_reports_reaches_the_host_and_the_run_goes_on
@@ -45,5 +46,5 @@ class RunEventsTest < Minitest::Test
 
   private
 
-  def agent_of(model) = Agent.new(model:, instructions: 'You help customers of a bookshop.')
+  def agent_of(model) = Agent.new(model:, instructions: 'You help customers of a bookshop.', clock: FakeClock.new)
 end

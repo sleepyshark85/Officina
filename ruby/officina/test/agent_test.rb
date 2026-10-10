@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'test_helper'
+require_relative 'support/fake_clock'
 
 # An agent's definition, the checks on a run's input, and the prefix fingerprint that binds a conversation to it.
 class AgentTest < Minitest::Test
@@ -72,21 +73,22 @@ class AgentTest < Minitest::Test
 
   def test_ctx04_a_changed_tool_fails_the_run_with_a_prefix_mismatch
     model = Model.new
-    changed = Agent.new(model:, instructions: 'You help.', tools: [tool('search', description: 'Searches better.')])
+    changed = Agent.new(model:, instructions: 'You help.', tools: [tool('search', description: 'Searches better.')],
+                        clock: FakeClock.new)
 
     assert_prefix_mismatch changed, model
   end
 
   def test_ctx04_changed_instructions_fail_the_run_with_a_prefix_mismatch
     model = Model.new
-    changed = Agent.new(model:, instructions: 'You help more.', tools: [tool('search')])
+    changed = Agent.new(model:, instructions: 'You help more.', tools: [tool('search')], clock: FakeClock.new)
 
     assert_prefix_mismatch changed, model
   end
 
   def test_ctx04_a_changed_model_setting_fails_the_run_with_a_prefix_mismatch
     model = Model.new(settings: 'other')
-    changed = Agent.new(model:, instructions: 'You help.', tools: [tool('search')])
+    changed = Agent.new(model:, instructions: 'You help.', tools: [tool('search')], clock: FakeClock.new)
 
     assert_prefix_mismatch changed, model
   end
@@ -106,7 +108,7 @@ class AgentTest < Minitest::Test
 
     result = changed.run(conversation, 'Again')
 
-    assert_equal Failed.new(reason: :prefix_mismatch, detail: PREFIX_MISMATCH, usage: Usage.new), result
+    assert_equal Failed.new(reason: :prefix_mismatch, detail: PREFIX_MISMATCH), result
     assert_empty model.requests
     assert_equal 2, conversation.messages.size
     assert_equal original.fingerprint, conversation.fingerprint

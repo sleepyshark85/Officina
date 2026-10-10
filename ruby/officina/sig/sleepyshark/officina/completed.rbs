@@ -3,11 +3,16 @@ module Sleepyshark
     class Completed < Data
       attr_reader text: String
       attr_reader usage: Usage
+      attr_reader cost: BigDecimal
+      attr_reader model_calls: Integer
+      attr_reader tool_calls: Integer
+      attr_reader duration: Float
 
-      def self.new: (text: String, usage: Usage) -> instance
+      def self.new: (text: String, ?usage: Usage, ?cost: BigDecimal, ?model_calls: Integer, ?tool_calls: Integer,
+                     ?duration: Float) -> instance
 
-
-      def initialize: (text: String, usage: Usage) -> void
+      def initialize: (text: String, ?usage: Usage, ?cost: BigDecimal, ?model_calls: Integer, ?tool_calls: Integer,
+                       ?duration: Float) -> void
     end
   end
 end

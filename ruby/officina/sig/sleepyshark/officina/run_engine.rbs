@@ -8,16 +8,14 @@ module Sleepyshark
       @conversation: Conversation
       @reporter: Reporter
       @cancel: Cancellation
-      @usage: Usage
-      @model_calls: Integer
-      @tool_calls: Integer
+      @spending: Spending
       @trace: RunTrace
       @host_raised: bool?
       @audit: AuditRecorder
       @tool_step: ToolStep
 
       def initialize: (agent: Agent, conversation: Conversation, append: ^(Array[Message], String) -> void,
-                       cancel: Cancellation, on_event: (^(run_event) -> void)?, trace: RunTrace) -> void
+                       cancel: Cancellation, on_event: (^(run_event) -> void)?, trace: RunTrace, budget: Budget?) -> void
 
       def run: (String input, String? context) -> result
 
@@ -29,7 +27,7 @@ module Sleepyshark
 
       def step: (Array[Message] pending) -> result?
 
-      def call_model: (Array[Message] messages) -> (Reply | Failed | nil)
+      def call_model: (Array[Message] messages, Integer? limit) -> (Reply | Failed | nil)
 
       def stream: (Request request) -> (Reply | Failed | nil)
 
@@ -37,7 +35,7 @@ module Sleepyshark
 
       def no_reply: (String why) -> Failed?
 
-      def after_reply: (Reply reply, Array[Message] pending) -> result?
+      def after_reply: (Reply reply, Array[Message] pending, Integer? limit) -> result?
 
       def rejected?: (Reply reply, Array[ToolCall] calls, result? result) -> boolish
 
@@ -47,7 +45,7 @@ module Sleepyshark
 
       def text_message: (Symbol role, String text) -> Message
 
-      def stopped: (Symbol reason) -> Stopped
+      def stopped: (Symbol reason, ?String? detail) -> Stopped
 
       def failed: (Symbol reason, String detail) -> Failed
     end

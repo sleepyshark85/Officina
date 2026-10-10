@@ -17,8 +17,8 @@ module Sleepyshark
         @lock = Mutex.new
       end
 
-      # Appends the entry: its time in ISO 8601 UTC with microseconds, its members in camel case, those it does not
-      # have left out.
+      # Appends the entry: its time in ISO 8601 UTC with microseconds, its cost a JSON number, its members in camel
+      # case, those it does not have left out.
       # @param entry [AuditEntry]
       # @return [void]
       # @raise [SystemCallError] when the file cannot be written
@@ -40,9 +40,12 @@ module Sleepyshark
       end
 
       def fields(entry)
-        fields = entry.to_h.merge(time: entry.time.utc.iso8601(6), usage: entry.usage&.to_h)
+        fields = entry.to_h.merge(time: entry.time.utc.iso8601(6), usage: entry.usage&.to_h, cost: number(entry.cost))
         fields.transform_keys { |key| CAMEL_CASE.fetch(key, key) }.compact
       end
+
+      # A cost as its digits, which JSON.generate would write as a string.
+      def number(cost) = cost && JSON::Fragment.new(cost.to_s('F'))
     end
   end
 end

@@ -15,7 +15,7 @@ module Sleepyshark
       def record: (Symbol kind, ?call: ToolCall?, ?span: OpenTelemetry::Trace::Span?, ?detail: String?,
                    **untyped fields) -> bool
 
-      def record_end: (result? result, Usage usage) -> bool
+      def record_end: (result? result, Usage usage, BigDecimal cost) -> bool
 
       private
 

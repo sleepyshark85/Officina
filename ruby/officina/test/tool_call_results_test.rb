@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'test_helper'
+require_relative 'support/fake_clock'
 require_relative 'support/tool_calls'
 
 # What each of a reply's calls gets back, and in which order: results, error results and cut results.
@@ -13,9 +14,9 @@ class ToolCallResultsTest < Minitest::Test
   def test_tool01_each_call_runs_its_tool_and_the_model_reads_the_results
     tools = [tool('search') { |input, _| "Found #{input.title}." }, tool('count', kind: :write) { |_, _| 3 }]
 
-    ran = run_calls(tools, call('1', 'search'), call('2', 'count'))
+    ran = run_calls(tools, call('1', 'search'), call('2', 'count'), clock: FakeClock.new)
 
-    assert_equal Completed.new(text: 'Done.', usage: Usage.new), ran.result
+    assert_equal Completed.new(text: 'Done.', model_calls: 2, tool_calls: 2), ran.result
     assert_equal [ToolResult.new(call_id: '1', content: 'Found Dune.', error: false),
                   ToolResult.new(call_id: '2', content: '3', error: false)], ran.results
     assert_equal ran.conversation.messages.first(3), ran.model.requests.last.messages

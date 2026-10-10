@@ -3,7 +3,7 @@
 module Sleepyshark
   module Officina
     AuditEntry = Data.define(:time, :sequence, :run, :conversation, :agent, :kind, :trace_id, :span_id, :tool, :call_id,
-                             :input, :outcome, :detail, :duration, :usage)
+                             :input, :outcome, :detail, :duration, :usage, :cost)
 
     # One durable record of a run: when, in which order, of which run, conversation and agent, in which trace and
     # span, and what. Its text has the agent's secrets redacted and is cut at 4,000 characters with its length noted.
@@ -24,12 +24,14 @@ module Sleepyshark
       # @param tool [String, nil] and +call_id+, for a call's entries
       # @param input [String, nil] a call's input, JSON text
       # @param outcome [String, nil] how it went, in a word or two: +completed+, +stopped: cancelled+, +failed:
-      #   model_error+ or +abandoned+ for a run; +ok+ or +error+ for a call; +approved+ or +denied+ for an approval
+      #   model_error+ or +abandoned+ for a run; +ok+, +error+ or +interrupted+ (the application stopped before its
+      #   result was recorded) for a call; +approved+ or +denied+ for an approval
       # @param detail [String, nil] more: a call's result, a denial's reason, why a run stopped or failed
       # @param duration [Float, nil] seconds a tool ran, on +:tool_ended+ when it ran
       # @param usage [Usage, nil] the run's tokens, on +:run_ended+
+      # @param cost [BigDecimal, nil] what they cost, in US dollars at the model's price, on +:run_ended+
       def initialize(time:, sequence:, run:, conversation:, agent:, kind:, trace_id: nil, span_id: nil, tool: nil,
-                     call_id: nil, input: nil, outcome: nil, detail: nil, duration: nil, usage: nil)
+                     call_id: nil, input: nil, outcome: nil, detail: nil, duration: nil, usage: nil, cost: nil)
         super
       end
     end

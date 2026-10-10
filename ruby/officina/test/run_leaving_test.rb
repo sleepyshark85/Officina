@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'test_helper'
+require_relative 'support/fake_clock'
 
 # Cancelling a run, and a host that leaves its block: what the conversation keeps, and what the host's own
 # exception does.
@@ -22,7 +23,7 @@ class RunLeavingTest < Minitest::Test
       cancel.cancel
     end
 
-    assert_equal Stopped.new(reason: :cancelled, detail: nil, usage: Usage.new), result
+    assert_equal Stopped.new(reason: :cancelled, detail: nil, model_calls: 1), result
     assert_empty conversation.messages
     assert_equal [TextDelta.new(text: 'Hello there')], events
   end
@@ -101,5 +102,5 @@ class RunLeavingTest < Minitest::Test
 
   private
 
-  def agent_of(model) = Agent.new(model:, instructions: 'You help customers of a bookshop.')
+  def agent_of(model) = Agent.new(model:, instructions: 'You help customers of a bookshop.', clock: FakeClock.new)
 end

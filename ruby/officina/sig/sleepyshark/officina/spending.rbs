@@ -1,0 +1,53 @@
+module Sleepyshark
+  module Officina
+    class Spending
+      FREE: Price
+
+      @budget: Budget
+      @price: Price
+      @clock: ^() -> Time
+      @started: Time
+      @tool_calls: Integer
+
+      attr_reader usage: Usage
+      attr_reader cost: BigDecimal
+      attr_reader model_calls: Integer
+
+      def initialize: (budget: Budget?, price: Price?, clock: ^() -> Time) -> void
+
+      def add: (Usage usage) -> void
+
+      def count_model_call: () -> Integer
+
+      def count_tool_calls: (Integer count) -> Integer
+
+      def output_limit: () -> Integer?
+
+      def reached: () -> String?
+
+      def report: (result result) -> result
+
+      private
+
+      def elapsed: () -> Float
+
+      def tokens_left: () -> Integer?
+
+      def affordable: () -> Integer?
+
+      def calls_used_up: () -> String?
+
+      def time_used_up: () -> String?
+
+      def tokens_used_up: () -> String?
+
+      def cost_used_up: () -> String?
+
+      def seconds: (Integer | Float value) -> String
+
+      def dollars: (BigDecimal value) -> String
+
+      def thousands: (Integer value) -> String
+    end
+  end
+end

@@ -45,6 +45,15 @@ class RequestTest < ClaudeTestCase
     assert_equal JSON.parse(dotnet), JSON.parse(api.bodies[0])
   end
 
+  def test_bud01_a_requests_output_limit_lowers_the_models_own_and_never_raises_it
+    api = serve(text_reply, text_reply, text_reply)
+    model = model(api, max_output_tokens: 16_000)
+
+    [nil, 500, 20_000].each { collect(model, hi.with(max_output_tokens: it)) }
+
+    assert_equal([16_000, 500, 16_000], api.bodies.map { JSON.parse(it)['max_tokens'] })
+  end
+
   def test_mdl02_the_api_key_given_is_sent
     api = serve(text_reply)
 

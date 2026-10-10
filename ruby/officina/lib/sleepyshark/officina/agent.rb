@@ -69,24 +69,34 @@ module Sleepyshark
       #
       # The message and run context enter the conversation only with the reply that answers them, so a run that gets
       # none leaves the conversation as it was. A stateless run passes a new conversation and drops it afterwards.
+      #
+      # A conversation saved while a reply's tools ran, before their results were appended, has calls without results:
+      # the run first answers each with an error result saying it was interrupted, and audits it.
       # @param conversation [Conversation]
       # @param input [String] the user's message
       # @param context [String, nil] the run context, appended after the message as an operator message
       # @param cancel [Cancellation, nil] the host's way to stop the run
-      # @return [Completed, Stopped, Failed] how the run ended, after the last event
-      # @raise [Error] when the message or the context is blank, or another run is using the conversation
-      def run(conversation, input, context: nil, cancel: nil, &on_event)
-        raise Error, 'A run needs a message' unless input.match?(/\S/)
-        raise Error, 'A run context cannot be blank' unless context.nil? || context.match?(/\S/)
-
+      # @param budget [Budget, nil] limits on the run; none unless given. A host may give each run what is left of a
+      #   session's budget
+      # @return [Completed, Stopped, Failed] how the run ended, with what it used, after the last event
+      # @raise [Error] when the message or the context is blank, a cost budget is given for a model with no price, or
+      #   another run is using the conversation
+      def run(conversation, input, context: nil, cancel: nil, budget: nil, &on_event)
+        check_run(input, context, budget)
         conversation.hold do |append|
           trace = RunTrace.new(agent: self, conversation:, input:)
-          RunEngine.new(agent: self, conversation:, append:, cancel: cancel || Cancellation.new, on_event:, trace:)
-                   .run(input, context)
+          RunEngine.new(agent: self, conversation:, append:, cancel: cancel || Cancellation.new, on_event:, trace:,
+                        budget:).run(input, context)
         end
       end
 
       private
+
+      def check_run(input, context, budget)
+        raise Error, 'A run needs a message' unless input.match?(/\S/)
+        raise Error, 'A run context cannot be blank' unless context.nil? || context.match?(/\S/)
+        raise Error, 'A cost budget needs a model with a price' if budget&.cost && !@model.info.price
+      end
 
       # Keeps what the prefix holds, and its fingerprint.
       def keep_prefix(model, instructions, tools)

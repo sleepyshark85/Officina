@@ -11,7 +11,8 @@ class JsonLinesAuditSinkTest < Minitest::Test
 
   def test_aud04_each_entry_is_appended_as_one_json_object_with_its_members_in_camel_case
     entries = [entry(1, kind: :tool_ended, tool: 'search', call_id: 'call_1', input: '{}', outcome: 'ok',
-                        detail: 'Found.', duration: 0.25), entry(2, kind: :run_ended, usage: Usage.new(input: 3))]
+                        detail: 'Found.', duration: 0.25),
+               entry(2, kind: :run_ended, usage: Usage.new(input: 3), cost: BigDecimal('0.00926'))]
 
     lines = written { |sink| entries.each { sink.write(it) } }
 
@@ -20,6 +21,7 @@ class JsonLinesAuditSinkTest < Minitest::Test
                    'outcome' => 'ok', 'detail' => 'Found.', 'duration' => 0.25 }, lines[0])
     assert_equal({ 'input' => 3, 'output' => 0, 'cache_read' => 0, 'cache_write' => 0, 'cache_write_hour' => 0 },
                  lines[1]['usage'])
+    assert_in_delta 0.00926, lines[1]['cost'], 1e-12
   end
 
   def test_aud03_aud04_an_entrys_trace_and_span_are_written_in_camel_case_after_its_kind
@@ -49,6 +51,12 @@ class JsonLinesAuditSinkTest < Minitest::Test
     assert_raises(SystemCallError) { sink.write(entry(1, kind: :run_started)) }
   end
 
+  def test_aud01_aud04_a_runs_cost_is_written_as_a_json_number_of_its_digits
+    lines = written(raw: true) { |sink| sink.write(entry(1, kind: :run_ended, cost: BigDecimal('0.00926'))) }
+
+    assert_includes lines[0], %("cost":0.00926})
+  end
+
   private
 
   # An entry at 9:00:00.5 in UTC+2.
@@ -57,12 +65,12 @@ class JsonLinesAuditSinkTest < Minitest::Test
                    agent: 'shop', kind:, **members)
   end
 
-  # The lines of a new file, parsed, once the block has written to a sink of it.
-  def written
+  # The lines of a new file, parsed unless raw, once the block has written to a sink of it.
+  def written(raw: false)
     Dir.mktmpdir do |directory|
       path = File.join(directory, 'audit.jsonl')
       yield JsonLinesAuditSink.new(path)
-      File.readlines(path).map { JSON.parse(it) }
+      File.readlines(path).map { raw ? it : JSON.parse(it) }
     end
   end
 end

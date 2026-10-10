@@ -39,9 +39,9 @@ module Sleepyshark
         end
       end
 
-      # Records the run's end: how it ended (nil when the host left it) and its usage.
-      def record_end(result, usage)
-        record(:run_ended, usage:, **ended(result))
+      # Records the run's end: how it ended (nil when the host left it), its usage and their cost.
+      def record_end(result, usage, cost)
+        record(:run_ended, usage:, cost:, **ended(result))
       end
 
       private

@@ -62,7 +62,7 @@ class AuditTableTest < Minitest::Test
     records = AuditTable.new(database: @database, price: PRICE).entries(conversation.id)
 
     assert_equal %w[RunStarted ToolStarted ToolEnded RunEnded], records.map(&:kind)
-    assert_equal [START + 2, START + 9, START + 12, START + 20], records.map(&:time)
+    assert_equal [START + 3, START + 11, START + 14, START + 24], records.map(&:time)
     assert_equal [nil, nil, 1.0, nil], records.map(&:duration)
     assert_equal [Officina::Usage.new(input: 1000, output: 200, cache_read: 3000), BigDecimal('0.0115')],
                  records.last.to_h.values_at(:usage, :cost)

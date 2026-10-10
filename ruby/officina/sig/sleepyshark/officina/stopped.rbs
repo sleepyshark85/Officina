@@ -4,11 +4,16 @@ module Sleepyshark
       attr_reader reason: Symbol
       attr_reader detail: String?
       attr_reader usage: Usage
+      attr_reader cost: BigDecimal
+      attr_reader model_calls: Integer
+      attr_reader tool_calls: Integer
+      attr_reader duration: Float
 
-      def self.new: (reason: Symbol, detail: String?, usage: Usage) -> instance
+      def self.new: (reason: Symbol, detail: String?, ?usage: Usage, ?cost: BigDecimal, ?model_calls: Integer,
+                     ?tool_calls: Integer, ?duration: Float) -> instance
 
-
-      def initialize: (reason: Symbol, detail: String?, usage: Usage) -> void
+      def initialize: (reason: Symbol, detail: String?, ?usage: Usage, ?cost: BigDecimal, ?model_calls: Integer,
+                       ?tool_calls: Integer, ?duration: Float) -> void
     end
   end
 end

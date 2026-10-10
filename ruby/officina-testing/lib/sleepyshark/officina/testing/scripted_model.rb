@@ -36,12 +36,16 @@ module Sleepyshark
            Reply.new(blocks: [text_block(text)], stop: :end)]
         end
 
-        # The steps of a reply that asks for the calls of the blocks, made by tool_use_block.
-        def self.tool_use(*blocks) = [Reply.new(blocks:, stop: :tool_use)]
+        # The steps of a reply that asks for the calls of the blocks, made by tool_use_block, reporting the usage if
+        # given.
+        def self.tool_use(*blocks, usage: nil)
+          [*(UsageReported.new(usage:) if usage), Reply.new(blocks:, stop: :tool_use)]
+        end
 
-        # The steps of a reply that ends with the stop, holding a text block unless the text is nil.
-        def self.stop(stop, text: 'Partial', detail: nil)
-          [Reply.new(blocks: text ? [text_block(text)] : [], stop:, detail:)]
+        # The steps of a reply that ends with the stop, holding a text block unless the text is nil, reporting the
+        # usage if given.
+        def self.stop(stop, text: 'Partial', detail: nil, usage: nil)
+          [*(UsageReported.new(usage:) if usage), Reply.new(blocks: text ? [text_block(text)] : [], stop:, detail:)]
         end
 
         # A text block as a provider adapter stores it, its raw JSON in the canonical form.

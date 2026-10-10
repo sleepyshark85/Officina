@@ -20,9 +20,9 @@ module Sleepyshark
 
         def self.text: (String text, ?usage: Usage?) -> Array[step]
 
-        def self.tool_use: (*Block blocks) -> Array[step]
+        def self.tool_use: (*Block blocks, ?usage: Usage?) -> Array[step]
 
-        def self.stop: (Symbol stop, ?text: String?, ?detail: String?) -> Array[step]
+        def self.stop: (Symbol stop, ?text: String?, ?detail: String?, ?usage: Usage?) -> Array[step]
 
         def self.text_block: (String text) -> Block
 

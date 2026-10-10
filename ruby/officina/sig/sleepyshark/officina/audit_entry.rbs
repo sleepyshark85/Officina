@@ -18,15 +18,16 @@ module Sleepyshark
       attr_reader detail: String?
       attr_reader duration: Float?
       attr_reader usage: Usage?
+      attr_reader cost: BigDecimal?
 
       def self.new: (time: Time, sequence: Integer, run: String, conversation: String, agent: String?, kind: Symbol,
                      ?trace_id: String?, ?span_id: String?, ?tool: String?, ?call_id: String?, ?input: String?, ?outcome: String?, ?detail: String?,
-                     ?duration: Float?, ?usage: Usage?) -> instance
+                     ?duration: Float?, ?usage: Usage?, ?cost: BigDecimal?) -> instance
 
 
       def initialize: (time: Time, sequence: Integer, run: String, conversation: String, agent: String?, kind: Symbol,
                        ?trace_id: String?, ?span_id: String?, ?tool: String?, ?call_id: String?, ?input: String?, ?outcome: String?, ?detail: String?,
-                       ?duration: Float?, ?usage: Usage?) -> void
+                       ?duration: Float?, ?usage: Usage?, ?cost: BigDecimal?) -> void
     end
   end
 end

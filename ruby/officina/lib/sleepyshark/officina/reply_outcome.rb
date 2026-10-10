@@ -9,15 +9,18 @@ module Sleepyshark
       private_constant :STOP_REASONS
 
       # The result the reply ends the run with, or nil when the run goes on to answer its calls.
-      # @param usage [Usage] of every model call of the run
-      def self.of(reply, usage)
+      # @param budget_used_up [String, nil] the budget limit used up, when the budget lowered the call's output limit:
+      #   a reply cut short then stopped for the budget, which cut it, rather than for the output limit
+      def self.of(reply, budget_used_up:)
+        return Stopped.new(reason: :budget, detail: budget_used_up) if budget_used_up && reply.stop == :max_tokens
+
         reason = STOP_REASONS[reply.stop]
-        return Stopped.new(reason:, detail: reply.detail, usage:) if reason
+        return Stopped.new(reason:, detail: reply.detail) if reason
 
         why = unexpected(reply)
-        return Failed.new(reason: :unexpected_stop, detail: why, usage:) if why
+        return Failed.new(reason: :unexpected_stop, detail: why) if why
 
-        Completed.new(text: reply.text, usage:) if reply.stop == :end
+        Completed.new(text: reply.text) if reply.stop == :end
       end
 
       # Why the run cannot act on the reply's stop, or nil when it can: the reply ends the turn without calls, or

@@ -14,6 +14,9 @@ module Sleepyshark
       # @param cache_write_hour [Integer] those of the cache writes kept for an hour, which cost more
       def initialize(input: 0, output: 0, cache_read: 0, cache_write: 0, cache_write_hour: 0) = super
 
+      # @return [Integer] every token it counts: input, output, cache reads and writes
+      def total = input + output + cache_read + cache_write
+
       # The tokens of both, kind by kind.
       def +(other)
         with(input: input + other.input, output: output + other.output, cache_read: cache_read + other.cache_read,

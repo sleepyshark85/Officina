@@ -85,15 +85,15 @@ class ConsoleAuditTest < Minitest::Test
       you> /audit
       Audit of session #{conversation}:
       Run 1, trace: http://localhost:18888/traces/detail/#{first}
-        #{at(3)}  RunStarted
-        #{at(11)}  ApprovalAsked     add_customer
-        #{at(14)}  ApprovalAnswered  add_customer          approved
-        #{at(15)}  ToolStarted       add_customer
-        #{at(18)}  ToolEnded         add_customer          ok  1,000 ms
-        #{at(26)}  RunEnded                                #{ended}
+        #{at(4)}  RunStarted
+        #{at(13)}  ApprovalAsked     add_customer
+        #{at(16)}  ApprovalAnswered  add_customer          approved
+        #{at(17)}  ToolStarted       add_customer
+        #{at(20)}  ToolEnded         add_customer          ok  1,000 ms
+        #{at(30)}  RunEnded                                #{ended}
       Run 2, trace: http://localhost:18888/traces/detail/#{second}
-        #{at(30)}  RunStarted
-        #{at(36)}  RunEnded                                completed  tokens: 5,200 in (4,000 cached), 300 out, $0.0155
+        #{at(35)}  RunStarted
+        #{at(43)}  RunEnded                                completed  tokens: 5,200 in (4,000 cached), 300 out, $0.0155
     TEXT
   end
 
