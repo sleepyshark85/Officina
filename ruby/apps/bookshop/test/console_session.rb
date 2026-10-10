@@ -69,6 +69,7 @@ module ConsoleSession
     end
 
     def settings = @later.settings
+    def info = @later.info
 
     def stream(request, cancel:, &)
       return @later.stream(request, cancel:, &) if @stalled
