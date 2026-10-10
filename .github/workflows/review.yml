@@ -1,9 +1,11 @@
 name: Review
 
-# The review gate: a pull request's "review" status passes only when the newest verdict naming its newest commit in full
-# ("**Verdict: APPROVE** at <40-character sha>"), posted by the owner or a collaborator, approves. A new commit needs a
-# new verdict; a short sha is not accepted, as a commit matching one can be forged. Comments run this workflow as it is
-# on main, and it reads the pull request through the API only, never its code.
+# The review gate: a pull request's "review" status passes when the newest verdict naming its newest commit in full
+# ("**Verdict: APPROVE** at <40-character sha>"), posted by the owner or a collaborator, approves; a short sha is not
+# accepted, as a commit matching one can be forged. An approval of an earlier commit carries over only clean merges of
+# the base branch (.github/review_gate.py says exactly when). Comments run this workflow as it is on main, and every
+# run takes the gate script from main: it reads the pull request through the API, and its commits as git data only,
+# never running its code.
 on:
   pull_request:
     types: [opened, synchronize, reopened]
@@ -29,6 +31,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          # The base branch's history, to compare the pull request's commits with.
+          fetch-depth: 0
+
       - name: Set the review status
         shell: bash
         env:
@@ -36,16 +44,16 @@ jobs:
           REPO: ${{ github.repository }}
           PR: ${{ github.event.pull_request.number || github.event.issue.number }}
         run: |
-          head=$(gh api "repos/$REPO/pulls/$PR" --jq .head.sha)
-          short=${head:0:7}
-          verdict=$(gh api --paginate "repos/$REPO/issues/$PR/comments" | jq -rs --arg sha "$head" '
-            [add[] | select(.author_association == "OWNER" or .author_association == "MEMBER" or .author_association == "COLLABORATOR")
-                   | select(.body | startswith("**Verdict:")) | select(.body | contains($sha))]
-            | last | .body // ""')
-          case "$verdict" in
-            "**Verdict: APPROVE** at $head"*) state=success; description="Approved at $short" ;;
-            "**Verdict:"*) state=failure; description="Changes requested at $short" ;;
-            *) state=pending; description="Waiting for a verdict naming $short in full" ;;
-          esac
+          pull=$(gh api "repos/$REPO/pulls/$PR")
+          head=$(jq -r .head.sha <<< "$pull")
+          base=$(jq -r .base.ref <<< "$pull")
+          # The head is fetched as data: its objects only, never checked out.
+          if ! result=$(git fetch --quiet --no-tags origin "$head" "+refs/heads/$base:refs/remotes/origin/$base" &&
+                        gh api --paginate "repos/$REPO/issues/$PR/comments" | jq -s 'add // []' |
+                        python3 .github/review_gate.py "$head" "$base"); then
+            result=$'error\tThe review gate failed; see its run'
+          fi
+          IFS=$'\t' read -r state description <<< "$result"
           gh api "repos/$REPO/statuses/$head" -f state="$state" -f context=review -f description="$description" > /dev/null
           echo "review: $state ($description)"
+          [[ $state != error ]]

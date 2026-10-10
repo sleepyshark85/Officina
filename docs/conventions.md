@@ -49,8 +49,18 @@ R15).
 | .NET | `.github/workflows/ci.yml`, `mutation.yml` | `ubuntu-latest`, `windows-latest`, `quality`, `mutation` |
 | Go | `.github/workflows/go.yml` | `go-changes`, `go-ubuntu`, `go-windows`, `go-quality`, `go-mutation` |
 | Ruby | `.github/workflows/ruby.yml` | `ruby-changes`, `ruby-ubuntu`, `ruby-windows`, `ruby-quality`, `ruby-mutation` |
-| All | `.github/workflows/review.yml` | `review`: the newest verdict naming the PR's newest commit in full, by the owner or a collaborator, is an approval |
+| All | `.github/workflows/review.yml` | `review`: an approval by the owner or a collaborator, as *the review gate* below says |
 
+- **The review gate** (`.github/review_gate.py`, tested in the `quality` job) counts as verdicts only comments starting
+  `**Verdict:` by the owner, a member or a collaborator; a verdict names each commit whose full sha it contains. It
+  passes when the newest verdict naming the PR's newest commit is `**Verdict: APPROVE** at <that sha>`, and fails
+  when that verdict is anything else. With no verdict naming the newest commit, it passes on an approval of an
+  earlier commit A only when all of these hold, and otherwise waits: that approval is the newest verdict naming any of
+  the PR's commits; every commit after A is a merge whose second parent is on the base branch (none of the author's
+  own); the newest commit is exactly git's clean merge of A's change onto the base it now sits on; and the PR's diff
+  against the base has the same patch id (whitespace kept) as A's. Its status says which case passed ("Approved at"
+  or "carried over clean merges of"), or why it waits. It runs from `main` and reads the PR's commits as git data
+  only, never running them.
 - **Each implementation's CI runs only when the pull request changes it**: `.github/changes.py` says what belongs to
   which (Go's and Ruby's folders, spikes and workflows; the shared `testdata/` to all; the rest to .NET). The other
   implementations' jobs are skipped, which their required checks count as passing; never add a path filter, as a
