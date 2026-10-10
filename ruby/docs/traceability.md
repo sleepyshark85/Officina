@@ -14,6 +14,10 @@ Tests are under `ruby/`, shortened as:
 | Prefix | `officina/test/prefix_stability_test.rb` (`PrefixStabilityTest`) |
 | Run | `officina/test/run_test.rb` (`RunTest`) |
 | Kit | `officina-testing/test/scripted_model_test.rb` (`ScriptedModelTest`) |
+| Stores | `officina/test/memory_store_contract.rb` and `memory_scope_contract.rb`, the tests every memory store passes, run by both `HashMemoryStoreTest` and `FileMemoryStoreTest` |
+| HashStore | `officina/test/hash_memory_store_test.rb` (`HashMemoryStoreTest`) |
+| FileStore | `officina/test/file_memory_store_test.rb` (`FileMemoryStoreTest`) |
+| Path | `officina/test/memory_path_test.rb` (`MemoryPathTest`) |
 
 ## Generality (GEN)
 
@@ -41,6 +45,13 @@ Tests are under `ruby/`, shortened as:
 | CTX-01 | Agent: `test_ctx01_the_fingerprint_is_the_one_every_implementation_computes` (against `testdata/session/prefix.json`); Run: `test_ctx01_the_run_context_follows_the_users_message_as_an_operator_message` | |
 | CTX-04 | Agent: `test_ctx04_a_changed_tool_instruction_or_model_setting_fails_the_run_with_a_prefix_mismatch` | |
 
+## Memory (MEM)
+
+| ID | Tests | Also checked by |
+|---|---|---|
+| MEM-02 | Stores: `test_mem02_a_written_file_reads_back_and_is_listed_with_its_size_in_bytes`, `test_mem02_writing_again_replaces_the_text`, `test_mem02_a_missing_file_reads_as_nil_and_an_unwritten_scope_lists_nothing`, `test_mem02_paths_with_dots_spaces_and_letters_beyond_ascii_are_accepted`, `test_mem02_deleting_removes_the_file_and_deleting_a_missing_one_does_nothing`, `test_mem02_a_deleted_files_directory_can_become_a_file`, `test_mem02_renaming_moves_the_file_and_leaves_no_directory_behind`, `test_mem02_renaming_a_missing_file_or_onto_a_taken_path_is_refused_and_changes_nothing`, `test_mem02_a_path_that_is_a_directory_or_runs_through_a_file_is_refused`, `test_mem02_text_that_is_not_valid_utf8_is_refused`, `test_mem02_concurrent_writers_lose_no_file`; FileStore: `test_mem02_each_scope_is_a_directory_named_by_the_hex_of_its_utf8_bytes`, `test_mem02_directories_left_empty_are_removed_up_to_the_scopes`, `test_mem02_a_file_that_is_not_utf8_text_is_refused_on_read`, `test_mem02_files_put_there_under_names_no_path_may_have_are_not_listed`; HashStore: `test_mem02_a_read_text_cannot_change_the_stored_one` | |
+| MEM-03 | Stores: `test_mem03_scopes_never_see_each_others_files`, `test_mem03_a_scopes_files_never_clash_with_anothers_paths`, `test_mem03_every_operation_refuses_a_path_outside_the_rules`, `test_mem03_every_operation_refuses_a_scope_outside_the_rules`; FileStore: `test_mem03_a_linked_directory_in_the_scope_is_never_followed`, `test_mem03_a_linked_file_in_the_scope_is_never_followed`, `test_mem03_a_scope_whose_directory_is_a_link_is_refused`; Path: `test_mem03_a_path_is_at_most_1024_characters`, `test_mem03_a_part_is_at_most_255_characters`, `test_mem03_only_utf8_strings_are_scopes_or_paths`, `test_mem03_a_scope_is_one_part_of_a_path`, `test_mem03_device_names_are_refused_whatever_their_case_or_extension`, `test_mem03_check_names_what_it_refuses` | The link tests skip where the system lets no test make a symbolic link (Windows without developer mode) |
+
 ## Events and observability (EVT)
 
 | ID | Tests | Also checked by |
@@ -55,3 +66,4 @@ Tests are under `ruby/`, shortened as:
 | TEST-02 | Prefix: `test_test02_the_prefix_is_stable_across_the_calls_of_a_run_and_across_runs`, `test_test02_the_prefix_is_stable_across_a_save_a_new_process_and_a_resume`, `test_test02_the_check_finds_a_changed_prefix` | |
 | TEST-03 | — | The Ruby workflow (`.github/workflows/ruby.yml`): `ruby-ubuntu` and `ruby-windows`, offline |
 | TEST-05 | Deps: `test_test05_the_workspace_keeps_the_rule`, `test_test05_a_fixture_keeping_the_rule_passes`, `test_test05_the_anthropic_sdk_used_anywhere_but_the_claude_gem_fails`, `test_test05_the_core_using_more_than_its_rule_allows_fails` (the core's own rule, D15 and R6, and the other gems', as well) | |
+| TEST-07 | Stores: `test_test07_generated_paths_never_leave_their_scope` (memory paths never leave their scope); Path: `test_test07_a_valid_path_is_relative_and_never_climbs` | CI runs the properties with a fixed `PROPERTY_SEED` |

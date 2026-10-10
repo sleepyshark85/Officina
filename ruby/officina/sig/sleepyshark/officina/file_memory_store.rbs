@@ -1,0 +1,28 @@
+module Sleepyshark
+  module Officina
+    class FileMemoryStore
+      include _MemoryStore
+
+      @root: String
+      @lock: Thread::Mutex
+
+      def initialize: (String root) -> void
+
+      private
+
+      def directory: (String scope) -> String
+
+      def within: [T] (String scope, String path) { (String file, String directory) -> T? } -> T?
+
+      def refuse_links: (String directory, String path) -> void
+
+      def vacant: (String directory, String path) -> String
+
+      def refuse_clash: (String directory, String path) -> void
+
+      def ancestors: (String path) -> Array[String]
+
+      def prune: (String directory, String path) -> void
+    end
+  end
+end

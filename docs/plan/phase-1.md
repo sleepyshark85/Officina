@@ -72,7 +72,7 @@ How each implementation realizes a slice, where it differs from the shared crite
 | S06 | Npgsql | `cmd/bookshop` on `pgx` (G7); Ctrl+C through `signal.NotifyContext`; end-to-end tests with `testcontainers-go` | `apps/bookshop` on `pg` and `connection_pool` (R7); Ctrl+C through `trap("INT")` pushing to a queue that the console's own thread reads to cancel the reply (R10); end-to-end tests against PostgreSQL in Docker (R12) |
 | S07 | `ActivitySource` and `Meter` | The OpenTelemetry API with host-passed providers (G6); the SDK's in-memory exporter in tests only | The OpenTelemetry API with host-passed providers (R6), the metrics API's version rechecked; the SDK's in-memory exporter and reader in tests only; OTLP/HTTP to the dashboard (R16) |
 | S08 | | The fingerprint matches .NET's byte for byte (its JSON escaping, the tool schemas as given rather than re-encoded, and the model settings string agreed in Go S04). Cross-implementation resume is proven at the core level: shared fixtures in `testdata/session/`, a session each implementation saved mid-reply resuming in the other. The Bookshop sessions do not resume across implementations yet, as .NET's chat agent has more in its prefix: they wait for memory (Go S09), context management (Go S10, which brings the fingerprint's `contextManagement` part), the MCP export tools (Go S11) and typed output (Go S12, the `output` part) | The fingerprint matches .NET's and Go's byte for byte through the core's JSON writer (R9), pinned by `testdata/session/prefix.json`; cross-implementation resume at the core level: `testdata/session/ruby-session.json`, which the .NET and Go tests resume as well, and the .NET and Go sessions there resume in Ruby; money as `BigDecimal` (R17) |
-| S09 | | Fuzz test of path scoping, besides the `rapid` property | Generated traversal paths for the scope property |
+| S09 | | Fuzz test of path scoping, besides the `rapid` property | Split in two to run in parallel: part A, the memory stores and path rules (`_MemoryStore`, file and in-memory stores sharing one set of tests, links refused, generated traversal paths for the scope property); part B, the memory service as Claude's memory tool through the tool pipeline, the staff member chosen at start and `/memory`, once Ruby S05 part B and the console exist |
 | S10 | | Checks on-demand compaction and `clear_at` live before relying on them (Go S02 left them unproven) | Checks threshold compaction and clearing live before relying on them, as Go S10 did |
 | S11 | | Stdio through `os/exec`, Streamable HTTP through `net/http`; fuzz test of message parsing; the child process is stopped and waited for when the context ends | Stdio through `Process.spawn` and pipes, Streamable HTTP through `net/http`; generated message-parsing cases; the child process is stopped and reaped when the run ends |
 | S12 | | The output schema through S05's schema derivation | The output schema through the schema DSL (R19) |
@@ -90,7 +90,7 @@ How each implementation realizes a slice, where it differs from the shared crite
 | S06 | Merged | Merged (#63) | Not started |
 | S07 | Merged | Merged (#64) | Not started |
 | S08 | Merged | Merged (#68) | Not started |
-| S09 | Merged | Merged (#71) | Not started |
+| S09 | Merged | Merged (#71) | Part A in review (#PRNUM) |
 | S10 | Merged | Merged (#70) | Not started |
 | S11 | Merged | Merged (#69) | Not started |
 | S12 | Merged | Merged (#72) | Not started |

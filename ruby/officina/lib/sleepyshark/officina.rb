@@ -20,6 +20,10 @@ require_relative 'officina/failed'
 require_relative 'officina/conversation'
 require_relative 'officina/run_engine'
 require_relative 'officina/agent'
+require_relative 'officina/memory_path'
+require_relative 'officina/memory_file'
+require_relative 'officina/hash_memory_store'
+require_relative 'officina/file_memory_store'
 
 module Sleepyshark
   # Officina's core: a purpose-neutral library for building agentic applications.
