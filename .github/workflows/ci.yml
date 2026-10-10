@@ -104,8 +104,9 @@ jobs:
       - name: Test
         run: dotnet test --no-build --configuration Release --blame-hang-timeout 2m
 
-  # Checks that need one OS only: formatting, known-vulnerable packages and the review gate's tests (.github/ belongs to
-  # .NET in .github/changes.py, so a change to the gate runs them under this required check).
+  # Checks that need one OS only: formatting, known-vulnerable packages, and the tests of the review gate and the Claude
+  # Code hooks (.github/ and .claude/ belong to .NET in .github/changes.py, so a change to either runs them under this
+  # required check).
   quality:
     name: quality
     needs: changes
@@ -121,6 +122,9 @@ jobs:
 
       - name: Review gate tests
         run: python3 -m unittest discover --start-directory .github
+
+      - name: Claude Code hook tests
+        run: python3 -B -m unittest discover --start-directory .claude/hooks/tests
 
       - uses: actions/setup-dotnet@v6
         with:
