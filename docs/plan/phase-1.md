@@ -103,6 +103,6 @@ How each implementation realizes a slice, where it differs from the shared crite
 |---|---|---|
 | Lead | Main session | Plans, dispatches, checks CI, merges approved PRs, reports to the owner |
 | Implementer | Opus subagent per slice, in its own worktree | Builds the slice, opens the PR |
-| Reviewer | A separate Opus subagent | Reviews each PR against `docs/conventions.md`, the implementation's language rules and this slice's criteria; at most 3 rounds. For Go and Ruby, a breach of the language's convention is a must-fix |
+| Reviewer | A new Opus subagent per PR ([conventions](../conventions.md#how-we-work)) | Reviews the PR against `docs/conventions.md`, the implementation's language rules and this slice's criteria; at most 3 rounds. For Go and Ruby, a breach of the language's convention is a must-fix |
 | Fixes | Sonnet subagent | Small, well-bounded review fixes only |
 | Owner | You | Sets direction; has delegated merges to the lead once the reviewer approves |

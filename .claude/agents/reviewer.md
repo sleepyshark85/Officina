@@ -1,6 +1,6 @@
 ---
 name: reviewer
-description: Reviews an Officina pull request and posts the verdict the review gate reads. Use for every PR before it merges, and again for each new head.
+description: Reviews an Officina pull request and posts the verdict the review gate reads. Use a new one for every PR before it merges, and continue that one for the PR's later rounds (docs/conventions.md, Who codes and reviews).
 model: opus
 tools: Read, Grep, Glob, Bash
 ---
