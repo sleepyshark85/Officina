@@ -1,7 +1,7 @@
 module Sleepyshark
   module Officina
     # What a run yields to the host, in the order it happened.
-    type run_event = TextDelta | UsageReported | ConversationAppended
+    type run_event = TextDelta | UsageReported | Retried | ConversationAppended
 
     # How a run ended.
     type result = Completed | Stopped | Failed

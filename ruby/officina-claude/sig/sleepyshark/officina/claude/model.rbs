@@ -1,0 +1,38 @@
+module Sleepyshark
+  module Officina
+    module Claude
+      class Model
+        include _Model
+
+        EFFORTS: Array[Symbol]
+        CACHE_LIFETIMES: Array[String]
+        ATTEMPTS: Integer
+        WAIT: ^(Float seconds, Cancellation cancel) -> void
+
+        @fixed: Hash[Symbol, untyped]
+        @prefix_cache: String
+        @client: Anthropic::Client
+        @wait: ^(Float seconds, Cancellation cancel) -> void
+
+        attr_reader settings: String
+
+        def initialize: (name: String, effort: Symbol, ?max_output_tokens: Integer, ?prefix_cache: String,
+                         ?conversation_cache: String, ?api_key: String?, ?base_url: String?,
+                         ?wait: ^(Float seconds, Cancellation cancel) -> void) -> void
+
+        def stream: (Request request, cancel: Cancellation) { (model_event event) -> void } -> Reply?
+
+        private
+
+        def pause: (Float seconds, Cancellation cancel) { (model_event event) -> void } -> void
+        def check: (String name, Symbol effort, Integer max_output_tokens, String prefix_cache,
+                   String conversation_cache) -> void
+        def check_cache: (String prefix, String conversation) -> void
+        def params: (Request request) -> Hash[Symbol, untyped]
+        def tool: (Tool tool) -> Hash[Symbol, untyped]
+        def message: (Message message) -> String
+        def content: (Block block) -> (JSON::Fragment | Hash[Symbol, untyped])
+      end
+    end
+  end
+end

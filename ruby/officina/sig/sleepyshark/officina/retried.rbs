@@ -1,0 +1,7 @@
+module Sleepyshark
+  module Officina
+    class Retried < Data
+      def initialize: () -> void
+    end
+  end
+end

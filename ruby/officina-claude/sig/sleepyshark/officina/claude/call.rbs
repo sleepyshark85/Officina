@@ -1,0 +1,30 @@
+module Sleepyshark
+  module Officina
+    module Claude
+      class Call
+        class IncompleteError < Error
+        end
+
+        STOPS: Hash[Symbol, Symbol]
+
+        @client: Anthropic::Client
+        @params: Hash[Symbol, untyped]
+        @cancel: Cancellation
+        @usage: Usage?
+
+        def initialize: (client: Anthropic::Client, params: Hash[Symbol, untyped], cancel: Cancellation) -> void
+
+        def reply: () { (model_event event) -> void } -> Reply?
+
+        private
+
+        def read: (untyped stream) { (model_event event) -> void } -> Reply?
+        def take: (untyped event, Array[Block] blocks) { (model_event event) -> void } -> Reply?
+        def finish: (untyped word, untyped message, Array[Block] blocks) { (model_event event) -> void } -> Reply
+        def block: (untyped content) -> Block
+        def usage: (untyped reported) -> Usage
+        def delta: (untyped reported) -> Usage
+      end
+    end
+  end
+end

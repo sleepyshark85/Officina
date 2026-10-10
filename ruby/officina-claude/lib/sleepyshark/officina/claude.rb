@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require 'anthropic'
 require 'sleepyshark/officina'
 
 module Sleepyshark
@@ -9,3 +10,10 @@ module Sleepyshark
     end
   end
 end
+
+require_relative 'claude/transient_error'
+require_relative 'claude/authentication_error'
+require_relative 'claude/invalid_request_error'
+require_relative 'claude/failure'
+require_relative 'claude/call'
+require_relative 'claude/model'
