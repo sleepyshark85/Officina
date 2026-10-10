@@ -67,9 +67,10 @@ class FileMemoryStoreTest < Minitest::Test
   def test_mem03_a_linked_directory_in_the_scope_is_never_followed
     store.write('alice', 'a.md', 'x')
     link(@outside, File.join(scope_directory('alice'), 'out'))
-    %w[out/secret.md out/new.md].each { refuse_every_operation('alice', it, link_refusal(it, 'out')) }
+    link('secret.md', File.join(@outside, 'link.md'))
+    %w[out/secret.md out/new.md out/link.md].each { refuse_every_operation('alice', it, link_refusal(it, 'out')) }
 
-    assert_equal [{ 'a.md' => 'x' }, { 'secret.md' => 'secret' }], [contents('alice'), outside]
+    assert_equal [{ 'a.md' => 'x' }, { 'link.md' => 'secret', 'secret.md' => 'secret' }], [contents('alice'), outside]
   end
 
   def test_mem03_a_linked_file_in_the_scope_is_never_followed
