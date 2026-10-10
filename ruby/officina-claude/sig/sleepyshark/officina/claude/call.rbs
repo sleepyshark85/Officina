@@ -24,7 +24,7 @@ module Sleepyshark
         def report: () { (model_event event) -> void } -> void
         def block: (untyped content) -> Block
         def usage: (untyped reported) -> Usage
-        def usage_after_delta: (untyped reported) -> Usage?
+        def usage_after_delta: (untyped reported) -> Usage
       end
     end
   end

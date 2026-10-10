@@ -1,0 +1,26 @@
+module Sleepyshark
+  module Officina
+    class ModelCall
+      @agent: Agent
+      @cancel: Cancellation
+      @spending: Spending
+      @trace: RunTrace
+      @audit: AuditRecorder
+      @reporter: Reporter
+      @host_raised: bool?
+
+      def initialize: (agent: Agent, cancel: Cancellation, spending: Spending, trace: RunTrace, audit: AuditRecorder,
+                       reporter: Reporter) -> void
+
+      def call: (Array[Message] messages, Integer? limit) -> (Reply | Failed | nil)
+
+      private
+
+      def stream: (Request request) -> (Reply | Failed | nil)
+
+      def relay: (model_event event) -> void
+
+      def no_reply: (String why) -> Failed?
+    end
+  end
+end
