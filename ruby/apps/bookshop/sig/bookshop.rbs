@@ -1,7 +1,8 @@
 module Bookshop
   COMPOSE_DATABASE: String
 
-  def self.build: (?env: _Settings) -> Shop
+  def self.build: (input: IO, output: IO, ?model: Sleepyshark::Officina::_Model?, ?env: _Settings,
+                   ?clock: ^() -> Time) -> Application
 
   # The settings build reads: ENV, or a Hash in tests.
   interface _Settings

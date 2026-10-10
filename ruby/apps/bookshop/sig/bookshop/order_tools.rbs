@@ -1,0 +1,20 @@
+module Bookshop
+  module OrderTools
+    Tool: singleton(Sleepyshark::Officina::Tool)
+    Input: singleton(Sleepyshark::Officina::Input)
+    CUSTOMER: Sleepyshark::Officina::Tool::_Input
+    ORDER: Sleepyshark::Officina::Tool::_Input
+    PLACE: Sleepyshark::Officina::Tool::_Input
+
+    def self.all: (Orders orders) -> Array[Sleepyshark::Officina::Tool]
+
+    private
+
+    def self.list_customer_orders_tool: (Orders orders) -> Sleepyshark::Officina::Tool
+    def self.get_order_tool: (Orders orders) -> Sleepyshark::Officina::Tool
+    def self.place_order_tool: (Orders orders) -> Sleepyshark::Officina::Tool
+    def self.cancel_order_tool: (Orders orders) -> Sleepyshark::Officina::Tool
+    def self.lines: (Order order) -> Array[Hash[Symbol, untyped]]
+    def self.time: (Time time) -> String
+  end
+end

@@ -8,7 +8,7 @@ module Bookshop
     RESTOCK: String
 
     def initialize: (database: Database) -> void
-    def search: (?BookFilter filter, ?limit: Integer) -> Array[Book]
+    def search: (?BookFilter filter, ?limit: Integer?) -> Array[Book]
     def find: (Integer id) -> Book
     def restock: (book_id: Integer, quantity: Integer) -> Book
 

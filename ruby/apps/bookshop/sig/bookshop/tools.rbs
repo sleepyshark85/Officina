@@ -1,0 +1,5 @@
+module Bookshop
+  module Tools
+    def self.all: (Shop shop) -> Array[Sleepyshark::Officina::Tool]
+  end
+end

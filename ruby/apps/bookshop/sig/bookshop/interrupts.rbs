@@ -1,0 +1,11 @@
+module Bookshop
+  class Interrupts
+    @signals: Thread::Queue[Symbol]
+    @lock: Thread::Mutex
+    @reply: Sleepyshark::Officina::Cancellation?
+
+    def initialize: () -> void
+    def watch: [T] () { () -> T } -> T
+    def cancelling: [T] (Sleepyshark::Officina::Cancellation reply) { () -> T } -> T
+  end
+end

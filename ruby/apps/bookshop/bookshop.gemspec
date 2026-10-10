@@ -18,4 +18,5 @@ Gem::Specification.new do |spec|
   spec.add_dependency 'connection_pool', '~> 3.0'
   spec.add_dependency 'pg', '~> 1.7'
   spec.add_dependency 'sleepyshark-officina', Sleepyshark::Officina::VERSION
+  spec.add_dependency 'sleepyshark-officina-claude', Sleepyshark::Officina::VERSION
 end

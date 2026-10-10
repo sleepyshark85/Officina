@@ -1,0 +1,23 @@
+module Bookshop
+  class Approvals
+    include Sleepyshark::Officina::_Approver
+
+    Approval: singleton(Sleepyshark::Officina::Approval)
+    WITHDRAWN: Sleepyshark::Officina::Approval
+
+    class Answer < Data
+      attr_reader call_id: String
+      attr_reader approval: Sleepyshark::Officina::Approval
+
+      def self.new: (call_id: String, approval: Sleepyshark::Officina::Approval) -> instance
+
+      def initialize: (call_id: String, approval: Sleepyshark::Officina::Approval) -> void
+    end
+
+    @answers: Thread::Queue[Answer | Sleepyshark::Officina::Cancellation]
+
+    def initialize: () -> void
+    def answer: (Sleepyshark::Officina::ToolCall call, Sleepyshark::Officina::Approval approval) -> void
+    def clear: () -> void
+  end
+end
