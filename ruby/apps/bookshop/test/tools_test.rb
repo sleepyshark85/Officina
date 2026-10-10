@@ -87,16 +87,20 @@ class ToolsTest < Minitest::Test
     assert_equal([144, 216], cancelled['returnedToStock'].map { it['bookId'] })
   end
 
-  def test_app07_too_few_copies_in_stock_is_refused_for_the_model_and_changes_nothing
+  def test_app07_too_few_copies_in_stock_is_a_failure_in_the_shops_words_and_changes_nothing
     copies = stock(310)
 
-    refusal = assert_raises(Bookshop::RefusedError) do
-      invoke('place_order', %({"customerId":1,"lines":[{"bookId":310,"quantity":#{copies + 1}}]}))
-    end
+    refusal = invoke('place_order', %({"customerId":1,"lines":[{"bookId":310,"quantity":#{copies + 1}}]}))
 
+    assert_instance_of Sleepyshark::Officina::ToolFailure, refusal
     assert_match(/\ANot enough stock for "[^"]+" \(id 310\): #{copies + 1} requested, #{copies} in stock/,
                  refusal.message)
     assert_equal copies, stock(310)
+  end
+
+  def test_app07_an_unknown_id_is_a_failure_in_the_shops_words
+    assert_equal Sleepyshark::Officina::ToolFailure.new(message: 'There is no book with id 9999.'),
+                 invoke('get_book', '{"bookId":9999}')
   end
 
   def test_app18_with_the_database_down_the_tools_fail_and_once_it_is_back_they_work_again
@@ -116,7 +120,7 @@ class ToolsTest < Minitest::Test
 
   private
 
-  # The tool's result for the input, as the JSON text the model reads.
+  # The tool's result for the input: the JSON text the model reads, or the failure the shop refused it with.
   def invoke(name, input) = @tools.fetch(name).invoke(input, Sleepyshark::Officina::Cancellation.new)
 
   # The tool's result, parsed, with amounts as BigDecimal.

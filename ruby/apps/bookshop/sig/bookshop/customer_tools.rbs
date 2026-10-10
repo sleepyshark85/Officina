@@ -1,6 +1,5 @@
 module Bookshop
   module CustomerTools
-    Tool: singleton(Sleepyshark::Officina::Tool)
     Input: singleton(Sleepyshark::Officina::Input)
     FIND: Sleepyshark::Officina::Tool::_Input
     ADD: Sleepyshark::Officina::Tool::_Input

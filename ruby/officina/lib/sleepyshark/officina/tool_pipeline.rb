@@ -93,12 +93,15 @@ module Sleepyshark
 
       def invoke(tool, step)
         started = @agent.clock.call
-        content = tool.invoke(step.call.input, @cancel)
+        output = tool.invoke(step.call.input, @cancel)
       rescue StandardError => e
         why = @cancel.cancelled? ? 'The call was cancelled while it ran' : 'The tool failed'
         finish(step.call, "#{why}: #{e}", step:, started:)
       else
-        finish(step.call, content, :ok, step:, started:)
+        case output
+        in ToolFailure[message:] then finish(step.call, message, step:, started:)
+        in String then finish(step.call, output, :ok, step:, started:)
+        end
       end
 
       # Redacts and cuts the call's result, records its outcome, ends its step, if it started, and reports it.

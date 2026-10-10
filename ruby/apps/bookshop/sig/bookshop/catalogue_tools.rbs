@@ -1,6 +1,5 @@
 module Bookshop
   module CatalogueTools
-    Tool: singleton(Sleepyshark::Officina::Tool)
     Input: singleton(Sleepyshark::Officina::Input)
     SEARCH: Sleepyshark::Officina::Tool::_Input
     BOOK: Sleepyshark::Officina::Tool::_Input
