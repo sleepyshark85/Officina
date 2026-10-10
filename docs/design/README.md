@@ -126,8 +126,8 @@ looks things up, asks to place the order (which needs approval), then answers.
    checks the prefix fingerprint (a mismatch fails the run), connects MCP sources and answers calls an interrupted run
    left without results.
 3. Each pass of the loop checks the budget, sends the request and relays text and usage while the reply streams.
-   `Decide` then says whether to append the reply and whether the run ends. The console saves the session on every
-   `ConversationAppended`.
+   `Decide` then says whether to append the reply and whether the run ends. The reply is appended with the messages it
+   answers before any of them is reported. The console saves the session on every `ConversationAppended`.
 4. A `tool_use` stop runs the reply's calls (next diagram) and appends their results as one message. The loop ends at
    the first other stop: end of turn, refusal, output limit, context full, error, cancellation, budget, or 25 model
    calls.
@@ -213,7 +213,7 @@ Each row of ARCHITECTURE §5.3, and the layers of §3, in .NET terms. Go's and R
 | Asynchronous I/O | Asynchronous contracts, each taking a `CancellationToken`: `IModel.StreamAsync` returns an `IAsyncEnumerable`; `IApprover`, `IMemoryStore`, `IAuditSink` and tool handlers return a `Task` |
 | Concurrent reads | Each read call is a task; `Task.WhenAll` joins them before the next write |
 | Hand-over | The pipeline runs on its own task and writes events to an unbounded `Channel<RunEvent>` that the engine relays |
-| Event order | **Diverges from §5.3:** the engine appends and reports each message in turn, so a host that stops reading at the first `ConversationAppended` holds the user message without the reply that answers it. Go appends them all first; .NET is to follow |
+| Event order | The engine appends a reply and the messages it answers (the user message and run context), then yields a `ConversationAppended` for each, so a host that stops reading at the first holds them all |
 | Cancellation | One `CancellationToken` per run, linked to the host's |
 | One run per conversation | An interlocked flag on `Conversation`; a second run throws |
 | Ownership | The engine awaits the pipeline's task in a `finally` |

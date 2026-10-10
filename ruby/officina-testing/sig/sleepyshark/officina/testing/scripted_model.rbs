@@ -1,0 +1,48 @@
+module Sleepyshark
+  module Officina
+    module Testing
+      class ScriptedModel
+        # One step of a scripted reply: an event it streams, or what its stream ends with.
+        type step = model_event | Reply | Exception | nil
+
+        FOLLOWS: Array[[Symbol, Symbol]]
+
+        @replies: Array[Array[step]]
+        @requests: Array[Request]
+        @lock: Thread::Mutex
+
+        include _Model
+
+        attr_reader settings: String
+
+        def initialize: (*Array[step] replies, ?settings: String) -> void
+
+        def self.text: (String text, ?usage: Usage?) -> Array[step]
+
+        def self.tool_use: (*Block blocks) -> Array[step]
+
+        def self.stop: (Symbol stop, ?text: String?, ?detail: String?) -> Array[step]
+
+        def self.text_block: (String text) -> Block
+
+        def self.tool_use_block: (String id, String name, String input) -> Block
+
+        def requests: () -> Array[Request]
+
+        def stream: (Request request, cancel: Cancellation) { (model_event event) -> void } -> Reply?
+
+        private
+
+        def next_reply: (Request request) -> Array[step]
+
+        def problem: (Array[Message] messages) -> String?
+
+        def pair_problem: (Message previous, Message message) -> String?
+
+        def role_problem:(Message previous, Message message) -> String?
+
+        def answer_problem: (Message previous, Message message) -> String?
+      end
+    end
+  end
+end

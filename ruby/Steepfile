@@ -1,11 +1,16 @@
 # frozen_string_literal: true
 
-# The gems' and the application's code against their signatures in sig/. Tests are not checked.
+# The gems' and the application's code against their signatures in sig/, and the workspace's corrections to core
+# signatures in sig/. Tests are not checked.
 target :lib do
-  signature 'officina/sig', 'officina-claude/sig', 'officina-mcp/sig', 'officina-testing/sig', 'apps/bookshop/sig'
+  signature 'sig', 'officina/sig', 'officina-claude/sig', 'officina-mcp/sig', 'officina-testing/sig',
+            'apps/bookshop/sig'
   check 'officina/lib', 'officina-claude/lib', 'officina-mcp/lib', 'officina-testing/lib', 'apps/bookshop/lib'
   # The standard library's signatures that are not in the collection's lock, as no gem of the lock needs them.
   library 'net-http', 'openssl', 'socket'
+
+  # Standard libraries that are not gems, so the collection does not list them.
+  library 'digest'
 
   configure_code_diagnostics(Steep::Diagnostic::Ruby.strict)
 end

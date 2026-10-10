@@ -1,0 +1,13 @@
+module Bookshop
+  class BookFilter < Data
+    attr_reader title: String?
+    attr_reader author: String?
+    attr_reader genre: String?
+    attr_reader max_price: Numeric?
+    attr_reader in_stock: bool
+
+    def self.new: (?title: String?, ?author: String?, ?genre: String?, ?max_price: Numeric?, ?in_stock: bool) -> instance
+
+    def initialize: (?title: String?, ?author: String?, ?genre: String?, ?max_price: Numeric?, ?in_stock: bool) -> void
+  end
+end

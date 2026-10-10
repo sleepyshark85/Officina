@@ -1,0 +1,12 @@
+module Sleepyshark
+  module Officina
+    class UsageReported < Data
+      attr_reader usage: Usage
+
+      def self.new: (usage: Usage) -> instance
+
+
+      def initialize: (usage: Usage) -> void
+    end
+  end
+end

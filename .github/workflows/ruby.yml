@@ -8,6 +8,10 @@ on:
   push:
     branches: [main]
   pull_request:
+  # For the full mutation run; the other jobs run as well, which also catches a newly published vulnerability.
+  schedule:
+    - cron: '0 4 * * 1'
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -118,6 +122,9 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
+        with:
+          # Comparing with the base branch needs its history.
+          fetch-depth: 0
 
       - uses: ruby/setup-ruby@14594264cd68ce8a2345dd349bc3d138a4ef85c8 # v1.327.0
         with:
@@ -125,12 +132,24 @@ jobs:
           bundler-cache: true
 
       - name: Mutate
-        # The core with its own tests (ruby/officina/mutant.yml). mutant has no threshold: it fails on any surviving
-        # mutant. Until Ruby S05 decides the bar from a first measured run, survivors are reported as a warning; a run
-        # that does not reach its summary (no "Alive:" line) still fails the job.
-        working-directory: ruby/officina
+        # Each gem with a mutant.yml, with its own tests: all its subjects on a push to main, weekly and on demand; on
+        # a pull request, only the subjects (methods) it changed, none when it changed no code. mutant has no
+        # threshold: it fails on any surviving mutant. Until Ruby S05 decides the bar from a first measured run,
+        # survivors are reported as a warning; a run that does not reach its summary (no "Alive:" line) still fails.
         run: |
-          if ! bundle exec mutant run | tee "$RUNNER_TEMP/mutant.log"; then
-            grep -q '^Alive:' "$RUNNER_TEMP/mutant.log" || exit 1
-            echo "::warning::Mutants survived in the core (the log lists them); there is no bar until Ruby S05."
-          fi
+          since=()
+          if [ "${{ github.event_name }}" = pull_request ]; then since=(--since "origin/${{ github.base_ref }}"); fi
+          status=0
+          for config in */mutant.yml; do
+            gem=$(dirname "$config")
+            echo "::group::$gem"
+            if ! (cd "$gem" && bundle exec mutant run "${since[@]}") | tee "$RUNNER_TEMP/mutant.log"; then
+              if grep -q '^Alive:' "$RUNNER_TEMP/mutant.log"; then
+                echo "::warning::Mutants survived in $gem (the log lists them); there is no bar until Ruby S05."
+              else
+                status=1
+              fi
+            fi
+            echo "::endgroup::"
+          done
+          exit $status

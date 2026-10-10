@@ -20,7 +20,7 @@ module Sleepyshark
 
           command = command&.map(&:-@).freeze
           # Data's own initialize, which takes the members, has no signature Steep reads.
-          super(name: -name, command:, env: frozen(env), url: url && -url, headers: frozen(headers)) # steep:ignore
+          super(name: -name, command:, env: frozen(env), url: url && -url, headers: frozen(headers))
         end
 
         private
