@@ -44,6 +44,19 @@ module Sleepyshark
         record(:run_ended, usage:, cost:, **ended(result))
       end
 
+      # Records what the provider did to shorten the conversation during a model call, and how much, as .NET words it.
+      # @param event [ConversationCompacted, ToolResultsCleared]
+      def record_edit(event)
+        case event
+        in ConversationCompacted
+          record(:compacted, detail: "#{Figures.thousands(event.tokens)} tokens summarized into " \
+                                     "#{Figures.thousands(event.summary_tokens)}.")
+        in ToolResultsCleared
+          record(:cleared, detail: "Results of #{Figures.thousands(event.tool_calls)} tool calls cleared: " \
+                                   "#{Figures.thousands(event.tokens)} tokens.")
+        end
+      end
+
       private
 
       # A sink's failure is a gap in the trail, which telemetry shows and the caller acts on.

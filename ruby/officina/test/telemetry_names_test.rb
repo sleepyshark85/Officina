@@ -14,10 +14,8 @@ class TelemetryNamesTest < Minitest::Test
   ROOT = File.expand_path('../../..', __dir__)
   DOTNET = %w[src/Sleepyshark.Officina/Telemetry/Telemetry.cs src/Sleepyshark.Officina/Runs/RunEngine.cs].freeze
   GO = %w[go/officina/telemetry.go go/officina/run.go].freeze
-  # The instruments and attributes of what Ruby does not have yet: compaction and clearing, and memory scopes.
-  NOT_YET = %w[officina.model.compactions officina.model.clearings officina.compaction.tokens
-               officina.compaction.summary_tokens officina.clearing.tokens officina.clearing.tool_calls
-               officina.memory.scope].freeze
+  # The attributes of what Ruby does not have yet: memory scopes.
+  NOT_YET = %w[officina.memory.scope].freeze
   # An instrument as .NET makes one: kind, name, unit and description.
   DOTNET_INSTRUMENT = /Create(Histogram|Counter)<\w+>\(\s*"([^"]+)",\s*"([^"]+)",\s*"([^"]+)"\)/
   # As Go does, its description perhaps in pieces joined with +.
@@ -74,7 +72,8 @@ class TelemetryNamesTest < Minitest::Test
   end
 
   # Runs that make every instrument and attribute the core has: a retry, text, usage, an approved write blocked as its
-  # attempt cannot be audited, a read that runs, with content on; then a model call that fails.
+  # attempt cannot be audited, a read that runs, with content on; then a model call that fails, and one for which the
+  # provider cleared tool results and compacted the conversation.
   def exercise(collector)
     model = Model.new([Retried.new, *reply('Saving.', usage(1, 1), call('1', 'save'), call('2', 'search'),
                                            stop: :tool_use)], Model.text('Done.'))
@@ -85,5 +84,14 @@ class TelemetryNamesTest < Minitest::Test
                              }))
       .run(Conversation.new, 'Save.')
     traced(collector, Model.new([RuntimeError.new('down')]), name: 'clerk').run(Conversation.new, 'Again.')
+    traced(collector, shortening, name: 'clerk', context_management: ContextManagement.new(
+      compact_at: 50_000, clear_tool_results: ToolResultClearing.new(after: 1)
+    )).run(Conversation.new, 'Long.')
+  end
+
+  def shortening
+    edits = [ToolResultsCleared.new(tokens: 1, tool_calls: 1), ConversationCompacted.new(tokens: 2, summary_tokens: 1)]
+    Model.new([*edits, *Model.text('Short.')],
+              info: ModelInfo.new(provider: 'scripted', name: 'scripted', compacts: true, clears_tool_results: true))
   end
 end

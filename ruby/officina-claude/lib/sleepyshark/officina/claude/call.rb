@@ -22,7 +22,8 @@ module Sleepyshark
           @usage = nil
         end
 
-        # Yields each text delta as it arrives and, once the call's usage is known, one UsageReported. Returns the
+        # Yields each text delta as it arrives and, once the reply is whole, what the provider did to shorten the
+        # conversation (ConversationCompacted, ToolResultsCleared) and one UsageReported. Returns the
         # reply, or nil once the cancellation stopped it; a prompt longer than the context window is a reply that
         # stops for +:context_full+. A failure, reported after the usage of what streamed before it, is raised as the
         # SDK raised it, or as an IncompleteError. What the block raises passes through as it is.
@@ -73,6 +74,7 @@ module Sleepyshark
           word = message[:stop_reason]
           raise IncompleteError, "Claude's reply stopped without a stop reason" unless word
 
+          ContextEditing.reported(message).each { yield it }
           report(&)
           # The gem gives a stop reason as a Symbol.
           stop = STOPS.fetch(word, :unknown)
@@ -102,8 +104,8 @@ module Sleepyshark
           end
         end
 
-        # The usage a message starts with: the API always counts its input and output tokens, not always the cache's.
-        # Only the start breaks the cache writes down by how long they are kept.
+        # The usage a message starts with, or of one of its iterations: the API always counts its input and output
+        # tokens, not always the cache's. Only these break the cache writes down by how long they are kept.
         def usage(reported)
           Usage.new(input: reported[:input_tokens], output: reported[:output_tokens],
                     cache_read: reported[:cache_read_input_tokens] || 0,
@@ -112,11 +114,17 @@ module Sleepyshark
         end
 
         # The usage after a message delta, which carries the final output count and repeats the input counts it has.
-        # The SDK raises on a delta before the message's start, so there is a usage to update.
+        # The SDK raises on a delta before the message's start, so there is a usage to update. A call that ran several
+        # iterations (a compaction, then the reply) counts only the last in those totals, so its usage is the sum of its
+        # iterations, whatever their kind.
         def usage_after_delta(reported)
-          @usage&.with(**{ input: reported[:input_tokens], output: reported[:output_tokens],
-                           cache_read: reported[:cache_read_input_tokens],
-                           cache_write: reported[:cache_creation_input_tokens] }.compact)
+          iterations = reported[:iterations]
+          return iterations.sum(Usage.new) { usage(it) } if iterations&.any?
+
+          # @type ivar @usage: Usage
+          @usage.with(**{ input: reported[:input_tokens], output: reported[:output_tokens],
+                          cache_read: reported[:cache_read_input_tokens],
+                          cache_write: reported[:cache_creation_input_tokens] }.compact)
         end
       end
       private_constant :Call

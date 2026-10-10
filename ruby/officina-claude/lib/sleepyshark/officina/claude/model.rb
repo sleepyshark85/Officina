@@ -72,10 +72,11 @@ module Sleepyshark
           freeze
         end
 
-        # The model as telemetry names it, with its price when this gem knows it.
+        # The model as telemetry names it, with its price when this gem knows it; Claude compacts conversations and
+        # clears old tool results on its side.
         def info
           name = @fixed.fetch(:model)
-          ModelInfo.new(provider: 'anthropic', name:, price: PRICES[name])
+          ModelInfo.new(provider: 'anthropic', name:, price: PRICES[name], compacts: true, clears_tool_results: true)
         end
 
         # Sends the request as one streamed call and yields its events, as the core's model contract says: text
@@ -128,9 +129,9 @@ module Sleepyshark
           raise Error, "Claude's prefix cache may not be shorter than its conversation cache"
         end
 
-        # The request as the API takes it, its output limit the lower of the model's and the request's. The messages go
-        # through the SDK's one raw field, each as a JSON fragment it writes as it is: its typed messages parameter
-        # would write stored blocks anew.
+        # The request as the API takes it, its output limit the lower of the model's and the request's, with its context
+        # management. The messages go through the SDK's one raw field, each as a JSON fragment it writes as it is: its
+        # typed messages parameter would write stored blocks anew.
         def params(request)
           { **@fixed,
             max_tokens: [@fixed.fetch(:max_tokens), request.max_output_tokens].compact.min,
@@ -138,6 +139,7 @@ module Sleepyshark
             system: [{ type: :text, text: request.instructions,
                        cache_control: { type: :ephemeral, ttl: @prefix_cache } }],
             request_options: { extra_body: { messages: request.messages.map { JSON::Fragment.new(message(it)) } } } }
+            .merge(ContextEditing.params(request.context_management))
         end
 
         def tool(tool)

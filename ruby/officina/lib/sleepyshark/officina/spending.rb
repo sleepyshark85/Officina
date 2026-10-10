@@ -80,7 +80,9 @@ module Sleepyshark
       def tokens_used_up
         limit = @budget.tokens
         total = @usage.total
-        "The token budget is used up: #{thousands(total)} of #{thousands(limit)} tokens." if limit && total >= limit
+        return unless limit && total >= limit
+
+        "The token budget is used up: #{Figures.thousands(total)} of #{Figures.thousands(limit)} tokens."
       end
 
       # Used up too once what is left buys less than one output token.
@@ -92,10 +94,9 @@ module Sleepyshark
       end
 
       # As .NET writes them: seconds with at most one decimal, dollars with at most six, each rounded half away from
-      # zero (for dollars whatever rounding mode the host's thread gives BigDecimal), and thousands with commas.
+      # zero (for dollars whatever rounding mode the host's thread gives BigDecimal).
       def seconds(value) = value.round(1).to_s.delete_suffix('.0')
       def dollars(value) = value.round(6, half: :up).to_s('F').delete_suffix('.0')
-      def thousands(value) = value.to_s.gsub(/\B(?=(\d{3})+\z)/, ',')
     end
     private_constant :Spending
   end
