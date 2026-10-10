@@ -1,0 +1,159 @@
+Spike Ruby S02 run output, 2026-10-10. anthropic gem 1.78.0, Ruby 4.0.7, claude-opus-5-5. Four invocations, in order;
+each carries the spend before it (R02_PRIOR_SPEND), so the last TOTAL is the whole spend: $0.4898.
+
+################ Run 1: `claude_features.rb midsys` (trial of the streamed path; the cost guard then counted bytes)
+===== midsys =====
+  typed system message to_json: {"role":"system","content":[{"text":"Run context: today is 2026-10-09; the customer is Ana Muñoz (loyalty member).","type":"text"}]}
+  [midsys#1] stop=end_turn blocks=[thinking(text=0ch, sig=876ch), text("Hi Ana! Welcome back to Café Libro. Today is **Friday, 9 October 2026**. How can…(+12)")]
+  [midsys#1] usage in=2 out=78 cache_read=0 cache_write=2671 | call $0.0149 running $0.0149 | replayed msgs checked=2
+    request messages: "messages":[{"role":"user","content":"Hi! Greet me by name and tell me today's date."},{"role":"system","content":[{"text":"Run context: today is 2026-10-09; the customer is Ana Muñoz (loyalty member).","type":"text"}]}],"stream":true}
+    stored text block: {"text":"Hi Ana! Welcome back to Café Libro. Today is **Friday, 9 October 2026**. How can I help you?","type":"text"}
+  [midsys#2] stop=end_turn blocks=[thinking(text=0ch, sig=1104ch), text("Try *The Murder of Roger Ackroyd* by Agatha Christie, a classic with one of the …(+135)")]
+  [midsys#2] usage in=2 out=131 cache_read=2671 cache_write=133 | call $0.0038 running $0.0188 | replayed msgs checked=5
+  [midsys#3] stop=end_turn blocks=[text("Try *The Big Sleep* by Raymond Chandler, a sharp, atmospheric hardboiled classic…(+104)")]
+  [midsys#3] usage in=2 out=73 cache_read=2804 cache_write=179 | call $0.0029 running $0.0217 | replayed msgs checked=8
+
+ROUND TRIP: replayed messages checked=15 mismatched=0; assistant blocks stored=4
+TOTAL: input=6 output=282 cache_read=5475 write5m=2983 write1h=0 cost=$0.0217
+
+################ Run 2: `R02_PRIOR_SPEND=0.0217 claude_features.rb` (all steps). Stopped after compact#1: the typed
+################ BetaCompactionBlock#encrypted_content reader raised (doc, finding 1). stderr is printed first.
+/home/agentadmin/sources/officina/.claude/worktrees/agent-a033fe44ea417d7db/spikes/ruby-claude-features/vendor/bundle/ruby/4.0.0/gems/anthropic-1.78.0/lib/anthropic/internal/type/base_model.rb:106:in 'block in Anthropic::Models::Beta::BetaCompactionBlock#add_field': Failed to parse BetaCompactionBlock.encrypted_content from NilClass to String. To get the unparsed API response, use BetaCompactionBlock[:encrypted_content]. Cause: NilClass can't be coerced into String (Anthropic::Errors::ConversionError)
+	from claude_features.rb:315:in 'block in Spike#compact'
+	from claude_features.rb:313:in 'Array#each'
+	from claude_features.rb:313:in 'Spike#compact'
+	from claude_features.rb:112:in 'block in Spike#run'
+	from claude_features.rb:107:in 'Array#each'
+	from claude_features.rb:107:in 'Spike#run'
+	from claude_features.rb:539:in '<main>'
+
+===== offline =====
+  A extra_body + JSON::Fragment, sent: {"role":"assistant","content":[{"type":"text","text":"Caf\u00e9 «Muñoz» <b>&amp;</b> a\/b +x"} , {"text":"z","type":"text"}]}
+  A wire (server):                     {"model":"claude-opus-5-5","max_tokens":10,"messages":[{"role":"user","content":"hi"},{"role":"assistant","content":[{"type":"text","text":"Caf\u00e9 «Muñoz» <b>&amp;</b> a\/b +x"} , {"text":"z","type":"text"}]}]}
+  A raw message byte-identical on the wire: true; middleware saw the wire bytes: true
+  B typed messages (parsed Hash), wire: {"model":"claude-opus-5-5","max_tokens":10,"messages":[{"role":"user","content":"hi"},{"role":"assistant","content":[{"type":"text","text":"Café «Muñoz» <b>&amp;</b> a/b +x"},{"text":"z","type":"text"}]}]}
+  B raw message byte-identical on the wire: false
+  C body StringIO via request middleware, wire: {"model":"claude-opus-5-5","max_tokens":10,"messages":[{"role":"user","content":"hi"},{"role":"assistant","content":[{"type":"text","text":"Caf\u00e9 «Muñoz» <b>&amp;</b> a\/b +x"} , {"text":"z","type":"text"}]}]}
+  C byte-identical: true
+  D canonical (escape < > & only): {"role":"assistant","content":[{"type":"text","text":"Caf\u00e9 «Muñoz» \u003cb\u003e\u0026amp;\u003c/b\u003e a\/b +x"} , {"text":"z","type":"text"}]}
+  D typed param to_json: {"role":"assistant","content":[{"text":"Café «Muñoz» <b>&amp;</b> a/b +x","type":"text"}]}
+  D canonical message byte-identical on the wire: true
+
+===== compact =====
+count_tokens: 2000 lines = 88184 tokens -> using 1179 lines (~52k)
+context_management json: {"edits":[{"type":"compact_20260112","trigger":{"type":"input_tokens","value":50000}}]}
+  stream: content_block_start compaction {"content":null,"type":"compaction"}
+  [compact#1] stop=end_turn blocks=[compaction(content=1190ch), thinking(text=0ch, sig=1060ch), text("Volume 42 of the mystery series")]
+  [compact#1] usage in=2 out=97 cache_read=2615 cache_write=559 | call $0.2664 running $0.2881 | replayed msgs checked=1
+  [compact#1] usage.iterations (typed)={compaction in=48 cache_read=2615 cache_write=50090 out=496} {message in=2 cache_read=2615 cache_write=559 out=97}
+  [compact#1] context_management.applied_edits (typed)=[]
+  stream: compaction_delta events=1
+
+################ Run 3: `R02_PRIOR_SPEND=0.2881 claude_features.rb compact` (raw reader for encrypted_content, cost guard
+################ on count_tokens). Its compaction iteration read the 52.7k prefix run 2 had written to the cache.
+
+===== compact =====
+count_tokens: 2000 lines = 88184 tokens -> using 1179 lines (~52k)
+context_management json: {"edits":[{"type":"compact_20260112","trigger":{"type":"input_tokens","value":50000}}]}
+  stream: content_block_start compaction {"content":null,"type":"compaction"}
+  [compact#1] stop=end_turn blocks=[compaction(content=928ch), thinking(text=0ch, sig=976ch), text("Volume 42 of the mystery series")]
+  [compact#1] usage in=2 out=75 cache_read=2615 cache_write=425 | call $0.0221 running $0.3102 | replayed msgs checked=1
+  [compact#1] usage.iterations (typed)={compaction in=48 cache_read=52705 cache_write=0 out=362} {message in=2 cache_read=2615 cache_write=425 out=75}
+  [compact#1] context_management.applied_edits (typed)=[]
+  stream: compaction_delta events=1
+  compaction block typed: Anthropic::Models::Beta::BetaCompactionBlock content=928ch encrypted_content=nil
+  compaction block stored (first 400 chars): {"content":"I am acting as the assistant for the small bookshop «Café Libro», answering briefly and precisely. The system policies (1–60, all identical in substance) require me to check the catalog first, never invent stock levels, and quote prices in euros.\n\nThe user supplied a catalog of items 0001–1179. Each entry follows a fixed pattern: Item N is titled \"Volume N of the [genre] series\", w…(+597)
+  [compact#2] stop=end_turn blocks=[text("Shelf Q2.")]
+  [compact#2] usage in=4 out=10 cache_read=2615 cache_write=522 | call $0.0033 running $0.3136 | replayed msgs checked=3
+  [compact#2] usage.iterations (typed)={message in=4 cache_read=2615 cache_write=522 out=10}
+  [compact#2] context_management.applied_edits (typed)=[]
+  [compact#3] stop=end_turn blocks=[text("Item 0042 costs 17.42 EUR.")]
+  [compact#3] usage in=4 out=19 cache_read=3137 cache_write=25 | call $0.0011 running $0.3147 | replayed msgs checked=5
+  [compact#3] usage.iterations (typed)={message in=4 cache_read=3137 cache_write=25 out=19}
+  [compact#3] context_management.applied_edits (typed)=[]
+
+ROUND TRIP: replayed messages checked=9 mismatched=0; assistant blocks stored=4
+TOTAL: input=58 output=466 cache_read=61072 write5m=972 write1h=0 cost=$0.3147
+
+################ Run 4: `R02_PRIOR_SPEND=0.3147 claude_features.rb clear memory updates midsys structured`
+
+===== clear =====
+context_management json: {"edits":[{"type":"clear_tool_uses_20250919","keep":{"type":"tool_uses","value":1},"trigger":{"type":"tool_uses","value":2}}]}
+  [clear#1] stop=tool_use blocks=[tool_use(lookup_book {"id":1})]
+  [clear#1] usage in=4 out=47 cache_read=0 cache_write=3035 | call $0.0161 running $0.3308 | replayed msgs checked=1
+  [clear#1] context_management.applied_edits (typed)=[]
+  [clear#2] stop=tool_use blocks=[tool_use(lookup_book {"id":2})]
+  [clear#2] usage in=2 out=47 cache_read=3035 cache_write=2674 | call $0.0149 running $0.3458 | replayed msgs checked=3
+  [clear#2] context_management.applied_edits (typed)=[]
+  [clear#3] stop=tool_use blocks=[tool_use(lookup_book {"id":3})]
+  [clear#3] usage in=80 out=48 cache_read=5709 cache_write=2672 | call $0.0158 running $0.3615 | replayed msgs checked=5
+  [clear#3] context_management.applied_edits (typed)=[]
+  [clear#4] stop=tool_use blocks=[tool_use(lookup_book {"id":4})]
+  [clear#4] usage in=2 out=47 cache_read=3035 cache_write=2808 | call $0.0156 running $0.3771 | replayed msgs checked=7
+  [clear#4] context_management.applied_edits (typed)=[{clear_tool_uses_20250919 cleared_input_tokens=4892 cleared_tool_uses=2}]
+  [clear#5] stop=end_turn blocks=[thinking(text=0ch, sig=960ch), text("I looked up all four books in order. **Books 3 and 4 are by Mara Linde.** They'r…(+253)")]
+  [clear#5] usage in=80 out=164 cache_read=5843 cache_write=2672 | call $0.0181 running $0.3953 | replayed msgs checked=9
+  [clear#5] context_management.applied_edits (typed)=[{clear_tool_uses_20250919 cleared_input_tokens=4799 cleared_tool_uses=2}]
+
+===== memory =====
+tools json: [{"name":"memory","type":"memory_20250818"}]
+  [memA#1] stop=tool_use blocks=[tool_use(memory {"command":"view","path":"/memories"})]
+  [memA#1] usage in=111 out=69 cache_read=0 cache_write=4269 | call $0.0232 running $0.4184 | replayed msgs checked=1
+    memory {"command":"view","path":"/memories"} -> Here are the files and directories up to 2 levels deep in /memories:
+  [memA#2] stop=tool_use blocks=[tool_use(memory {"command":"create","path":"/memories/customers/ana.md","file_text":"# Customer: Ana\n- Loves mystery novels\n- Dislikes horror (avoid recommending)\n"})]
+  [memA#2] usage in=207 out=135 cache_read=4269 cache_write=0 | call $0.0044 running $0.4228 | replayed msgs checked=3
+    memory {"command":"create","path":"/memories/customers/ana.md","file_text":"# Customer: Ana\n- Loves mystery novels\n- Dislikes horror (avoid recommending)\n"} -> File created successfully at: /memories/customers/ana.md
+  [memA#3] stop=end_turn blocks=[text("Hi Ana! I've saved that you love mystery novels and don't like horror. I'll keep…(+105)")]
+  [memA#3] usage in=365 out=66 cache_read=4269 cache_write=0 | call $0.0036 running $0.4264 | replayed msgs checked=5
+  store after A: {"/memories/customers/ana.md":"# Customer: Ana\n- Loves mystery novels\n- Dislikes horror (avoid recommending)\n"}
+  [memB#1] stop=tool_use blocks=[tool_use(memory {"command":"view","path":"/memories"})]
+  [memB#1] usage in=96 out=69 cache_read=4269 cache_write=0 | call $0.0026 running $0.4291 | replayed msgs checked=1
+    memory {"command":"view","path":"/memories"} -> Here are the files and directories up to 2 levels deep in /memories:\n78	/memories/customers/ana.md
+  [memB#2] stop=tool_use blocks=[tool_use(memory {"command":"view","path":"/memories/customers/ana.md"})]
+  [memB#2] usage in=206 out=77 cache_read=4269 cache_write=0 | call $0.0032 running $0.4323 | replayed msgs checked=3
+    memory {"command":"view","path":"/memories/customers/ana.md"} ->      1	# Customer: Ana\n     2	- Loves mystery novels\n     3	- Dislikes horror (avoid recommending)\n
+  [memB#3] stop=end_turn blocks=[thinking(text=0ch, sig=1032ch), text("If you're Ana, I'd suggest our mystery shelf, since my notes say that's your fav…(+50)")]
+  [memB#3] usage in=333 out=108 cache_read=4269 cache_write=0 | call $0.0043 running $0.4366 | replayed msgs checked=5
+
+===== updates =====
+thinking json: {"display":"updates","type":"adaptive"}
+  [updates#1] stop=tool_use blocks=[thinking(text=0ch, sig=976ch), text("I'll start with \"The Name of the Rose\" and check its stock and price."), tool_use(check_stock {"title":"The Name of the Rose"}), tool_use(get_price {"title":"The Name of the Rose"})]
+  [updates#1] usage in=4 out=170 cache_read=0 cache_write=3127 | call $0.0191 running $0.4557 | replayed msgs checked=1
+    stream: thinking_delta=1 signature_delta=1 deltas=[]
+    thinking block stored: {"signature":"CAQS0wUKEAgSGAI4AUIIdGhpbmtpbmcSDKb90PZUeI4pW10NPxoMcYm64lRa4+PHZ3plIjDqm+8iqwjOHIBqesyNuWqVIHsClNEhtM+e0yW2r4PcBmtfpBeeWWl5gKvnqWDtcvMq8ASfFxubNun7By4lJ0z31VJKdFixtnmuy6FYIRJLexSXV7s83TNn4JC6lTMoXQq3RrGMsWSgougBYSphtgJupUKCVhh0b253oQOFpuWOw/Po5I…(+764)
+  [updates#2] stop=tool_use blocks=[text("\"The Name of the Rose\" costs €16.90, but it's out of stock (0 copies). Next I'm …(+23)"), tool_use(check_stock {"title":"Gaudy Night"}), tool_use(get_price {"title":"Gaudy Night"})]
+  [updates#2] usage in=2 out=151 cache_read=3127 cache_write=240 | call $0.0049 running $0.4605 | replayed msgs checked=3
+    stream: thinking_delta=0 signature_delta=0 deltas=
+  [updates#3] stop=tool_use blocks=[text("\"Gaudy Night\" costs €14.90 and we have 3 copies. Last, I'm checking \"The Daughte…(+11)"), tool_use(check_stock {"title":"The Daughter of Time"}), tool_use(get_price {"title":"The Daughter of Time"})]
+  [updates#3] usage in=2 out=150 cache_read=3367 cache_write=219 | call $0.0048 running $0.4653 | replayed msgs checked=5
+    stream: thinking_delta=0 signature_delta=0 deltas=
+  [updates#4] stop=end_turn blocks=[thinking(text=0ch, sig=1104ch), text("\"Gaudy Night\" (€14.90, 3 copies) is the cheapest title in stock. In fact, it's t…(+194)")]
+  [updates#4] usage in=2 out=180 cache_read=3586 cache_write=218 | call $0.0054 running $0.4707 | replayed msgs checked=7
+    stream: thinking_delta=1 signature_delta=1 deltas=[]
+    thinking block stored: {"signature":"CAQStAYKEAgSGAI4AUIIdGhpbmtpbmcSDEghBBV8zzqvGFw9dhoM3Mc+MvPNj3PQdEa/IjC0HmuC8ubO2TvKDDc4yBfu8AuMN8ulIBU6rf2Pk0+qCDlBTZeexis0UXdbwvYKhAoq0QWz/eno6B4EacQ7LBJOVV/ATGPLi7U8+fMvv02z0idLK9ddn2MahT+tQXrXESQR9pL+Oau/authkGfQOxc84hrgycAZjm/TxIwZ88+vopM5iw…(+892)
+
+===== midsys =====
+  typed system message to_json: {"role":"system","content":[{"text":"Run context: today is 2026-10-09; the customer is Ana Muñoz (loyalty member).","type":"text"}]}
+  [midsys#1] stop=end_turn blocks=[thinking(text=0ch, sig=844ch), text("Hi Ana! Welcome back to Café Libro, and thanks for being a loyalty member. Today…(+60)")]
+  [midsys#1] usage in=2 out=86 cache_read=2671 cache_write=0 | call $0.0023 running $0.4730 | replayed msgs checked=2
+    request messages: "messages":[{"role":"user","content":"Hi! Greet me by name and tell me today's date."},{"role":"system","content":[{"text":"Run context: today is 2026-10-09; the customer is Ana Muñoz (loyalty member).","type":"text"}]}],"stream":true}
+    stored text block: {"text":"Hi Ana! Welcome back to Café Libro, and thanks for being a loyalty member. Today is **Friday, 9 October 2026**.\n\nHow can I help you today?","type":"text"}
+  [midsys#2] stop=end_turn blocks=[thinking(text=0ch, sig=996ch), text("Try *The Murder of Roger Ackroyd* by Agatha Christie, a clever classic with one …(+158)")]
+  [midsys#2] usage in=2 out=112 cache_read=2671 cache_write=141 | call $0.0035 running $0.4765 | replayed msgs checked=5
+  [midsys#3] stop=end_turn blocks=[thinking(text=0ch, sig=948ch), text("*The Name of the Rose* by Umberto Eco is an atmospheric medieval monastery myste…(+103)")]
+  [midsys#3] usage in=2 out=78 cache_read=2812 cache_write=160 | call $0.0029 running $0.4794 | replayed msgs checked=8
+
+===== structured =====
+  [subset] stop=end_turn blocks=[text("{\"title\":\"The Murder of Roger Ackroyd\",\"author\":\"Agatha Christie\",\"year\":1926,\"p…(+244)")]
+  [subset] usage in=588 out=138 cache_read=0 cache_write=0 | call $0.0051 running $0.4845 | replayed msgs checked=1
+  subset output_config.format on the wire: {"type":"json_schema","schema":{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","properties":{"title":{"type":"string","minLength":1},"author":{"type":"string"},"year":{"type":"integer","description":"Year of first publication"},"price":{"type":"number"},"genre":{"enum":["Mystery","Horror","History"]},"tags":{"type":"array","items":{"type":"string"},"minItems":1},"isbn":{"anyOf":[{"type":"string","pattern":"^[0-9-]{10,17}$"},{"type":"null"}]},"note":{"type":["object","null"],"properties":{"text":{"type":"string"}},"required":["text"],"additionalProperties":false}},"required":["title","author","year","price","genre","tags","isbn","note"],"additionalProperties":false}}
+    subset accepted; output: {"title":"The Murder of Roger Ackroyd","author":"Agatha Christie","year":1926,"price":12.99,"genre":"Mystery","tags":["classic","whodunit","Hercule Poirot","twist ending"],"isbn":"978-0062073563","note":{"text":"A great pick for Ana: a short, clever classic with one of the most famous twist endings …(+24); parsed_output: nil
+  subset-with-bounds output_config.format on the wire: {"type":"json_schema","schema":{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","properties":{"title":{"type":"string","minLength":1},"author":{"type":"string"},"year":{"type":"integer","description":"Year of first publication","minimum":1400,"maximum":2026},"price":{"type":"number"},"genre":{"enum":["Mystery","Horror","History"]},"tags":{"type":"array","items":{"type":"string"},"minItems":1,"maxItems":5},"isbn":{"anyOf":[{"type":"string","pattern":"^[0-9-]{10,17}$"},{"type":"null"}]},"note":{"type":["object","null"],"properties":{"text":{"type":"string"}},"required":["text"],"additionalProperties":false}},"required":["title","author","year","price","genre","tags","isbn","note"],"additionalProperties":false}}
+    subset-with-bounds REJECTED 400: {"type":"error","error":{"type":"invalid_request_error","message":"output_config.format.schema: For 'integer' type, properties maximum, minimum are not supported"},"request_id":"req_011CfswuvopUj2JG8dSVE5hj"}
+  [sdk-from-model] stop=end_turn blocks=[text("{\"title\":\"The Murder of Roger Ackroyd\",\"author\":\"Agatha Christie\",\"year\":1926,\"p…(+318)")]
+  [sdk-from-model] usage in=528 out=161 cache_read=0 cache_write=0 | call $0.0053 running $0.4898 | replayed msgs checked=1
+  sdk-from-model output_config.format on the wire: {"type":"json_schema","schema":{"type":"object","properties":{"title":{"type":"string"},"author":{"type":"string"},"year":{"type":"integer","description":"Year of first publication"},"price":{"type":"number"},"genre":{"type":"string","enum":["Mystery","Horror","History"]},"tags":{"type":"array","items":{"type":"string"}},"isbn":{"type":["string","null"]},"note":{"anyOf":[{"type":"object","properties":{"text":{"type":"string"}},"required":["text"],"additionalProperties":false},{"type":"null"}]}},"required":["title","author","year","price","genre","tags","isbn","note"],"additionalProperties":false}}
+    sdk-from-model accepted; output: {"title":"The Murder of Roger Ackroyd","author":"Agatha Christie","year":1926,"price":12.99,"genre":"Mystery","tags":["classic","whodunit","Hercule Poirot","twist ending"],"isbn":null,"note":{"text":"A great pick for Ana: a landmark Poirot mystery famous for one of the most surprising twist endings …(+98); parsed_output: #<Spike::BookPick:0x280 {title: "The Murder of Roger Ackroyd", author: "Agatha Christie", year: 1926, price: 12.99, genre: :Mystery, tags: ["classic", "whodunit", "Hercule Poirot", "twist ending"], is…(+222)
+
+ROUND TRIP: replayed messages checked=76 mismatched=0; assistant blocks stored=29
+TOTAL: input=2618 output=2103 cache_read=57201 write5m=22235 write1h=0 cost=$0.4898
