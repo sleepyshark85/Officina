@@ -55,7 +55,7 @@ module Sleepyshark
 
         def limited_connection: (String host, Integer? port) -> Net::HTTP
 
-        def exchange: (Net::HTTP http, Net::HTTP::Post request, Integer? id) -> Hash[String, json]
+        def exchange: (Net::HTTP http, Net::HTTP::Post request, Integer? id) -> (Hash[String, json] | Exception)
 
         def raise_unless_ok: (Net::HTTPResponse response, Net::HTTP::Post request) -> void
 
