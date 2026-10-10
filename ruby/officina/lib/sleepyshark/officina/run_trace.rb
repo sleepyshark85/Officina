@@ -111,7 +111,8 @@ module Sleepyshark
 
       def start_run(conversation, input, parent)
         attributes = { 'gen_ai.operation.name' => 'invoke_agent', 'gen_ai.conversation.id' => conversation.id,
-                       **@dimensions, **content('gen_ai.input.messages', input, role: 'user') }
+                       'officina.run.id' => @run, **@dimensions,
+                       **content('gen_ai.input.messages', input, role: 'user') }
         name = ['invoke_agent', @agent.name].compact.join(' ')
         @telemetry.start_span(name, parent:, kind: :internal, attributes:, at: now)
       end

@@ -68,7 +68,7 @@ module Sleepyshark
         refusal = tool.input_problem(call.input) || (@approvals.denial(tool, shown(call), step) if tool.needs_approval?)
         return @results[index] = finish(call, refusal, :error, step:) if refusal
         # The host may have cancelled while the approver decided, or while this write waited for the reads.
-        return if @cancel.cancelled?
+        return @results[index] = finish(call, NOT_STARTED, :error, step:) if @cancel.cancelled?
 
         if tool.write?
           @results[index] = write(tool, step)
