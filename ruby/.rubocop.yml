@@ -28,9 +28,3 @@ Metrics/MethodLength:
     - '**/test/**/*'
 Minitest/MultipleAssertions:
   Max: 5
-
-# mutant 0.17 cannot parse the `it` block parameter: one in lib/ fails the whole mutation run. Tests may use it.
-Style/ItBlockParameter:
-  EnforcedStyle: disallow
-  Include:
-    - '**/lib/**/*.rb'

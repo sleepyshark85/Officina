@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using System.Text.Json;
 using Sleepyshark.Officina.Testing;
 
@@ -128,6 +129,31 @@ public class CancellationTests
         Assert.Equal(
             [("c1", "interrupted"), ("c2", "interrupted")],
             sink.Entries.Where(entry => entry.Kind == AuditKind.ToolEnded && entry.Outcome == "interrupted").Select(entry => (entry.CallId, entry.Outcome)));
+    }
+
+    [Fact]
+    public async Task AGT_08_AGT_05_a_host_that_stops_reading_at_the_first_append_holds_the_message_context_and_reply_together()
+    {
+        var model = new ScriptedModel().CallTools(new ToolCall("c1", "search", """{"query":"x"}""")).Reply("Resumed.");
+        var agent = Agents.With(model, tools: Agents.SearchTool());
+        var conversation = new Conversation();
+        ImmutableArray<Message>? seen = null;
+        await foreach (var runEvent in agent.StreamAsync(conversation, "Search.", new() { Context = "Date: 2026-10-05." }, Ct))
+        {
+            if (runEvent is ConversationAppended appended)
+            {
+                seen = appended.Conversation.Messages;
+                break;
+            }
+        }
+
+        Assert.Equal([Role.User, Role.Operator, Role.Assistant], seen!.Value.Select(message => message.Role));
+        Assert.Equal(seen.Value, conversation.Messages);
+
+        var next = await agent.RunAsync(conversation, "Go on.", cancellationToken: Ct);
+
+        Assert.Equal("Resumed.", Assert.IsType<Completed>(next).Text);
+        Assert.Null(RoleSequence.Problem(model.Requests[^1].Messages));
     }
 
     /// <summary>A tool source, such as an MCP server, still connecting when the host cancels the run.</summary>
