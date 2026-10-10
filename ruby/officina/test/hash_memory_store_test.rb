@@ -15,12 +15,16 @@ class HashMemoryStoreTest < Minitest::Test
   end
 
   def test_mem02_changing_the_callers_strings_after_a_write_or_rename_changes_nothing_stored
-    strings = [+'alice', +'a.md', +'tea', +'b.md']
-    store.write(*strings.first(3))
-    store.rename(strings[0], strings[1], strings[3])
-    strings.each { it << 'x' }
+    scope = +'alice'
+    path = +'a.md'
+    text = +'tea'
+    new_path = +'b.md'
+    store.write(scope, path, text)
+    store.rename(scope, path, new_path)
+    store.write(scope, path, text)
+    [scope, path, text, new_path].each { it << 'x' }
 
-    assert_equal({ 'b.md' => 'tea' }, contents('alice'))
+    assert_equal({ 'a.md' => 'tea', 'b.md' => 'tea' }, contents('alice'))
     assert_predicate store.read('alice', 'b.md'), :frozen?
   end
 

@@ -36,6 +36,12 @@ class MemoryPathTest < Minitest::Test
     assert MemoryPath.valid?('a/b')
   end
 
+  def test_mem03_a_string_of_a_subclass_is_a_string
+    text = Class.new(String)
+
+    assert_equal [true, true], [MemoryPath.valid?(text.new('a/b')), MemoryPath.valid_scope?(text.new('a'))]
+  end
+
   def test_mem03_device_names_are_refused_whatever_their_case_or_extension
     refused = %w[con PRN.md aux.tar.gz Nul COM0 lpt9 CONOUT$ conin$.x] + ['COM²', 'NUL .txt']
     accepted = %w[CONSOLE COM COM10 LPT nul_ aconin$ x.con]

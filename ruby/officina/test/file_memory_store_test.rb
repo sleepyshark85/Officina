@@ -11,7 +11,10 @@ class FileMemoryStoreTest < Minitest::Test
   cover 'Sleepyshark::Officina::FileMemoryStore*'
   cover 'Sleepyshark::Officina::MemoryPath*'
 
-  # A directory of its own for each test: the store's root, and beside it a file the store must never reach.
+  SCOPE_LINK_REFUSAL = /\AThe memory scope "alice" is a link, which memory does not follow\.\z/
+
+  # A directory of its own for each test: the store's root, and beside it a file the store must never reach. It is
+  # the working directory too, so a file written anywhere but under the root is among the files outside.
   def setup
     @temp = Dir.mktmpdir('officina-memory')
     @root = File.join(@temp, 'memory')
@@ -19,9 +22,12 @@ class FileMemoryStoreTest < Minitest::Test
     Dir.mkdir(@outside)
     File.write(File.join(@outside, 'secret.md'), 'secret')
     @store = Sleepyshark::Officina::FileMemoryStore.new(@root)
+    @working_directory = Dir.pwd
+    Dir.chdir(@temp)
   end
 
   def teardown
+    Dir.chdir(@working_directory)
     FileUtils.remove_entry(@temp)
   end
 
@@ -44,7 +50,7 @@ class FileMemoryStoreTest < Minitest::Test
     store.write('alice', 'a.md', 'x')
     File.binwrite(File.join(scope_directory('alice'), 'a.md'), "\xFF".b)
 
-    assert_raises(Error) { store.read('alice', 'a.md') }
+    assert_equal 'The memory file a.md is not UTF-8 text.', assert_raises(Error) { store.read('alice', 'a.md') }.message
   end
 
   def test_mem02_files_put_there_under_names_no_path_may_have_are_not_listed
@@ -58,7 +64,7 @@ class FileMemoryStoreTest < Minitest::Test
   def test_mem03_a_linked_directory_in_the_scope_is_never_followed
     store.write('alice', 'a.md', 'x')
     link(@outside, File.join(scope_directory('alice'), 'out'))
-    %w[out/secret.md out/new.md].each { refuse_every_operation('alice', it, /link/) }
+    %w[out/secret.md out/new.md].each { refuse_every_operation('alice', it, link_refusal(it, 'out')) }
 
     assert_equal [{ 'a.md' => 'x' }, { 'secret.md' => 'secret' }], [contents('alice'), outside]
   end
@@ -66,7 +72,7 @@ class FileMemoryStoreTest < Minitest::Test
   def test_mem03_a_linked_file_in_the_scope_is_never_followed
     store.write('alice', 'a.md', 'x')
     link(File.join(@outside, 'secret.md'), File.join(scope_directory('alice'), 'secret.md'))
-    refuse_every_operation('alice', 'secret.md', /link/)
+    refuse_every_operation('alice', 'secret.md', link_refusal('secret.md', 'secret.md'))
 
     assert_equal [{ 'a.md' => 'x' }, { 'secret.md' => 'secret' }], [contents('alice'), outside]
   end
@@ -74,9 +80,9 @@ class FileMemoryStoreTest < Minitest::Test
   def test_mem03_a_scope_whose_directory_is_a_link_is_refused
     Dir.mkdir(@root)
     link(@outside, scope_directory('alice'))
-    refuse_every_operation('alice', 'secret.md', /link/)
+    refuse_every_operation('alice', 'secret.md', SCOPE_LINK_REFUSAL)
 
-    assert_raises(Error) { store.list('alice') }
+    assert_match SCOPE_LINK_REFUSAL, assert_raises(Error) { store.list('alice') }.message
     assert_equal({ 'secret.md' => 'secret' }, outside)
   end
 
@@ -85,6 +91,11 @@ class FileMemoryStoreTest < Minitest::Test
   attr_reader :store
 
   def scope_directory(scope) = File.join(@root, scope.unpack1('H*'))
+
+  def link_refusal(path, link)
+    message = "The memory path #{path} leads through the link #{link}, which memory does not follow."
+    /\A#{Regexp.escape(message)}\z/
+  end
 
   # The files beside the root, and their text.
   def outside
