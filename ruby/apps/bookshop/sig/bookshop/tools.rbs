@@ -1,8 +1,5 @@
 module Bookshop
   module Tools
     def self.all: (Shop shop) -> Array[Sleepyshark::Officina::Tool]
-
-    def self.tool: (name: String, description: String, input: Sleepyshark::Officina::Tool::_Input, kind: Symbol,
-                    ?needs_approval: bool) { (untyped input) -> untyped } -> Sleepyshark::Officina::Tool
   end
 end

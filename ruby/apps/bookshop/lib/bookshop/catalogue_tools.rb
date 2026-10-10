@@ -35,21 +35,21 @@ module Bookshop
         description = 'Searches the catalogue. Every filter is optional; text filters match part of the title or ' \
                       'author name, ignoring case. Returns books cheapest first, at most ' \
                       "#{Catalogue::MAX_SEARCH_RESULTS}."
-        Tools.tool(name: 'search_books', description:, input: SEARCH, kind: :read) do |input|
+        ShopTool.define(name: 'search_books', description:, input: SEARCH, kind: :read) do |input|
           catalogue.search(filter(input), limit: input.limit).map { |book| book(book).except(:year) }
         end
       end
 
       def get_book_tool(catalogue)
-        Tools.tool(name: 'get_book', input: BOOK, kind: :read,
-                   description: 'Gets one book with its author, genre, price, year and copies in stock.') do |input|
+        description = 'Gets one book with its author, genre, price, year and copies in stock.'
+        ShopTool.define(name: 'get_book', description:, input: BOOK, kind: :read) do |input|
           book(catalogue.find(input.book_id))
         end
       end
 
       def restock_book_tool(catalogue)
-        Tools.tool(name: 'restock_book', description: 'Adds copies of a book to its stock.', input: RESTOCK,
-                   kind: :write, needs_approval: true) do |input|
+        ShopTool.define(name: 'restock_book', description: 'Adds copies of a book to its stock.', input: RESTOCK,
+                        kind: :write, needs_approval: true) do |input|
           book = catalogue.restock(book_id: input.book_id, quantity: input.quantity)
           { bookId: book.id, title: book.title, stock: book.stock }
         end

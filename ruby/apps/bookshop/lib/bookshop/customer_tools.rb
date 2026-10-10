@@ -23,14 +23,14 @@ module Bookshop
 
       def find_customer_tool(customers)
         description = 'Finds customers whose name or email contains the given text, ignoring case.'
-        Tools.tool(name: 'find_customer', description:, input: FIND, kind: :read) do |input|
+        ShopTool.define(name: 'find_customer', description:, input: FIND, kind: :read) do |input|
           customers.search(input.name_or_email).map { |customer| customer(customer) }
         end
       end
 
       def add_customer_tool(customers)
-        Tools.tool(name: 'add_customer', description: 'Adds a new customer. Emails are unique.', input: ADD,
-                   kind: :write, needs_approval: true) do |input|
+        ShopTool.define(name: 'add_customer', description: 'Adds a new customer. Emails are unique.', input: ADD,
+                        kind: :write, needs_approval: true) do |input|
           customer(customers.add(name: input.name, email: input.email))
         end
       end

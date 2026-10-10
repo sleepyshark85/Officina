@@ -12,18 +12,5 @@ module Bookshop
     def self.all(shop)
       CatalogueTools.all(shop.catalogue) + CustomerTools.all(shop.customers) + OrderTools.all(shop.orders)
     end
-
-    # A tool of the shop: an Officina::Tool, defined as Officina::Tool.new defines one, whose handler answers a
-    # RefusedError with a failure carrying its message.
-    # @yieldparam input [Data] the call's input
-    # @yieldreturn [Object] the result, which the core writes as JSON
-    # @return [Sleepyshark::Officina::Tool]
-    def self.tool(name:, description:, input:, kind:, needs_approval: false)
-      Sleepyshark::Officina::Tool.new(name:, description:, input:, kind:, needs_approval:) do |given|
-        yield(given)
-      rescue RefusedError => e
-        Sleepyshark::Officina::ToolFailure.new(message: e.message)
-      end
-    end
   end
 end

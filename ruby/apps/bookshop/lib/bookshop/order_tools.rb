@@ -30,8 +30,8 @@ module Bookshop
       private
 
       def list_customer_orders_tool(orders)
-        Tools.tool(name: 'list_customer_orders', input: CUSTOMER, kind: :read,
-                   description: "Lists a customer's orders, newest first, with status and total.") do |input|
+        ShopTool.define(name: 'list_customer_orders', input: CUSTOMER, kind: :read,
+                        description: "Lists a customer's orders, newest first, with status and total.") do |input|
           orders.of_customer(input.customer_id).map do |order|
             { id: order.id, status: order.status, placedAt: time(order.placed_at), total: Money.json(order.total),
               copies: order.copies }
@@ -40,8 +40,8 @@ module Bookshop
       end
 
       def get_order_tool(orders)
-        Tools.tool(name: 'get_order', description: 'Gets one order with its customer, status, lines and total.',
-                   input: ORDER, kind: :read) do |input|
+        ShopTool.define(name: 'get_order', description: 'Gets one order with its customer, status, lines and total.',
+                        input: ORDER, kind: :read) do |input|
           order = orders.find(input.order_id)
           { order: { id: order.id, customerId: order.customer_id, customer: order.customer, status: order.status,
                      placedAt: time(order.placed_at), total: Money.json(order.total) },
@@ -52,7 +52,7 @@ module Bookshop
       def place_order_tool(orders)
         description = "Places an order for a customer at the books' current prices, taking the copies from stock. " \
                       'Fails, changing nothing, if a book is unknown or has too few copies in stock.'
-        Tools.tool(name: 'place_order', description:, input: PLACE, kind: :write, needs_approval: true) do |input|
+        ShopTool.define(name: 'place_order', description:, input: PLACE, kind: :write, needs_approval: true) do |input|
           order = orders.place(customer_id: input.customer_id, lines: input.lines)
           { orderId: order.id, customerId: order.customer_id, customer: order.customer, lines: lines(order),
             total: Money.json(order.total) }
@@ -60,8 +60,8 @@ module Bookshop
       end
 
       def cancel_order_tool(orders)
-        Tools.tool(name: 'cancel_order', description: 'Cancels a placed order and returns its copies to stock.',
-                   input: ORDER, kind: :write, needs_approval: true) do |input|
+        ShopTool.define(name: 'cancel_order', description: 'Cancels a placed order and returns its copies to stock.',
+                        input: ORDER, kind: :write, needs_approval: true) do |input|
           order = orders.cancel(input.order_id)
           { orderId: order.id, status: order.status, returnedToStock: lines(order) }
         end
