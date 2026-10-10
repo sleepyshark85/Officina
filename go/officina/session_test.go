@@ -198,38 +198,50 @@ func TestAgent_CTX04_ASchemaIsFingerprintedAsGivenNotReEncoded(t *testing.T) {
 	}
 }
 
-func TestRun_APP10_ASessionDotNetSavedMidReplyResumesWithItsPrefixAndInterruptedCallsAnswered(t *testing.T) {
+func TestRun_APP10_ASessionAnotherImplementationSavedMidReplyResumesWithItsPrefixAndInterruptedCallsAnswered(t *testing.T) {
 	t.Parallel()
-	p := readSharedPrefix(t)
-	var c officina.Conversation
-	if err := json.Unmarshal([]byte(sharedFile(t, "session", "dotnet-session.json")), &c); err != nil {
-		t.Fatalf("unmarshal .NET's session: %v", err)
+	tests := []struct {
+		file, interrupted string
+	}{
+		{"dotnet-session.json", "toolu_02"},
+		{"ruby-session.json", "rb_02"},
 	}
-	stored := c.Messages()
-	model := officinatest.NewModel(p.Settings, officinatest.TextReply("The order may not have gone through."))
-	agent := p.agent(t, model)
+	for _, tt := range tests {
+		t.Run(tt.file, func(t *testing.T) {
+			t.Parallel()
+			p := readSharedPrefix(t)
+			var c officina.Conversation
+			if err := json.Unmarshal([]byte(sharedFile(t, "session", tt.file)), &c); err != nil {
+				t.Fatalf("unmarshal %s: %v", tt.file, err)
+			}
+			stored := c.Messages()
+			model := officinatest.NewModel(p.Settings, officinatest.TextReply("The order may not have gone through."))
+			agent := p.agent(t, model)
 
-	if !agent.CanContinue(&c) {
-		t.Fatal("CanContinue() = false for the session .NET saved with the same prefix")
-	}
-	result := run(t, agent, &c, "Did the order go through?", officina.RunOptions{})
+			if !agent.CanContinue(&c) {
+				t.Fatalf("CanContinue() = false for %s, saved with the same prefix", tt.file)
+			}
+			result := run(t, agent, &c, "Did the order go through?", officina.RunOptions{})
 
-	if result.Status != officina.Completed {
-		t.Fatalf("result = %+v, want Completed", result)
-	}
-	req := model.Requests()[0]
-	// The stored messages, raw blocks included, go out byte for byte: the prefix .NET's last request cached.
-	if err := officinatest.CheckPrefix([]officina.Request{{Tools: req.Tools, Instructions: req.Instructions,
-		Messages: stored}, req}); err != nil {
-		t.Errorf("the resumed request does not continue the stored one: %v", err)
-	}
-	want := []officina.ToolResult{{CallID: "toolu_02", Content: "The call was interrupted: the application stopped " +
-		"before its result was recorded, so it may or may not have taken effect.", IsError: true}}
-	if diff := cmp.Diff(want, results(req.Messages[len(stored)])); diff != "" {
-		t.Errorf("interrupted results mismatch (-want +got):\n%s", diff)
-	}
-	if err := officinatest.CheckConversation(req.Messages); err != nil {
-		t.Errorf("the request is invalid: %v", err)
+			if result.Status != officina.Completed {
+				t.Fatalf("result = %+v, want Completed", result)
+			}
+			req := model.Requests()[0]
+			// The stored messages, raw blocks included, go out byte for byte: the prefix the saving
+			// implementation's last request cached.
+			if err := officinatest.CheckPrefix([]officina.Request{{Tools: req.Tools, Instructions: req.Instructions,
+				Messages: stored}, req}); err != nil {
+				t.Errorf("the resumed request does not continue the stored one: %v", err)
+			}
+			want := []officina.ToolResult{{CallID: tt.interrupted, Content: "The call was interrupted: the application " +
+				"stopped before its result was recorded, so it may or may not have taken effect.", IsError: true}}
+			if diff := cmp.Diff(want, results(req.Messages[len(stored)])); diff != "" {
+				t.Errorf("interrupted results mismatch (-want +got):\n%s", diff)
+			}
+			if err := officinatest.CheckConversation(req.Messages); err != nil {
+				t.Errorf("the request is invalid: %v", err)
+			}
+		})
 	}
 }
 
