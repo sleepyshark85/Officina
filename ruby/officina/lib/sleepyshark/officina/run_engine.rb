@@ -75,7 +75,7 @@ module Sleepyshark
       def call_model(messages, limit)
         @spending.count_model_call
         request = Request.new(tools: @agent.tools, instructions: @agent.instructions, messages:,
-                              max_output_tokens: limit)
+                              max_output_tokens: limit, context_management: @agent.context_management)
         @trace.model_call { stream(request) || no_reply("The model's reply ended without a stop reason") }
       end
 
@@ -93,6 +93,7 @@ module Sleepyshark
         # @type var usage: Usage
         case event
         in UsageReported(usage:) then @spending.add(usage)
+        in ConversationCompacted | ToolResultsCleared then @audit.record_edit(event)
         else nil
         end
         @trace.observe(event)
@@ -102,9 +103,7 @@ module Sleepyshark
         raise
       end
 
-      def no_reply(why)
-        failed(:model_error, why) unless @cancel.cancelled?
-      end
+      def no_reply(why) = (failed(:model_error, why) unless @cancel.cancelled?)
 
       # Keeps the reply, with the messages it answers and its calls' results, unless the provider would reject it, and
       # returns the run's result, or nil when the loop goes on.

@@ -44,7 +44,21 @@ module Sleepyshark
         record(:run_ended, usage:, cost:, **ended(result))
       end
 
+      # Records what the provider did to shorten the conversation during a model call, and how much, as .NET words it.
+      # @param event [ConversationCompacted, ToolResultsCleared]
+      def record_edit(event)
+        case event
+        in ConversationCompacted(tokens:, summary_tokens:)
+          record(:compacted, detail: "#{thousands(tokens)} tokens summarized into #{thousands(summary_tokens)}.")
+        in ToolResultsCleared(tokens:, tool_calls:)
+          calls = thousands(tool_calls)
+          record(:cleared, detail: "Results of #{calls} tool calls cleared: #{thousands(tokens)} tokens.")
+        end
+      end
+
       private
+
+      def thousands(count) = Figures.thousands(count)
 
       # A sink's failure is a gap in the trail, which telemetry shows and the caller acts on.
       def written?(sink, span, entry)

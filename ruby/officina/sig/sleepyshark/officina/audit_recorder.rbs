@@ -17,7 +17,11 @@ module Sleepyshark
 
       def record_end: (result? result, Usage usage, BigDecimal cost) -> bool
 
+      def record_edit: (ConversationCompacted | ToolResultsCleared event) -> bool
+
       private
+
+      def thousands: (Integer count) -> String
 
       def written?: (_AuditSink sink, OpenTelemetry::Trace::Span span, AuditEntry entry) -> bool
 

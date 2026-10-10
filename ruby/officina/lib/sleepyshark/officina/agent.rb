@@ -28,6 +28,8 @@ module Sleepyshark
       attr_reader :clock
       # @return [Telemetry] where the agent's traces and metrics go
       attr_reader :telemetry
+      # @return [ContextManagement, nil] how the model's provider shortens a long conversation; nil for not at all
+      attr_reader :context_management
 
       # @param model [_Model]
       # @param instructions [String]
@@ -40,10 +42,13 @@ module Sleepyshark
       #   and as a JSON string may escape them
       # @param clock [#call, nil] the real time unless given
       # @param telemetry [Telemetry, nil] none unless given: no spans or metrics
-      # @raise [Error] when the instructions are blank or two tools share a name
+      # @param context_management [ContextManagement, nil] part of the prefix; it needs the provider's support
+      #   (ModelInfo). Without compaction, a run that fills the model's context window stops with +:context_full+
+      # @raise [Error] when the instructions are blank, two tools share a name, or the model's provider cannot manage
+      #   the context as asked
       def initialize(model:, instructions:, tools: [], approver: nil, audit_sink: nil, name: nil, secrets: [],
-                     clock: nil, telemetry: nil)
-        keep_prefix(model, instructions, tools)
+                     clock: nil, telemetry: nil, context_management: nil)
+        keep_prefix(model, instructions, tools, context_management)
         @approver = approver
         @audit_sink = audit_sink
         @name = name && -name
@@ -99,11 +104,25 @@ module Sleepyshark
       end
 
       # Keeps what the prefix holds, and its fingerprint.
-      def keep_prefix(model, instructions, tools)
+      def keep_prefix(model, instructions, tools, context_management)
         @tools = sorted(tools)
         @model = model
         @instructions = given(instructions)
+        @context_management = supported(context_management, model.info)
         @fingerprint = prefix_fingerprint(model.settings)
+      end
+
+      def supported(context_management, info)
+        return unless context_management
+
+        if context_management.compact_at && !info.compacts?
+          raise Error, "The model's provider does not compact conversations"
+        end
+        if context_management.clear_tool_results && !info.clears_tool_results?
+          raise Error, "The model's provider does not clear old tool results"
+        end
+
+        context_management
       end
 
       def given(instructions)
@@ -120,8 +139,8 @@ module Sleepyshark
       end
 
       # The bytes every implementation hashes, which must never change: {"model":…,"instructions":…,"tools":[{"name":…,
-      # "description":…,"inputSchema":…},…]}, with the strings escaped as .NET's default JSON encoder escapes them and
-      # each schema as given.
+      # "description":…,"inputSchema":…},…],"contextManagement":{…}}, with the strings escaped as .NET's default JSON
+      # encoder escapes them, each schema as given, and the context management only when it asks for something.
       def prefix_fingerprint(settings)
         tools = @tools.map do |tool|
           name = DotnetJson.string(tool.name)
@@ -130,7 +149,8 @@ module Sleepyshark
         end
         model = DotnetJson.string(settings)
         instructions = DotnetJson.string(@instructions)
-        Digest::SHA256.hexdigest(%({"model":#{model},"instructions":#{instructions},"tools":[#{tools.join(',')}]}))
+        Digest::SHA256.hexdigest(%({"model":#{model},"instructions":#{instructions},"tools":[#{tools.join(',')}]) +
+                                 "#{@context_management&.fingerprint}}")
       end
     end
   end

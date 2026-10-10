@@ -1,0 +1,12 @@
+module Sleepyshark
+  module Officina
+    class ToolResultsCleared < Data
+      attr_reader tokens: Integer
+      attr_reader tool_calls: Integer
+
+      def self.new: (tokens: Integer, tool_calls: Integer) -> instance
+
+      def initialize: (tokens: Integer, tool_calls: Integer) -> void
+    end
+  end
+end

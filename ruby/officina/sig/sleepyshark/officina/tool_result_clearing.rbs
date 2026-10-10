@@ -1,0 +1,15 @@
+module Sleepyshark
+  module Officina
+    class ToolResultClearing < Data
+      attr_reader after: Integer
+      attr_reader keep: Integer
+      attr_reader at_least_tokens: Integer
+
+      def self.new: (after: Integer, ?keep: Integer, ?at_least_tokens: Integer) -> instance
+
+      def initialize: (after: Integer, ?keep: Integer, ?at_least_tokens: Integer) -> void
+
+      def fingerprint: () -> String
+    end
+  end
+end
