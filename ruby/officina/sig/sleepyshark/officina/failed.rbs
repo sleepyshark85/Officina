@@ -1,0 +1,14 @@
+module Sleepyshark
+  module Officina
+    class Failed < Data
+      attr_reader reason: Symbol
+      attr_reader detail: String
+      attr_reader usage: Usage
+
+      def self.new: (reason: Symbol, detail: String, usage: Usage) -> instance
+
+
+      def initialize: (reason: Symbol, detail: String, usage: Usage) -> void
+    end
+  end
+end

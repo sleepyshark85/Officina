@@ -1,0 +1,16 @@
+module Sleepyshark
+  module Officina
+    class ToolResult < Data
+      attr_reader call_id: String
+      attr_reader content: String
+      attr_reader error: bool
+
+      def self.new: (call_id: String, content: String, error: bool) -> instance
+
+
+      def initialize: (call_id: String, content: String, error: bool) -> void
+
+      def error?: () -> bool
+    end
+  end
+end

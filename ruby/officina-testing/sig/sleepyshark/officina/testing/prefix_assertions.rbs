@@ -1,0 +1,13 @@
+module Sleepyshark
+  module Officina
+    module Testing
+      module PrefixAssertions : Minitest::Test
+        def assert_stable_prefix: (Array[Request] requests) -> void
+
+        private
+
+        def assert_same_prefix: (Request previous, Request request, Integer number) -> void
+      end
+    end
+  end
+end
