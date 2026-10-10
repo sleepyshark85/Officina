@@ -7,11 +7,6 @@ module Sleepyshark
     # What an agent is: a model, instructions and optionally tools. It is frozen once built, so any number of runs, in
     # any number of threads, may share it.
     class Agent
-      # Every character .NET's default JSON encoder escapes: all but printable ASCII, and " & ' + < > ` \.
-      ESCAPED = /[^\x20-\x7E]|["&'+<>`\\]/
-      SHORT = { '\\' => '\\\\', "\b" => '\\b', "\t" => '\\t', "\n" => '\\n', "\f" => '\\f', "\r" => '\\r' }.freeze
-      private_constant :ESCAPED, :SHORT
-
       # @return [_Model]
       attr_reader :model
       # @return [String] frozen for every conversation: nothing per user, run or date goes there
@@ -71,20 +66,13 @@ module Sleepyshark
       # each schema as given.
       def prefix_fingerprint(settings)
         tools = @tools.map do |tool|
-          %({"name":#{string(tool.name)},"description":#{string(tool.description)},"inputSchema":#{tool.input_schema}})
+          name = DotnetJson.string(tool.name)
+          description = DotnetJson.string(tool.description)
+          %({"name":#{name},"description":#{description},"inputSchema":#{tool.input_schema}})
         end
-        Digest::SHA256.hexdigest(
-          %({"model":#{string(settings)},"instructions":#{string(@instructions)},"tools":[#{tools.join(',')}]})
-        )
-      end
-
-      # A JSON string as .NET writes it: short escapes for the backslash and five control characters, and each other
-      # escaped character as its UTF-16 code units in upper-case hex. Invalid UTF-8 becomes U+FFFD.
-      def string(text)
-        escaped = text.scrub.gsub(ESCAPED) do |char|
-          SHORT[char] || char.encode(Encoding::UTF_16BE).unpack('n*').map { |unit| format('\\u%04X', unit) }.join
-        end
-        %("#{escaped}")
+        model = DotnetJson.string(settings)
+        instructions = DotnetJson.string(@instructions)
+        Digest::SHA256.hexdigest(%({"model":#{model},"instructions":#{instructions},"tools":[#{tools.join(',')}]}))
       end
     end
   end

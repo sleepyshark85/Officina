@@ -1,0 +1,45 @@
+# The parts of the pg gem the application uses: neither the gem nor the community collection has signatures for it.
+module PG
+  def self.connect: (String url) -> Connection
+
+  class Error < StandardError
+  end
+
+  class ConnectionBad < Error
+  end
+
+  class Connection
+    def exec_params: (String sql, Array[untyped] params) -> Result
+    def transaction: [T] () { (Connection) -> T } -> T
+    def check_socket: () -> self
+    def reset: () -> self
+    def close: () -> void
+    def type_map_for_results=: (TypeMap) -> TypeMap
+    def type_map_for_queries=: (TypeMap) -> TypeMap
+    def field_name_type=: (:symbol | :string | :static_symbol) -> void
+  end
+
+  # Its rows are Hashes of column name to value, decoded by the connection's type map: untyped, as the columns depend
+  # on the query.
+  class Result
+    include Enumerable[Hash[Symbol, untyped]]
+
+    def each: () { (Hash[Symbol, untyped]) -> void } -> self
+    def first: () -> Hash[Symbol, untyped]?
+    def values: () -> Array[Array[untyped]]
+    def getvalue: (Integer row, Integer column) -> untyped
+    def ntuples: () -> Integer
+    def cmd_tuples: () -> Integer
+  end
+
+  class TypeMap
+  end
+
+  class BasicTypeMapForResults < TypeMap
+    def initialize: (Connection connection) -> void
+  end
+
+  class BasicTypeMapForQueries < TypeMap
+    def initialize: (Connection connection) -> void
+  end
+end

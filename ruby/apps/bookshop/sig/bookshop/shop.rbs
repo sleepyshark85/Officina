@@ -1,0 +1,16 @@
+module Bookshop
+  class Shop
+    attr_reader catalogue: Catalogue
+    attr_reader customers: Customers
+    attr_reader orders: Orders
+
+    def self.open: (String url) -> Shop
+
+    def initialize: (database: Database) -> void
+    def close: () -> void
+
+    private
+
+    @database: Database
+  end
+end

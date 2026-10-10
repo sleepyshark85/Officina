@@ -1,0 +1,12 @@
+module Sleepyshark
+  module Officina
+    module DotnetJson
+      ESCAPED_CHARACTER: Regexp
+      SHORT_ESCAPES: Hash[String, String]
+
+      def self.string: (String text) -> String
+
+      def self.unicode_escape: (String char) -> String
+    end
+  end
+end

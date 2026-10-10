@@ -2,7 +2,6 @@ module Sleepyshark
   module Officina
     class Block < Data
       TOKEN: Regexp
-      HTML: Hash[String, String]
 
       attr_reader text: String?
       attr_reader raw: String?

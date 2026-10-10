@@ -14,5 +14,8 @@ Gem::Specification.new do |spec|
   spec.executables = ['bookshop']
   spec.metadata['rubygems_mfa_required'] = 'true'
 
+  spec.add_dependency 'bigdecimal', '~> 4.0'
+  spec.add_dependency 'connection_pool', '~> 3.0'
+  spec.add_dependency 'pg', '~> 1.7'
   spec.add_dependency 'sleepyshark-officina', Sleepyshark::Officina::VERSION
 end

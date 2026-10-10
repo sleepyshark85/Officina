@@ -1,0 +1,6 @@
+module Sleepyshark
+  module Officina
+    class SchemaError < Error
+    end
+  end
+end

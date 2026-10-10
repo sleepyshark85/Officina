@@ -1,0 +1,14 @@
+module Bookshop
+  class Order < Data
+    attr_reader id: Integer
+    attr_reader customer_id: Integer
+    attr_reader customer: String
+    attr_reader status: String
+    attr_reader placed_at: Time
+    attr_reader total: BigDecimal
+    attr_reader lines: Array[OrderLine]
+
+    def self.new: (id: Integer, customer_id: Integer, customer: String, status: String, placed_at: Time,
+                   total: BigDecimal, lines: Array[OrderLine]) -> instance
+  end
+end

@@ -1,0 +1,14 @@
+module Bookshop
+  class Customers
+    SEARCH: String
+    ADD: String
+
+    def initialize: (database: Database) -> void
+    def search: (String text) -> Array[Customer]
+    def add: (name: String, email: String) -> Customer
+
+    private
+
+    @database: Database
+  end
+end
