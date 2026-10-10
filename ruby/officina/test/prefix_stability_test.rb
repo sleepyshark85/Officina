@@ -3,7 +3,7 @@
 require 'open3'
 require 'rbconfig'
 require 'test_helper'
-require_relative 'fixtures/resumed_agent'
+require_relative 'fixtures/prefix_stability_agent'
 
 # The prefix stays byte-identical across a run's model calls, across runs, and across a save, a new process and a
 # resume.
@@ -20,7 +20,7 @@ class PrefixStabilityTest < Minitest::Test
   def test_test02_the_prefix_is_stable_across_the_calls_of_a_run_and_across_runs
     call = Model.tool_use_block('call_1', 'search', '{"query":"Gaudy Night"}')
     model = Model.new(Model.tool_use(call), Model.text('Not found.'), Model.text('Bye.'))
-    agent = ResumedAgent.of(model)
+    agent = PrefixStabilityAgent.of(model)
     conversation = Conversation.new
 
     agent.run(conversation, 'Find Gaudy Night.', context: 'Today is Friday.')
@@ -33,7 +33,7 @@ class PrefixStabilityTest < Minitest::Test
   def test_test02_the_prefix_is_stable_across_a_save_a_new_process_and_a_resume
     model = Model.new(Model.tool_use(Model.tool_use_block('call_1', 'search', '{}')), Model.text('Café «Libro».'))
     conversation = Conversation.new
-    ResumedAgent.of(model).run(conversation, 'Find <Café> & co.', context: 'Today is Friday.')
+    PrefixStabilityAgent.of(model).run(conversation, 'Find <Café> & co.', context: 'Today is Friday.')
 
     output, status = Open3.capture2(RbConfig.ruby, *LIBS.flat_map { ['-I', it] }, RESUME,
                                     stdin_data: conversation.to_json, binmode: true)

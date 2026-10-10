@@ -29,7 +29,7 @@ Tests are under `ruby/`, shortened as:
 
 | ID | Tests | Also checked by |
 |---|---|---|
-| AGT-01 | Agent: `test_agt01_an_agent_is_frozen_with_its_tools_sorted_by_name`, `test_agt01_blank_instructions_are_refused`, `test_agt01_two_tools_with_one_name_are_refused_whatever_their_descriptions` | |
+| AGT-01 | Agent: `test_agt01_an_agent_is_frozen_with_a_sorted_copy_of_its_tools`, `test_agt01_blank_instructions_are_refused`, `test_agt01_two_tools_with_one_name_are_refused_whatever_their_descriptions` | |
 | AGT-02 | Run: `test_agt02_a_scripted_multi_turn_run_completes_with_text`, `test_agt02_each_tool_call_gets_a_result_and_the_model_is_called_again`; Agent: `test_agt02_a_blank_message_is_refused` | |
 | AGT-03 | Run: `test_agt03_every_stop_reason_maps_to_its_result`, `test_agt03_a_result_carries_the_usage_of_every_model_call`, `test_agt03_a_run_stops_at_the_iteration_limit_after_25_model_calls`; Usage: `test_agt03_usages_add_up_kind_by_kind`, `test_agt03_a_new_usage_counts_no_tokens` | |
 | AGT-04 | Run: `test_agt04_one_hundred_concurrent_runs_of_one_agent_each_complete_on_their_own_conversation`, `test_agt04_a_second_run_on_a_conversation_in_use_is_refused` | |

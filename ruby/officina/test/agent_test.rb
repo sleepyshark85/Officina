@@ -19,7 +19,7 @@ class AgentTest < Minitest::Test
     assert_equal 'Hello', agent.run(Conversation.new, 'Hi').text
   end
 
-  def test_agt01_an_agent_is_frozen_with_its_tools_sorted_by_name
+  def test_agt01_an_agent_is_frozen_with_a_sorted_copy_of_its_tools
     tools = [tool('search'), tool('place_order')]
     agent = Agent.new(model: Model.new, instructions: +'You help.', tools:)
 
