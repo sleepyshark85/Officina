@@ -29,6 +29,21 @@ class ConsoleSummarySavesTest < Minitest::Test
     assert_equal spans.find { it.name == 'summary' }.span_id, warning.span_id
   end
 
+  def test_app20_a_summary_that_is_saved_is_logged_as_info_in_its_span
+    telemetry = MemoryTelemetry.new
+    logged = []
+    spans = []
+    seen = -> { logged.concat(telemetry.logs).then { spans.concat(telemetry.spans) } }
+
+    transcript = session(ScriptedModel.new(ScriptedModel.text('Hello.')), 'Sam', 'Hi.', '/new', seen, '/quit',
+                         summarizer: ScriptedModel.new(summary_reply('Greeting', 'Sam said hello.')), telemetry:)
+
+    info = logged.find { it.severity_text == 'INFO' && it.body.include?('summarized') }
+
+    assert_equal "Session #{session_id(transcript)} summarized: 1000 input tokens, 100 output tokens", info.body
+    assert_equal spans.find { it.name == 'summary' }.span_id, info.span_id
+  end
+
   UNSAVABLE = 'ERROR:  column "summarized" of relation "sessions" does not exist'
 
   private
