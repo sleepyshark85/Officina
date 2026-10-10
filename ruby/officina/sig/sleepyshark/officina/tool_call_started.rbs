@@ -1,0 +1,12 @@
+module Sleepyshark
+  module Officina
+    class ToolCallStarted < Data
+      attr_reader call: ToolCall
+
+      def self.new: (call: ToolCall) -> instance
+
+
+      def initialize: (call: ToolCall) -> void
+    end
+  end
+end

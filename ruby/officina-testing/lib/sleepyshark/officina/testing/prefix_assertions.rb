@@ -5,8 +5,9 @@ module Sleepyshark
     module Testing
       # The prefix stability check, as a Minitest assertion: include it in a test class.
       module PrefixAssertions
-        # Fails unless each request's tools, instructions and earlier messages equal the previous request's, byte for
-        # byte. Pass the requests of a scripted run, or of several runs, saves and resumes, in the order they were sent.
+        # Fails unless each request's tools (as the model sees them), instructions and earlier messages equal the
+        # previous request's, byte for byte. Pass the requests of a scripted run, or of several runs, saves and
+        # resumes, in the order they were sent.
         # @param requests [Array<Request>]
         def assert_stable_prefix(requests)
           (1...requests.size).each { |at| assert_same_prefix(requests.fetch(at - 1), requests.fetch(at), at + 1) }
@@ -16,11 +17,14 @@ module Sleepyshark
 
         def assert_same_prefix(previous, request, number)
           since = "request #{number}, from request #{number - 1}"
-          assert_equal previous.tools, request.tools, "The tools changed in #{since}"
+          assert_equal model_view(previous.tools), model_view(request.tools), "The tools changed in #{since}"
           assert_equal previous.instructions, request.instructions, "The instructions changed in #{since}"
           assert_equal previous.messages, request.messages.first(previous.messages.size),
                        "An earlier message changed in #{since}"
         end
+
+        # What of each tool reaches the model.
+        def model_view(tools) = tools.map { |tool| [tool.name, tool.description, tool.input_schema] }
       end
     end
   end

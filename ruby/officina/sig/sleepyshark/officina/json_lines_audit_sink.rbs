@@ -1,0 +1,18 @@
+module Sleepyshark
+  module Officina
+    class JsonLinesAuditSink
+      @path: String
+      @lock: Thread::Mutex
+
+      def initialize: (String path) -> void
+
+      def write: (AuditEntry entry) -> void
+
+      private
+
+      def append: (String line) -> void
+
+      def fields: (AuditEntry entry) -> Hash[Symbol, untyped]
+    end
+  end
+end

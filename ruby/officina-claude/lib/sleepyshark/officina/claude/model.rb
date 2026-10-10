@@ -48,10 +48,11 @@ module Sleepyshark
         # @param wait [#call] waits between attempts, given the seconds and the call's Cancellation; tests pass one
         #   that waits for nothing
         # @raise [Error] when a setting is missing or unknown
-        # rubocop:disable Metrics/ParameterLists -- each setting is a keyword argument, as ruby/CLAUDE.md asks
+        # mutant:disable -- its three survivors change nothing the API or a test can see: the SDK adds the cache
+        #   control's only type, ephemeral, when it is left out; a max_retries of -1 retries no more than 0; and the
+        #   settings hash is read only by this frozen model
         def initialize(name:, effort:, max_output_tokens: 64_000, prefix_cache: '5m', conversation_cache: '5m',
                        api_key: nil, base_url: nil, wait: WAIT)
-          # rubocop:enable Metrics/ParameterLists
           check(name, effort, max_output_tokens, prefix_cache, conversation_cache)
           cache = prefix_cache == conversation_cache ? prefix_cache : "#{prefix_cache}/#{conversation_cache}"
           @settings = -"claude model=#{name} effort=#{effort} max_tokens=#{max_output_tokens} cache=#{cache} " \

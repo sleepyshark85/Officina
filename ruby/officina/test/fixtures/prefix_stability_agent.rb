@@ -8,8 +8,9 @@ module PrefixStabilityAgent
   # @param model [Sleepyshark::Officina::Testing::ScriptedModel]
   # @return [Sleepyshark::Officina::Agent]
   def self.of(model)
-    tool = Sleepyshark::Officina::Tool.new(name: 'search', description: 'Searches «the» catalogue.',
-                                           input_schema: '{ "type": "object" }')
+    schema = Sleepyshark::Officina::Schema.new('{ "type": "object" }')
+    tool = Sleepyshark::Officina::Tool.new(name: 'search', description: 'Searches «the» catalogue.', input: schema,
+                                           kind: :read) { 'Found.' }
     Sleepyshark::Officina::Agent.new(model:, instructions: 'You help <customers> & staff.', tools: [tool])
   end
 end

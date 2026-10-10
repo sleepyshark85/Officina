@@ -1,0 +1,17 @@
+module Sleepyshark
+  module Officina
+    module Testing
+      class RecordingAuditSink
+        @fails: (^(AuditEntry) -> boolish)?
+        @entries: Array[AuditEntry]
+        @lock: Thread::Mutex
+
+        def initialize: (?fails: (^(AuditEntry) -> boolish)?) -> void
+
+        def entries: () -> Array[AuditEntry]
+
+        def write: (AuditEntry entry) -> nil
+      end
+    end
+  end
+end

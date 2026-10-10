@@ -1,0 +1,12 @@
+module Sleepyshark
+  module Officina
+    class CallReport
+      @audit: AuditRecorder
+      @events: Thread::Queue
+
+      def initialize: (audit: AuditRecorder, events: Thread::Queue) -> void
+
+      def call: (Symbol kind, tool_event event, **untyped fields) -> void
+    end
+  end
+end

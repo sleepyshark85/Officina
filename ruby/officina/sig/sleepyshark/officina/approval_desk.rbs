@@ -1,0 +1,19 @@
+module Sleepyshark
+  module Officina
+    class ApprovalDesk
+      @approver: _Approver?
+      @cancel: Cancellation
+      @report: CallReport
+
+      def initialize: (approver: _Approver?, cancel: Cancellation, report: CallReport) -> void
+
+      def denial: (Tool tool, ToolCall call) -> String?
+
+      private
+
+      def ask: (_Approver approver, Tool tool, ToolCall call) -> Approval
+
+      def reason: (Approval approval) -> String?
+    end
+  end
+end

@@ -132,21 +132,29 @@ jobs:
           bundler-cache: true
 
       - name: Mutate
-        # Each gem with a mutant.yml, with its own tests: all its subjects on a push to main, weekly and on demand; on
-        # a pull request, only the subjects (methods) it changed, none when it changed no code. mutant has no
-        # threshold: it fails on any surviving mutant. Until Ruby S05 decides the bar from a first measured run,
-        # survivors are reported as a warning; a run that does not reach its summary (no "Alive:" line) still fails.
+        # Each gem with a mutant.yml, with its own tests and the fixed property seed, without which kills are not
+        # repeatable. On a pull request, only the subjects (methods) it changed, and any survivor fails the job: an
+        # equivalent mutant is removed by changing the code, or its method excluded with a "mutant:disable" comment
+        # saying why, which the review judges. On a push to main, weekly and on demand, all subjects, failing below
+        # the bar of docs/implementations/ruby.md (R13), or when the run does not reach its summary.
+        env:
+          PROPERTY_SEED: "20261010"
+          MUTATION_BAR: "99"
         run: |
-          since=()
-          if [ "${{ github.event_name }}" = pull_request ]; then since=(--since "origin/${{ github.base_ref }}"); fi
           status=0
           for config in */mutant.yml; do
             gem=$(dirname "$config")
             echo "::group::$gem"
-            if ! (cd "$gem" && bundle exec mutant run "${since[@]}") | tee "$RUNNER_TEMP/mutant.log"; then
-              if grep -q '^Alive:' "$RUNNER_TEMP/mutant.log"; then
-                echo "::warning::Mutants survived in $gem (the log lists them); there is no bar until Ruby S05."
-              else
+            if [ "${{ github.event_name }}" = pull_request ]; then
+              (cd "$gem" && bundle exec mutant run --since "origin/${{ github.base_ref }}") || status=1
+            else
+              (cd "$gem" && bundle exec mutant run) | tee "$RUNNER_TEMP/mutant.log" || true
+              coverage=$(sed -n 's/^Coverage: *\([0-9.]*\)%$/\1/p' "$RUNNER_TEMP/mutant.log" | tail -n 1)
+              if [ -z "$coverage" ]; then
+                echo "::error::$gem: the mutation run did not reach its summary."
+                status=1
+              elif awk -v c="$coverage" -v bar="$MUTATION_BAR" 'BEGIN { exit !(c < bar) }'; then
+                echo "::error::$gem: mutation coverage $coverage% is below the bar of $MUTATION_BAR%."
                 status=1
               fi
             fi

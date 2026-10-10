@@ -11,9 +11,6 @@ module Sleepyshark
       # stream that ends without a stop reason). It stops early, returning nil, once the run is cancelled. Like the
       # provider's API, it rejects a request whose messages the API would reject.
       class ScriptedModel
-        # Each role that may follow another, besides a user message after one holding only tool results.
-        FOLLOWS = [%i[user assistant], %i[user operator], %i[operator assistant], %i[assistant user]].freeze
-        private_constant :FOLLOWS
         # @return [String] the settings it was made with, which enter the prefix fingerprint
         attr_reader :settings
 
@@ -72,42 +69,12 @@ module Sleepyshark
         def next_reply(request)
           @lock.synchronize do
             @requests << request
-            problem = problem(request.messages)
+            problem = ConversationRules.problem(request.messages)
             raise Error, "Scripted model: request #{@requests.size} is invalid: #{problem}" if problem
             raise Error, "Scripted model: request #{@requests.size} has no reply left" if @replies.empty?
 
             @replies.shift
           end
-        end
-
-        # What the provider's API would reject in the messages, or nil. Roles: the user speaks first; no two messages
-        # in a row have one role, except a user message after one holding only tool results, which the provider
-        # joins; the operator follows the user, and only the assistant follows the operator. Calls: each message
-        # answers exactly the calls of the one before it, in call order, and the last leaves none unanswered.
-        def problem(messages)
-          return "the first message is not the user's" unless messages.first&.role == :user
-          return 'the last message has calls without results' if messages.fetch(-1).blocks.any?(&:tool_call)
-
-          (1...messages.size).each do |at|
-            why = pair_problem(messages.fetch(at - 1), messages.fetch(at))
-            return "message #{at + 1}: #{why}" if why
-          end
-          nil
-        end
-
-        def pair_problem(previous, message) = role_problem(previous, message) || answer_problem(previous, message)
-
-        def role_problem(previous, message)
-          pair = [previous.role, message.role]
-          return if FOLLOWS.include?(pair) || (pair == %i[user user] && previous.blocks.all?(&:tool_result))
-
-          "the #{message.role} follows the #{previous.role}"
-        end
-
-        def answer_problem(previous, message)
-          calls = previous.blocks.filter_map { |block| block.tool_call&.id }
-          answers = message.blocks.filter_map { |block| block.tool_result&.call_id }
-          "it answers the calls #{answers} instead of #{calls}" unless answers == calls
         end
       end
     end

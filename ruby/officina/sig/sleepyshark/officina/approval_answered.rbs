@@ -1,0 +1,13 @@
+module Sleepyshark
+  module Officina
+    class ApprovalAnswered < Data
+      attr_reader call: ToolCall
+      attr_reader approved: bool
+
+      def self.new: (call: ToolCall, approved: bool) -> instance
+
+
+      def initialize: (call: ToolCall, approved: bool) -> void
+    end
+  end
+end

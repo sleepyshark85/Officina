@@ -1,0 +1,20 @@
+module Sleepyshark
+  module Officina
+    class RunningReads
+      @cancel: Cancellation
+      @threads: Hash[Integer, Thread]
+
+      def initialize: (Cancellation cancel) -> void
+
+      def start: (Integer index) { () -> ToolResult } -> Thread
+
+      def join: () -> Hash[Integer, ToolResult]
+
+      def stop: () -> void
+
+      private
+
+      def join_all: (Array[Thread] threads) -> void
+    end
+  end
+end

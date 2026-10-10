@@ -88,7 +88,7 @@ module DatabaseServer
     reason = DatabaseServer.skipped
     skip reason if reason
     @database_name = DatabaseServer.copy
-    @shop = Bookshop.build(env: { 'BOOKSHOP_DATABASE' => database_url })
+    @shop = Bookshop::Shop.open(database_url)
   end
 
   def teardown

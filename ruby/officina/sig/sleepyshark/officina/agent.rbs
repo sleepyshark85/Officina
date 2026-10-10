@@ -1,7 +1,7 @@
 module Sleepyshark
   module Officina
     # What a run yields to the host, in the order it happened.
-    type run_event = TextDelta | UsageReported | Retried | ConversationAppended
+    type run_event = TextDelta | UsageReported | Retried | ConversationAppended | tool_event
 
     # How a run ended.
     type result = Completed | Stopped | Failed
@@ -11,13 +11,28 @@ module Sleepyshark
       attr_reader instructions: String
       attr_reader tools: Array[Tool]
       attr_reader fingerprint: String
+      attr_reader approver: _Approver?
+      attr_reader audit_sink: _AuditSink?
+      attr_reader name: String?
+      attr_reader clock: ^() -> Time
 
-      def initialize: (model: _Model, instructions: String, ?tools: Array[Tool]) -> void
+      @secrets: Secrets
+
+      def initialize: (model: _Model, instructions: String, ?tools: Array[Tool], ?approver: _Approver?,
+                       ?audit_sink: _AuditSink?, ?name: String?, ?secrets: Array[String], ?clock: (^() -> Time)?) -> void
+
+      def tool: (String name) -> Tool?
+
+      def redact: (String text) -> String
 
       def run: (Conversation conversation, String input, ?context: String?, ?cancel: Cancellation?)
              ?{ (run_event event) -> void } -> result
 
       private
+
+      def given: (String instructions) -> String
+
+      def sorted: (Array[Tool] tools) -> Array[Tool]
 
       def prefix_fingerprint: (String settings) -> String
     end

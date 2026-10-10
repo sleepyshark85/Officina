@@ -13,3 +13,8 @@ AllCops:
   Exclude:
     # The dependency test's fixture gems: input it reads, never loaded, breaking the rules on purpose.
     - test/fixtures/**/*
+
+# Ruby/CLAUDE.md asks for every optional setting as a keyword argument, named where it is passed, so keywords do not
+# count towards the limit; positional parameters still do.
+Metrics/ParameterLists:
+  CountKeywordArgs: false

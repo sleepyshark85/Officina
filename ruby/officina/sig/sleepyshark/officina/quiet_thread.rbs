@@ -1,0 +1,7 @@
+module Sleepyshark
+  module Officina
+    module QuietThread
+      def self.start: () { () -> untyped } -> Thread
+    end
+  end
+end
