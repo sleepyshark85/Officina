@@ -25,10 +25,8 @@ parts the change touches. You judge the change; you never change it.
    reporting it: a failing command or test beats an argument.
 2. **The conventions:** every point of docs/conventions.md, and the language rules of the code the change touches:
    CLAUDE.md for .NET, go/CLAUDE.md for anything under `go/`, ruby/CLAUDE.md for anything under `ruby/`. Go and Ruby
-   rules are strict: a breach is a must-fix. C#-shaped Go (getters, `I`-prefixed interfaces, a container, panics for
-   failures) is a breach, and so is C#- or Go-shaped Ruby (abstract classes raising `NotImplementedError`, `get_x`
-   methods, a container, state shared across threads without a guard, exceptions for a run's outcome, errors
-   returned as pairs).
+   rules are strict: a breach is a must-fix, and so is code shaped like another language (the conventions' "port the
+   behaviour, never the shape"; each language's rules list the tells).
 3. **The shared architecture.** The code follows ARCHITECTURE.md's layers (§3), run exits and tool-call rules (§5.1,
    §5.2), runtime model (§5.3) and application layers (§12), whatever the language; the implementation's design notes
    map each §5.3 row and record the change's non-obvious choices. A different behaviour, or a choice left unrecorded,
