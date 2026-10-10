@@ -87,12 +87,12 @@ class WireTest < Minitest::Test
   def test_mcp01_an_events_data_is_its_data_lines_without_one_leading_space_joined_as_utf8
     stream = Wire.const_get(:EventStream).new
     events = []
-    # Starting with a blank line, a character in a chunk of its own, then an event with no data.
-    ["\ndata:  two spaces\r\ndata:", 'é', "\n\n: comment\nevent: none\n\n"].each do |chunk|
+    # Starting with a blank line; bytes, then text, as chunks may come; then an event with no data.
+    ["\ndata:  two spaces\r\ndata: é".b, 'é', "\n\n: comment\nevent: none\n\n"].each do |chunk|
       stream.feed(chunk) { events << it }
     end
 
-    assert_equal [" two spaces\né"], events
+    assert_equal [" two spaces\néé"], events
     assert_equal Encoding::UTF_8, events.first.encoding
   end
 

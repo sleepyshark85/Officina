@@ -161,6 +161,18 @@ class StreamableHttpTest < Minitest::Test
     end
   end
 
+  def test_mcp01_a_closed_connection_sends_nothing_more
+    server = FakeServer.new(tools: [ECHO])
+    server.serve_http do |url|
+      client = connect(url)
+      client.close
+      error = assert_raises(Mcp::Error) { echo(client) }
+
+      assert_equal 'MCP server web could not be reached: the connection was closed', error.message
+      assert_empty server.calls
+    end
+  end
+
   def test_mcp01_a_url_that_is_not_http_is_refused
     error = assert_raises(ArgumentError) { connect('ftp://127.0.0.1/mcp') }
 

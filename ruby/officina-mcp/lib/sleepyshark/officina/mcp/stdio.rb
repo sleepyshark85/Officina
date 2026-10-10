@@ -16,7 +16,7 @@ module Sleepyshark
           # Raises Mcp::Error once the server has gone.
           def take(timeout)
             answer = queue.pop(timeout:)
-            raise Error, transport.lost.to_s if answer.nil? && queue.closed?
+            raise Error, transport.lost if answer.nil? && queue.closed?
 
             answer
           end
@@ -50,8 +50,8 @@ module Sleepyshark
           Pending.new(self, id, queue)
         end
 
-        # Why the server can no longer be reached; nil while it can.
-        def lost = @mutex.synchronize { lost_reason if @lost }
+        # Why the server can no longer be reached, once it cannot.
+        def lost = @mutex.synchronize { lost_reason }
 
         # Stops waiting for the response to request id.
         def forget(id)
@@ -71,7 +71,7 @@ module Sleepyshark
           @process.write(text)
         rescue IOError, SystemCallError => e
           lose("it could not be written to: #{e.message}")
-          raise Error, lost.to_s
+          raise Error, lost
         end
 
         # Hands a response to the request waiting for it; anything else is skipped.

@@ -25,7 +25,7 @@ module Sleepyshark
 
         def post: (String text, Integer? id, String? _version) -> Pending
 
-        def lost: () -> String?
+        def lost: () -> String
 
         def forget: (Integer? id) -> void
 

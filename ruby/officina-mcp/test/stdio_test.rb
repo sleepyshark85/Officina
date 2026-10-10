@@ -23,7 +23,7 @@ class StdioTest < Minitest::Test
       tools = client.list_tools(cancel: NeverCancelled.new)
       echo = { 'type' => 'object', 'properties' => { 'text' => { 'type' => 'string' } } }
 
-      assert_equal %w[echo upper fail crash cut hang], tools.map(&:name)
+      assert_equal %w[echo upper fail crash stray cut hang], tools.map(&:name)
       assert_equal Mcp::Tool.new(name: 'echo', description: 'The echo tool.', input_schema: echo), tools.first
       assert_equal Mcp::CallResult.new(text: 'HI', error: false), client.call_tool('upper', { 'text' => 'hi' })
     end
@@ -36,6 +36,20 @@ class StdioTest < Minitest::Test
       results = texts.map { |text| Thread.new { client.call_tool('echo', { 'text' => text }).text } }.map(&:value)
 
       assert_equal texts, results
+    end
+  end
+
+  def test_mcp01_a_response_to_no_request_waiting_is_skipped
+    with_client do |client|
+      assert_equal 'after', client.call_tool('stray', {}).text
+    end
+  end
+
+  def test_mcp04_a_tool_list_cancelled_before_it_starts_raises
+    with_client do |client|
+      error = assert_raises(Mcp::Error) { client.list_tools(cancel: CancelledAfter.new(1)) }
+
+      assert_equal 'MCP server fs, tools/list: cancelled', error.message
     end
   end
 
@@ -68,7 +82,8 @@ class StdioTest < Minitest::Test
     server = Mcp::Server.new(name: 'fs', command: ['officina-no-such-program'])
     error = assert_raises(Mcp::Error) { Mcp.connect(server) }
 
-    assert_match(/\AMCP server fs could not be started \(officina-no-such-program\): /, error.message)
+    assert_equal "MCP server fs could not be started (officina-no-such-program): #{Errno::ENOENT.new.message}",
+                 error.message.delete_suffix(' - officina-no-such-program')
   end
 
   def test_mcp04_a_message_of_16_mb_is_read_and_a_longer_one_loses_the_server
@@ -89,6 +104,14 @@ class StdioTest < Minitest::Test
     end
   end
 
+  def test_mcp04_a_server_that_closes_its_output_stays_lost_though_it_still_reads
+    with_client('mute') do |client|
+      messages = Array.new(2) { assert_raises(Mcp::Error) { client.call_tool('echo', { 'text' => 'hi' }) }.message }
+
+      assert_equal ['MCP server fs could not be reached: it closed its connection'] * 2, messages
+    end
+  end
+
   def test_mcp04_an_answer_the_server_cut_short_as_it_exited_is_no_answer
     with_client do |client|
       error = assert_raises(Mcp::Error) { client.call_tool('cut', {}) }
@@ -100,7 +123,7 @@ class StdioTest < Minitest::Test
   def test_mcp04_a_server_that_exits_while_connecting_raises_with_what_it_said
     error = assert_raises(Mcp::Error) { connect('complain') }
 
-    assert_equal 'MCP server fs could not be reached: it closed its connection: configuration file missing',
+    assert_equal "MCP server fs could not be reached: it closed its connection: configuration file missing \uFFFD",
                  error.message
   end
 
@@ -138,9 +161,23 @@ class StdioTest < Minitest::Test
 
   def test_mcp01_closing_stops_and_reaps_the_server
     with_pid_file do |pid_file|
-      connect(env: { 'FAKE_MCP_PID' => pid_file }).close
+      client = connect(env: { 'FAKE_MCP_PID' => pid_file })
+      client.close
+      error = assert_raises(Mcp::Error) { client.list_tools }
 
+      assert_equal 'MCP server fs could not be reached: the connection was closed', error.message
       refute_running pid_file
+    end
+  end
+
+  def test_mcp01_closing_lets_a_server_that_takes_a_moment_shut_down_by_itself
+    Dir.mktmpdir do |directory|
+      done = File.join(directory, 'done')
+      # Each reading of the clock is half a second on, so the 5 seconds a server has to exit take ten polls.
+      now = 0
+      connect('tidy', env: { 'FAKE_MCP_EXIT' => done }, clock: -> { now += 0.5 }).close
+
+      assert_path_exists done, 'the server shut down by itself rather than being killed'
     end
   end
 

@@ -34,26 +34,22 @@ module Sleepyshark
             raise Error, transport.lose(e.message)
           end
 
-          # Ends the request, if still running, and waits for its thread. A connection still opening cannot be closed,
-          # so it is closed once open, or the opening fails within OPEN_TIMEOUT.
+          # Waits for the request's thread, ending its connection until it has ended. A connection still opening cannot
+          # be closed, so it is closed once open, or the opening fails within OPEN_TIMEOUT. Net::HTTP closes the
+          # connection of a request that has ended.
           def release
-            loop do
-              stop
-              break if worker.join(POLL)
-            end
+            stop until worker.join(POLL)
           rescue *FAILURES
             # Taken already, or abandoned: either way, how it ended no longer matters.
             nil
-          ensure
-            stop
           end
 
           private
 
           def stop
-            http.finish if http.started?
+            http.finish
           rescue IOError
-            nil # Finished meanwhile.
+            nil # Not open: not yet, or not any more.
           end
         end
         private_constant :Pending

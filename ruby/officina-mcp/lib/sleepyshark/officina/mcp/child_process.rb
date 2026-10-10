@@ -123,10 +123,10 @@ module Sleepyshark
           # A message and its line end, at most; a longer line is cut there, and is then too long.
           while (line = output.gets(Wire::MAX_MESSAGE + 1))
             message = line.chomp
-            return too_long(on_end) if message.bytesize > Wire::MAX_MESSAGE
-
-            # A last line without its line end is incomplete.
-            on_message.call(message) if line.end_with?("\n")
+            # A line cut at the limit has no line end, nor has a last line that is incomplete.
+            if message.bytesize > Wire::MAX_MESSAGE then too_long(on_end)
+            elsif line.end_with?("\n") then on_message.call(message)
+            end
           end
           on_end.call(['it closed its connection', last_error_line].compact.join(': '))
         rescue IOError
@@ -155,10 +155,12 @@ module Sleepyshark
 
         # Kills the server; on Windows, where it has no group to kill once it has gone, with what it started.
         def kill
-          return signal(@exit.pid) unless WINDOWS
-
-          # The standard library has no job objects: taskkill finds what the server started from it.
-          system('taskkill', '/T', '/F', '/PID', @exit.pid.to_s, out: File::NULL, err: File::NULL)
+          if WINDOWS
+            # The standard library has no job objects: taskkill finds what the server started from it.
+            system('taskkill', '/T', '/F', '/PID', @exit.pid.to_s, out: File::NULL, err: File::NULL)
+          else
+            signal(@exit.pid)
+          end
         end
 
         def signal(pid)

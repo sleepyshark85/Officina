@@ -2,6 +2,7 @@
 
 require 'test_helper'
 require 'sleepyshark/officina/mcp'
+require_relative 'cancellations'
 require_relative 'scripted_http_server'
 
 # What the client makes of the results a server answers with, over a scripted HTTP server: the test kit's fake
@@ -35,7 +36,8 @@ class ClientTest < Minitest::Test
   end
 
   def test_mcp04_a_tool_result_without_a_list_of_typed_content_items_is_refused
-    unreadable = ['text', {}, { 'content' => 'text' }, { 'content' => ['text'] }, { 'content' => [{ 'text' => 'a' }] },
+    unreadable = ['text', [], {}, { 'content' => 'text' }, { 'content' => ['text'] }, { 'content' => [5] },
+                  { 'content' => [{ 'text' => 'a' }] }, { 'content' => [{ 'type' => 'text', 'text' => 5 }] },
                   { 'content' => [{ 'type' => 5 }] }, { 'content' => [{ 'type' => 'text' }] }]
     with_client(results(*unreadable)) do |client|
       messages = unreadable.map { assert_raises(Mcp::Error) { call(client) }.message }
@@ -104,7 +106,32 @@ class ClientTest < Minitest::Test
     end
   end
 
+  def test_mcp04_a_connect_already_30_seconds_late_sends_nothing
+    requests = Scripted.serve(Scripted::HANDSHAKE) do |url|
+      error = assert_raises(Mcp::Error) { Mcp.connect(server(url), clock: readings(0, 30)) }
+
+      assert_equal 'MCP server web did not answer within 30 seconds', error.message
+    end
+
+    assert_empty requests
+  end
+
+  # Cancelled from its second check on, or late from the clock's third reading on: either comes while initialize is
+  # answered, or as the notification that follows is about to be sent.
+  def test_mcp04_a_connect_cancelled_or_late_once_initialize_is_answered_raises
+    [{ cancel: CancelledAfter.new(2) }, { clock: readings(0, 10, 30) }].each do |options|
+      Scripted.serve(Scripted::HANDSHAKE) do |url|
+        assert_raises(Mcp::Error) { Mcp.connect(server(url), **options) }
+      end
+    end
+  end
+
   private
+
+  # A clock that reads each of values in turn, then the last one on.
+  def readings(*values) = -> { values.size > 1 ? values.shift : values.first }
+
+  def server(url) = Mcp::Server.new(name: 'web', url:)
 
   def call(client) = client.call_tool('echo', {})
 

@@ -39,7 +39,7 @@ module Sleepyshark
           # @type var pages: Array[Hash[String, json]]
           pages = []
           loop do
-            pages << request('tools/list', cursors.empty? ? nil : { 'cursor' => cursors.fetch(-1) }, cancel:)
+            pages << request('tools/list', { 'cursor' => cursors.last }.compact, cancel:)
             cursor = next_cursor(pages.fetch(-1)) or break
             raise Error, "MCP server #{@name} gave the cursor #{cursor.inspect} twice" if cursors.include?(cursor)
 

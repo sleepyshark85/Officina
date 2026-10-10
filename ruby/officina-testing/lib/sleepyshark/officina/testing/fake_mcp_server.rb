@@ -96,9 +96,10 @@ module Sleepyshark
             nil
           end
 
+          # A notification has no id, and params, when there are any, are an object: null is neither.
           def valid?(message)
-            params = message['params']
-            message['jsonrpc'] == '2.0' && (params.nil? || params.is_a?(Hash))
+            message['jsonrpc'] == '2.0' && (!message.key?('params') || message['params'].is_a?(Hash)) &&
+              (!message.key?('id') || !message['id'].nil?)
           end
 
           def initialized? = @mutex.synchronize { @initialized }
