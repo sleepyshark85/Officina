@@ -42,6 +42,8 @@ module Sleepyshark
 
       def finish:(Reply reply, Array[ToolCall] calls) -> result?
 
+      def text: (Reply reply) -> String
+
       def append: (*Message messages) -> void
 
       def tools: (Array[ToolCall] calls) -> ToolPipeline

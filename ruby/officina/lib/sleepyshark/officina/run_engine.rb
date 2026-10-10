@@ -126,7 +126,7 @@ module Sleepyshark
       # The result a reply's stop leads to, or nil when its calls are to be answered.
       def finish(reply, calls)
         case [reply.stop, calls.empty?]
-        in [:end, true] then Completed.new(text: @agent.redact(reply.text), usage: @usage)
+        in [:end, true] then Completed.new(text: @agent.redact(text(reply)), usage: @usage)
         in [:end, false] then failed(:unexpected_stop, "The model's reply called tools but did not stop for them")
         in [:tool_use, true] then failed(:unexpected_stop, 'The model stopped to use tools but called none')
         in [:tool_use, false] then nil
@@ -134,6 +134,8 @@ module Sleepyshark
         in [stop, _] then stopped(STOPPED.fetch(stop), reply.detail)
         end
       end
+
+      def text(reply) = reply.blocks.map(&:text).join
 
       # Every message is appended before the first is reported, so a host that stops reading midway still holds a
       # conversation where the reply follows the messages it answers.

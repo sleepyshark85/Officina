@@ -19,9 +19,6 @@ module Sleepyshark
 
         super(blocks: blocks.dup.freeze, stop:, detail: detail && -detail)
       end
-
-      # The text of its blocks, joined.
-      def text = blocks.map { |block| block.text.to_s }.join
     end
   end
 end

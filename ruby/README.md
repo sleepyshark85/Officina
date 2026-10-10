@@ -42,7 +42,9 @@ inputs (CI always uses one fixed seed). `SEED=<n>` repeats Minitest's test order
 report to `coverage/`. Mutation testing of the core runs from its directory:
 
 ```sh
-cd officina && bundle exec mutant run
+cd officina
+bundle exec mutant run                # every method, as on a push to main and weekly
+bundle exec mutant run --since main   # only the methods changed since main, as on a pull request
 ```
 
 The hooks in `../.claude/` run RuboCop and Steep before a commit that stages anything under `ruby/` but docs, and

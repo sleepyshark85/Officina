@@ -24,6 +24,8 @@ would do), rewrite it.
 - Required checks before a merge, from `.github/workflows/ruby.yml`: `ruby-changes`, `ruby-ubuntu`, `ruby-windows`,
   `ruby-quality`, `ruby-mutation`, besides the .NET and Go ones.
 - Every file starts with `# frozen_string_literal: true`.
+- No `it` block parameter in a gem's `lib/`: mutant 0.17 cannot parse it, and one fails the whole mutation run
+  (RuboCop's `Style/ItBlockParameter` enforces it there; tests may use it).
 - No monkey patching or refinements of classes Officina does not own; no `method_missing` or `respond_to_missing?`;
   no `eval`, `instance_eval` or `class_eval` of strings; no global variables, class variables (`@@`) or mutable
   constants (freeze them); no `ObjectSpace`; `send` to a private method only in tests, and even there prefer the public
