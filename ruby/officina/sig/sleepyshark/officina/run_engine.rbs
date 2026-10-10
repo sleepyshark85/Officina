@@ -3,17 +3,16 @@ module Sleepyshark
     class RunEngine
       MAX_MODEL_CALLS: Integer
       PREFIX_MISMATCH: String
-      STOPPED: Hash[Symbol, Symbol]
 
       @agent: Agent
       @conversation: Conversation
-      @append: ^(Array[Message], String) -> void
+      @reporter: Reporter
       @cancel: Cancellation
-      @on_event: (^(run_event) -> void)?
       @usage: Usage
       @model_calls: Integer
-      @host_failure: StandardError?
+      @host_raised: bool
       @audit: AuditRecorder
+      @tool_step: ToolStep
 
       def initialize: (agent: Agent, conversation: Conversation, append: ^(Array[Message], String) -> void,
                        cancel: Cancellation, on_event: (^(run_event) -> void)?) -> void
@@ -26,31 +25,27 @@ module Sleepyshark
 
       def call_until_stopped: (Array[Message] pending) -> result
 
+      def step: (Array[Message] pending) -> result?
+
       def call_model: (Array[Message] messages) -> (Reply | Stopped | Failed)
+
+      def stream: (Request request) -> (Reply | Stopped | Failed | nil)
 
       def relay: (model_event event) -> void
 
-      def emit: (run_event event) -> void
+      def no_reply: (String why) -> (Stopped | Failed)
 
-      def cut_off: (String why) -> (Stopped | Failed)
+      def after_reply: (Reply reply, Array[Message] pending) -> result?
 
-      def take: (Reply reply, Array[Message] pending) -> result?
+      def rejected?: (Reply reply, Array[ToolCall] calls, result? result) -> boolish
 
-      def answer_after: (Array[ToolCall] calls) { () -> void } -> void
+      def keep: (Reply reply, Array[Message] pending, Array[ToolCall] calls) -> void
 
-      def answer: (ToolPipeline? pipeline, Array[ToolCall] calls, bool reported) -> void
-
-      def finish:(Reply reply, Array[ToolCall] calls) -> result?
-
-      def text: (Reply reply) -> String
-
-      def append: (*Message messages) -> void
-
-      def tools: (Array[ToolCall] calls) -> ToolPipeline
+      def redacted: (result result) -> result
 
       def text_message: (Symbol role, String text) -> Message
 
-      def stopped: (Symbol reason, ?String? detail) -> Stopped
+      def stopped: (Symbol reason) -> Stopped
 
       def failed: (Symbol reason, String detail) -> Failed
     end

@@ -1,0 +1,20 @@
+module Sleepyshark
+  module Officina
+    class ToolStep
+      @agent: Agent
+      @audit: AuditRecorder
+      @cancel: Cancellation
+      @reporter: Reporter
+
+      def initialize: (agent: Agent, audit: AuditRecorder, cancel: Cancellation, reporter: Reporter) -> void
+
+      def call: (Array[ToolCall] calls) { () -> void } -> void
+
+      private
+
+      def append_results: (ToolPipeline? pipeline, Array[ToolCall] calls, bool reported) -> void
+
+      def start_pipeline: (Array[ToolCall] calls) -> ToolPipeline
+    end
+  end
+end

@@ -11,6 +11,8 @@ module Sleepyshark
 
 
       def initialize: (blocks: Array[Block], stop: Symbol, ?detail: String?) -> void
+
+      def text: () -> String
     end
   end
 end
