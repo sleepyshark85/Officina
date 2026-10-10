@@ -104,10 +104,10 @@ module Sleepyshark
           false
         end
 
-        # Records the client's loss, once, while it is the source's.
+        # Records the client's loss, once however many calls meet it.
         def lost(client, reason)
           @mutex.synchronize do
-            if @client.equal?(client) && !@lost_client.equal?(client)
+            unless @lost_client.equal?(client)
               @lost_client = client
               @changes << ToolSourceChange.new(state: :disconnected, detail: reason)
             end

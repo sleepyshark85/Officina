@@ -84,6 +84,24 @@ class ClientTest < Minitest::Test
     end
   end
 
+  def test_mcp04_a_ping_is_answered_with_nothing_and_one_already_30_seconds_late_is_not_sent
+    values = [0]
+    clock = -> { values.size > 1 ? values.shift : values.first }
+    requests = Scripted.serve(Scripted.results({})) do |url|
+      client = Mcp.connect(server(url), clock:)
+
+      assert_nil client.ping
+      values.replace([0, 30])
+
+      assert_equal 'MCP server web did not answer within 30 seconds', assert_raises(Mcp::Error) { client.ping }.message
+      refute_predicate client, :lost?
+    ensure
+      client&.close
+    end
+
+    assert_equal 3, requests.size, 'the handshake and one ping'
+  end
+
   private
 
   # A clock that reads each of values in turn, then the last one on.
