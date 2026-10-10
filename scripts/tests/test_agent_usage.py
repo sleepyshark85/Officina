@@ -113,7 +113,7 @@ class AgentUsageTest(unittest.TestCase):
             calls=1200, processed=999, cache_reads=1000, peak_context=1400, first=at(10, 0), last=at(10, 30),
             active=timedelta(minutes=12)))
         reviewer = agent_usage.Agent("a1234567", "reviewer", "Review a|b", agent_usage.Usage(
-            calls=3, processed=2600, cache_reads=0, peak_context=999, first=at(10, 5), last=at(11, 40),
+            calls=3, processed=1_234_567, cache_reads=0, peak_context=999, first=at(10, 5), last=at(11, 40),
             active=timedelta(seconds=100)))
         self.assertEqual(agent_usage.render_session(agent_usage.Session("abcdef12-0000", [lead, reviewer])),
                          "## Session abcdef12 (2026-10-05 10:00 to 2026-10-05 11:40 UTC)\n"
@@ -121,13 +121,13 @@ class AgentUsageTest(unittest.TestCase):
                          "| Role | Agents | Input processed |\n"
                          "|---|---|---|\n"
                          "| lead | 1 | 999 |\n"
-                         "| reviewer | 1 | 3k |\n"
+                         "| reviewer | 1 | 1,235k |\n"
                          "\n"
                          "| Agent | Role | Task | Calls | Input processed | Of which cache reads | Peak context "
                          "| Active minutes |\n"
                          "|---|---|---|---|---|---|---|---|\n"
                          "| lead | lead | This session's main conversation | 1,200 | 999 | 1k | 1k | 12 |\n"
-                         "| a1234567 | reviewer | Review a/b | 3 | 3k | 0 | 999 | 2 |\n")
+                         "| a1234567 | reviewer | Review a/b | 3 | 1,235k | 0 | 999 | 2 |\n")
 
     def test_a_directory_without_transcripts_exits_with_an_error_and_leaves_the_doc_as_it_was(self):
         doc = self.directory / "doc.md"
