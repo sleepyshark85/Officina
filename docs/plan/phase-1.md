@@ -82,7 +82,7 @@ How each implementation realizes a slice, where it differs from the shared crite
 | Slice | .NET | Go | Ruby |
 |---|---|---|---|
 | S01 | Merged | Merged (#56) | Not started |
-| S02 | Merged | Merged (#55) | In review |
+| S02 | Merged | Merged (#55) | In review (#83) |
 | S03 | Merged | Merged (#58) | Not started |
 | S04 | Merged | Merged (#59) | Not started |
 | S05 | Merged | Merged (#61) | Not started |
