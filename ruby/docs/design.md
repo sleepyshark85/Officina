@@ -1,0 +1,16 @@
+# Ruby design notes
+
+Choices in the Ruby core that the code alone does not explain. Concepts are in
+[`ARCHITECTURE.md`](../../ARCHITECTURE.md); decisions R1…R20 in [`ruby.md`](../../docs/implementations/ruby.md).
+
+| Choice | Why |
+|---|---|
+| A tool's input or a typed output is declared with `Input.define { … }` (R19), whose methods are the JSON types (`string`, `integer`, `number`, `boolean`, `array`) with `optional:`, `nullable:`, `minimum:` (integers only), `enum:` (strings) and `array … of:` or a block for objects; it returns a frozen `Data` class with `schema` and `from_json` | Only what the Bookshop tools, its summary and the samples' outputs need. One declaration is the value class and the schema, so they cannot drift; an absent member is `nil`, and a handler applies its own defaults |
+| A member's JSON name is its Ruby name in camel case (`max_price` is `maxPrice`) | .NET's tools take their parameter names and its outputs camel-case their members, and the schemas must be .NET's bytes, so Bookshop's names match without a per-member setting |
+| The schema is written as text by the DSL, not built as a hash and encoded: description first, then `type` (a list for nullable) or `enum` alone, then `minimum` and `items`; an object as `type`, `properties`, `required` (always, even empty), `additionalProperties: false`; strings escaped as .NET's default encoder does (`DotnetJson`) | The prefix fingerprint takes each schema as given, so a session one implementation saved resumes in another only if the schemas are the same bytes (Go S13 found this). Pinned against what .NET printed (`officina/test/fixtures/dotnet-schemas.tsv`) and the shared `testdata/session/prefix.json` |
+| `Schema.new(json)` checks the subset when it is created and raises `SchemaError` naming where it leaves it; `#validate(value)` returns problems as `"<JSON pointer>: <problem>"`, as .NET and Go word them | TEST-08: nothing is half checked. A list of problems, not an exception, as invalid input goes back to the model as an error result it can act on |
+| The subset is .NET's and Go's: the annotations, `type`, `properties`, `required`, `additionalProperties`, `items`, `anyOf`, `enum`, `const`, the four counts, `minimum`, `maximum`, `pattern` | The same schemas are accepted by every implementation, the DSL's and those MCP servers send |
+| Numbers compare as Ruby compares them (an `Integer` and a `Float` exactly); 1.0 is an integer; string lengths count code points | Exact where .NET and Go use doubles; matches JSON Schema and the reference validator |
+| A `pattern` is a Ruby regular expression with a 0.1 s timeout; one that times out is a problem of that value, not an error | Ruby has no ECMA-262 engine; its `^` and `$` match at line ends. The reference validator runs with Ruby regular expressions (`regexp_resolver: 'ruby'`) so the property test compares like with like |
+| The core's gems use named block parameters, never `it` | mutant 0.17 cannot parse an `it` block, and fails the whole `ruby-mutation` run on one |
+| TEST-08's generated schemas come from a `pbt` arbitrary of the test's own that draws from pbt's seeded generator and does not shrink | pbt has no recursive generator; drawing from its generator keeps `PROPERTY_SEED` reproducing a case, and a failure prints the whole schema and value |
