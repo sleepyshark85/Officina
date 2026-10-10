@@ -74,4 +74,11 @@ class InputDotnetTest < Minitest::Test
     assert_equal %({"type":"object","properties":{"note":{"description":#{written},"type":"string"}},) \
                  '"required":["note"],"additionalProperties":false}', input.schema.to_s
   end
+
+  def test_tool01_invalid_utf8_is_written_as_the_replacement_character
+    input = Input.define { string :note, "caf\xC3" }
+
+    assert_equal '{"type":"object","properties":{"note":{"description":"caf\\uFFFD","type":"string"}},' \
+                 '"required":["note"],"additionalProperties":false}', input.schema.to_s
+  end
 end

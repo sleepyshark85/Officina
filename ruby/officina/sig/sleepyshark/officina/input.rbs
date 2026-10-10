@@ -1,6 +1,9 @@
 module Sleepyshark
   module Officina
     module Input
+      # Turns a member's JSON value into its value.
+      type read = Proc | Method
+
       # The class methods of a class `define` returns.
       interface _Class
         def schema: () -> Schema
@@ -19,19 +22,32 @@ module Sleepyshark
         attr_reader json_name: String
         attr_reader schema: String
         attr_reader optional: bool
-        attr_reader read: ^(untyped) -> untyped
+        attr_reader read: read
 
-        def self.new: (name: Symbol, json_name: String, schema: String, optional: bool, read: ^(untyped) -> untyped) -> Field
+        def self.new: (name: Symbol, json_name: String, schema: String, optional: bool, read: read) -> Field
+      end
+
+      class Members
+        @fields: Hash[String, Field]
+
+        def initialize: () -> void
+
+        def add: (Symbol name, String? description, optional: bool, body: String, ?read: read) -> Field
+
+        def to_a: () -> Array[Field]
+
+        private
+
+        def json_name: (Symbol name) -> String
       end
 
       class Declaration
         SCALARS: Array[Symbol]
-        SAME: ^(untyped) -> untyped
         WHOLE: ^(untyped) -> untyped
 
-        attr_reader fields: Array[Field]
+        @members: Members
 
-        def initialize: () -> void
+        def initialize: (Members members) -> void
 
         def string: (Symbol name, ?String? description, ?optional: bool, ?nullable: bool, ?enum: Array[String]?) -> void
 
@@ -43,17 +59,13 @@ module Sleepyshark
 
         def array: (Symbol name, ?String? description, ?of: Symbol?, ?optional: bool, ?nullable: bool) ?{ () [self: Declaration] -> void } -> void
 
-        private
+        def self.enum: (Array[String] values) -> String
 
-        def array_of_scalars: (Symbol name, String? description, bool optional, bool nullable, Symbol? of) -> void
+        def self.type: (String name, bool nullable) -> String
 
-        def array_of_objects: (Symbol name, String? description, bool optional, bool nullable) { () [self: Declaration] -> void } -> void
+        def self.minimum: (Symbol name, Integer? minimum) -> String
 
-        def add: (Symbol name, String? description, bool optional, String body, ?^(untyped) -> untyped read) -> void
-
-        def type: (String name, bool nullable) -> String
-
-        def bound: (Symbol name, Integer? minimum) -> String
+        def self.items: (Symbol name, Symbol? scalar) ?{ () [self: Declaration] -> void } -> [_ToS, read]
       end
     end
   end

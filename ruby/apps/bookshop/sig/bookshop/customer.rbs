@@ -1,0 +1,9 @@
+module Bookshop
+  class Customer < Data
+    attr_reader id: Integer
+    attr_reader name: String
+    attr_reader email: String
+
+    def self.new: (id: Integer, name: String, email: String) -> instance
+  end
+end

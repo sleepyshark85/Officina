@@ -117,9 +117,14 @@ class SchemaTest < Minitest::Test
     end
   end
 
-  def test_test08_a_schema_that_is_not_json_is_refused
-    ['{"type":', '{"a":{},"a":{}}'].each do |schema|
-      assert_match(/\AThe schema is not JSON: /, assert_raises(SchemaError, schema) { Schema.new(schema) }.message)
+  def test_test08_a_schema_that_is_not_json_is_refused_with_the_parsers_detail
+    {
+      '{"type":' => 'unexpected end of input at line 1 column 9',
+      '{"a":{},"a":{}}' => 'duplicate key "a" at line 1 column 1'
+    }.each do |schema, detail|
+      refused = assert_raises(SchemaError, schema) { Schema.new(schema) }
+
+      assert_equal "The schema is not JSON: #{detail}", refused.message
     end
   end
 end

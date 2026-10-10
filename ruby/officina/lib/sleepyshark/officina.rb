@@ -2,11 +2,6 @@
 
 require_relative 'officina/version'
 require_relative 'officina/error'
-require_relative 'officina/schema_error'
-require_relative 'officina/dotnet_json'
-require_relative 'officina/schema_subset'
-require_relative 'officina/schema'
-require_relative 'officina/input'
 require_relative 'officina/usage'
 require_relative 'officina/cancellation'
 require_relative 'officina/tool'
@@ -40,6 +35,11 @@ require_relative 'officina/reporter'
 require_relative 'officina/tool_step'
 require_relative 'officina/run_engine'
 require_relative 'officina/agent'
+require_relative 'officina/schema_error'
+require_relative 'officina/dotnet_json'
+require_relative 'officina/schema_subset'
+require_relative 'officina/schema'
+require_relative 'officina/input'
 
 module Sleepyshark
   # Officina's core: a purpose-neutral library for building agentic applications.

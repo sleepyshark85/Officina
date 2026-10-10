@@ -2,7 +2,6 @@ module Sleepyshark
   module Officina
     class Schema
       RULES: Hash[String, Array[untyped]]
-      PATTERN_TIMEOUT: Float
 
       @text: String
       @root: untyped

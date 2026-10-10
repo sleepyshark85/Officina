@@ -22,9 +22,11 @@ module Sleepyshark
       # @return [Class] a frozen `Data` class with a member per declared one, in their order, and two class methods:
       #   `schema`, the {Schema} of its JSON form, and `from_json(object)`, which turns a JSON object (as JSON.parse
       #   returns it, valid against that schema) into an instance, an absent member being nil.
-      # @raise [ArgumentError] when a declaration is malformed.
+      # @raise [ArgumentError] when a declaration is malformed, or declares two members with the same JSON name.
       def self.define(&)
-        fields = Declaration.new.tap { |declaration| declaration.instance_exec(&) }.fields
+        members = Members.new
+        Declaration.new(members).instance_exec(&)
+        fields = members.to_a
         value_class(fields, Schema.new(object_schema(fields)))
       end
 
@@ -48,89 +50,110 @@ module Sleepyshark
       # JSON value becomes the member's.
       Field = Data.define(:name, :json_name, :schema, :optional, :read)
 
+      # The members declared so far, by JSON name.
+      class Members
+        def initialize
+          @fields = {}
+        end
+
+        # @param body [String] the member's schema after its description, without the braces.
+        # @param read [#call] turns the member's JSON value into its value.
+        # @raise [ArgumentError] when a member with the same JSON name is already declared.
+        def add(name, description, optional:, body:, read: :itself.to_proc)
+          json_name = json_name(name)
+          raise ArgumentError, "#{name}: #{json_name} is declared twice" if @fields.key?(json_name)
+
+          described = (%("description":#{DotnetJson.string(description)},) if description)
+          @fields[json_name] = Field.new(name:, json_name:, schema: "{#{described}#{body}}", optional:, read:)
+        end
+
+        def to_a = @fields.values
+
+        private
+
+        def json_name(name)
+          first, *rest = name.to_s.split('_')
+          "#{first}#{rest.map(&:capitalize).join}"
+        end
+      end
+
       # The receiver of a declaration's block: each method declares a member of that JSON type, named by a snake-case
       # symbol, with an optional description the model reads. `nullable: true` also allows null; `optional: true` lets
-      # the member be absent.
+      # the member be absent. Its helpers are class methods, so the block reaches these five methods only.
       class Declaration
         SCALARS = %i[string integer number boolean].freeze
-        SAME = ->(value) { value }
         # JSON Schema counts 1.0 as an integer, so an integer member may arrive as an integral Float.
         WHOLE = ->(value) { value.is_a?(Float) ? value.to_i : value }
-        private_constant :SCALARS, :SAME, :WHOLE
+        private_constant :SCALARS, :WHOLE
 
-        attr_reader :fields
-
-        def initialize
-          @fields = []
+        def initialize(members)
+          @members = members
         end
 
         # A string member, or with `enum:` one of the given strings.
         # @param enum [Array<String>, nil] the only values allowed, written without a type, as .NET writes an enum.
         def string(name, description = nil, optional: false, nullable: false, enum: nil)
-          return add(name, description, optional, type('string', nullable)) unless enum
-          raise ArgumentError, "#{name}: an enum cannot be nullable" if nullable
+          raise ArgumentError, "#{name}: an enum cannot be nullable" if enum && nullable
 
-          add(name, description, optional, %("enum":[#{enum.map { |value| DotnetJson.string(value) }.join(',')}]))
+          body = enum ? Declaration.enum(enum) : Declaration.type('string', nullable)
+          @members.add(name, description, optional:, body:)
         end
 
         # A whole number member; 1.0 counts as one.
         # @param minimum [Integer, nil] the smallest value allowed.
         def integer(name, description = nil, optional: false, nullable: false, minimum: nil)
-          add(name, description, optional, type('integer', nullable) + bound(name, minimum), WHOLE)
+          body = Declaration.type('integer', nullable) + Declaration.minimum(name, minimum)
+          @members.add(name, description, optional:, body:, read: WHOLE)
         end
 
         # A number member.
         # @param minimum [Integer, nil] the smallest value allowed.
         def number(name, description = nil, optional: false, nullable: false, minimum: nil)
-          add(name, description, optional, type('number', nullable) + bound(name, minimum))
+          body = Declaration.type('number', nullable) + Declaration.minimum(name, minimum)
+          @members.add(name, description, optional:, body:)
         end
 
         # A true or false member.
         def boolean(name, description = nil, optional: false, nullable: false)
-          add(name, description, optional, type('boolean', nullable))
+          @members.add(name, description, optional:, body: Declaration.type('boolean', nullable))
         end
 
         # An array of one scalar type (`of: :string`), or of objects whose members the block declares; their values are
         # instances of a class of their own.
-        def array(name, description = nil, of: nil, optional: false, nullable: false, &items)
-          raise ArgumentError, "#{name}: give either of: #{SCALARS.join(', ')} or a block" unless items.nil? ^ of.nil?
-          return array_of_objects(name, description, optional, nullable, &items) if items
-          raise ArgumentError, "#{name}: of: must be one of #{SCALARS.join(', ')}" unless SCALARS.include?(of)
+        def array(name, description = nil, of: nil, optional: false, nullable: false, &objects)
+          raise ArgumentError, "#{name}: give either of: #{SCALARS.join(', ')} or a block" unless objects.nil? ^ of.nil?
 
-          array_of_scalars(name, description, optional, nullable, of)
+          items, item = Declaration.items(name, of, &objects)
+          body = %(#{Declaration.type('array', nullable)},"items":#{items})
+          @members.add(name, description, optional:, body:, read: ->(value) { value&.map(&item).freeze })
         end
 
-        private
+        def self.enum(values) = %("enum":[#{values.map { |value| DotnetJson.string(value) }.join(',')}])
 
-        def array_of_scalars(name, description, optional, nullable, of)
-          each = of == :integer ? WHOLE : SAME
-          add(name, description, optional, %(#{type('array', nullable)},"items":{"type":"#{of}"}),
-              ->(value) { value&.map(&each)&.freeze })
-        end
+        def self.type(name, nullable) = nullable ? %("type":["#{name}","null"]) : %("type":"#{name}")
 
-        def array_of_objects(name, description, optional, nullable, &)
-          element = Input.define(&)
-          add(name, description, optional, %(#{type('array', nullable)},"items":#{element.schema}),
-              ->(value) { value&.map { |object| element.from_json(object) }&.freeze })
-        end
-
-        def add(name, description, optional, body, read = SAME)
-          described = (%("description":#{DotnetJson.string(description)},) if description)
-          first, *rest = name.to_s.split('_')
-          @fields << Field.new(name:, json_name: "#{first}#{rest.map(&:capitalize).join}",
-                               schema: "{#{described}#{body}}", optional:, read:)
-        end
-
-        def type(name, nullable) = nullable ? %("type":["#{name}","null"]) : %("type":"#{name}")
-
-        def bound(name, minimum)
+        def self.minimum(name, minimum)
           return '' if minimum.nil?
           raise ArgumentError, "#{name}: minimum must be an Integer" unless minimum.is_a?(Integer)
 
           %(,"minimum":#{minimum})
         end
+
+        # @return [Array(#to_s, #call)] the schema of an array's items, and what turns an item's JSON value into its
+        #   value.
+        # @raise [ArgumentError] when there is no block and the scalar type is not one.
+        def self.items(name, scalar, &objects)
+          if objects
+            element = Input.define(&objects)
+            [element.schema, element.method(:from_json)]
+          else
+            raise ArgumentError, "#{name}: of: must be one of #{SCALARS.join(', ')}" unless SCALARS.include?(scalar)
+
+            [%({"type":"#{scalar}"}), scalar == :integer ? WHOLE : :itself.to_proc]
+          end
+        end
       end
-      private_constant :Field, :Declaration
+      private_constant :Field, :Members, :Declaration
     end
   end
 end

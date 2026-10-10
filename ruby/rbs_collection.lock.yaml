@@ -21,6 +21,14 @@ gems:
     revision: b87dcecfe407f29af1b6cb733183ff927b1c5289
     remote: https://github.com/ruby/gem_rbs_collection.git
     repo_dir: gems
+- name: connection_pool
+  version: '2.4'
+  source:
+    type: git
+    name: ruby/gem_rbs_collection
+    revision: b87dcecfe407f29af1b6cb733183ff927b1c5289
+    remote: https://github.com/ruby/gem_rbs_collection.git
+    repo_dir: gems
 - name: csv
   version: '3.3'
   source:
@@ -217,6 +225,10 @@ gems:
     revision: b87dcecfe407f29af1b6cb733183ff927b1c5289
     remote: https://github.com/ruby/gem_rbs_collection.git
     repo_dir: gems
+- name: timeout
+  version: '0'
+  source:
+    type: stdlib
 - name: tsort
   version: '0'
   source:
