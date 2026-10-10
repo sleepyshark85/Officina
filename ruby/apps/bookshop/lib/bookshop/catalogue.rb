@@ -9,7 +9,7 @@ module Bookshop
     # The books a search returns when it is given no limit.
     SEARCH_RESULTS = 20
 
-    BOOKS = <<~SQL
+    BOOKS = <<~SQL.chomp
       select b.id, b.title, a.name as author, g.name as genre, b.price, b.published_year as year, s.quantity as stock
       from books b
       join authors a on a.id = b.author_id
@@ -46,8 +46,9 @@ module Bookshop
     #
     # @param limit [Integer] the most books to return, kept between 1 and MAX_SEARCH_RESULTS
     def search(filter = BookFilter.new, limit: SEARCH_RESULTS)
-      values = [Database.containing(filter.title), Database.containing(filter.author), present(filter.genre),
-                filter.max_price, filter.in_stock, limit.clamp(1, MAX_SEARCH_RESULTS)]
+      values = [Database.containing(filter.title), Database.containing(filter.author),
+                Database.nil_if_blank(filter.genre), filter.max_price, filter.in_stock,
+                limit.clamp(1, MAX_SEARCH_RESULTS)]
       @database.with { |connection| connection.exec_params(SEARCH, values).map { |row| book(row) } }
     end
 
@@ -83,10 +84,6 @@ module Bookshop
     def book(row)
       Book.new(id: row[:id], title: row[:title], author: row[:author], genre: row[:genre], price: row[:price],
                year: row[:year], stock: row[:stock])
-    end
-
-    def present(text)
-      text unless text.nil? || text.strip.empty?
     end
   end
 end

@@ -88,7 +88,7 @@ module DatabaseServer
     reason = DatabaseServer.skipped
     skip reason if reason
     @database_name = DatabaseServer.copy
-    @shop = Bookshop.build(env: { 'BOOKSHOP_DATABASE' => DatabaseServer.url(@database_name) })
+    @shop = Bookshop.build(env: { 'BOOKSHOP_DATABASE' => database_url })
   end
 
   def teardown
@@ -100,6 +100,8 @@ module DatabaseServer
   private
 
   attr_reader :shop
+
+  def database_url = DatabaseServer.url(@database_name)
 
   # Makes the test's database unreachable, as if its server had stopped: new connections are refused and open ones
   # ended.
@@ -113,12 +115,12 @@ module DatabaseServer
   end
 
   # Runs a query of the test's own, outside the shop, and returns its one value as an Integer.
-  def count(sql, *params)
-    connection = PG.connect(DatabaseServer.url(@database_name))
+  def select_integer(sql, *params)
+    connection = PG.connect(database_url)
     Integer(connection.exec_params(sql, params).getvalue(0, 0))
   ensure
     connection&.close
   end
 
-  def stock(book_id) = count('select quantity from stock where book_id = $1', book_id)
+  def stock(book_id) = select_integer('select quantity from stock where book_id = $1', book_id)
 end

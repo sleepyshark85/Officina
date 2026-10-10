@@ -5,16 +5,20 @@ module Bookshop
   # it stopped, is reconnected first, so once the database is back no call fails on a connection it ended. A row is a
   # Hash of Symbol column names to values: numbers as Integer and BigDecimal, times as Time. Thread-safe.
   class Database
-    # Connections open at most at once, and the seconds a caller waits for one.
+    # Connections open at most at once.
     POOL_SIZE = 5
+    # Seconds a caller waits for a connection when all are in use.
     CHECKOUT_TIMEOUT = 5
-    private_constant :POOL_SIZE, :CHECKOUT_TIMEOUT
+    private_constant :CHECKOUT_TIMEOUT
 
     # A LIKE pattern matching text that contains part, its wildcards taken literally; nil for nil or blank text.
     def self.containing(part)
-      return if part.nil? || part.strip.empty?
+      nil_if_blank(part)&.then { |text| "%#{text.gsub(/[\\%_]/) { |wildcard| "\\#{wildcard}" }}%" }
+    end
 
-      "%#{part.gsub(/[\\%_]/) { |wildcard| "\\#{wildcard}" }}%"
+    # The text, or nil for nil or blank text, which a query takes as no filter.
+    def self.nil_if_blank(text)
+      text unless text.nil? || text.strip.empty?
     end
 
     # @param url [String] a PostgreSQL connection URL; nothing connects until the first call

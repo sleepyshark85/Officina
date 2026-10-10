@@ -4,6 +4,7 @@ module Bookshop
     CHECKOUT_TIMEOUT: Integer
 
     def self.containing: (String? part) -> String?
+    def self.nil_if_blank: (String? text) -> String?
 
     def initialize: (String url) -> void
     def with: [T] () { (PG::Connection) -> T } -> T

@@ -18,6 +18,5 @@ module Bookshop
 
     def read: (PG::Connection connection, Integer id) -> Book
     def book: (Hash[Symbol, untyped] row) -> Book
-    def present: (String? text) -> String?
   end
 end

@@ -34,7 +34,7 @@ module Bookshop
     private_constant :LOCK_BOOKS, :TAKE, :LOCK_ORDER, :GIVE_BACK
 
     class << self
-      # Takes each line's copies from stock.
+      # Takes each line's copies from stock, and returns the books' current prices, which the order charges.
       #
       # @param lines [Array<#book_id, #quantity>] each book once
       # @return [Hash{Integer => BigDecimal}] each book's current price by id
