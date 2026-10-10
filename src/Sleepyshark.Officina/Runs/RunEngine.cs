@@ -123,10 +123,16 @@ internal static class RunEngine
             var (append, end) = Decide(agent, reply, toolCalls.Count > 0, usage, budgetCut);
             if (append)
             {
+                // All appended before any is reported, so a host that stops reading at the first never holds the input without its reply.
                 conversation.Bind(fingerprint);
-                foreach (var appended in pending.Add(new Message(Role.Assistant, reply.Blocks.ToImmutable())))
+                var step = pending.Add(new Message(Role.Assistant, reply.Blocks.ToImmutable()));
+                foreach (var appended in step)
                 {
                     conversation.Append(appended);
+                }
+
+                foreach (var appended in step)
+                {
                     yield return new ConversationAppended(conversation, appended);
                 }
 
