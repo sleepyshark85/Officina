@@ -18,8 +18,8 @@ would do), rewrite it.
 
 ## Tooling (enforced by hooks and CI)
 
-- `bundle exec rubocop`; `bundle exec steep check`; `bundle exec rake test` with warnings on and none printed;
-  `bundle exec bundler-audit check --update` clean. All before a commit or push, as for .NET and Go.
+- `bundle exec rubocop` and `bundle exec steep check` before a commit; `bundle exec rake test`, with warnings on and
+  none printed, before a push, as for .NET and Go. `bundler-audit` runs in `ruby-quality`, as it needs the network.
 - Required checks before a merge, from `.github/workflows/ruby.yml`: `ruby-changes`, `ruby-ubuntu`, `ruby-windows`,
   `ruby-quality`, `ruby-mutation`, besides the .NET and Go ones.
 - Every file starts with `# frozen_string_literal: true`.
@@ -35,15 +35,15 @@ would do), rewrite it.
   constant they define. No module named `Utils`, `Helpers`, `Common`, `Models` or `Types`. No stutter:
   `Officina::Agent`, not `Officina::OfficinaAgent`; `Claude::Model`, not `Claude::ClaudeModel`.
 - Keep the public API minimal. Internals are `private_constant` and private methods. Every public class, module and
-  method has a YARD comment (what it is for, `@param`, `@return`, `@raise`) and an RBS signature in `sig/`; the comment
-  says what the signature cannot.
+  method has an RBS signature in `sig/` and a YARD comment saying what it is for and what the signature cannot
+  (meaning, units, `@raise`); no tag that only repeats a type.
 - **Contracts are duck types**, written as RBS interfaces (`_Model`, `_Approver`, `_MemoryStore`, `_AuditSink`,
   `_ToolSource`), defined beside their consumer, small (one to three methods). No base class whose methods raise
   `NotImplementedError`; no interface with one implementation and no consumer that needs to swap it.
 - **Values are immutable:** `Data.define` for value objects (usage, messages, results, events), frozen collections
   inside them. No `attr_writer` or `attr_accessor` on shared objects: an agent is frozen once built (AGT-01). A field
-  reader is `name`, never `get_name`; a predicate ends in `?` (`cancelled?`), a method that mutates its receiver or
-  raises where a sibling does not ends in `!`.
+  reader is `name`, never `get_name`; a predicate ends in `?` (`cancelled?`); a `!` marks only the more dangerous
+  version of a method that also has a safe one, as the style guide says.
 - Keyword arguments for required dependencies and for every optional setting; positional arguments only for the one or
   two values a call is obviously about (`agent.run(conversation, input, cancel:)`). Optional settings default to
   `nil` or a frozen constant, never a shared mutable object.
@@ -66,27 +66,28 @@ would do), rewrite it.
 
 - Threads from the standard library (R11). **Every thread has an owner that joins it**, in an `ensure`, and a way to
   stop (the run's `Cancellation`). No fire-and-forget. The test helper that compares `Thread.list` before and after
-  each test proves it.
+  each test proves it, which is why tests run one at a time.
 - Never `Thread#raise`, `Thread#kill`, `Timeout.timeout` or `Thread.abort_on_exception = true`; cancellation is
-  cooperative (R10). A signal trap only cancels a token: no locking, I/O or logging in trap context.
+  cooperative (R10). A signal trap only pushes to a `Thread::Queue` that an owned thread reads: no `Mutex`, I/O,
+  logging or `Cancellation#cancel` in trap context, where a `Mutex` raises.
 - Shared mutable state lives behind one `Mutex` owned by the object that holds it; work is handed over through a
-  `Thread::Queue`, closed by the side that sends. A queue for a reply's tool events is sized from the number of calls
-  (`Thread::SizedQueue`), never "big enough".
+  `Thread::Queue`, closed by the side that sends. A value shared across threads is frozen; an object shared across
+  threads that has state (a store, a sink, a client) guards it itself.
 - A block passed to `run` may `break`: the code that started tools waits for them in an `ensure`.
 
 ## Tests
 
 - Minitest (`Minitest::Test`), plain `assert_*` and `refute_*`; no matcher library, no `mocha`. Test names carry the
   requirement ID in lower case: `test_agt05_cancelling_mid_stream_appends_nothing`. Each test is independent and runs
-  in random order (Minitest's default); `parallelize_me!` unless a test shares a boundary fake.
+  in random order (Minitest's default), one at a time: no `parallelize_me!`, as the thread-leak check needs it.
 - Fakes only at the boundaries (docs/conventions.md); never a stub of an Officina object. `assert_equal expected,
   actual`, expected first.
 - Property tests with `prop_check` for TEST-07, generated inputs for every parser and validator (JSON Schema subset,
   MCP messages, memory paths); CI runs a fixed seed, and a failure prints the seed that reproduces it.
 - Each sample in `examples/` runs as a test.
 - Golden files under the gem's `test/fixtures/`, updated only with `UPDATE_GOLDEN=1`, reviewed like code. The shared
-  files in the repository's top-level `testdata/` are read only: .NET and Go read them too, and nothing in Ruby
-  writes them.
+  files in the repository's top-level `testdata/` are never written by a test: .NET and Go read them too. A new shared
+  fixture (Ruby S08's `ruby-session.json`) is added once, by its own documented step, and reviewed like code.
 
 ## Files
 
