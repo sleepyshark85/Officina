@@ -32,7 +32,7 @@ module Sleepyshark
 
         @tools = tools.sort_by(&:name).freeze
         names = @tools.map(&:name)
-        twin = names.find { names.count(it) > 1 }
+        twin = names.find { |name| names.count(name) > 1 }
         raise Error, "Two tools are named #{twin}" if twin
 
         @model = model
@@ -82,7 +82,7 @@ module Sleepyshark
       # escaped character as its UTF-16 code units in upper-case hex. Invalid UTF-8 becomes U+FFFD.
       def string(text)
         escaped = text.scrub.gsub(ESCAPED) do |char|
-          SHORT[char] || char.encode(Encoding::UTF_16BE).unpack('n*').map { format('\\u%04X', it) }.join
+          SHORT[char] || char.encode(Encoding::UTF_16BE).unpack('n*').map { |unit| format('\\u%04X', unit) }.join
         end
         %("#{escaped}")
       end
