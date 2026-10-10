@@ -10,12 +10,14 @@ module Sleepyshark
       @cancel: Cancellation
       @usage: Usage
       @model_calls: Integer
+      @tool_calls: Integer
+      @trace: RunTrace
       @host_raised: bool?
       @audit: AuditRecorder
       @tool_step: ToolStep
 
       def initialize: (agent: Agent, conversation: Conversation, append: ^(Array[Message], String) -> void,
-                       cancel: Cancellation, on_event: (^(run_event) -> void)?) -> void
+                       cancel: Cancellation, on_event: (^(run_event) -> void)?, trace: RunTrace) -> void
 
       def run: (String input, String? context) -> result
 

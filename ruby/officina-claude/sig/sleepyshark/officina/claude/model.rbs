@@ -8,6 +8,7 @@ module Sleepyshark
         CACHE_LIFETIMES: Array[String]
         ATTEMPTS: Integer
         WAIT: ^(Float seconds, Cancellation cancel) -> void
+        PRICES: Hash[String, Price]
 
         @fixed: Hash[Symbol, untyped]
         @prefix_cache: String
@@ -19,6 +20,8 @@ module Sleepyshark
         def initialize: (name: String, effort: Symbol, ?max_output_tokens: Integer, ?prefix_cache: String,
                          ?conversation_cache: String, ?api_key: String?, ?base_url: String?,
                          ?wait: ^(Float seconds, Cancellation cancel) -> void) -> void
+
+        def info: () -> ModelInfo
 
         def stream: (Request request, cancel: Cancellation) { (model_event event) -> void } -> Reply?
 

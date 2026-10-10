@@ -12,14 +12,17 @@ module Sleepyshark
 
       # Why the call may not run, said for the model, or nil when the approver approved it.
       # @param call [ToolCall] its input redacted, as the approver and the host see it
-      def denial(tool, call)
+      # @param step [ToolCallTrace] the call's, which records the wait and the answer
+      def denial(tool, call, step)
         approver = @approver
         return 'The call needs approval, and this run is unattended, so it was denied.' unless approver
 
-        @report.call(:approval_asked, ApprovalAsked.new(call:))
+        @report.call(:approval_asked, ApprovalAsked.new(call:), span: step.span)
+        step.asked
         approval = ask(approver, tool, call)
+        step.answered(approval.approved?, cancelled: @cancel.cancelled?)
         @report.call(:approval_answered, ApprovalAnswered.new(call:, approved: approval.approved?),
-                     outcome: approval.approved? ? 'approved' : 'denied', detail: approval.reason)
+                     span: step.span, outcome: approval.approved? ? 'approved' : 'denied', detail: approval.reason)
         reason(approval)
       end
 

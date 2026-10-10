@@ -10,6 +10,9 @@ module Sleepyshark
       # of the prefix fingerprint, so it must not change during the model's life.
       def settings: () -> String
 
+      # The model as telemetry names it, and its price. It must not change during the model's life.
+      def info: () -> ModelInfo
+
       # Sends one request and yields its events as they arrive. Returns the reply once the model has stopped, or nil
       # when the cancellation cut the reply off. Retries transient failures itself; raises a StandardError for a
       # failure that remains, or a stream that ends without a stop reason. What the block raises, or a break from it,

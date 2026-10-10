@@ -9,25 +9,29 @@ module Sleepyshark
       PREFIX_MISMATCH = "The agent's tools, instructions or model settings differ from those the conversation was " \
                         'started with; start a new conversation'
 
-      def initialize(agent:, conversation:, append:, cancel:, on_event:)
+      # @param trace [RunTrace] the run's, whose span has started
+      def initialize(agent:, conversation:, append:, cancel:, on_event:, trace:)
         @agent = agent
         @conversation = conversation
         @reporter = Reporter.new(append:, fingerprint: agent.fingerprint, on_event:)
         @cancel = cancel
         @usage = Usage.new
         @model_calls = 0
-        @audit = AuditRecorder.new(agent:, conversation:)
-        @tool_step = ToolStep.new(agent:, audit: @audit, cancel:, reporter: @reporter)
+        @tool_calls = 0
+        @trace = trace
+        @audit = AuditRecorder.new(agent:, conversation:, trace:)
+        @tool_step = ToolStep.new(agent:, audit: @audit, trace:, cancel:, reporter: @reporter)
       end
 
-      # The run's result, its text and detail without the agent's secrets, between the run's two audit entries; a run
-      # the host left has none, and its end is recorded as abandoned.
+      # The run's result, its text and detail without the agent's secrets, between the run's two audit entries, and
+      # its span's end; a run the host left has none, and its end is recorded as abandoned.
       def run(input, context)
         # @type var result: result?
         @audit.record(:run_started)
         result = redacted(decide(input, context))
       ensure
         @audit.record_end(result, @usage)
+        @trace.finish(result, @usage, model_calls: @model_calls, tool_calls: @tool_calls)
       end
 
       private
@@ -64,8 +68,10 @@ module Sleepyshark
       # The reply, the result of a call that got none, or nil when the run was cancelled, which the loop then stops.
       def call_model(messages)
         @model_calls += 1
-        stream(Request.new(tools: @agent.tools, instructions: @agent.instructions, messages:)) ||
-          no_reply("The model's reply ended without a stop reason")
+        @trace.model_call do
+          stream(Request.new(tools: @agent.tools, instructions: @agent.instructions, messages:)) ||
+            no_reply("The model's reply ended without a stop reason")
+        end
       end
 
       # The reply; nil for a stream that ended without one; what #no_reply makes of a stream that failed. What the
@@ -84,6 +90,7 @@ module Sleepyshark
         in UsageReported(usage:) then @usage += usage
         else nil
         end
+        @trace.observe(event)
         @reporter.emit(event)
       rescue StandardError
         @host_raised = true
@@ -108,6 +115,7 @@ module Sleepyshark
 
       def keep(reply, pending, calls)
         assistant = Message.new(role: :assistant, blocks: reply.blocks)
+        @tool_calls += calls.size
         if calls.empty?
           @reporter.append(*pending, assistant)
         else

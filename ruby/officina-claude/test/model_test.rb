@@ -34,6 +34,15 @@ class ModelTest < ClaudeTestCase
     end
   end
 
+  def test_evt02_info_names_the_provider_and_model_and_prices_opus
+    opus = Claude::Model.new(name: 'claude-opus-5-5', effort: :low, api_key: 'test-key').info
+    other = Claude::Model.new(name: 'claude-other', effort: :low, api_key: 'test-key').info
+
+    assert_equal ['anthropic', 'claude-opus-5-5', [4, 20, BigDecimal('0.2'), 5, 8]],
+                 [opus.provider, opus.name, opus.price.to_h.values]
+    assert_equal ['anthropic', 'claude-other', nil], [other.provider, other.name, other.price]
+  end
+
   def test_agt01_a_model_and_its_settings_are_frozen
     claude = Claude::Model.new(name: 'claude-opus-5-5', effort: :low, api_key: 'test-key')
 

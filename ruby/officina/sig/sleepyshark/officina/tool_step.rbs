@@ -3,10 +3,12 @@ module Sleepyshark
     class ToolStep
       @agent: Agent
       @audit: AuditRecorder
+      @trace: RunTrace
       @cancel: Cancellation
       @reporter: Reporter
 
-      def initialize: (agent: Agent, audit: AuditRecorder, cancel: Cancellation, reporter: Reporter) -> void
+      def initialize: (agent: Agent, audit: AuditRecorder, trace: RunTrace, cancel: Cancellation, reporter: Reporter)
+                    -> void
 
       def call: (Array[ToolCall] calls) { () -> void } -> void
 

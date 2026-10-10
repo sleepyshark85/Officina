@@ -18,7 +18,15 @@ class JsonLinesAuditSinkTest < Minitest::Test
     assert_equal({ 'time' => '2026-10-10T07:00:00.500000Z', 'sequence' => 1, 'run' => 'r', 'conversation' => 'c',
                    'agent' => 'shop', 'kind' => 'tool_ended', 'tool' => 'search', 'callId' => 'call_1', 'input' => '{}',
                    'outcome' => 'ok', 'detail' => 'Found.', 'duration' => 0.25 }, lines[0])
-    assert_equal({ 'input' => 3, 'output' => 0, 'cache_read' => 0, 'cache_write' => 0 }, lines[1]['usage'])
+    assert_equal({ 'input' => 3, 'output' => 0, 'cache_read' => 0, 'cache_write' => 0, 'cache_write_hour' => 0 },
+                 lines[1]['usage'])
+  end
+
+  def test_aud03_aud04_an_entrys_trace_and_span_are_written_in_camel_case_after_its_kind
+    lines = written { |sink| sink.write(entry(1, kind: :run_started, trace_id: 'a' * 32, span_id: 'b' * 16)) }
+
+    assert_equal(%w[time sequence run conversation agent kind traceId spanId], lines[0].keys)
+    assert_equal ['a' * 32, 'b' * 16], lines[0].values_at('traceId', 'spanId')
   end
 
   def test_aud04_members_an_entry_does_not_have_are_left_out

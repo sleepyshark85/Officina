@@ -1,0 +1,57 @@
+module Sleepyshark
+  module Officina
+    class RunTrace
+      @agent: Agent
+      @telemetry: Telemetry
+      @info: ModelInfo
+      @children: OpenTelemetry::Context
+      @call: ModelCallTrace
+
+      attr_reader run: String
+      attr_reader span: OpenTelemetry::Trace::Span
+      def initialize: (agent: Agent, conversation: Conversation, input: String) -> void
+
+      def model_call: () { () -> (Reply | Failed)? } -> (Reply | Failed)?
+
+      def observe: (model_event event) -> void
+
+      def tool_call: (Tool? tool, ToolCall call) -> ToolCallTrace
+
+      def finish: (result? result, Usage usage, model_calls: Integer, tool_calls: Integer) -> void
+
+      def audit_failed: (OpenTelemetry::Trace::Span span, Symbol kind) -> void
+
+      def dimensions: () -> Hash[String, String]
+
+      def start: (String name, attributes: Hash[String, untyped], ?kind: Symbol?) -> OpenTelemetry::Trace::Span
+
+      def add: (Symbol counter, Integer value, Hash[String, untyped] attributes) -> void
+
+      def record: (Symbol histogram, Numeric value, Hash[String, untyped] attributes) -> void
+
+      def now: () -> Time
+
+      def usage_attributes: (Usage usage) -> Hash[String, untyped]
+
+      def cost: (Usage usage) -> Float
+
+      def content: (String name, String text, ?role: String?) -> Hash[String, String]?
+
+      def stop: (OpenTelemetry::Trace::Span span, ?String? error_type, ?String? description) -> void
+
+      private
+
+      def start_run: (Conversation conversation, String input) -> OpenTelemetry::Trace::Span
+
+      def stop_run: (result? result) -> void
+
+      def answer: (result result) -> Hash[String, String]?
+
+      def ended: (result? result) -> String
+
+      def reason: (result? result) -> String?
+
+      def pascal: (Symbol symbol) -> String
+    end
+  end
+end

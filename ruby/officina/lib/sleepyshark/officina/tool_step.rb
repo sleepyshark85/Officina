@@ -7,9 +7,10 @@ module Sleepyshark
     # events cancels it: the calls still get their results, appended, as the provider rejects a call without its
     # result, but not reported.
     class ToolStep
-      def initialize(agent:, audit:, cancel:, reporter:)
+      def initialize(agent:, audit:, trace:, cancel:, reporter:)
         @agent = agent
         @audit = audit
+        @trace = trace
         @cancel = cancel
         @reporter = reporter
       end
@@ -41,7 +42,7 @@ module Sleepyshark
         end
       end
 
-      def start_pipeline(calls) = ToolPipeline.new(agent: @agent, audit: @audit, cancel: @cancel, calls:)
+      def start_pipeline(calls) = ToolPipeline.new(agent: @agent, audit: @audit, trace: @trace, cancel: @cancel, calls:)
     end
     private_constant :ToolStep
   end

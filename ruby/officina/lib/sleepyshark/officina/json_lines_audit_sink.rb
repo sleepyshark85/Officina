@@ -7,6 +7,10 @@ module Sleepyshark
     # The built-in audit sink: appends each entry to a file as one JSON object per line, flushed to disk before #write
     # returns. Safe for concurrent runs within one process. The core uses it only when the host passes it to an agent.
     class JsonLinesAuditSink
+      # The members whose names are more than one word, in camel case.
+      CAMEL_CASE = { call_id: :callId, trace_id: :traceId, span_id: :spanId }.freeze
+      private_constant :CAMEL_CASE
+
       # @param path [String] the file, created when the first entry is written
       def initialize(path)
         @path = path
@@ -37,7 +41,7 @@ module Sleepyshark
 
       def fields(entry)
         fields = entry.to_h.merge(time: entry.time.utc.iso8601(6), usage: entry.usage&.to_h)
-        fields.transform_keys { |key| key == :call_id ? :callId : key }.compact
+        fields.transform_keys { |key| CAMEL_CASE.fetch(key, key) }.compact
       end
     end
   end

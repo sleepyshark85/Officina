@@ -1,36 +1,41 @@
 # frozen_string_literal: true
 
-require 'securerandom'
-
 module Sleepyshark
   module Officina
     # Numbers one run's audit entries and writes them to the agent's sink one at a time, from any of the run's
-    # threads. Without a sink it records nothing, and every record succeeds.
+    # threads, each with the trace and span of the step it records. Without a sink it records nothing, and every
+    # record succeeds.
     class AuditRecorder
       MAX_TEXT = 4_000
       private_constant :MAX_TEXT
 
-      def initialize(agent:, conversation:)
+      # @param trace [RunTrace] the run's, whose id and span an entry names, unless a step's span, and which counts the
+      #   entries the sink fails to write
+      def initialize(agent:, conversation:, trace:)
         @agent = agent
         @conversation = conversation.id
-        @run = SecureRandom.hex
+        @run = trace.run
+        @trace = trace
         @sequence = 0
         @lock = Mutex.new
       end
 
-      # Fills in the entry's time, sequence and identity, and the tool call's, if it is about one, redacts and cuts
-      # its text, and writes it. A failure is returned for the caller to decide what a missing entry means: only a
-      # write's attempt depends on it.
+      # Fills in the entry's time, sequence, identity and span, and the tool call's, if it is about one, redacts and
+      # cuts its text, and writes it. A failure shows in telemetry, and is returned for the caller to decide what a
+      # missing entry means: only a write's attempt depends on it.
+      # @param span [OpenTelemetry::Trace::Span, nil] the step's; nil for the run's
       # @return [Boolean] whether the entry is in the trail
-      def record(kind, call: nil, detail: nil, **fields)
+      def record(kind, call: nil, span: nil, detail: nil, **fields)
         sink = @agent.audit_sink
         return true unless sink
 
+        span ||= @trace.span
         @lock.synchronize do
           @sequence += 1
-          written?(sink, AuditEntry.new(time: @agent.clock.call, sequence: @sequence, run: @run,
-                                        conversation: @conversation, agent: @agent.name, kind:, tool: call&.name,
-                                        call_id: call&.id, input: clean(call&.input), detail: clean(detail), **fields))
+          written?(sink, span, AuditEntry.new(time: @agent.clock.call, sequence: @sequence, run: @run,
+                                              conversation: @conversation, agent: @agent.name, kind:, **ids(span),
+                                              tool: call&.name, call_id: call&.id, input: clean(call&.input),
+                                              detail: clean(detail), **fields))
         end
       end
 
@@ -41,12 +46,19 @@ module Sleepyshark
 
       private
 
-      # A sink's failure is a gap in the trail, which the caller acts on.
-      def written?(sink, entry)
+      # A sink's failure is a gap in the trail, which telemetry shows and the caller acts on.
+      def written?(sink, span, entry)
         sink.write(entry)
         true
       rescue StandardError
+        @trace.audit_failed(span, entry.kind)
         false
+      end
+
+      # The span's trace and span ids; nil for a span of no trace, as without a tracer provider or a host's span.
+      def ids(span)
+        context = span.context
+        { trace_id: context.hex_trace_id, span_id: context.hex_span_id } if context.valid?
       end
 
       def clean(text)

@@ -6,7 +6,12 @@ module Sleepyshark
 
       def initialize: (audit: AuditRecorder, events: Thread::Queue) -> void
 
-      def call: (Symbol kind, tool_event event, **untyped fields) -> void
+      def call: (Symbol kind, tool_event event, span: OpenTelemetry::Trace::Span?, **untyped fields) ?{ () -> void }
+              -> void
+
+      def attempt: (ToolCallTrace step) -> bool
+
+      def ended: (ToolCallFinished event, span: OpenTelemetry::Trace::Span?, duration: Float?) ?{ () -> void } -> void
     end
   end
 end

@@ -8,7 +8,7 @@ module Sleepyshark
       NOT_STARTED: String
 
       @agent: Agent
-      @audit: AuditRecorder
+      @trace: RunTrace
       @cancel: Cancellation
       @calls: Array[ToolCall]
       @results: Hash[Integer, ToolResult]
@@ -18,7 +18,8 @@ module Sleepyshark
       @approvals: ApprovalDesk
       @thread: Thread
 
-      def initialize: (agent: Agent, audit: AuditRecorder, cancel: Cancellation, calls: Array[ToolCall]) -> void
+      def initialize: (agent: Agent, audit: AuditRecorder, trace: RunTrace, cancel: Cancellation,
+                       calls: Array[ToolCall]) -> void
 
       def each_event: () { (tool_event event) -> void } -> void
 
@@ -30,15 +31,15 @@ module Sleepyshark
 
       def start: (ToolCall call, Integer index) -> void
 
-      def run_if_allowed: (Tool tool, ToolCall call, Integer index) -> void
+      def run_if_allowed: (Tool tool, ToolCallTrace step, Integer index) -> void
 
-      def write: (Tool tool, ToolCall call) -> ToolResult
+      def write: (Tool tool, ToolCallTrace step) -> ToolResult
 
-      def read: (Tool tool, ToolCall call, Integer index) -> void
+      def read: (Tool tool, ToolCallTrace step, Integer index) -> void
 
-      def invoke: (Tool tool, ToolCall call) -> ToolResult
+      def invoke: (Tool tool, ToolCallTrace step) -> ToolResult
 
-      def finish: (ToolCall call, String content, error: bool, ?started: Time?) -> ToolResult
+      def finish: (ToolCall call, String content, ?Symbol outcome, ?step: ToolCallTrace?, ?started: Time?) -> ToolResult
 
       def cut: (String content) -> String
 
