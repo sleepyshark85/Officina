@@ -44,7 +44,8 @@ jobs:
   ubuntu:
     name: go-ubuntu
     needs: changes
-    if: needs.changes.outputs.go == 'true'
+    # Skipped only when the detector says false: if it fails, its output is empty and the jobs run.
+    if: ${{ !cancelled() && needs.changes.outputs.go != 'false' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps: &test
@@ -68,7 +69,8 @@ jobs:
   windows:
     name: go-windows
     needs: changes
-    if: needs.changes.outputs.go == 'true'
+    # Skipped only when the detector says false: if it fails, its output is empty and the jobs run.
+    if: ${{ !cancelled() && needs.changes.outputs.go != 'false' }}
     runs-on: windows-latest
     timeout-minutes: 15
     steps: *test
@@ -76,7 +78,8 @@ jobs:
   quality:
     name: go-quality
     needs: changes
-    if: needs.changes.outputs.go == 'true'
+    # Skipped only when the detector says false: if it fails, its output is empty and the jobs run.
+    if: ${{ !cancelled() && needs.changes.outputs.go != 'false' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -110,7 +113,8 @@ jobs:
   mutation:
     name: go-mutation
     needs: changes
-    if: needs.changes.outputs.go == 'true'
+    # Skipped only when the detector says false: if it fails, its output is empty and the jobs run.
+    if: ${{ !cancelled() && needs.changes.outputs.go != 'false' }}
     runs-on: ubuntu-latest
     # About 26 minutes usually; a slow runner has taken 55, so leave room before it is cancelled.
     timeout-minutes: 90

@@ -35,8 +35,8 @@ reused (ARCHITECTURE §13).
   (`go-changes`, `go-ubuntu`, `go-windows`, `go-quality`, `go-mutation`): every PR needs all nine, and the five Ruby
   ones too once Ruby S01 is merged (R15).
 - Hooks: before a commit that stages .NET code, `dotnet format --verify-no-changes` and the Release build (warnings
-  are errors), and the staged files shown; before a push that changes more than docs outside `go/`, the tests. After
-  an edit to a `.cs` file, one type per file named after it, and no requirement IDs in comments. The Go checks run
+  are errors), and the staged files shown; before a push that changes more than docs outside `go/` and `ruby/`, the
+  tests. After an edit to a `.cs` file, one type per file named after it, and no requirement IDs in comments. The Go checks run
   only for files under `go/` ([`go/README.md`](go/README.md)), and from Ruby S01 the Ruby checks only for files under
   `ruby/`.
 - **One class, record, struct, interface or enum per file**, named after it. Related types share a folder (in the

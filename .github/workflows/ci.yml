@@ -38,7 +38,8 @@ jobs:
   ubuntu:
     name: ubuntu-latest
     needs: changes
-    if: needs.changes.outputs.dotnet == 'true'
+    # Skipped only when the detector says false: if it fails, its output is empty and the jobs run.
+    if: ${{ !cancelled() && needs.changes.outputs.dotnet != 'false' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
@@ -79,11 +80,13 @@ jobs:
   windows:
     name: windows-latest
     needs: changes
-    if: needs.changes.outputs.dotnet == 'true'
+    # Skipped only when the detector says false: if it fails, its output is empty and the jobs run.
+    if: ${{ !cancelled() && needs.changes.outputs.dotnet != 'false' }}
     runs-on: windows-latest
     timeout-minutes: 15
     env:
       DOTNET_NOLOGO: true
+      TESTCONTAINERS_RYUK_DISABLED: true
       DOTNET_CLI_TELEMETRY_OPTOUT: true
     steps:
       - uses: actions/checkout@v7
@@ -105,7 +108,8 @@ jobs:
   quality:
     name: quality
     needs: changes
-    if: needs.changes.outputs.dotnet == 'true'
+    # Skipped only when the detector says false: if it fails, its output is empty and the jobs run.
+    if: ${{ !cancelled() && needs.changes.outputs.dotnet != 'false' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:

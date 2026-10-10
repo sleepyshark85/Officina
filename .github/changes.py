@@ -28,8 +28,9 @@ def main():
         changed = True
     else:
         base = f"origin/{os.environ['GITHUB_BASE_REF']}"
-        paths = subprocess.run(["git", "diff", "--name-only", f"{base}...HEAD"],
-                               capture_output=True, text=True, check=True).stdout.split()
+        # Without --no-renames a file moved between implementations lists only its new path, hiding the side it left.
+        paths = subprocess.run(["git", "diff", "--no-renames", "--name-only", f"{base}...HEAD"],
+                               capture_output=True, text=True, check=True).stdout.splitlines()
         changed = any(implementation in owners(path) for path in paths)
     if not changed:
         print(f"Nothing of {implementation} changed; its jobs are skipped.", file=sys.stderr)

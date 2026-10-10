@@ -36,7 +36,8 @@ jobs:
   mutation:
     name: mutation
     needs: changes
-    if: needs.changes.outputs.dotnet == 'true'
+    # Skipped only when the detector says false: if it fails, its output is empty and the jobs run.
+    if: ${{ !cancelled() && needs.changes.outputs.dotnet != 'false' }}
     runs-on: ubuntu-latest
     timeout-minutes: 90
     env:
