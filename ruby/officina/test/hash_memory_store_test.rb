@@ -14,13 +14,14 @@ class HashMemoryStoreTest < Minitest::Test
     @store = Sleepyshark::Officina::HashMemoryStore.new
   end
 
-  def test_mem02_a_read_text_cannot_change_the_stored_one
-    text = +'tea'
-    store.write('alice', 'prefs.md', text)
-    text << ' and cake'
+  def test_mem02_changing_the_callers_strings_after_a_write_or_rename_changes_nothing_stored
+    strings = [+'alice', +'a.md', +'tea', +'b.md']
+    store.write(*strings.first(3))
+    store.rename(strings[0], strings[1], strings[3])
+    strings.each { it << 'x' }
 
-    assert_predicate store.read('alice', 'prefs.md'), :frozen?
-    assert_equal 'tea', store.read('alice', 'prefs.md')
+    assert_equal({ 'b.md' => 'tea' }, contents('alice'))
+    assert_predicate store.read('alice', 'b.md'), :frozen?
   end
 
   private

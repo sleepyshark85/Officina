@@ -32,13 +32,11 @@ module Sleepyshark
       #   or runs through a file
       def write(scope, path, text)
         MemoryPath.check(scope, path)
-        unless text.encoding == Encoding::UTF_8 && text.valid_encoding?
-          raise Error, 'Memory text must be a valid UTF-8 string.'
-        end
+        MemoryPath.check_text(text)
 
         @lock.synchronize do
           refuse_clash(scope, path)
-          @files[[scope.dup.freeze, path.dup.freeze]] = text.dup.freeze
+          @files[[-scope, -path]] = text.dup.freeze
         end
       end
 
@@ -55,11 +53,12 @@ module Sleepyshark
       def rename(scope, path, new_path)
         MemoryPath.check(scope, path, new_path)
         @lock.synchronize do
+          text = @files.fetch([scope, path]) { raise Error, "There is no memory file #{path}." }
           raise Error, "There is already a memory file #{new_path}." if @files.key?([scope, new_path])
 
           refuse_clash(scope, new_path)
-          text = @files.delete([scope, path]) or raise Error, "There is no memory file #{path}."
-          @files[[scope, new_path.dup.freeze]] = text
+          @files.delete([scope, path])
+          @files[[-scope, -new_path]] = text
         end
       end
 

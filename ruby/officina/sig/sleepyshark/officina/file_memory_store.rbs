@@ -10,9 +10,11 @@ module Sleepyshark
 
       private
 
+      def text_of: (String file, String path) -> String
+
       def directory: (String scope) -> String
 
-      def within: [T] (String scope, String path) { (String file, String directory) -> T? } -> T?
+      def within: [T] (String scope, String path, *String other_paths) { (String file, String directory) -> T? } -> T?
 
       def refuse_links: (String directory, String path) -> void
 

@@ -2,7 +2,8 @@ module Sleepyshark
   module Officina
     module MemoryPath
       MAX_LENGTH: Integer
-      MAX_PART: Integer
+      MAX_PART_BYTES: Integer
+      MAX_SCOPE_BYTES: Integer
       FORBIDDEN: Regexp
       DEVICES: Set[String]
 
@@ -11,6 +12,8 @@ module Sleepyshark
       def self.valid_scope?: (untyped scope) -> bool
 
       def self.check: (String scope, *String paths) -> void
+
+      def self.check_text: (String text) -> void
 
       private
 

@@ -35,6 +35,14 @@ module MemoryStoreContract
     assert_equal paths.to_h { [it, it] }, contents('alice')
   end
 
+  def test_mem02_the_longest_scope_and_parts_the_rules_allow_are_kept
+    scope = "#{'é' * 63}x"
+    path = "#{'é' * 127}x/#{'日' * 85}"
+    store.write(scope, path, 'x')
+
+    assert_equal({ path => 'x' }, contents(scope))
+  end
+
   def test_mem02_deleting_removes_the_file_and_deleting_a_missing_one_does_nothing
     store.write('alice', 'a/b/c.md', 'x')
     store.write('alice', 'a/d.md', 'y')
@@ -63,13 +71,17 @@ module MemoryStoreContract
   def test_mem02_renaming_a_missing_file_or_onto_a_taken_path_is_refused_and_changes_nothing
     { 'a.md' => 'a', 'b.md' => 'b', 'dir/c.md' => 'c' }.each { |path, text| store.write('alice', path, text) }
 
-    messages = [%w[missing.md x.md], %w[a.md b.md], %w[a.md a.md], %w[a.md dir], %w[a.md b.md/x]].map do |from, to|
-      assert_raises(Error) { store.rename('alice', from, to) }.message
-    end
+    refusals = {
+      %w[missing.md x.md] => 'There is no memory file missing.md.',
+      %w[missing.md b.md] => 'There is no memory file missing.md.',
+      %w[a.md b.md] => 'There is already a memory file b.md.',
+      %w[a.md a.md] => 'There is already a memory file a.md.',
+      %w[a.md dir] => 'dir is a memory directory.',
+      %w[a.md b.md/x] => 'b.md/x runs through the memory file b.md.'
+    }
+    messages = refusals.keys.to_h { |paths| [paths, assert_raises(Error) { store.rename('alice', *paths) }.message] }
 
-    assert_equal ['There is no memory file missing.md.', 'There is already a memory file b.md.',
-                  'There is already a memory file a.md.', 'dir is a memory directory.',
-                  'b.md/x runs through the memory file b.md.'], messages
+    assert_equal refusals, messages
     assert_equal({ 'a.md' => 'a', 'b.md' => 'b', 'dir/c.md' => 'c' }, contents('alice'))
   end
 

@@ -2,25 +2,20 @@
 
 module Sleepyshark
   module Officina
-    # The scopes and paths a memory store accepts. A scope is one part; a path is parts joined by "/". A part is never
-    # empty, "." or "..", never ends with a dot or a space, holds no control character and none of \ / : * ? " < > | %,
-    # and is no reserved Windows device name (CON, COM1, CONIN$…), whatever its case or extension. So a path is
-    # relative, cannot climb out of its scope, and names the same file in every store on every system. Scopes and paths
-    # are UTF-8 strings.
+    # The scopes, paths and text a memory store accepts. A path is parts joined by "/", at most 1,024 characters; a
+    # scope is one part. A part is never empty, "." or "..", never ends with a dot or a space, holds no control
+    # character and none of \ / : * ? " < > | %, and is no reserved Windows device name (CON, COM1, CONIN$…), whatever
+    # its case or extension. A part is at most 255 UTF-8 bytes, and a scope at most 127, as the file store names its
+    # directory by the scope's bytes in hex. So a path is relative, cannot climb out of its scope, and every store can
+    # hold it on every system. Scopes, paths and text are valid UTF-8 strings.
     module MemoryPath
-      # The longest path, in characters.
       MAX_LENGTH = 1024
-
-      # The longest part, in characters, which is what file systems allow in one name.
-      MAX_PART = 255
-      private_constant :MAX_PART
-
+      MAX_PART_BYTES = 255
+      MAX_SCOPE_BYTES = 127
       FORBIDDEN = %r{[\\/:*?"<>|%\p{Cc}]}
-      private_constant :FORBIDDEN
-
       DEVICES = (%w[CON PRN AUX NUL CONIN$ CONOUT$] +
-                 %w[COM LPT].product([*'0'..'9', "\u00b9", "\u00b2", "\u00b3"]).map(&:join)).to_set.freeze
-      private_constant :DEVICES
+                 %w[COM LPT].product([*'0'..'9', '¹', '²', '³']).map(&:join)).to_set.freeze
+      private_constant :MAX_LENGTH, :MAX_PART_BYTES, :MAX_SCOPE_BYTES, :FORBIDDEN, :DEVICES
 
       class << self
         # Whether a store accepts the path.
@@ -30,7 +25,7 @@ module Sleepyshark
 
         # Whether a store accepts the scope.
         def valid_scope?(scope)
-          utf8?(scope) && part?(scope)
+          utf8?(scope) && scope.bytesize <= MAX_SCOPE_BYTES && part?(scope)
         end
 
         # Checks a scope and the paths within it, as every store operation does first.
@@ -42,6 +37,12 @@ module Sleepyshark
           raise Error, "#{invalid.inspect} is not a valid memory path." if invalid
         end
 
+        # Checks the text a store is to keep.
+        # @raise [Error] when it is not a valid UTF-8 string
+        def check_text(text)
+          raise Error, 'Memory text must be a valid UTF-8 string.' unless utf8?(text)
+        end
+
         private
 
         def utf8?(text)
@@ -49,7 +50,7 @@ module Sleepyshark
         end
 
         def part?(part)
-          part.length.between?(1, MAX_PART) && !part.end_with?('.', ' ') && !part.match?(FORBIDDEN) &&
+          part.bytesize.between?(1, MAX_PART_BYTES) && !part.end_with?('.', ' ') && !part.match?(FORBIDDEN) &&
             !DEVICES.include?(part.partition('.').first.rstrip.upcase)
         end
       end

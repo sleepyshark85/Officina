@@ -12,8 +12,16 @@ class MemoryPathTest < Minitest::Test
     assert_equal([true, false], ["#{'x/' * 511}xx", "#{'x/' * 512}x"].map { MemoryPath.valid?(it) })
   end
 
-  def test_mem03_a_part_is_at_most_255_characters
-    assert_equal([true, false], ['é' * 255, 'é' * 256].map { MemoryPath.valid?("a/#{it}") })
+  def test_mem03_a_part_is_at_most_255_utf8_bytes
+    parts = ["#{'é' * 127}x", 'é' * 128, 'x' * 255, 'x' * 256]
+
+    assert_equal([true, false, true, false], parts.map { MemoryPath.valid?("a/#{it}") })
+  end
+
+  def test_mem03_a_scope_is_at_most_127_utf8_bytes
+    scopes = ['x' * 127, 'x' * 128, "#{'é' * 63}x", 'é' * 64]
+
+    assert_equal([true, false, true, false], scopes.map { MemoryPath.valid_scope?(it) })
   end
 
   def test_mem03_only_utf8_strings_are_scopes_or_paths

@@ -11,8 +11,7 @@ module Sleepyshark
     # runs may share it.
     #
     # It guards against the model's paths, not against other processes changing the directory. On a case-insensitive
-    # file system, paths of one scope that differ only in case name the same file. A scope's directory name is twice its
-    # UTF-8 bytes long, so a scope over 127 bytes cannot hold files on systems that limit a name to 255 characters.
+    # file system, paths of one scope that differ only in case name the same file.
     class FileMemoryStore
       # @param root [String] the directory that holds the scopes' directories, created when a file is first written
       def initialize(root)
@@ -23,6 +22,7 @@ module Sleepyshark
       # Every file of the scope, in no particular order; none for a scope never written to.
       # @raise [Error] when the scope is invalid, or its directory is a link
       def list(scope)
+        MemoryPath.check(scope)
         directory = directory(scope)
         @lock.synchronize do
           # Nothing for a directory that is not there; ** never descends into a linked directory; a linked file is
@@ -37,25 +37,15 @@ module Sleepyshark
       # The file's text, or nil when there is no such file.
       # @raise [Error] when the scope or the path is invalid, the path leads through a link, or the file is not UTF-8
       def read(scope, path)
-        within(scope, path) do |file|
-          next unless File.file?(file)
-
-          text = File.binread(file).force_encoding(Encoding::UTF_8)
-          raise Error, "The memory file #{path} is not UTF-8 text." unless text.valid_encoding?
-
-          text
-        end
+        within(scope, path) { |file| text_of(file, path) if File.file?(file) }
       end
 
       # Creates the file, or replaces its text.
       # @raise [Error] when the scope or the path is invalid, the path leads through a link, the text is not valid
       #   UTF-8, or the path is a directory or runs through a file
       def write(scope, path, text)
-        unless text.encoding == Encoding::UTF_8 && text.valid_encoding?
-          raise Error, 'Memory text must be a valid UTF-8 string.'
-        end
-
         within(scope, path) do |file, directory|
+          MemoryPath.check_text(text)
           refuse_clash(directory, path)
           FileUtils.mkdir_p(File.dirname(file))
           File.binwrite(file, text)
@@ -66,10 +56,10 @@ module Sleepyshark
       # @raise [Error] when the scope or the path is invalid, or the path leads through a link
       def delete(scope, path)
         within(scope, path) do |file, directory|
-          next unless File.file?(file)
-
-          File.delete(file)
-          prune(directory, path)
+          if File.file?(file)
+            File.delete(file)
+            prune(directory, path)
+          end
         end
       end
 
@@ -77,8 +67,7 @@ module Sleepyshark
       # @raise [Error] when the scope or a path is invalid, a path leads through a link, there is no file at the path,
       #   or the new path is taken, is a directory or runs through a file
       def rename(scope, path, new_path)
-        MemoryPath.check(scope, new_path)
-        within(scope, path) do |file, directory|
+        within(scope, path, new_path) do |file, directory|
           raise Error, "There is no memory file #{path}." unless File.file?(file)
 
           target = vacant(directory, new_path)
@@ -90,18 +79,25 @@ module Sleepyshark
 
       private
 
-      # The scope's directory, which must not be a link.
+      # The file's text, refused when it is not UTF-8, as anything may have put its bytes there.
+      def text_of(file, path)
+        text = File.binread(file).force_encoding(Encoding::UTF_8)
+        raise Error, "The memory file #{path} is not UTF-8 text." unless text.valid_encoding?
+
+        text
+      end
+
+      # The directory of a valid scope, which must not be a link.
       def directory(scope)
-        MemoryPath.check(scope)
         directory = File.join(@root, scope.unpack('H*').join)
         return directory unless File.symlink?(directory)
 
         raise Error, "The memory scope #{scope.inspect} is a link, which memory does not follow."
       end
 
-      # Yields the path's file and the scope's directory, holding the lock, once the path is checked.
-      def within(scope, path)
-        MemoryPath.check(scope, path)
+      # Checks the scope and paths, then yields the first path's file and the scope's directory, holding the lock.
+      def within(scope, path, *other_paths)
+        MemoryPath.check(scope, path, *other_paths)
         directory = directory(scope)
         @lock.synchronize do
           refuse_links(directory, path)
