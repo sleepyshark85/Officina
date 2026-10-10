@@ -2,7 +2,7 @@
 
 Officina is a purpose-neutral library for building agentic applications. Phase 1 is accepted against one reference
 application, **Bookshop Assistant**: an interactive console chatbot over PostgreSQL in Docker. It has three
-implementations: **.NET 10** at the repository root (done), **Go** in [`go/`](go/) (in progress) and **Ruby** in
+implementations: **.NET 10** at the repository root (done), **Go** in [`go/`](go/) (done) and **Ruby** in
 [`ruby/`](ruby/) (planned), each tracked in [`docs/plan/phase-1.md`](docs/plan/phase-1.md). Working in `go/` loads
 [`go/CLAUDE.md`](go/CLAUDE.md) as well, and working in `ruby/` loads [`ruby/CLAUDE.md`](ruby/CLAUDE.md).
 

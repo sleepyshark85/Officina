@@ -111,7 +111,7 @@ public sealed class BookshopDatabase : IAsyncLifetime
 
     private static async Task<PostgreSqlContainer> StartContainerAsync()
     {
-        var started = new PostgreSqlBuilder("postgres:17")
+        var started = new PostgreSqlBuilder("mirror.gcr.io/library/postgres:17")
             .WithDatabase(Seeded)
             .WithUsername("bookshop")
             .WithPassword(Password)

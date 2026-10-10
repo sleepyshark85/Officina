@@ -3,9 +3,8 @@
 The Go implementation of Officina: the same requirements ([`REQUIREMENTS.md`](../REQUIREMENTS.md)) and architecture
 ([`ARCHITECTURE.md`](../ARCHITECTURE.md)) as the .NET one at the repository root, written as idiomatic Go.
 
-Status: phase 1 complete once Go S13 (samples, the demo script and the live smoke test) is merged: every slice of the
-plan is in, Bookshop Assistant runs the demo script as written, and a session either implementation saved resumes in
-the other. See
+Status: phase 1 complete: every slice of the plan is in, Bookshop Assistant runs the demo script as written, and a
+session either implementation saved resumes in the other. See
 [`docs/plan/phase-1.md`](../docs/plan/phase-1.md) for the slices (the Go column),
 [`docs/implementations/go.md`](../docs/implementations/go.md) for the decisions and
 [`docs/traceability.md`](docs/traceability.md) for the tests of each requirement.
