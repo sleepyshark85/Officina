@@ -14,6 +14,5 @@ Your files: {{paths}}. Other agents own {{paths and who, or "nothing: no one els
 Scratch prefix: `{{prefix}}-`. Live API cap: {{"$X for the whole task" or "no live calls"}}.
 
 The review applies every row of the code quality bar in docs/conventions.md. Follow
-.claude/skills/dispatch/agent-rules.md.
-{{"Stop once the PR is open: the lead dispatches its reviewer." or "Then ask a new `reviewer` agent to review it, and fix what it finds."}}
+.claude/skills/dispatch/agent-rules.md. Stop once the PR is open: the lead dispatches its reviewer.
 ```

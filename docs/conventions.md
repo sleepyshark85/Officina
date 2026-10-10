@@ -32,9 +32,9 @@ written, and this page wins for what the code must do.
   (Sonnet) only for small, well-bounded fixes, and `reviewer` (Opus), which approves each PR with a verdict comment the
   review gate reads, checking these conventions, the implementation's language rules, the design rules below and
   over-complication; at most 3 review rounds, then stop and summarize for the owner. **Each PR gets a new reviewer**,
-  kept for that PR's rounds only: a later PR, or a strict re-review, gets another new one, as a reviewer carrying
-  many PRs' history approved work that new reviewers then rejected. The lead writes each agent's brief with the
-  `dispatch` skill (`.claude/skills/dispatch/`).
+  kept for that PR's rounds only, as one carrying many PRs' history approves too easily. A later PR gets another new
+  one, and so does a strict re-review: one the lead asks for when it doubts an approval, which counts as one of the
+  PR's three rounds. The lead writes each agent's brief with the `dispatch` skill (`.claude/skills/dispatch/`).
 - Review comments may arrive as a pending review: read them with GraphQL
   `pullRequest(number: N) { reviewThreads { … } }`, as the REST endpoints don't return them.
 

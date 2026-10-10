@@ -11,7 +11,6 @@ included; these add what running beside other agents needs.
 - **Live API calls** stay under the cap your brief gives, for the whole task. Before each call, check that its worst
   case still fits; when the next one might not, stop and report the spend so far rather than make it.
 - **Ruby** commands run through `~/.local/bin/mise exec ruby@4.0.7 -- …` (the version in `ruby/.ruby-version`).
-- **Never merge** a pull request, and never turn on auto-merge: the lead does, after the review. This overrides any
-  merge step in your agent definition.
+- **Never merge** a pull request, and never turn on auto-merge: the lead does, after the review.
 - **Report** the PR, the head commit's full sha, the newest review verdict and the sha it names, the required checks'
   state (`gh pr checks <n>`), and what is left open.
