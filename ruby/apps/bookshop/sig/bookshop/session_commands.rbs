@@ -1,0 +1,26 @@
+module Bookshop
+  class SessionCommands
+    LISTED: Integer
+
+    @agent: Sleepyshark::Officina::Agent
+    @store: SessionStore
+    @clock: ^() -> Time
+    @budgets: Budgets
+    @terminal: Terminal
+
+    def initialize: (agent: Sleepyshark::Officina::Agent, store: SessionStore, clock: ^() -> Time, budgets: Budgets,
+                     terminal: Terminal) -> void
+    def start: (String staff_member, ?announced: String) -> Session
+    def list: (Session current) -> void
+    def resume: (String id, Session current) -> Session
+    def cost: (Session session) -> void
+
+    private
+
+    def line: (SessionListing listing, Session current) -> String
+    def continues?: (StoredSession stored) -> bool
+    def resumed: (StoredSession stored, Session current) -> Session
+    def refusal: (String id, StoredSession? stored) -> String
+    def refuse: (String reason, Session current) -> Session
+  end
+end

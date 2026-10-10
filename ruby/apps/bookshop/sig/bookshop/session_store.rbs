@@ -1,0 +1,25 @@
+module Bookshop
+  class SessionStore
+    CREATE: String
+    UPDATE: String
+    STORED: String
+    LOAD: String
+    LIST: String
+
+    @database: Database
+
+    def initialize: (database: Database) -> void
+    def save: (Sleepyshark::Officina::Conversation conversation, staff_member: String,
+               usage: Sleepyshark::Officina::Usage, cost: BigDecimal, previous: String?) -> String
+    def load: (String id) -> StoredSession?
+    def list: (Integer count) -> Array[SessionListing]
+
+    private
+
+    def write: (PG::Connection connection, Array[untyped] values, String? expected) -> Integer
+    def write_over_earlier: (PG::Connection connection, Sleepyshark::Officina::Conversation conversation,
+                             Array[untyped] values) -> Integer
+    def earlier?: (String stored, Sleepyshark::Officina::Conversation conversation) -> bool
+    def stored: (Hash[Symbol, untyped] row) -> StoredSession
+  end
+end

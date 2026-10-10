@@ -35,7 +35,16 @@ require_relative 'bookshop/order_tools'
 require_relative 'bookshop/tools'
 require_relative 'bookshop/chat_agent'
 require_relative 'bookshop/approvals'
+require_relative 'bookshop/spent'
+require_relative 'bookshop/setting_error'
+require_relative 'bookshop/budgets'
+require_relative 'bookshop/stored_session'
+require_relative 'bookshop/session_listing'
+require_relative 'bookshop/session_changed_error'
+require_relative 'bookshop/session_not_saved'
+require_relative 'bookshop/session_store'
 require_relative 'bookshop/session'
+require_relative 'bookshop/session_commands'
 require_relative 'bookshop/audit_record'
 require_relative 'bookshop/audit_table'
 require_relative 'bookshop/audit_view'
@@ -61,25 +70,29 @@ module Bookshop
   # @param output [IO] where the console writes
   # @param model [Sleepyshark::Officina::_Model, nil] the chat agent's model; Claude (ChatAgent.claude) if nil
   # @param env [#fetch] the settings: BOOKSHOP_DATABASE, a PostgreSQL URL, the compose file's database if not set;
-  #   BOOKSHOP_DASHBOARD, the telemetry dashboard /audit links to, the compose file's if not set
+  #   BOOKSHOP_DASHBOARD, the telemetry dashboard /audit links to, the compose file's if not set;
+  #   BOOKSHOP_REPLY_BUDGET, a reply's budget in US dollars, $0.50 if not set or empty
   # @param clock [#call] returns the current Time, for the run context, the audit trail and telemetry
   # @param telemetry [Telemetry, nil] where traces, metrics and logs go; OTLP to the compose file's dashboard if nil
   # @return [Application]
+  # @raise [SettingError] when BOOKSHOP_REPLY_BUDGET is not an amount above zero
   # rubocop:disable-next Metrics/AbcSize, Metrics/MethodLength -- the composition root names every part in one place
   def self.build(input:, output:, model: nil, env: ENV, clock: -> { Time.now }, telemetry: nil)
+    budgets = Budgets.from(env)
     url = env.fetch('BOOKSHOP_DATABASE', COMPOSE_DATABASE)
     database = Database.new(url)
     model ||= ChatAgent.claude
     telemetry ||= Telemetry.otlp
     approvals = Approvals.new
-    audit = AuditTable.new(database:, price: model.info.price)
+    audit = AuditTable.new(database:)
     agent = Sleepyshark::Officina::Agent.new(
       name: 'bookshop', model:, instructions: ChatAgent::INSTRUCTIONS, tools: Tools.all(Shop.new(database:)),
       approver: approvals, audit_sink: audit, secrets: [Database.password(url)].compact, clock:,
       telemetry: telemetry.officina
     )
     view = AuditView.new(table: audit, dashboard: env.fetch('BOOKSHOP_DASHBOARD', COMPOSE_DASHBOARD))
-    console = Console.new(agent:, approvals:, input:, output:, clock:, audit: view, telemetry:)
+    console = Console.new(agent:, approvals:, input:, output:, clock:, store: SessionStore.new(database:),
+                          budgets:, audit: view, telemetry:)
     Application.new(database:, telemetry:, console:)
   end
 end

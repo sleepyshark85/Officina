@@ -1,0 +1,4 @@
+module Bookshop
+  class SessionChangedError < StandardError
+  end
+end

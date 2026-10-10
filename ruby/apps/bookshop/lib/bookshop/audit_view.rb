@@ -48,7 +48,8 @@ module Bookshop
 
     def outcome(record)
       case record
-      in { kind: 'RunEnded', usage: Usage => usage } then "#{record.outcome}  #{spent(record, usage)}"
+      in { kind: 'RunEnded', usage: Usage => usage }
+        "#{record.outcome}  #{spent(usage, record.cost || BigDecimal(0))}"
       in { kind: 'ApprovalAnswered', detail: String => reason } then "#{record.outcome}: #{reason}"
       in { kind: 'ToolEnded', duration: Float => seconds } then "#{record.outcome}  #{milliseconds(seconds)}"
       else record.outcome.to_s
@@ -56,18 +57,12 @@ module Bookshop
     end
 
     # A run's tokens and cost.
-    def spent(record, usage)
-      "tokens: #{thousands(usage.all_input)} in " \
-        "(#{thousands(usage.cache_read)} cached), #{thousands(usage.output)} out, $#{dollars(record.cost)}"
+    def spent(usage, cost)
+      "tokens: #{Spent.thousands(usage.all_input)} in (#{Spent.thousands(usage.cache_read)} cached), " \
+        "#{Spent.thousands(usage.output)} out, $#{Spent.dollars(cost)}"
     end
 
-    def milliseconds(seconds) = "#{thousands((seconds * 1000).round)} ms"
-
-    # The cost to four decimals, such as 0.0123; nothing when it is not known.
-    def dollars(cost) = format('%.4f', cost || 0)
-
-    # The count, not negative, with its thousands separated by commas.
-    def thousands(count) = count.to_s.reverse.scan(/\d{1,3}/).join(',').reverse
+    def milliseconds(seconds) = "#{Spent.thousands((seconds * 1000).round)} ms"
   end
   private_constant :AuditView
 end
