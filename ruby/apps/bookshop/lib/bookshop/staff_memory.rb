@@ -40,7 +40,7 @@ module Bookshop
     # The file's path as the model sees it, then each line of its text.
     def file(scope, path)
       text = @store.read(scope, path).to_s.sub(/\n+\z/, '')
-      ["#{ROOT}/#{path}", *text.split("\n", -1).map { "  #{it}" }]
+      ["#{ROOT}/#{path}", *text.split("\n").map { "  #{it}" }]
     end
   end
   private_constant :StaffMemory

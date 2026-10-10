@@ -64,6 +64,7 @@ class ConsoleTest < Minitest::Test
                     "Who is using the assistant? Your name: Sam\n",
                     "you> /help\n#{HELP}",
                     "you> \nyou> /memo\nUnknown command /memo. Type /help for commands.\n", "you> /quit\n"
+    refute_includes transcript, 'cannot be used'
     refute_includes transcript, 'Not read.'
     assert_empty model.requests
   end

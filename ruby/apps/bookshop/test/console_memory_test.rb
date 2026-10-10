@@ -12,6 +12,12 @@ class ConsoleMemoryTest < Minitest::Test
   SAVE = '{"command":"create","path":"/memories/preferences.md","file_text":"Show prices with tax.\n"}'
   VIEW = '{"command":"view","path":"/memories/preferences.md"}'
 
+  # A memory store whose one file is deleted by someone else between /memory's listing and its reading.
+  class VanishingStore
+    def list(_scope) = [Sleepyshark::Officina::MemoryFile.new(path: 'preferences.md', size: 16)]
+    def read(_scope, _path) = nil
+  end
+
   def test_app11_memory_shows_what_is_remembered_for_the_staff_member_at_the_counter
     memory = Officina::HashMemoryStore.new
     memory.write('sam', 'preferences.md', "Prices with tax.\n\nBrief answers.\n\n")
@@ -40,6 +46,26 @@ class ConsoleMemoryTest < Minitest::Test
       assert_in_order transcript, "you> /memory\nThe memory could not be read: The memory file preferences.md is " \
                                   "not UTF-8 text.\nyou> /help\nCommands:"
     end
+  end
+
+  def test_app11_memory_the_system_refuses_to_read_is_said_in_one_line
+    Dir.mktmpdir('r09b2-') do |root|
+      Officina::FileMemoryStore.new(root).write('sam', 'preferences.md', 'Prices with tax.')
+      file = File.join(root, 'sam'.unpack1('H*'), 'preferences.md')
+      File.chmod(0, file)
+      skip 'This system lets the tests read a file without permission to read it.' if File.readable?(file)
+
+      transcript = session(ScriptedModel.new, 'Sam', '/memory', '/quit', memory: Officina::FileMemoryStore.new(root))
+
+      assert_in_order transcript, "you> /memory\nThe memory could not be read: Permission denied @ rb_sysopen - " \
+                                  "#{file}\nyou> /quit"
+    end
+  end
+
+  def test_app11_a_file_gone_between_listing_and_reading_shows_as_its_path_alone
+    transcript = session(ScriptedModel.new, 'Sam', '/memory', '/quit', memory: VanishingStore.new)
+
+    assert_in_order transcript, "you> /memory\nRemembered:\n/memories/preferences.md\nyou> /quit"
   end
 
   def test_app11_mem03_mem04_mem05_a_preference_saved_in_one_session_is_applied_in_a_new_one
