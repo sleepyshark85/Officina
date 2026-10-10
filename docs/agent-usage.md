@@ -13,6 +13,7 @@ python3 -B scripts/agent-usage.py
 - **Output** is not shown: transcripts record a message's usage as its stream begins, before the output is counted.
 - **Peak context:** the input of the agent's largest single request, what it carried at its fullest. The context-size
   hook (`.claude/hooks/context-size.py`) warns an agent at 150k and 300k.
+- **Start, End:** the times (UTC) of the agent's first and last transcript entry, prompts and tool results included.
 - **Active minutes:** the time between the agent's consecutive transcript entries, leaving out every gap of 30
   minutes or more as idle (a night, the owner away). Waits for tools and CI shorter than that count as active.
 
@@ -23,48 +24,48 @@ python3 -B scripts/agent-usage.py
 | lead | 1 | 73,844k |
 | general-purpose | 39 | 299,882k |
 
-| Agent | Role | Task | Calls | Input processed | Of which cache reads | Peak context | Active minutes |
-|---|---|---|---|---|---|---|---|
-| lead | lead | This session's main conversation | 239 | 73,844k | 72,910k | 506k | 286 |
-| a52cc06d | general-purpose | Implement slice S01 skeleton | 32 | 2,228k | 2,139k | 89k | 7 |
-| ad1b4fe5 | general-purpose | Run slice S02 live API check | 46 | 6,560k | 6,369k | 191k | 12 |
-| a4dacc7e | general-purpose | Review PR #3 S01 skeleton | 10 | 500k | 457k | 61k | 2 |
-| a4652a5e | general-purpose | Implement slice S03 run loop | 51 | 6,223k | 6,071k | 168k | 20 |
-| a0eade42 | general-purpose | Review PR #4 S02 spike | 18 | 1,499k | 1,396k | 120k | 3 |
-| ad6b7e38 | general-purpose | Review PR #5 docs findings | 12 | 969k | 882k | 104k | 2 |
-| af930c91 | general-purpose | Fix PR #4 review items | 6 | 241k | 195k | 46k | 1 |
-| a4bd1e7a | general-purpose | Review PR #6 S03 run loop | 24 | 2,577k | 2,308k | 163k | 10 |
-| ae3252d8 | general-purpose | Fix S01 review nits | 6 | 215k | 193k | 39k | 2 |
-| a626d868 | general-purpose | Review PR #7 S01 nits | 5 | 181k | 156k | 41k | 1 |
-| ae8c5543 | general-purpose | Review PR #8 CI gates | 17 | 664k | 636k | 46k | 5 |
-| aea57be4 | general-purpose | Implement slice S04 Claude adapter | 84 | 15,956k | 15,453k | 268k | 24 |
-| a7237bed | general-purpose | Review PR #9 test strategy docs | 12 | 577k | 534k | 60k | 4 |
-| a918e58d | general-purpose | Review PR #10 S04 Claude adapter | 38 | 4,583k | 4,443k | 157k | 16 |
-| a57269a5 | general-purpose | Implement slice S05 tools and audit | 124 | 26,570k | 26,042k | 290k | 32 |
-| aba77a48 | general-purpose | Fix PR #10 concurrency test | 11 | 424k | 381k | 43k | 3 |
-| ab42362f | general-purpose | Review PR #11 S05 tools and audit | 39 | 3,642k | 3,438k | 131k | 14 |
-| ab3bf6b3 | general-purpose | Implement slice S06 Bookshop console | 107 | 16,570k | 16,184k | 226k | 31 |
-| aa96d2ed | general-purpose | Fix PR #11 End-with-tools result | 12 | 463k | 419k | 44k | 3 |
-| aaa1e649 | general-purpose | Review PR #12 S06 Bookshop console | 38 | 3,684k | 3,480k | 131k | 17 |
-| afb08abf | general-purpose | Implement slice S07 telemetry | 139 | 29,453k | 28,908k | 305k | 38 |
-| a254400b | general-purpose | Fix PR #12 approval read race | 11 | 395k | 355k | 39k | 3 |
-| a3c3fdc9 | general-purpose | Review PR #13 S07 telemetry | 31 | 3,087k | 2,962k | 142k | 14 |
-| a1336cff | general-purpose | Implement slice S08 sessions and budgets | 123 | 29,969k | 29,348k | 339k | 32 |
-| a4686b38 | general-purpose | Review PR #14 S08 sessions budgets | 30 | 3,669k | 3,382k | 169k | 11 |
-| a8c4c142 | general-purpose | Implement slice S09 memory | 121 | 27,543k | 26,711k | 321k | 41 |
-| a03605e1 | general-purpose | Implement slice S10 long conversations | 118 | 24,324k | 23,551k | 287k | 32 |
-| a97d9827 | general-purpose | Implement slice S11 MCP | 89 | 15,000k | 14,586k | 237k | 27 |
-| ada640fd | general-purpose | Implement slice S12 typed output | 93 | 16,804k | 16,358k | 255k | 22 |
-| a7a4c4c1 | general-purpose | Review PR #16 S12 typed output | 30 | 3,264k | 3,133k | 148k | 9 |
-| abdc9a9c | general-purpose | Review PR #17 S11 MCP | 29 | 2,411k | 2,218k | 124k | 12 |
-| a5e1e48d | general-purpose | Review PR #18 S09 memory | 36 | 4,587k | 4,283k | 180k | 24 |
-| a51e94c4 | general-purpose | Review PR #19 S10 long conversations | 35 | 4,342k | 4,192k | 167k | 13 |
-| aa709a54 | general-purpose | Implement S13a samples and cleanup | 99 | 18,486k | 18,239k | 263k | 26 |
-| a4d84518 | general-purpose | Implement S13b demo and smoke test | 99 | 15,445k | 15,234k | 227k | 33 |
-| a734fa61 | general-purpose | Review PR #21 S13b demo smoke | 31 | 2,318k | 2,154k | 109k | 12 |
-| a4264eb7 | general-purpose | Review PR #20 S13a samples | 38 | 3,313k | 3,208k | 121k | 11 |
-| a969d427 | general-purpose | Fix demo-mode clearing tuning | 19 | 884k | 829k | 55k | 4 |
-| a01121f5 | general-purpose | Review PR #22 demo clearing fix | 7 | 265k | 222k | 43k | 2 |
+| Agent | Role | Task | Start (UTC) | End (UTC) | Calls | Input processed | Of which cache reads | Peak context | Active minutes |
+|---|---|---|---|---|---|---|---|---|---|
+| lead | lead | This session's main conversation | 2026-10-05 13:58 | 2026-10-06 07:35 | 239 | 73,844k | 72,910k | 506k | 286 |
+| a52cc06d | general-purpose | Implement slice S01 skeleton | 2026-10-05 14:15 | 2026-10-05 14:22 | 32 | 2,228k | 2,139k | 89k | 7 |
+| ad1b4fe5 | general-purpose | Run slice S02 live API check | 2026-10-05 14:15 | 2026-10-05 14:27 | 46 | 6,560k | 6,369k | 191k | 12 |
+| a4dacc7e | general-purpose | Review PR #3 S01 skeleton | 2026-10-05 14:22 | 2026-10-05 14:25 | 10 | 500k | 457k | 61k | 2 |
+| a4652a5e | general-purpose | Implement slice S03 run loop | 2026-10-05 14:22 | 2026-10-05 14:42 | 51 | 6,223k | 6,071k | 168k | 20 |
+| a0eade42 | general-purpose | Review PR #4 S02 spike | 2026-10-05 14:27 | 2026-10-05 14:31 | 18 | 1,499k | 1,396k | 120k | 3 |
+| ad6b7e38 | general-purpose | Review PR #5 docs findings | 2026-10-05 14:28 | 2026-10-05 14:30 | 12 | 969k | 882k | 104k | 2 |
+| af930c91 | general-purpose | Fix PR #4 review items | 2026-10-05 14:30 | 2026-10-05 14:30 | 6 | 241k | 195k | 46k | 1 |
+| a4bd1e7a | general-purpose | Review PR #6 S03 run loop | 2026-10-05 14:34 | 2026-10-05 14:44 | 24 | 2,577k | 2,308k | 163k | 10 |
+| ae3252d8 | general-purpose | Fix S01 review nits | 2026-10-05 14:34 | 2026-10-05 14:36 | 6 | 215k | 193k | 39k | 2 |
+| a626d868 | general-purpose | Review PR #7 S01 nits | 2026-10-05 14:36 | 2026-10-05 14:37 | 5 | 181k | 156k | 41k | 1 |
+| ae8c5543 | general-purpose | Review PR #8 CI gates | 2026-10-05 14:43 | 2026-10-05 14:47 | 17 | 664k | 636k | 46k | 5 |
+| aea57be4 | general-purpose | Implement slice S04 Claude adapter | 2026-10-05 15:17 | 2026-10-05 15:41 | 84 | 15,956k | 15,453k | 268k | 24 |
+| a7237bed | general-purpose | Review PR #9 test strategy docs | 2026-10-05 15:17 | 2026-10-05 15:21 | 12 | 577k | 534k | 60k | 4 |
+| a918e58d | general-purpose | Review PR #10 S04 Claude adapter | 2026-10-05 15:33 | 2026-10-05 15:49 | 38 | 4,583k | 4,443k | 157k | 16 |
+| a57269a5 | general-purpose | Implement slice S05 tools and audit | 2026-10-05 15:33 | 2026-10-05 16:05 | 124 | 26,570k | 26,042k | 290k | 32 |
+| aba77a48 | general-purpose | Fix PR #10 concurrency test | 2026-10-05 15:45 | 2026-10-05 15:47 | 11 | 424k | 381k | 43k | 3 |
+| ab42362f | general-purpose | Review PR #11 S05 tools and audit | 2026-10-05 15:56 | 2026-10-05 16:10 | 39 | 3,642k | 3,438k | 131k | 14 |
+| ab3bf6b3 | general-purpose | Implement slice S06 Bookshop console | 2026-10-05 15:56 | 2026-10-05 16:27 | 107 | 16,570k | 16,184k | 226k | 31 |
+| aa96d2ed | general-purpose | Fix PR #11 End-with-tools result | 2026-10-05 16:07 | 2026-10-05 16:09 | 12 | 463k | 419k | 44k | 3 |
+| aaa1e649 | general-purpose | Review PR #12 S06 Bookshop console | 2026-10-05 16:17 | 2026-10-05 16:34 | 38 | 3,684k | 3,480k | 131k | 17 |
+| afb08abf | general-purpose | Implement slice S07 telemetry | 2026-10-05 16:17 | 2026-10-05 16:55 | 139 | 29,453k | 28,908k | 305k | 38 |
+| a254400b | general-purpose | Fix PR #12 approval read race | 2026-10-05 16:30 | 2026-10-05 16:33 | 11 | 395k | 355k | 39k | 3 |
+| a3c3fdc9 | general-purpose | Review PR #13 S07 telemetry | 2026-10-05 16:42 | 2026-10-05 16:56 | 31 | 3,087k | 2,962k | 142k | 14 |
+| a1336cff | general-purpose | Implement slice S08 sessions and budgets | 2026-10-05 16:42 | 2026-10-05 17:14 | 123 | 29,969k | 29,348k | 339k | 32 |
+| a4686b38 | general-purpose | Review PR #14 S08 sessions budgets | 2026-10-05 17:04 | 2026-10-05 17:15 | 30 | 3,669k | 3,382k | 169k | 11 |
+| a8c4c142 | general-purpose | Implement slice S09 memory | 2026-10-05 17:04 | 2026-10-05 17:45 | 121 | 27,543k | 26,711k | 321k | 41 |
+| a03605e1 | general-purpose | Implement slice S10 long conversations | 2026-10-05 17:04 | 2026-10-05 17:36 | 118 | 24,324k | 23,551k | 287k | 32 |
+| a97d9827 | general-purpose | Implement slice S11 MCP | 2026-10-05 17:04 | 2026-10-05 17:31 | 89 | 15,000k | 14,586k | 237k | 27 |
+| ada640fd | general-purpose | Implement slice S12 typed output | 2026-10-05 17:04 | 2026-10-05 17:26 | 93 | 16,804k | 16,358k | 255k | 22 |
+| a7a4c4c1 | general-purpose | Review PR #16 S12 typed output | 2026-10-05 17:18 | 2026-10-05 17:28 | 30 | 3,264k | 3,133k | 148k | 9 |
+| abdc9a9c | general-purpose | Review PR #17 S11 MCP | 2026-10-05 17:21 | 2026-10-05 17:33 | 29 | 2,411k | 2,218k | 124k | 12 |
+| a5e1e48d | general-purpose | Review PR #18 S09 memory | 2026-10-05 17:23 | 2026-10-05 17:46 | 36 | 4,587k | 4,283k | 180k | 24 |
+| a51e94c4 | general-purpose | Review PR #19 S10 long conversations | 2026-10-05 17:25 | 2026-10-05 17:37 | 35 | 4,342k | 4,192k | 167k | 13 |
+| aa709a54 | general-purpose | Implement S13a samples and cleanup | 2026-10-05 17:47 | 2026-10-05 18:14 | 99 | 18,486k | 18,239k | 263k | 26 |
+| a4d84518 | general-purpose | Implement S13b demo and smoke test | 2026-10-05 17:47 | 2026-10-05 18:21 | 99 | 15,445k | 15,234k | 227k | 33 |
+| a734fa61 | general-purpose | Review PR #21 S13b demo smoke | 2026-10-05 18:06 | 2026-10-05 18:18 | 31 | 2,318k | 2,154k | 109k | 12 |
+| a4264eb7 | general-purpose | Review PR #20 S13a samples | 2026-10-05 18:06 | 2026-10-05 18:17 | 38 | 3,313k | 3,208k | 121k | 11 |
+| a969d427 | general-purpose | Fix demo-mode clearing tuning | 2026-10-06 01:18 | 2026-10-06 01:23 | 19 | 884k | 829k | 55k | 4 |
+| a01121f5 | general-purpose | Review PR #22 demo clearing fix | 2026-10-06 01:23 | 2026-10-06 01:25 | 7 | 265k | 222k | 43k | 2 |
 
 ## Session d6c4a9e9 (2026-10-06 01:37 to 2026-10-08 12:45 UTC)
 
@@ -73,28 +74,28 @@ python3 -B scripts/agent-usage.py
 | lead | 1 | 257,154k |
 | general-purpose | 19 | 23,085k |
 
-| Agent | Role | Task | Calls | Input processed | Of which cache reads | Peak context | Active minutes |
-|---|---|---|---|---|---|---|---|
-| lead | lead | This session's main conversation | 584 | 257,154k | 254,834k | 964k | 242 |
-| a8e11095 | general-purpose | Review PR 23 tool context | 7 | 286k | 240k | 46k | 1 |
-| a34f834d | general-purpose | Review PR 24 RunOptions | 16 | 1,028k | 966k | 79k | 3 |
-| a7cef14e | general-purpose | Review PR 25 run decision | 8 | 338k | 304k | 51k | 1 |
-| a9b6f66d | general-purpose | Review PR 26 outcomes cohesion | 6 | 249k | 219k | 47k | 1 |
-| a69d5b58 | general-purpose | Review PR 27 RunScope | 10 | 471k | 413k | 58k | 2 |
-| a2c1a4ea | general-purpose | Review PR 28 design docs | 43 | 5,137k | 4,991k | 163k | 7 |
-| a1ad3481 | general-purpose | Review PR 29 principle gaps | 10 | 512k | 450k | 62k | 1 |
-| a427c91b | general-purpose | Review PR 30 entry point | 10 | 487k | 426k | 62k | 1 |
-| ab095d16 | general-purpose | Review PR 30 entry point | 14 | 781k | 730k | 67k | 2 |
-| a65a93af | general-purpose | Review PR 31 rename | 16 | 791k | 746k | 62k | 2 |
-| a0bd49e0 | general-purpose | Review PR 32 RequestPrefix | 19 | 1,166k | 1,086k | 81k | 3 |
-| af73adb0 | general-purpose | Review PR 33 comment shortening | 35 | 3,592k | 3,448k | 144k | 8 |
-| a49282a5 | general-purpose | Review PR 34 session fixes | 23 | 1,560k | 1,464k | 96k | 7 |
-| a752ec05 | general-purpose | Review PR 35 SessionManager | 18 | 1,135k | 1,073k | 79k | 5 |
-| ae84b7e8 | general-purpose | Review PR 36 Claude strings | 30 | 2,284k | 2,179k | 105k | 6 |
-| a78c6fec | general-purpose | Review PR 37 built-in stores | 17 | 1,049k | 967k | 82k | 3 |
-| af7cfeb0 | general-purpose | Review PR 45 search indexes | 15 | 760k | 696k | 64k | 6 |
-| ada54a9a | general-purpose | Review PR 46 CodeQL | 11 | 532k | 489k | 61k | 2 |
-| ae3f6d54 | general-purpose | Review PR 48 gates | 19 | 927k | 880k | 64k | 6 |
+| Agent | Role | Task | Start (UTC) | End (UTC) | Calls | Input processed | Of which cache reads | Peak context | Active minutes |
+|---|---|---|---|---|---|---|---|---|---|
+| lead | lead | This session's main conversation | 2026-10-06 01:37 | 2026-10-08 12:45 | 584 | 257,154k | 254,834k | 964k | 242 |
+| a8e11095 | general-purpose | Review PR 23 tool context | 2026-10-06 01:47 | 2026-10-06 01:48 | 7 | 286k | 240k | 46k | 1 |
+| a34f834d | general-purpose | Review PR 24 RunOptions | 2026-10-06 01:50 | 2026-10-06 01:53 | 16 | 1,028k | 966k | 79k | 3 |
+| a7cef14e | general-purpose | Review PR 25 run decision | 2026-10-06 01:51 | 2026-10-06 01:53 | 8 | 338k | 304k | 51k | 1 |
+| a9b6f66d | general-purpose | Review PR 26 outcomes cohesion | 2026-10-06 01:54 | 2026-10-06 01:55 | 6 | 249k | 219k | 47k | 1 |
+| a69d5b58 | general-purpose | Review PR 27 RunScope | 2026-10-06 02:13 | 2026-10-06 02:15 | 10 | 471k | 413k | 58k | 2 |
+| a2c1a4ea | general-purpose | Review PR 28 design docs | 2026-10-06 02:51 | 2026-10-06 02:57 | 43 | 5,137k | 4,991k | 163k | 7 |
+| a1ad3481 | general-purpose | Review PR 29 principle gaps | 2026-10-06 03:12 | 2026-10-06 03:13 | 10 | 512k | 450k | 62k | 1 |
+| a427c91b | general-purpose | Review PR 30 entry point | 2026-10-06 03:54 | 2026-10-06 03:55 | 10 | 487k | 426k | 62k | 1 |
+| ab095d16 | general-purpose | Review PR 30 entry point | 2026-10-06 03:56 | 2026-10-06 03:58 | 14 | 781k | 730k | 67k | 2 |
+| a65a93af | general-purpose | Review PR 31 rename | 2026-10-06 04:01 | 2026-10-06 04:03 | 16 | 791k | 746k | 62k | 2 |
+| a0bd49e0 | general-purpose | Review PR 32 RequestPrefix | 2026-10-06 04:15 | 2026-10-06 04:18 | 19 | 1,166k | 1,086k | 81k | 3 |
+| af73adb0 | general-purpose | Review PR 33 comment shortening | 2026-10-06 04:44 | 2026-10-06 04:52 | 35 | 3,592k | 3,448k | 144k | 8 |
+| a49282a5 | general-purpose | Review PR 34 session fixes | 2026-10-06 08:10 | 2026-10-06 08:17 | 23 | 1,560k | 1,464k | 96k | 7 |
+| a752ec05 | general-purpose | Review PR 35 SessionManager | 2026-10-06 08:13 | 2026-10-06 08:18 | 18 | 1,135k | 1,073k | 79k | 5 |
+| ae84b7e8 | general-purpose | Review PR 36 Claude strings | 2026-10-06 08:36 | 2026-10-06 08:42 | 30 | 2,284k | 2,179k | 105k | 6 |
+| a78c6fec | general-purpose | Review PR 37 built-in stores | 2026-10-06 08:49 | 2026-10-06 08:52 | 17 | 1,049k | 967k | 82k | 3 |
+| af7cfeb0 | general-purpose | Review PR 45 search indexes | 2026-10-06 17:19 | 2026-10-06 17:24 | 15 | 760k | 696k | 64k | 6 |
+| ada54a9a | general-purpose | Review PR 46 CodeQL | 2026-10-06 17:23 | 2026-10-06 17:24 | 11 | 532k | 489k | 61k | 2 |
+| ae3f6d54 | general-purpose | Review PR 48 gates | 2026-10-06 17:37 | 2026-10-06 17:43 | 19 | 927k | 880k | 64k | 6 |
 
 ## Session c0c4cb14 (2026-10-06 07:38 to 2026-10-06 07:44 UTC)
 
@@ -102,85 +103,147 @@ python3 -B scripts/agent-usage.py
 |---|---|---|
 | lead | 1 | 598k |
 
-| Agent | Role | Task | Calls | Input processed | Of which cache reads | Peak context | Active minutes |
-|---|---|---|---|---|---|---|---|
-| lead | lead | This session's main conversation | 13 | 598k | 572k | 49k | 7 |
+| Agent | Role | Task | Start (UTC) | End (UTC) | Calls | Input processed | Of which cache reads | Peak context | Active minutes |
+|---|---|---|---|---|---|---|---|---|---|
+| lead | lead | This session's main conversation | 2026-10-06 07:38 | 2026-10-06 07:44 | 13 | 598k | 572k | 49k | 7 |
 
-## Session 882087f6 (2026-10-10 02:00 to 2026-10-10 10:12 UTC)
+## Session 882087f6 (2026-10-10 02:00 to 2026-10-10 18:22 UTC)
 
 | Role | Agents | Input processed |
 |---|---|---|
-| lead | 1 | 201,186k |
-| reviewer | 34 | 116,738k |
-| developer | 26 | 707,016k |
-| fixer | 3 | 2,139k |
+| lead | 1 | 329,643k |
+| reviewer | 56 | 200,614k |
+| developer | 56 | 1,140,641k |
+| fixer | 13 | 25,981k |
 | claude-code-guide | 2 | 115k |
 
-| Agent | Role | Task | Calls | Input processed | Of which cache reads | Peak context | Active minutes |
-|---|---|---|---|---|---|---|---|
-| lead | lead | This session's main conversation | 455 | 201,186k | 200,275k | 771k | 365 |
-| a8eb4164 | reviewer | Review Ruby plan and licence PRs | 190 | 41,017k | 38,076k | 384k | 152 |
-| a033fe44 | developer | Ruby S02 Claude features spike | 96 | 18,555k | 18,276k | 279k | 19 |
-| a9bee389 | reviewer | Review PR #83 Ruby S02 | 28 | 1,676k | 1,593k | 83k | 5 |
-| af836887 | developer | Ruby S01 skeleton slice | 147 | 28,135k | 27,565k | 294k | 49 |
-| ab6d8f7e | reviewer | Review PR 84 Ruby S01 | 64 | 5,328k | 5,205k | 124k | 12 |
-| ada44bb2 | developer | Diff-scoped mutation for Go and Ruby | 93 | 8,975k | 8,823k | 151k | 18 |
-| ac7b3343 | developer | Ruby S03 run loop slice | 160 | 36,542k | 35,910k | 336k | 36 |
-| a0054be8 | developer | .NET fix for issue #86 | 16 | 885k | 835k | 68k | 4 |
-| a3509c65 | developer | Ruby S05a schema DSL and validator | 173 | 35,639k | 35,325k | 332k | 44 |
-| a69ba430 | developer | Ruby S11a MCP client protocol | 176 | 41,901k | 41,239k | 374k | 47 |
-| aa6986f7 | reviewer | Review PR 87 | 38 | 1,634k | 1,572k | 65k | 5 |
-| acb63113 | reviewer | Review PR 88 | 11 | 231k | 209k | 27k | 1 |
-| a3a37aae | developer | Ruby S04 Claude adapter slice | 146 | 36,597k | 36,244k | 369k | 37 |
-| a3740c93 | developer | Fix flaky Go MCP test on Windows | 42 | 2,836k | 2,577k | 86k | 38 |
-| a0264476 | reviewer | Review PR 89 | 19 | 511k | 417k | 36k | 13 |
-| a8e52a21 | reviewer | Review PR #90 Ruby S03 | 27 | 1,844k | 1,752k | 96k | 8 |
-| a7f6d890 | reviewer | Review PR 91 | 62 | 4,866k | 4,753k | 117k | 16 |
-| adc9d3e9 | reviewer | Review PR #92 | 45 | 3,189k | 3,001k | 110k | 17 |
-| a58a7a79 | developer | Ruby S05B tool pipeline and audit | 448 | 204,891k | 200,526k | 824k | 143 |
-| a9520ea8 | reviewer | Review PR 93 Ruby S04 | 52 | 4,355k | 4,240k | 119k | 8 |
-| a72e97df | developer | Ruby S06A Bookshop data layer | 167 | 35,989k | 35,658k | 349k | 39 |
-| a02f78e9 | developer | Ruby S09A memory stores | 234 | 55,807k | 54,946k | 384k | 66 |
-| ac4362a2 | reviewer | Review PR 94 Ruby S06A | 52 | 4,563k | 4,349k | 135k | 18 |
-| aa90e0d0 | reviewer | Review PR 95 | 56 | 4,864k | 4,518k | 152k | 41 |
-| a4598c87 | reviewer | Strict re-review of #91 | 26 | 1,605k | 1,516k | 93k | 5 |
-| a42254e3 | reviewer | Strict re-review of #92 | 36 | 2,749k | 2,484k | 117k | 33 |
-| aacd55e9 | reviewer | Strict re-review of #93 | 44 | 3,488k | 3,365k | 127k | 13 |
-| a0ab3cc3 | reviewer | Strict audit of merged Ruby code | 47 | 5,389k | 5,224k | 169k | 11 |
-| acfcde0a | developer | Fix #91 strict review findings | 65 | 7,000k | 6,858k | 158k | 17 |
-| a71af28e | developer | Ruby S03 quality cleanup PR | 118 | 17,431k | 17,212k | 236k | 29 |
-| a632b7c1 | developer | Fix #93 strict review findings | 153 | 29,177k | 28,632k | 320k | 43 |
-| a251f740 | reviewer | Review PR 91 round 2 | 22 | 955k | 897k | 60k | 6 |
-| a8c62d46 | reviewer | Review PR 98 | 36 | 2,548k | 2,363k | 109k | 15 |
-| adca4233 | fixer | Fix #89 discarded wait error | 23 | 951k | 856k | 49k | 14 |
-| a546a966 | reviewer | Review PR 89 new head | 8 | 116k | 90k | 17k | 10 |
-| a7dc3e8f | developer | Fix #92 strict review findings | 241 | 72,645k | 70,776k | 514k | 109 |
-| a0e09729 | reviewer | Review PR 93 round 2 | 66 | 6,395k | 6,101k | 163k | 17 |
-| ac3d145a | reviewer | Owner-approved round 4 for #95 | 19 | 854k | 796k | 63k | 4 |
-| a206ee6e | developer | Conventions single source of truth | 57 | 6,358k | 6,225k | 151k | 14 |
-| a100949b | developer | Fix #95 lock-removal test gap | 83 | 8,086k | 7,948k | 155k | 33 |
-| a24be168 | reviewer | Review PR 99 conventions | 30 | 1,599k | 1,524k | 77k | 5 |
-| a7533d10 | reviewer | Review PR 100 | 73 | 8,175k | 7,866k | 172k | 29 |
-| a14cb536 | reviewer | Verify PR 95 round-4 fix | 26 | 845k | 802k | 45k | 4 |
-| ae76923f | reviewer | Verdict #95 after main merge | 13 | 259k | 216k | 30k | 11 |
-| a98e1d10 | developer | Review gate carries approval over merges | 79 | 10,029k | 9,721k | 181k | 29 |
-| a0fe8e6d | developer | Dispatch skill and fresh-reviewer rule | 32 | 2,270k | 2,193k | 94k | 9 |
-| ad3d18b9 | developer | Context-size monitoring hook | 69 | 5,476k | 5,375k | 117k | 16 |
-| a5bac968 | claude-code-guide | Verify project skill layout | 3 | 58k | 34k | 24k | 1 |
-| aa934d4e | claude-code-guide | Hook fields in subagents | 3 | 57k | 47k | 21k | 1 |
-| a544e539 | reviewer | Review PR 101 dispatch skill | 19 | 705k | 643k | 66k | 4 |
-| abeaf449 | reviewer | Review PR 102 | 33 | 1,764k | 1,683k | 85k | 9 |
-| aba25af7 | reviewer | Merge-check verdict for #95 | 6 | 78k | 56k | 16k | 10 |
-| aaf9aac9 | reviewer | Review PR 103 review gate | 52 | 3,077k | 2,984k | 97k | 13 |
-| a9b3d707 | reviewer | Merge-check verdict for #100 | 20 | 590k | 496k | 50k | 17 |
-| a776164a | developer | Ruby S06 part B Bookshop console | 84 | 15,101k | 14,851k | 268k | 16 |
-| ace4eb44 | developer | Ruby S07 part A core telemetry | 81 | 13,489k | 13,229k | 278k | 15 |
-| acd00305 | reviewer | Merge-check verdict for #102 | 5 | 88k | 67k | 23k | 1 |
-| ac530fe0 | fixer | Run hook tests in CI | 7 | 254k | 232k | 39k | 1 |
-| aa6d9fad | reviewer | Review PR #104 hook tests in CI | 13 | 276k | 253k | 28k | 2 |
-| a85c2558 | reviewer | Review PR #105 agent usage doc | 21 | 795k | 738k | 58k | 7 |
-| a12e48db | developer | Continue Ruby S07 part A telemetry | 56 | 6,051k | 5,915k | 152k | 7 |
-| ad2244a5 | fixer | Hook warning tells agents to save work | 21 | 934k | 884k | 50k | 3 |
-| aa4d313a | developer | Continue Ruby S06 part B console | 52 | 5,259k | 5,127k | 149k | 7 |
-| a89d31b4 | developer | Fix #105 agent-usage review findings | 30 | 1,892k | 1,827k | 83k | 6 |
-| a359b6d0 | reviewer | Review PR #106 hook hand-over text | 14 | 310k | 283k | 31k | 3 |
+| Agent | Role | Task | Start (UTC) | End (UTC) | Calls | Input processed | Of which cache reads | Peak context | Active minutes |
+|---|---|---|---|---|---|---|---|---|---|
+| lead | lead | This session's main conversation | 2026-10-10 02:00 | 2026-10-10 18:22 | 756 | 329,643k | 328,214k | 960k | 771 |
+| a8eb4164 | reviewer | Review Ruby plan and licence PRs | 2026-10-10 02:10 | 2026-10-10 08:57 | 190 | 41,017k | 38,076k | 384k | 152 |
+| a033fe44 | developer | Ruby S02 Claude features spike | 2026-10-10 04:36 | 2026-10-10 04:56 | 96 | 18,555k | 18,276k | 279k | 19 |
+| a9bee389 | reviewer | Review PR #83 Ruby S02 | 2026-10-10 04:50 | 2026-10-10 04:55 | 28 | 1,676k | 1,593k | 83k | 5 |
+| af836887 | developer | Ruby S01 skeleton slice | 2026-10-10 04:56 | 2026-10-10 05:45 | 147 | 28,135k | 27,565k | 294k | 49 |
+| ab6d8f7e | reviewer | Review PR 84 Ruby S01 | 2026-10-10 05:15 | 2026-10-10 05:27 | 64 | 5,328k | 5,205k | 124k | 12 |
+| ada44bb2 | developer | Diff-scoped mutation for Go and Ruby | 2026-10-10 06:36 | 2026-10-10 06:53 | 93 | 8,975k | 8,823k | 151k | 18 |
+| ac7b3343 | developer | Ruby S03 run loop slice | 2026-10-10 06:36 | 2026-10-10 07:12 | 160 | 36,542k | 35,910k | 336k | 36 |
+| a0054be8 | developer | .NET fix for issue #86 | 2026-10-10 06:43 | 2026-10-10 06:48 | 16 | 885k | 835k | 68k | 4 |
+| a3509c65 | developer | Ruby S05a schema DSL and validator | 2026-10-10 06:43 | 2026-10-10 07:27 | 173 | 35,639k | 35,325k | 332k | 44 |
+| a69ba430 | developer | Ruby S11a MCP client protocol | 2026-10-10 06:43 | 2026-10-10 07:30 | 176 | 41,901k | 41,239k | 374k | 47 |
+| aa6986f7 | reviewer | Review PR 87 | 2026-10-10 06:45 | 2026-10-10 06:50 | 38 | 1,634k | 1,572k | 65k | 5 |
+| acb63113 | reviewer | Review PR 88 | 2026-10-10 06:46 | 2026-10-10 06:47 | 11 | 231k | 209k | 27k | 1 |
+| a3a37aae | developer | Ruby S04 Claude adapter slice | 2026-10-10 06:47 | 2026-10-10 07:24 | 146 | 36,597k | 36,244k | 369k | 37 |
+| a3740c93 | developer | Fix flaky Go MCP test on Windows | 2026-10-10 06:54 | 2026-10-10 08:08 | 42 | 2,836k | 2,577k | 86k | 38 |
+| a0264476 | reviewer | Review PR 89 | 2026-10-10 07:00 | 2026-10-10 07:59 | 19 | 511k | 417k | 36k | 13 |
+| a8e52a21 | reviewer | Review PR #90 Ruby S03 | 2026-10-10 07:04 | 2026-10-10 07:12 | 27 | 1,844k | 1,752k | 96k | 8 |
+| a7f6d890 | reviewer | Review PR 91 | 2026-10-10 07:11 | 2026-10-10 07:27 | 62 | 4,866k | 4,753k | 117k | 16 |
+| adc9d3e9 | reviewer | Review PR #92 | 2026-10-10 07:11 | 2026-10-10 07:28 | 45 | 3,189k | 3,001k | 110k | 17 |
+| a58a7a79 | developer | Ruby S05B tool pipeline and audit | 2026-10-10 07:13 | 2026-10-10 09:36 | 448 | 204,891k | 200,526k | 824k | 143 |
+| a9520ea8 | reviewer | Review PR 93 Ruby S04 | 2026-10-10 07:14 | 2026-10-10 07:22 | 52 | 4,355k | 4,240k | 119k | 8 |
+| a72e97df | developer | Ruby S06A Bookshop data layer | 2026-10-10 07:25 | 2026-10-10 08:04 | 167 | 35,989k | 35,658k | 349k | 39 |
+| a02f78e9 | developer | Ruby S09A memory stores | 2026-10-10 07:25 | 2026-10-10 08:31 | 234 | 55,807k | 54,946k | 384k | 66 |
+| ac4362a2 | reviewer | Review PR 94 Ruby S06A | 2026-10-10 07:44 | 2026-10-10 08:02 | 52 | 4,563k | 4,349k | 135k | 18 |
+| aa90e0d0 | reviewer | Review PR 95 | 2026-10-10 07:46 | 2026-10-10 08:26 | 56 | 4,864k | 4,518k | 152k | 41 |
+| a4598c87 | reviewer | Strict re-review of #91 | 2026-10-10 07:46 | 2026-10-10 07:51 | 26 | 1,605k | 1,516k | 93k | 5 |
+| a42254e3 | reviewer | Strict re-review of #92 | 2026-10-10 07:46 | 2026-10-10 12:06 | 50 | 4,832k | 4,254k | 162k | 46 |
+| aacd55e9 | reviewer | Strict re-review of #93 | 2026-10-10 07:46 | 2026-10-10 08:00 | 44 | 3,488k | 3,365k | 127k | 13 |
+| a0ab3cc3 | reviewer | Strict audit of merged Ruby code | 2026-10-10 07:46 | 2026-10-10 07:57 | 47 | 5,389k | 5,224k | 169k | 11 |
+| acfcde0a | developer | Fix #91 strict review findings | 2026-10-10 07:51 | 2026-10-10 08:08 | 65 | 7,000k | 6,858k | 158k | 17 |
+| a71af28e | developer | Ruby S03 quality cleanup PR | 2026-10-10 07:57 | 2026-10-10 08:26 | 118 | 17,431k | 17,212k | 236k | 29 |
+| a632b7c1 | developer | Fix #93 strict review findings | 2026-10-10 08:00 | 2026-10-10 08:43 | 153 | 29,177k | 28,632k | 320k | 43 |
+| a251f740 | reviewer | Review PR 91 round 2 | 2026-10-10 08:02 | 2026-10-10 08:07 | 22 | 955k | 897k | 60k | 6 |
+| a8c62d46 | reviewer | Review PR 98 | 2026-10-10 08:11 | 2026-10-10 08:26 | 36 | 2,548k | 2,363k | 109k | 15 |
+| adca4233 | fixer | Fix #89 discarded wait error | 2026-10-10 08:16 | 2026-10-10 08:30 | 23 | 951k | 856k | 49k | 14 |
+| a546a966 | reviewer | Review PR 89 new head | 2026-10-10 08:19 | 2026-10-10 08:29 | 8 | 116k | 90k | 17k | 10 |
+| a7dc3e8f | developer | Fix #92 strict review findings | 2026-10-10 08:20 | 2026-10-10 10:40 | 256 | 80,483k | 77,078k | 533k | 140 |
+| a0e09729 | reviewer | Review PR 93 round 2 | 2026-10-10 08:24 | 2026-10-10 08:42 | 66 | 6,395k | 6,101k | 163k | 17 |
+| ac3d145a | reviewer | Owner-approved round 4 for #95 | 2026-10-10 08:33 | 2026-10-10 08:37 | 19 | 854k | 796k | 63k | 4 |
+| a206ee6e | developer | Conventions single source of truth | 2026-10-10 08:37 | 2026-10-10 08:51 | 57 | 6,358k | 6,225k | 151k | 14 |
+| a100949b | developer | Fix #95 lock-removal test gap | 2026-10-10 08:40 | 2026-10-10 09:12 | 83 | 8,086k | 7,948k | 155k | 33 |
+| a24be168 | reviewer | Review PR 99 conventions | 2026-10-10 08:42 | 2026-10-10 08:47 | 30 | 1,599k | 1,524k | 77k | 5 |
+| a7533d10 | reviewer | Review PR 100 | 2026-10-10 09:00 | 2026-10-10 09:29 | 73 | 8,175k | 7,866k | 172k | 29 |
+| a14cb536 | reviewer | Verify PR 95 round-4 fix | 2026-10-10 09:08 | 2026-10-10 09:12 | 26 | 845k | 802k | 45k | 4 |
+| ae76923f | reviewer | Verdict #95 after main merge | 2026-10-10 09:14 | 2026-10-10 09:26 | 13 | 259k | 216k | 30k | 11 |
+| a98e1d10 | developer | Review gate carries approval over merges | 2026-10-10 09:15 | 2026-10-10 09:45 | 79 | 10,029k | 9,721k | 181k | 29 |
+| a0fe8e6d | developer | Dispatch skill and fresh-reviewer rule | 2026-10-10 09:15 | 2026-10-10 09:24 | 32 | 2,270k | 2,193k | 94k | 9 |
+| ad3d18b9 | developer | Context-size monitoring hook | 2026-10-10 09:15 | 2026-10-10 09:32 | 69 | 5,476k | 5,375k | 117k | 16 |
+| a5bac968 | claude-code-guide | Verify project skill layout | 2026-10-10 09:15 | 2026-10-10 09:16 | 3 | 58k | 34k | 24k | 1 |
+| aa934d4e | claude-code-guide | Hook fields in subagents | 2026-10-10 09:16 | 2026-10-10 09:16 | 3 | 57k | 47k | 21k | 1 |
+| a544e539 | reviewer | Review PR 101 dispatch skill | 2026-10-10 09:19 | 2026-10-10 09:24 | 19 | 705k | 643k | 66k | 4 |
+| abeaf449 | reviewer | Review PR 102 | 2026-10-10 09:22 | 2026-10-10 09:31 | 33 | 1,764k | 1,683k | 85k | 9 |
+| aba25af7 | reviewer | Merge-check verdict for #95 | 2026-10-10 09:27 | 2026-10-10 09:37 | 6 | 78k | 56k | 16k | 10 |
+| aaf9aac9 | reviewer | Review PR 103 review gate | 2026-10-10 09:31 | 2026-10-10 09:44 | 52 | 3,077k | 2,984k | 97k | 13 |
+| a9b3d707 | reviewer | Merge-check verdict for #100 | 2026-10-10 09:36 | 2026-10-10 09:53 | 20 | 590k | 496k | 50k | 17 |
+| a776164a | developer | Ruby S06 part B Bookshop console | 2026-10-10 09:49 | 2026-10-10 10:04 | 84 | 15,101k | 14,851k | 268k | 16 |
+| ace4eb44 | developer | Ruby S07 part A core telemetry | 2026-10-10 09:49 | 2026-10-10 10:03 | 81 | 13,489k | 13,229k | 278k | 15 |
+| acd00305 | reviewer | Merge-check verdict for #102 | 2026-10-10 09:54 | 2026-10-10 09:54 | 5 | 88k | 67k | 23k | 1 |
+| ac530fe0 | fixer | Run hook tests in CI | 2026-10-10 09:55 | 2026-10-10 09:56 | 7 | 254k | 232k | 39k | 1 |
+| aa6d9fad | reviewer | Review PR #104 hook tests in CI | 2026-10-10 09:56 | 2026-10-10 09:58 | 13 | 276k | 253k | 28k | 2 |
+| a85c2558 | reviewer | Review PR #105 agent usage doc | 2026-10-10 10:03 | 2026-10-10 10:52 | 32 | 1,531k | 1,391k | 72k | 13 |
+| a12e48db | developer | Continue Ruby S07 part A telemetry | 2026-10-10 10:04 | 2026-10-10 10:12 | 56 | 6,051k | 5,915k | 152k | 7 |
+| ad2244a5 | fixer | Hook warning tells agents to save work | 2026-10-10 10:05 | 2026-10-10 10:08 | 21 | 934k | 884k | 50k | 3 |
+| aa4d313a | developer | Continue Ruby S06 part B console | 2026-10-10 10:05 | 2026-10-10 10:15 | 56 | 5,869k | 5,732k | 155k | 10 |
+| a89d31b4 | developer | Fix #105 agent-usage review findings | 2026-10-10 10:06 | 2026-10-10 10:13 | 34 | 2,229k | 2,162k | 85k | 7 |
+| a359b6d0 | reviewer | Review PR #106 hook hand-over text | 2026-10-10 10:06 | 2026-10-10 10:09 | 14 | 310k | 283k | 31k | 3 |
+| a8bd0bab | developer | Ruby S07A-1 telemetry code green | 2026-10-10 10:12 | 2026-10-10 10:18 | 36 | 2,984k | 2,870k | 131k | 6 |
+| a5e4d148 | developer | Finish Ruby S06 part B and open PR | 2026-10-10 10:15 | 2026-10-10 11:28 | 112 | 17,915k | 17,182k | 252k | 72 |
+| a896222f | reviewer | Review PR 92 round 2 | 2026-10-10 10:16 | 2026-10-10 10:39 | 63 | 5,716k | 5,450k | 156k | 23 |
+| a3454011 | fixer | #105 one-line test fix | 2026-10-10 10:49 | 2026-10-10 10:50 | 8 | 291k | 269k | 39k | 1 |
+| a3b5e925 | developer | Ruby S07A-2 telemetry tests and docs | 2026-10-10 10:49 | 2026-10-10 11:19 | 119 | 23,916k | 23,375k | 307k | 30 |
+| aaa4fd32 | developer | #92 round-2 fixes and mutation | 2026-10-10 10:49 | 2026-10-10 11:17 | 90 | 17,652k | 17,355k | 314k | 28 |
+| a95196ee | reviewer | Review PR #108 Ruby S06 part B | 2026-10-10 10:51 | 2026-10-10 11:31 | 49 | 4,646k | 4,367k | 155k | 39 |
+| a35afbd1 | developer | Finish #92 round-2 fixes | 2026-10-10 11:17 | 2026-10-10 11:53 | 78 | 8,973k | 8,490k | 168k | 36 |
+| ae648f92 | developer | Ruby S07A step 3 kill survivors | 2026-10-10 11:19 | 2026-10-10 12:17 | 143 | 23,782k | 23,331k | 259k | 58 |
+| ac3e953b | developer | Keep the lead's context small | 2026-10-10 11:40 | 2026-10-10 11:45 | 18 | 938k | 894k | 62k | 5 |
+| a4489266 | reviewer | Review PR #109 lead context rules | 2026-10-10 11:42 | 2026-10-10 11:45 | 16 | 440k | 402k | 38k | 4 |
+| af8d2b42 | reviewer | Review PR #107 Ruby S07 part A | 2026-10-10 11:50 | 2026-10-10 12:36 | 60 | 6,250k | 5,519k | 163k | 46 |
+| a316ef92 | fixer | #107 rename Price#read | 2026-10-10 12:18 | 2026-10-10 12:23 | 9 | 330k | 291k | 39k | 5 |
+| ad25b3f1 | developer | Ruby S07 part B app telemetry | 2026-10-10 12:37 | 2026-10-10 12:59 | 123 | 22,832k | 22,560k | 288k | 22 |
+| ac7491b6 | developer | Ruby S08 sessions and budgets | 2026-10-10 12:37 | 2026-10-10 12:40 | 38 | 3,706k | 3,565k | 158k | 3 |
+| aa9ff0a6 | developer | Core: tool handler error results | 2026-10-10 12:37 | 2026-10-10 12:49 | 63 | 6,117k | 5,998k | 136k | 12 |
+| afa5894b | developer | Ruby S08 part A core budgets | 2026-10-10 12:40 | 2026-10-10 13:06 | 129 | 27,692k | 27,400k | 310k | 26 |
+| aa6a6153 | reviewer | Review PR #110 tool error results | 2026-10-10 12:44 | 2026-10-10 12:51 | 18 | 951k | 873k | 78k | 7 |
+| a035d965 | reviewer | Review PR #111 Ruby S07 part B | 2026-10-10 12:59 | 2026-10-10 13:24 | 48 | 5,003k | 4,720k | 152k | 25 |
+| aa06a499 | reviewer | Review PR #112 Ruby S08 part A | 2026-10-10 13:06 | 2026-10-10 13:40 | 49 | 4,826k | 4,448k | 149k | 34 |
+| aba09d39 | developer | Fix #111 round-1 findings | 2026-10-10 13:09 | 2026-10-10 13:21 | 61 | 5,683k | 5,566k | 133k | 12 |
+| ad4a9d4c | developer | Fix #112 round-1 findings | 2026-10-10 13:14 | 2026-10-10 13:34 | 66 | 5,157k | 5,063k | 112k | 20 |
+| aaf730d0 | developer | Ruby S08 part B Bookshop sessions | 2026-10-10 13:41 | 2026-10-10 14:05 | 104 | 19,618k | 19,332k | 286k | 24 |
+| a5d70b91 | developer | .NET and Go resume ruby-session | 2026-10-10 13:41 | 2026-10-10 13:49 | 29 | 1,507k | 1,444k | 63k | 8 |
+| a6317a58 | developer | Ruby S10 part A long conversations | 2026-10-10 13:42 | 2026-10-10 14:08 | 121 | 25,134k | 24,845k | 306k | 26 |
+| af29a29a | reviewer | Review PR #113 resume Ruby session | 2026-10-10 13:46 | 2026-10-10 14:00 | 18 | 590k | 509k | 42k | 14 |
+| a11f6fb0 | developer | Ruby S09B-1 memory tool core | 2026-10-10 13:58 | 2026-10-10 14:19 | 94 | 19,303k | 19,017k | 304k | 22 |
+| a7a6e54b | developer | Ruby S11B-1 MCP tool source | 2026-10-10 13:58 | 2026-10-10 14:31 | 101 | 18,747k | 18,458k | 306k | 33 |
+| acafc3ad | developer | Ruby S12A typed output core | 2026-10-10 13:58 | 2026-10-10 14:34 | 137 | 23,078k | 22,663k | 248k | 36 |
+| a1311288 | reviewer | Review PR #114 Ruby S08 part B | 2026-10-10 14:05 | 2026-10-10 15:25 | 69 | 6,538k | 5,992k | 154k | 43 |
+| a351ed63 | reviewer | Review PR #115 Ruby S10 part A | 2026-10-10 14:08 | 2026-10-10 14:34 | 55 | 5,124k | 4,859k | 146k | 26 |
+| ab664792 | reviewer | Review PR #116 Ruby S12 part A | 2026-10-10 14:15 | 2026-10-10 15:16 | 54 | 4,277k | 3,734k | 132k | 61 |
+| abe24512 | developer | Fix #115: split RunEngine | 2026-10-10 14:16 | 2026-10-10 14:27 | 28 | 1,786k | 1,725k | 79k | 11 |
+| a4408d48 | developer | Fix #114 round-1 findings | 2026-10-10 14:19 | 2026-10-10 14:55 | 98 | 13,219k | 12,694k | 202k | 36 |
+| ae475b95 | developer | Finish S09B-1 memory tool PR | 2026-10-10 14:20 | 2026-10-10 14:57 | 77 | 7,993k | 7,619k | 167k | 37 |
+| a3e0f4a2 | developer | Finish S11B-1 MCP tool source | 2026-10-10 14:31 | 2026-10-10 15:05 | 153 | 28,304k | 28,020k | 302k | 33 |
+| a6fbeb28 | developer | Fix #116 round 2 and merge main | 2026-10-10 14:39 | 2026-10-10 14:52 | 70 | 5,815k | 5,712k | 121k | 13 |
+| a2e22db1 | reviewer | Review PR #117 Ruby S09B-1 | 2026-10-10 14:57 | 2026-10-10 16:20 | 70 | 8,660k | 7,993k | 188k | 40 |
+| a6759b3e | fixer | Fix #116 fingerprint fixture test | 2026-10-10 15:08 | 2026-10-10 15:09 | 9 | 404k | 356k | 48k | 2 |
+| af36414b | fixer | Fix #114 round-2 must-fix | 2026-10-10 15:08 | 2026-10-10 15:11 | 15 | 814k | 751k | 63k | 4 |
+| a8fbbed6 | developer | Finish S11B-1 MCP tool source (2) | 2026-10-10 15:08 | 2026-10-10 16:43 | 151 | 22,806k | 22,154k | 238k | 95 |
+| adfaf88f | developer | Fix #117 round 1 and merge main | 2026-10-10 15:09 | 2026-10-10 16:18 | 123 | 15,770k | 14,926k | 208k | 69 |
+| ad61dde1 | fixer | Make Steep fail on FATAL in CI | 2026-10-10 15:09 | 2026-10-10 15:34 | 54 | 3,513k | 3,370k | 88k | 25 |
+| a784131c | reviewer | Review PR #118 Steep FATAL gate | 2026-10-10 15:16 | 2026-10-10 15:36 | 43 | 2,165k | 2,017k | 81k | 20 |
+| aeb90019 | reviewer | Review PR #119 Ruby S11B-1 | 2026-10-10 15:32 | 2026-10-10 17:06 | 70 | 7,209k | 6,490k | 162k | 50 |
+| af9d9a54 | developer | Ruby S10 part B demo mode | 2026-10-10 15:32 | 2026-10-10 16:23 | 77 | 10,196k | 9,862k | 193k | 19 |
+| ac5b70b9 | developer | Ruby S12 part B summarizer | 2026-10-10 15:32 | 2026-10-10 15:57 | 98 | 17,050k | 16,798k | 269k | 25 |
+| a1d397e9 | reviewer | Review PR #120 Ruby S10 part B | 2026-10-10 15:47 | 2026-10-10 16:28 | 41 | 2,943k | 2,698k | 107k | 41 |
+| af169ffd | reviewer | Review PR #121 Ruby S12 part B | 2026-10-10 15:58 | 2026-10-10 17:22 | 56 | 5,680k | 5,138k | 159k | 36 |
+| af77deea | fixer | Fix #121 round-1 findings | 2026-10-10 16:05 | 2026-10-10 17:22 | 121 | 13,581k | 13,129k | 167k | 38 |
+| aaa4a0ee | fixer | Fix flaky Ruby stdio running? helper | 2026-10-10 16:27 | 2026-10-10 16:44 | 23 | 1,047k | 966k | 52k | 17 |
+| ac79444e | reviewer | Review PR #122 stdio race fix | 2026-10-10 16:29 | 2026-10-10 16:44 | 16 | 409k | 360k | 34k | 15 |
+| af588a9e | fixer | Merge main into PR #117 | 2026-10-10 16:41 | 2026-10-10 17:42 | 44 | 2,642k | 2,381k | 84k | 31 |
+| a64eb13f | reviewer | Merge-check verdict for PR #117 | 2026-10-10 16:44 | 2026-10-10 17:42 | 35 | 1,329k | 1,065k | 60k | 58 |
+| ae1bc73e | developer | Ruby S11 part B-2 CSV export | 2026-10-10 17:07 | 2026-10-10 17:43 | 91 | 13,378k | 12,810k | 206k | 35 |
+| a60cb98a | reviewer | Review PR #123 Ruby S11B-2 | 2026-10-10 17:19 | 2026-10-10 18:19 | 61 | 5,117k | 4,658k | 122k | 61 |
+| aaf14983 | developer | Ruby S09 part B-2 Bookshop memory | 2026-10-10 17:42 | 2026-10-10 18:21 | 96 | 13,788k | 13,222k | 204k | 39 |
+| a26ba814 | reviewer | Review PR #124 Ruby S09B-2 | 2026-10-10 17:53 | 2026-10-10 18:18 | 44 | 2,831k | 2,588k | 90k | 25 |
+| a9cf94ab | fixer | Fix missing require in transcript_test | 2026-10-10 18:09 | 2026-10-10 18:13 | 18 | 886k | 828k | 58k | 4 |
+| ad37fade | reviewer | Review PR #125 test require fix | 2026-10-10 18:14 | 2026-10-10 18:16 | 7 | 127k | 109k | 22k | 3 |
+| adcbcec8 | fixer | Add start/end times to agent-usage | 2026-10-10 18:20 | 2026-10-10 18:22 | 8 | 334k | 288k | 46k | 2 |
+| a936aa5f | reviewer | Review PR #126 agent-usage times | 2026-10-10 18:21 | 2026-10-10 18:22 | 10 | 223k | 199k | 29k | 1 |
