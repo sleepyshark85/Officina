@@ -13,3 +13,4 @@ appsettings.Local.json
 .env
 StrykerOutput/
 coverage/
+__pycache__/
