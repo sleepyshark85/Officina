@@ -48,7 +48,9 @@ module Sleepyshark
         raise
       end
 
-      def no_reply(why) = (Failed.new(reason: :model_error, detail: why) unless @cancel.cancelled?)
+      def no_reply(why)
+        Failed.new(reason: :model_error, detail: why) unless @cancel.cancelled?
+      end
     end
     private_constant :ModelCall
   end
