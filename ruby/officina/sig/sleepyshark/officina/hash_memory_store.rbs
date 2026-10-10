@@ -1,0 +1,16 @@
+module Sleepyshark
+  module Officina
+    class HashMemoryStore
+      include _MemoryStore
+
+      @files: Hash[[String, String], String]
+      @lock: Thread::Mutex
+
+      def initialize: () -> void
+
+      private
+
+      def refuse_clash: (String scope, String path) -> void
+    end
+  end
+end
