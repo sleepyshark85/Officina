@@ -9,7 +9,7 @@ Warning.singleton_class.prepend(WorkspaceWarnings)
 
 if ENV['COVERAGE']
   require 'simplecov'
-  SimpleCov.start { add_filter %r{/test/} }
+  SimpleCov.start { skip %r{/test/} }
 end
 
 require 'minitest/autorun'

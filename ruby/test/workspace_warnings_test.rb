@@ -22,7 +22,9 @@ class WorkspaceWarningsTest < Minitest::Test
     Dir.mktmpdir(nil, __dir__) do |directory|
       warns = File.join(directory, 'warns.rb')
       File.write(warns, "def probe = (unused = 1; nil)\n")
-      _, error, status = Open3.capture3(RbConfig.ruby, '-w', '-I', __dir__, '-r', 'test_helper', warns)
+      # Without COVERAGE, so the child does not write over this run's coverage report.
+      _, error, status = Open3.capture3({ 'COVERAGE' => nil }, RbConfig.ruby, '-w', '-I', __dir__, '-r', 'test_helper',
+                                        warns)
 
       refute_predicate status, :success?
       assert_match 'Minitest::UnexpectedWarning', error
