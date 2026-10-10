@@ -3,7 +3,11 @@ module Bookshop
     attr_reader catalogue: Catalogue
     attr_reader customers: Customers
     attr_reader orders: Orders
+    attr_reader database: Database
 
-    def self.new: (catalogue: Catalogue, customers: Customers, orders: Orders) -> instance
+    def self.new: (catalogue: Catalogue, customers: Customers, orders: Orders, database: Database) -> instance
+    def self.open: (String url) -> Shop
+
+    def close: () -> void
   end
 end

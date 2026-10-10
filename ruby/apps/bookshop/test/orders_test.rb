@@ -43,7 +43,7 @@ class OrdersTest < Minitest::Test
   end
 
   def test_app07_business_rule_failures_are_refused_and_change_nothing
-    before = [stock(170), scalar('select count(*) from orders')]
+    before = [stock(170), count('select count(*) from orders')]
     available = stock(170)
 
     { [1, [Line.new(171, 1), Line.new(170, available + 1)]] =>
@@ -58,7 +58,7 @@ class OrdersTest < Minitest::Test
 
       assert_equal message, refused.message
     end
-    assert_equal before, [stock(170), scalar('select count(*) from orders')]
+    assert_equal before, [stock(170), count('select count(*) from orders')]
   end
 
   def test_app06_concurrent_orders_never_take_more_copies_than_are_in_stock

@@ -2,9 +2,9 @@
 
 module Bookshop
   # The customers' orders: read, placed and cancelled through fixed SQL with bound values, placing and cancelling
-  # each in one transaction. A refused request raises RefusedError and changes nothing; a database that cannot be
-  # reached raises PG::Error. Thread-safe.
-  class Orders # rubocop:disable Metrics/ClassLength -- half its lines are its SQL, constants rather than logic
+  # each in one transaction with the stock it takes or gives back. A refused request raises RefusedError and changes
+  # nothing; a database that cannot be reached raises PG::Error. Thread-safe.
+  class Orders
     CUSTOMER_EXISTS = 'select 1 from customers where id = $1'
 
     OF_CUSTOMER = <<~SQL
@@ -30,52 +30,21 @@ module Bookshop
       order by l.book_id
     SQL
 
-    # Locks the books' stock rows in id order, so concurrent orders cannot deadlock, until the order commits.
-    LOCK_STOCK = <<~SQL
-      select b.id, b.title, b.price, s.quantity
-      from books b
-      join stock s on s.book_id = b.id
-      where b.id = any($1::integer[])
-      order by b.id
-      for update of s
-    SQL
-
-    TAKE_STOCK = 'update stock set quantity = quantity - $2 where book_id = $1'
-
     INSERT = "insert into orders (customer_id, status, total) values ($1, 'placed', $2) returning id"
 
     INSERT_LINE = 'insert into order_lines (order_id, book_id, quantity, unit_price) values ($1, $2, $3, $4)'
 
     LOCK = 'select status from orders where id = $1 for update'
 
-    # Locks the order's stock rows in book id order, as placing an order does, so the two cannot deadlock.
-    LOCK_ORDER_STOCK = <<~SQL
-      select s.book_id
-      from stock s
-      join order_lines l on l.book_id = s.book_id
-      where l.order_id = $1
-      order by s.book_id
-      for update of s
-    SQL
-
-    RETURN_STOCK = <<~SQL
-      update stock s set quantity = s.quantity + l.quantity
-      from order_lines l
-      where l.order_id = $1 and s.book_id = l.book_id
-    SQL
-
     CANCEL = "update orders set status = 'cancelled' where id = $1"
 
-    private_constant :CUSTOMER_EXISTS, :OF_CUSTOMER, :FIND, :LINES, :LOCK_STOCK, :TAKE_STOCK, :INSERT, :INSERT_LINE,
-                     :LOCK, :LOCK_ORDER_STOCK, :RETURN_STOCK, :CANCEL
+    private_constant :CUSTOMER_EXISTS, :OF_CUSTOMER, :FIND, :LINES, :INSERT, :INSERT_LINE, :LOCK, :CANCEL
 
-    # @param database [Database]
     def initialize(database:)
       @database = database
       freeze
     end
 
-    # @return [Order]
     # @raise [RefusedError] when there is no such order
     def find(id)
       @database.with { |connection| read(connection, id) }
@@ -83,7 +52,6 @@ module Bookshop
 
     # A customer's orders, newest first.
     #
-    # @return [Array<OrderSummary>]
     # @raise [RefusedError] when there is no such customer
     def of_customer(customer_id)
       @database.with do |connection|
@@ -104,7 +72,7 @@ module Bookshop
       check_lines(lines)
       @database.transaction do |connection|
         check_customer(connection, customer_id)
-        prices = take_stock(connection, lines)
+        prices = Stock.take(connection, lines)
         read(connection, insert(connection, customer_id, lines, prices))
       end
     end
@@ -119,8 +87,7 @@ module Bookshop
         raise RefusedError, "There is no order with id #{id}." unless status
         raise RefusedError, "Order #{id} is already cancelled." if status == 'cancelled'
 
-        connection.exec_params(LOCK_ORDER_STOCK, [id])
-        connection.exec_params(RETURN_STOCK, [id])
+        Stock.give_back(connection, id)
         connection.exec_params(CANCEL, [id])
         read(connection, id)
       end
@@ -164,24 +131,6 @@ module Bookshop
       return unless ids.empty? || ids.uniq.size != ids.size || lines.any? { |line| line.quantity < 1 }
 
       raise RefusedError, 'An order needs at least one line, each book once, each for at least one copy.'
-    end
-
-    # Locks the lines' books, checks their stock and takes the copies; returns each book's price by id.
-    def take_stock(connection, lines)
-      books = connection.exec_params(LOCK_STOCK, [lines.map(&:book_id)]).to_h { |row| [row[:id], row] }
-      lines.each do |line|
-        check_stock(books[line.book_id], line)
-        connection.exec_params(TAKE_STOCK, [line.book_id, line.quantity])
-      end
-      books.transform_values { |book| book[:price] }
-    end
-
-    def check_stock(book, line)
-      raise RefusedError, "There is no book with id #{line.book_id}. Nothing was ordered." unless book
-      return if book[:quantity] >= line.quantity
-
-      raise RefusedError, "Not enough stock for \"#{book[:title]}\" (id #{line.book_id}): #{line.quantity} " \
-                          "requested, #{book[:quantity]} in stock. Nothing was ordered."
     end
   end
 end

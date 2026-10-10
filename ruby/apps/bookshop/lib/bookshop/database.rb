@@ -11,8 +11,6 @@ module Bookshop
     private_constant :POOL_SIZE, :CHECKOUT_TIMEOUT
 
     # A LIKE pattern matching text that contains part, its wildcards taken literally; nil for nil or blank text.
-    #
-    # @return [String, nil]
     def self.containing(part)
       return if part.nil? || part.strip.empty?
 

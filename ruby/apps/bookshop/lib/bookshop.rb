@@ -5,12 +5,14 @@ require 'connection_pool'
 require 'pg'
 require 'sleepyshark/officina'
 require_relative 'bookshop/book'
+require_relative 'bookshop/book_filter'
 require_relative 'bookshop/customer'
 require_relative 'bookshop/order_line'
 require_relative 'bookshop/order'
 require_relative 'bookshop/order_summary'
 require_relative 'bookshop/refused_error'
 require_relative 'bookshop/database'
+require_relative 'bookshop/stock'
 require_relative 'bookshop/catalogue'
 require_relative 'bookshop/customers'
 require_relative 'bookshop/orders'
@@ -25,16 +27,7 @@ module Bookshop
   # and the agent come next.
   #
   # @param env [#fetch] the settings: BOOKSHOP_DATABASE, a PostgreSQL URL, the compose file's database if not set
-  # @return [Shop]
   def self.build(env: ENV)
-    shop(Database.new(env.fetch('BOOKSHOP_DATABASE', COMPOSE_DATABASE)))
-  end
-
-  # The shop over a database.
-  #
-  # @param database [Database]
-  # @return [Shop]
-  def self.shop(database)
-    Shop.new(catalogue: Catalogue.new(database:), customers: Customers.new(database:), orders: Orders.new(database:))
+    Shop.open(env.fetch('BOOKSHOP_DATABASE', COMPOSE_DATABASE))
   end
 end

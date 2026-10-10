@@ -20,15 +20,12 @@ module Bookshop
 
     private_constant :SEARCH, :ADD
 
-    # @param database [Database]
     def initialize(database:)
       @database = database
       freeze
     end
 
     # Customers whose name or email contains the text, ignoring case, by name: at most 20, none for blank text.
-    #
-    # @return [Array<Customer>]
     def search(text)
       @database.with do |connection|
         connection.exec_params(SEARCH, [Database.containing(text)]).map do |row|
@@ -39,7 +36,6 @@ module Bookshop
 
     # Adds a customer, the name and email stripped of surrounding space.
     #
-    # @return [Customer]
     # @raise [RefusedError] when the name or email is blank, or another customer has the email
     def add(name:, email:)
       name = name.strip

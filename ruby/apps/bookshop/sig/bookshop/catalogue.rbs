@@ -2,13 +2,13 @@ module Bookshop
   class Catalogue
     MAX_SEARCH_RESULTS: Integer
     SEARCH_RESULTS: Integer
+    BOOKS: String
     SEARCH: String
     FIND: String
     RESTOCK: String
 
     def initialize: (database: Database) -> void
-    def search: (?title: String?, ?author: String?, ?genre: String?, ?max_price: Numeric?, ?in_stock: bool,
-                 ?limit: Integer) -> Array[Book]
+    def search: (?BookFilter filter, ?limit: Integer) -> Array[Book]
     def find: (Integer id) -> Book
     def restock: (book_id: Integer, quantity: Integer) -> Book
 
@@ -18,5 +18,6 @@ module Bookshop
 
     def read: (PG::Connection connection, Integer id) -> Book
     def book: (Hash[Symbol, untyped] row) -> Book
+    def present: (String? text) -> String?
   end
 end

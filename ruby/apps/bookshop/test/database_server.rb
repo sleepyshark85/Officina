@@ -32,7 +32,7 @@ module DatabaseServer
     # A fresh copy of the seeded database, on the server started first if it is not yet.
     def copy
       @port ||= start
-      @copies = @copies.to_i + 1
+      @copies = (@copies || 0) + 1
       name = "test_#{@copies}"
       admin("create database #{name} template #{SEEDED}")
       name
@@ -85,14 +85,14 @@ module DatabaseServer
 
   def setup
     super
-    skip DatabaseServer.skipped if DatabaseServer.skipped
+    reason = DatabaseServer.skipped
+    skip reason if reason
     @database_name = DatabaseServer.copy
-    @database = Bookshop::Database.new(database_url)
-    @shop = Bookshop.shop(@database)
+    @shop = Bookshop.build(env: { 'BOOKSHOP_DATABASE' => DatabaseServer.url(@database_name) })
   end
 
   def teardown
-    @database&.close
+    @shop&.close
     DatabaseServer.admin("drop database #{@database_name} with (force)") if @database_name
     super
   end
@@ -101,8 +101,6 @@ module DatabaseServer
 
   attr_reader :shop
 
-  def database_url = DatabaseServer.url(@database_name)
-
   # Makes the test's database unreachable, as if its server had stopped: new connections are refused and open ones
   # ended.
   def take_database_down
@@ -110,18 +108,17 @@ module DatabaseServer
     DatabaseServer.admin("select pg_terminate_backend(pid) from pg_stat_activity where datname = '#{@database_name}'")
   end
 
-  # Makes the test's database reachable again after take_database_down.
   def bring_database_back
     DatabaseServer.admin("alter database #{@database_name} allow_connections true")
   end
 
-  # Runs a query of the test's own and returns the first column of its first row.
-  def scalar(sql, *params)
-    connection = PG.connect(database_url)
-    connection.exec_params(sql, params).getvalue(0, 0)
+  # Runs a query of the test's own, outside the shop, and returns its one value as an Integer.
+  def count(sql, *params)
+    connection = PG.connect(DatabaseServer.url(@database_name))
+    Integer(connection.exec_params(sql, params).getvalue(0, 0))
   ensure
     connection&.close
   end
 
-  def stock(book_id) = Integer(scalar('select quantity from stock where book_id = $1', book_id))
+  def stock(book_id) = count('select quantity from stock where book_id = $1', book_id)
 end

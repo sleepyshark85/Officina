@@ -4,25 +4,15 @@ module Bookshop
     OF_CUSTOMER: String
     FIND: String
     LINES: String
-    LOCK_STOCK: String
-    TAKE_STOCK: String
     INSERT: String
     INSERT_LINE: String
     LOCK: String
-    LOCK_ORDER_STOCK: String
-    RETURN_STOCK: String
     CANCEL: String
-
-    # A line of an order to place: which book, how many copies.
-    interface _Line
-      def book_id: () -> Integer
-      def quantity: () -> Integer
-    end
 
     def initialize: (database: Database) -> void
     def find: (Integer id) -> Order
     def of_customer: (Integer customer_id) -> Array[OrderSummary]
-    def place: (customer_id: Integer, lines: Array[_Line]) -> Order
+    def place: (customer_id: Integer, lines: Array[Stock::_Line]) -> Order
     def cancel: (Integer id) -> Order
 
     private
@@ -31,11 +21,9 @@ module Bookshop
 
     def read: (PG::Connection connection, Integer id) -> Order
     def read_lines: (PG::Connection connection, Integer id) -> Array[OrderLine]
-    def insert: (PG::Connection connection, Integer customer_id, Array[_Line] lines, Hash[Integer, BigDecimal] prices)
-                -> Integer
+    def insert: (PG::Connection connection, Integer customer_id, Array[Stock::_Line] lines,
+                 Hash[Integer, BigDecimal] prices) -> Integer
     def check_customer: (PG::Connection connection, Integer id) -> void
-    def check_lines: (Array[_Line] lines) -> void
-    def take_stock: (PG::Connection connection, Array[_Line] lines) -> Hash[Integer, BigDecimal]
-    def check_stock: (Hash[Symbol, untyped]? book, _Line line) -> void
+    def check_lines: (Array[Stock::_Line] lines) -> void
   end
 end
