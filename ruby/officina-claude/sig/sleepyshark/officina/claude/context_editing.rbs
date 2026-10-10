@@ -1,0 +1,26 @@
+module Sleepyshark
+  module Officina
+    module Claude
+      module ContextEditing
+        CLEARING: String
+        CLEARING_BETA: String
+        COMPACTION: String
+        COMPACTION_BETA: String
+
+        def self.params: (ContextManagement? settings) -> Hash[Symbol, untyped]
+
+        READ: Array[Symbol]
+
+        def self.reported: (untyped message) -> Array[ConversationCompacted | ToolResultsCleared]
+
+        def self.compactions: (untyped message) -> Array[ConversationCompacted]
+
+        def self.clearings: (untyped message) -> Array[ToolResultsCleared]
+
+        def self.clearing: (ToolResultClearing? clearing) -> [Hash[Symbol, untyped], String]?
+
+        def self.compaction: (Integer? threshold) -> [Hash[Symbol, untyped], String]?
+      end
+    end
+  end
+end
