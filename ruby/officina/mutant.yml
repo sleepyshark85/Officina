@@ -5,6 +5,8 @@ integration:
 includes:
   - lib
   - ../test
+hooks:
+  - ../test/mutant_hooks.rb
 requires:
   - sleepyshark/officina
 matcher:
