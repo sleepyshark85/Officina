@@ -51,3 +51,21 @@ Choices in the Go core that the code alone does not explain. Concepts are in
 | `MemoryStore` has four methods (`List`, `Read`, `Write`, `Delete`); the tool renames by writing each file anew, then deleting the old one | The fewest the commands need, so a host's own store stays small; a failure midway leaves a copy, never a loss. A missing file is `fs.ErrNotExist` |
 | `FileMemoryStore` opens each scope's directory with `os.Root` and refuses one that is itself a link | `os.Root` refuses any path or link that leaves the directory, a second guard behind the path rules; only a relative link that stays in the scope is followed, and an absolute one is refused even when it points inside |
 | `MapMemoryStore`'s zero value is an empty store | go/CLAUDE.md: a useful zero value instead of a constructor |
+
+## How Go realizes the runtime model
+
+Each row of ARCHITECTURE §5.3, and the layers of §3, in Go terms. .NET's and Ruby's design notes hold the same table.
+
+| ARCHITECTURE element | Go |
+|---|---|
+| Consuming a run | `Agent.Stream` returns an `iter.Seq[RunEvent]` and a function giving the `Result` once the sequence ends; `Agent.Run` is `Stream` without the events (G10) |
+| Host stops consuming | A `break` out of the `range` cancels the run's context; the run drains its tools and returns |
+| Asynchronous I/O | Blocking calls on the consumer's or the pipeline's goroutine, each taking a `context.Context` first |
+| Concurrent reads | A goroutine per read call under a `sync.WaitGroup`, waited for before the next write |
+| Hand-over | The pipeline runs on its own goroutine and sends on a channel sized calls × 4 (started, approval asked and answered, finished) |
+| Cancellation | The run's `context.Context`, derived from the host's |
+| One run per conversation | `ErrConversationInUse` for a second run on a conversation in use |
+| Ownership | Every goroutine is waited for before the run returns; `goleak` in each package's `TestMain` proves it (G11) |
+| Time | `time.Now` in the core; `testing/synctest`'s fake clock in tests, so there is no clock interface (G11) |
+| Composition root | `internal/bookshop.Build`, called by `main` and by the tests with boundary fakes (G5) |
+
