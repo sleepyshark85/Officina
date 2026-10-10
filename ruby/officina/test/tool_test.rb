@@ -95,6 +95,24 @@ class ToolTest < Minitest::Test
     assert_predicate call.input, :frozen?
   end
 
+  def test_tool05_a_failure_the_handler_returns_is_passed_on_as_it_is
+    tool = Tool.new(name: 'order', description: 'Orders.', input: Search, kind: :write) do |_, _|
+      ToolFailure.new(message: 'Not enough stock.')
+    end
+
+    assert_equal ToolFailure.new(message: 'Not enough stock.'), tool.invoke('{"title":"Dune"}', Cancellation.new)
+  end
+
+  def test_tool05_a_tool_failure_keeps_a_frozen_copy_of_its_message
+    message = +'Not enough stock.'
+
+    failure = ToolFailure.new(message:)
+    message << '!'
+
+    assert_equal 'Not enough stock.', failure.message
+    assert_predicate failure.message, :frozen?
+  end
+
   def test_a_tool_result_keeps_frozen_copies_of_its_strings
     call_id = +'call_1'
     content = +'3 copies.'

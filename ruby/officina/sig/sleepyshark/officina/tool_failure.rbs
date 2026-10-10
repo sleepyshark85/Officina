@@ -1,0 +1,12 @@
+module Sleepyshark
+  module Officina
+    class ToolFailure < Data
+      attr_reader message: String
+
+      def self.new: (message: String) -> instance
+
+
+      def initialize: (message: String) -> void
+    end
+  end
+end

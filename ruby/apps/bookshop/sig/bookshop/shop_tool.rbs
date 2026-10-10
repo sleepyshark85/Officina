@@ -1,0 +1,6 @@
+module Bookshop
+  module ShopTool
+    def self.define: (name: String, description: String, input: Sleepyshark::Officina::Tool::_Input, kind: Symbol,
+                      **bool approval) { (untyped input) -> untyped } -> Sleepyshark::Officina::Tool
+  end
+end
