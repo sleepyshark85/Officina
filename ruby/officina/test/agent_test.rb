@@ -71,6 +71,19 @@ class AgentTest < Minitest::Test
     assert_equal prefix['fingerprint'], agent.fingerprint
   end
 
+  def test_ctx01_hist01_the_fingerprint_with_context_management_is_the_one_every_implementation_computes
+    prefix = JSON.parse(File.read(File.join(SHARED, 'session', 'prefix.json')))
+    tools = prefix['tools'].map { tool(it['name'], description: it['description'], schema: it['inputSchema']) }
+    model = Model.new(settings: prefix['settings'], info: ModelInfo.new(provider: 's', name: 's', compacts: true,
+                                                                        clears_tool_results: true))
+
+    prefix['contextManagement'].each do |part|
+      agent = Agent.new(model:, instructions: prefix['instructions'], tools:, context_management: shared(part))
+
+      assert_equal part['fingerprint'], agent.fingerprint, part.to_s
+    end
+  end
+
   def test_ctx04_a_changed_tool_fails_the_run_with_a_prefix_mismatch
     model = Model.new
     changed = Agent.new(model:, instructions: 'You help.', tools: [tool('search', description: 'Searches better.')],
@@ -94,6 +107,15 @@ class AgentTest < Minitest::Test
   end
 
   private
+
+  # The context management of a part of the shared prefix fixture.
+  def shared(part)
+    clearing = (if part['clearAfter']
+                  ToolResultClearing.new(after: part['clearAfter'], keep: part['clearKeep'],
+                                         at_least_tokens: part['clearAtLeastTokens'])
+                end)
+    ContextManagement.new(compact_at: part['compactAt'], clear_tool_results: clearing)
+  end
 
   def tool(name, description: 'Searches the catalogue.', schema: '{"type":"object"}')
     Tool.new(name:, description:, input: Schema.new(schema), kind: :read) { 'Found.' }

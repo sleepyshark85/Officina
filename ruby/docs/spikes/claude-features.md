@@ -79,3 +79,14 @@ adjusted in the Claude gem.
 **Decision change:** R9 gains the replay channel and how blocks are written (this PR). On-demand compaction
 (`compact-2026-09-04`) and `clear_at` are typed but unproven here; Go S10 tried both live, and Ruby S10 checks threshold
 compaction and clearing live before relying on them.
+
+## Ruby S10 follow-up: threshold compaction and clearing, live
+
+**Date:** 2026-10-10 · same gem and model, effort `low` · **API cost:** $0.39 · Run through the Ruby adapter
+(`Claude::Model` under an `Agent` with context management), from a throwaway script, not kept. On-demand compaction
+and `clear_at` were not rerun: Ruby uses neither (D12; the run context stays in view, as in Go S10).
+
+| Feature | Status | Evidence | Consequence |
+|---|---|---|---|
+| Tool-result clearing (`clear_tool_uses_20250919`: after 2 tool calls, keep 1, clear at least 0) | **Works** | One lookup per reply, each result about 2,700 tokens: first applied on call 4 (`ToolResultsCleared` 5,562 tokens, 2 calls), then on every later call (5,469 / 2, 11,124 / 4, 11,031 / 4), as the conversation keeps the results. Each clearing call read nothing from the cache (the prefix is below the cacheable minimum) and wrote the tail again. The model noticed: it looked books 1 and 2 up again ("the first results … were cleared before I noted their titles"). 7 calls, $0.11 | As designed (HIST-02). A clearing rewrites the tail's cache entry, so a host sets `at_least_tokens` outside demo mode |
+| Threshold compaction (`compact_20260112`, trigger 50,000) | **Works** | A 51,713-token prompt (counted first, free): `ConversationCompacted` 51,814 tokens summarized into 583; the call's usage, summed over its iterations, 460 input, 928 output, 51,766 cache writes, $0.28. Reply blocks: compaction, thinking, text. The conversation saved, read back and sent with the compaction block as stored (`"encrypted_content":null`): accepted, and the next call wrote only 777 tokens, the summary in place of what it summarized | As designed (HIST-01, MDL-05): the block is kept and replayed; cost comes from `usage.iterations` |

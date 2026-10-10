@@ -1,0 +1,12 @@
+module Sleepyshark
+  module Officina
+    class ConversationCompacted < Data
+      attr_reader tokens: Integer
+      attr_reader summary_tokens: Integer
+
+      def self.new: (tokens: Integer, summary_tokens: Integer) -> instance
+
+      def initialize: (tokens: Integer, summary_tokens: Integer) -> void
+    end
+  end
+end
