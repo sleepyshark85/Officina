@@ -136,11 +136,12 @@ def render_session(session):
              "| Role | Agents | Input processed |", "|---|---|---|"]
     lines += [f"| {role} | {count} | {tokens(processed)} |"
               for role, (count, processed) in by_role(session.agents).items()]
-    lines += ["", "| Agent | Role | Task | Calls | Input processed | Of which cache reads | Peak context "
-              "| Active minutes |", "|---|---|---|---|---|---|---|---|"]
+    lines += ["", "| Agent | Role | Task | Start (UTC) | End (UTC) | Calls | Input processed | Of which cache reads "
+              "| Peak context | Active minutes |", "|---|---|---|---|---|---|---|---|---|---|"]
     for agent in session.agents:
         usage = agent.usage
-        lines.append(f"| {agent.name} | {agent.role} | {agent.task.replace('|', '/')} | {usage.calls:,} "
+        lines.append(f"| {agent.name} | {agent.role} | {agent.task.replace('|', '/')} "
+                     f"| {utc(usage.first)} | {utc(usage.last)} | {usage.calls:,} "
                      f"| {tokens(usage.processed)} | {tokens(usage.cache_reads)} | {tokens(usage.peak_context)} "
                      f"| {round(usage.active / timedelta(minutes=1))} |")
     return "\n".join(lines) + "\n"
@@ -163,6 +164,7 @@ python3 -B scripts/agent-usage.py
 - **Output** is not shown: transcripts record a message's usage as its stream begins, before the output is counted.
 - **Peak context:** the input of the agent's largest single request, what it carried at its fullest. The context-size
   hook (`.claude/hooks/context-size.py`) warns an agent at 150k and 300k.
+- **Start, End:** the times (UTC) of the agent's first and last model call.
 - **Active minutes:** the time between the agent's consecutive transcript entries, leaving out every gap of {idle}
   minutes or more as idle (a night, the owner away). Waits for tools and CI shorter than that count as active.
 """
