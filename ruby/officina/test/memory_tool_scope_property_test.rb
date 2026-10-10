@@ -4,6 +4,7 @@ require 'test_helper'
 require 'find'
 require 'tmpdir'
 require_relative 'support/memory_calls'
+require_relative 'support/symbolic_links'
 
 # Generated paths, most of them a route out of the memory directory (climbing, absolute, encoded, through a link,
 # either separator), with or without /memories in front, through each of the memory tool's commands in each store:
@@ -13,6 +14,7 @@ require_relative 'support/memory_calls'
 class MemoryToolScopePropertyTest < Minitest::Test
   include Sleepyshark::Officina
   include MemoryCalls
+  include SymbolicLinks
 
   cover 'Sleepyshark::Officina*'
 
@@ -46,17 +48,30 @@ class MemoryToolScopePropertyTest < Minitest::Test
                    Pbt.array(Pbt.tuple(Pbt.one_of(*SEPARATORS, ''), Pbt.one_of(*PIECES)), min: 1, max: 4))
 
   def test_test07_mem03_generated_paths_through_the_memory_tool_never_leave_the_scope
-    Pbt.assert do
-      Pbt.property(Pbt.tuple(Pbt.one_of(*COMMANDS), PATH, PATH)) do |command, path, other|
-        input = input(command, path(*path), path(*other))
-        Dir.mktmpdir do |directory|
-          [arranged(HashMemoryStore.new), file_store(directory)].each { stays_in_scope(it, directory, input) }
-        end
-      end
+    each_generated_case do |input, directory|
+      [arranged(HashMemoryStore.new), file_store(directory)].each { stays_in_scope(it, directory, input) }
+    end
+  end
+
+  def test_test07_mem03_generated_paths_through_the_memory_tool_never_follow_a_link_out_of_the_scope
+    Dir.mktmpdir { link(it, File.join(it, 'link')) }
+
+    each_generated_case do |input, directory|
+      stays_in_scope(linked(file_store(directory), directory), directory, input)
     end
   end
 
   private
+
+  # Yields each generated command's input, and a new directory for its stores.
+  def each_generated_case
+    Pbt.assert do
+      Pbt.property(Pbt.tuple(Pbt.one_of(*COMMANDS), PATH, PATH)) do |command, path, other|
+        input = input(command, path(*path), path(*other))
+        Dir.mktmpdir { yield input, it }
+      end
+    end
+  end
 
   def path(prefixed, kind, route, pieces)
     path = kind.positive? ? route.join : pieces.flatten.drop(1).join
@@ -71,16 +86,19 @@ class MemoryToolScopePropertyTest < Minitest::Test
       insert_text: 'x' }
   end
 
-  # A file store in the directory, beside the secret, with its links in sam's directory.
+  # A file store in the directory's memory/, beside the secret in its outside/.
   def file_store(directory)
-    secret = File.join(directory, 'outside', 'secret.txt')
-    FileUtils.mkdir_p(File.dirname(secret))
-    File.write(secret, SECRET)
-    root = File.join(directory, 'memory')
-    arranged(FileMemoryStore.new(root)).tap do
-      File.symlink(File.dirname(secret), File.join(root, SAM_DIRECTORY, 'link'))
-      File.symlink(File.join('..', OTHER_DIRECTORY), File.join(root, SAM_DIRECTORY, 'peer'))
-    end
+    FileUtils.mkdir_p(File.join(directory, 'outside'))
+    File.write(File.join(directory, 'outside', 'secret.txt'), SECRET)
+    arranged(FileMemoryStore.new(File.join(directory, 'memory')))
+  end
+
+  # The file store, with a link in sam's directory to the secret's directory and one to other's directory.
+  def linked(store, directory)
+    sam = File.join(directory, 'memory', SAM_DIRECTORY)
+    link(File.join(directory, 'outside'), File.join(sam, 'link'))
+    link(File.join('..', OTHER_DIRECTORY), File.join(sam, 'peer'))
+    store
   end
 
   # The store, with a file in sam's scope and one in other's.
