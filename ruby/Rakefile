@@ -11,7 +11,7 @@ desc 'Check the code against its signatures with Steep'
 task :steep do
   output, status = Open3.capture2e('steep', 'check')
   puts output
-  failure = SteepVerdict.failure(output, status.success?)
+  failure = SteepVerdict.failure(output, success: status.success?)
   abort failure if failure
 end
 

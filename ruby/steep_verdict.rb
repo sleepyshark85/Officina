@@ -6,9 +6,9 @@ module SteepVerdict
   LOG_PROBLEM = /\d\d:\d\d:\d\d\.\d+: (FATAL|ERROR): /
 
   # @return [String, nil] why the run failed, or nil when it did not
-  def self.failure(output, success)
+  def self.failure(output, success:)
     return 'Steep failed.' unless success
 
-    'Steep logged a FATAL or ERROR line (above): it skipped a file.' if output.match?(LOG_PROBLEM)
+    'Steep logged a FATAL or ERROR line (above): files may not have been checked.' if output.match?(LOG_PROBLEM)
   end
 end
