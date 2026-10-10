@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'test_helper'
+require_relative 'support/collector'
 require_relative 'support/fake_clock'
 
 # A run of an agent with an output type: the schema it sends, and the reply read as a value of the type, or the run
@@ -49,11 +50,18 @@ class TypedOutputTest < Minitest::Test
     assert_equal Failed.new(reason: :invalid_output, detail:, model_calls: 1), result
   end
 
-  def test_out02_a_reply_that_is_not_json_fails_the_run
-    result = agent_of(Model.new(Model.text('Gaudy Night, 2 copies.'))).run(Conversation.new, 'Summarize the session.')
+  def test_out02_evt04_a_reply_that_is_not_json_fails_the_run_saying_where_without_its_text
+    collector = Collector.new
+    model = Model.new(Model.text(%({"title":"x" Ana Lopez, 2 copies})))
+    agent = Agent.new(model:, instructions: 'You summarize sessions.', output: Summary, telemetry: collector.telemetry,
+                      clock: FakeClock.new)
+    detail = 'The output is not JSON: it breaks off at line 1, column 14'
 
-    assert_equal :invalid_output, result.reason
-    assert_match(/\AThe output is not JSON: unexpected character: 'Gaudy/, result.detail)
+    result = agent.run(Conversation.new, 'Summarize the session.')
+
+    assert_equal Failed.new(reason: :invalid_output, detail:, model_calls: 1), result
+    assert_equal detail, collector.span('invoke_agent').status.description
+    refute_match(/Ana/, collector.dump)
   end
 
   def test_out02_the_reply_is_kept_in_the_conversation_and_the_failure_audited

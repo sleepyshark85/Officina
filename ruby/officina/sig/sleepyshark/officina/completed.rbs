@@ -9,11 +9,11 @@ module Sleepyshark
       attr_reader tool_calls: Integer
       attr_reader duration: Float
 
-      def self.new: (text: String, ?output: Data?, ?usage: Usage, ?cost: BigDecimal, ?model_calls: Integer, ?tool_calls: Integer,
-                     ?duration: Float) -> instance
+      def self.new: (text: String, ?output: Data?, ?usage: Usage, ?cost: BigDecimal, ?model_calls: Integer,
+                     ?tool_calls: Integer, ?duration: Float) -> instance
 
-      def initialize: (text: String, ?output: Data?, ?usage: Usage, ?cost: BigDecimal, ?model_calls: Integer, ?tool_calls: Integer,
-                       ?duration: Float) -> void
+      def initialize: (text: String, ?output: Data?, ?usage: Usage, ?cost: BigDecimal, ?model_calls: Integer,
+                       ?tool_calls: Integer, ?duration: Float) -> void
     end
   end
 end

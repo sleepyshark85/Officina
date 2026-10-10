@@ -26,7 +26,8 @@ module Sleepyshark
 
         invalid("The output does not match its schema: #{problems.join('; ')}")
       rescue JSON::ParserError => e
-        invalid("The output is not JSON: #{e}")
+        # The parser's message quotes the reply, which must not reach the detail: telemetry shows it.
+        invalid("The output is not JSON: it breaks off at line #{e.line}, column #{e.column}")
       end
 
       def self.invalid(detail) = Failed.new(reason: :invalid_output, detail:)

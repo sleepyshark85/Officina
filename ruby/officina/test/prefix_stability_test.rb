@@ -52,7 +52,7 @@ class PrefixStabilityTest < Minitest::Test
   def test_test02_the_check_finds_a_changed_prefix
     request = Request.new(tools: [], instructions: 'You help.', messages: [user('Hi')])
     changed = [request.with(instructions: 'You help more.'), request.with(messages: [user('Hello')]),
-               request.with(tools: [tool('t', 'd', '{}')]),
+               request.with(tools: [tool('t', 'd', '{}')]), request.with(output_schema: '{"type":"object"}'),
                request.with(messages: [])]
 
     changed.each do |later|
