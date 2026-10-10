@@ -69,8 +69,13 @@ bundle exec apps/bookshop/exe/bookshop
 It asks your name, then takes messages, such as *Order the two cheapest fantasy books in stock for Alice Martin and
 tell me the total*. Replies stream with each tool call shown; a change asks for your approval with its exact input.
 Ctrl+C stops a reply in progress, and the session goes on; `/help` lists the commands, `/quit` leaves.
+`/audit` shows the session's audit trail, each run with a link to its trace on the compose file's telemetry dashboard,
+<http://localhost:18888>, where each reply is one trace (the reply, its run, model calls and tool calls) with its log
+record; the application sends its traces, metrics and logs there over OTLP/HTTP, port 4318.
 `BOOKSHOP_DATABASE`, a PostgreSQL URL, names another database than the compose file's, such as one on another port:
-`postgres://bookshop:shelf-demo-41@localhost:5433/bookshop`.
+`postgres://bookshop:shelf-demo-41@localhost:5433/bookshop`; `BOOKSHOP_DASHBOARD` another dashboard for `/audit`'s
+links, and OpenTelemetry's own `OTEL_EXPORTER_OTLP_ENDPOINT` another OTLP/HTTP endpoint, such as
+`http://localhost:4328`.
 
 The hooks in `../.claude/` run RuboCop and Steep before a commit that stages anything under `ruby/` but docs, and
 the tests before a push that changes it; they find `bundle` on `PATH`, or else in mise's shims

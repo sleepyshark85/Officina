@@ -3,7 +3,8 @@
 module Bookshop
   # The staff member's console: asks who is using it, then reads messages and commands, streams each reply with its
   # tool activity, asks approval for changes, and cancels the reply in progress on Ctrl+C, after which the session
-  # goes on; Ctrl+C with no reply in progress leaves.
+  # goes on; Ctrl+C with no reply in progress leaves. Each reply is traced and logged; /audit shows a session's audit
+  # trail.
   class Console
     HELP = <<~TEXT.chomp
       Commands:

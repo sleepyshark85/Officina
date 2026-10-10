@@ -13,19 +13,23 @@ module Bookshop
     SERVICE = 'bookshop-assistant'
     # Milliseconds between metric exports, as .NET's.
     METRICS_INTERVAL = 5_000
-    # Seconds closing waits for each provider to send what is left.
-    CLOSE_TIMEOUT = 5
-    private_constant :SDK, :Officina, :SCOPE, :SERVICE, :METRICS_INTERVAL, :CLOSE_TIMEOUT
+    # The metrics and logs exporters gzip by default, which the dashboard cannot read; the traces exporter does not.
+    UNCOMPRESSED = 'none'
+    # Seconds closing waits for each provider to send what is left: an exporter whose dashboard is down retries until
+    # then, which delays leaving the console.
+    CLOSE_TIMEOUT = 2
+    private_constant :SDK, :Officina, :SCOPE, :SERVICE, :METRICS_INTERVAL, :UNCOMPRESSED, :CLOSE_TIMEOUT
 
     # Telemetry that exports over OTLP/HTTP to OTEL_EXPORTER_OTLP_ENDPOINT, or http://localhost:4318, the compose
     # file's dashboard. The exporters connect when they first send, so it is made with the dashboard down.
     def self.otlp
-      new(spans: SDK::Trace::Export::BatchSpanProcessor.new(OpenTelemetry::Exporter::OTLP::Exporter.new),
+      otlp = OpenTelemetry::Exporter::OTLP
+      new(spans: SDK::Trace::Export::BatchSpanProcessor.new(otlp::Exporter.new),
           metrics: SDK::Metrics::Export::PeriodicMetricReader.new(
-            exporter: OpenTelemetry::Exporter::OTLP::Metrics::MetricsExporter.new,
+            exporter: otlp::Metrics::MetricsExporter.new(compression: UNCOMPRESSED),
             export_interval_millis: METRICS_INTERVAL
           ),
-          logs: SDK::Logs::Export::BatchLogRecordProcessor.new(OpenTelemetry::Exporter::OTLP::Logs::LogsExporter.new))
+          logs: SDK::Logs::Export::BatchLogRecordProcessor.new(otlp::Logs::LogsExporter.new(compression: UNCOMPRESSED)))
     end
 
     # @return [Sleepyshark::Officina::Telemetry] what the agent reports its runs to

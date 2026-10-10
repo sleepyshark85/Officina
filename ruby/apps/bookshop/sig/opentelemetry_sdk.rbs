@@ -79,13 +79,13 @@ module OpenTelemetry
 
       module Metrics
         class MetricsExporter < OpenTelemetry::SDK::Metrics::Export::MetricReader
-          def initialize: () -> void
+          def initialize: (?compression: String) -> void
         end
       end
 
       module Logs
         class LogsExporter
-          def initialize: () -> void
+          def initialize: (?compression: String) -> void
         end
       end
     end

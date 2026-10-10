@@ -5,6 +5,7 @@ module Bookshop
     SCOPE: String
     SERVICE: String
     METRICS_INTERVAL: Integer
+    UNCOMPRESSED: String
     CLOSE_TIMEOUT: Integer
 
     def self.otlp: () -> Telemetry
