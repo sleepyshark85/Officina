@@ -35,7 +35,7 @@ class RunTest < Minitest::Test
     assert_equal %i[user assistant user assistant], conversation.messages.map(&:role)
     answer = conversation.messages[2].blocks.first.tool_result
 
-    assert_equal ['call_1', true], [answer.call_id, answer.error?]
+    assert_equal ['call_1', 'No tool named search can run.', true], [answer.call_id, answer.content, answer.error?]
     assert_equal conversation.messages.first(3), @model.requests.last.messages
   end
 
@@ -71,11 +71,11 @@ class RunTest < Minitest::Test
   def test_agt03_a_result_carries_the_usage_of_every_model_call
     call = Model.tool_use_block('call_1', 'search', '{}')
     agent = agent_of([UsageReported.new(usage: Usage.new(input: 10, output: 2)), *Model.tool_use(call)],
-                     Model.text('Done.', usage: Usage.new(input: 1, cache_read: 10, output: 3)))
+                     Model.text('Done.', usage: Usage.new(input: 1, cache_read: 10, cache_write: 4, output: 3)))
 
     result = agent.run(Conversation.new, 'Hello')
 
-    assert_equal Usage.new(input: 11, output: 5, cache_read: 10), result.usage
+    assert_equal Usage.new(input: 11, output: 5, cache_read: 10, cache_write: 4), result.usage
   end
 
   def test_agt03_a_run_stops_at_the_iteration_limit_after_25_model_calls

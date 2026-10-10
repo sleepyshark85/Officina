@@ -59,7 +59,7 @@ class AgentTest < Minitest::Test
       definition = { model:, instructions: 'You help.', tools: [tool('search')], part => changed }
       result = Agent.new(**definition).run(conversation, 'Again')
 
-      assert_equal :prefix_mismatch, result.reason, part
+      assert_equal [:prefix_mismatch, true], [result.reason, result.detail.end_with?('start a new conversation')], part
       assert_empty model.requests, part
     end
     assert_equal 2, conversation.messages.size
