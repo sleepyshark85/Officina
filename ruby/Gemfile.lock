@@ -13,6 +13,7 @@ PATH
       pg (~> 1.7)
       sleepyshark-officina (= 0.1.0)
       sleepyshark-officina-claude (= 0.1.0)
+      sleepyshark-officina-mcp (= 0.1.0)
 
 PATH
   remote: officina-claude

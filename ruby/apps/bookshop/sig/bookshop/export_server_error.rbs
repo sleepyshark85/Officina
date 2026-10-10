@@ -1,0 +1,4 @@
+module Bookshop
+  class ExportServerError < StandardError
+  end
+end
