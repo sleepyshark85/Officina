@@ -64,7 +64,7 @@ class DependenciesTest < Minitest::Test
   end
 
   # Each [what the gem does, what it uses]: its runtime dependencies, then its requires. What it uses is a gem's name,
-  # nil for the standard library and the gem's own files, or else the use itself, which no rule allows.
+  # nil for the standard library and the gem's own files, or :forbidden for a require no rule allows.
   def uses(root, gemspec, spec)
     lib = File.join(File.dirname(gemspec), 'lib')
     spec.runtime_dependencies.map { |dependency| ["#{gemspec} depends on #{dependency.name}", dependency.name] } +
@@ -77,15 +77,15 @@ class DependenciesTest < Minitest::Test
 
   # [what the call does, what it uses] for a require or require_relative call in a file of the lib.
   def use_of(call, lib, file)
-    use = "#{file}:#{call.location.start_line}"
+    line = "#{file}:#{call.location.start_line}"
     argument = call.arguments&.arguments&.first
-    return [use += ' has a require it cannot read', use] unless argument.is_a?(Prism::StringNode)
+    return ["#{line} has a require it cannot read", :forbidden] unless argument.is_a?(Prism::StringNode)
 
     feature = argument.unescaped
-    return ["#{use} requires #{feature}", gem_of(feature)] if call.name == :require
-    return ["#{use} requires #{feature}", nil] if inside?(lib, File.join(File.dirname(file), feature))
+    return ["#{line} requires #{feature}", gem_of(feature)] if call.name == :require
+    return ["#{line} requires #{feature}", nil] if inside?(lib, File.join(File.dirname(file), feature))
 
-    [use += " requires #{feature} outside its lib/", use]
+    ["#{line} requires #{feature} outside its lib/", :forbidden]
   end
 
   # Each require or require_relative call under the node.

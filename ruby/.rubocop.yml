@@ -13,18 +13,3 @@ AllCops:
   Exclude:
     # The dependency test's fixture gems: input it reads, never loaded, breaking the rules on purpose.
     - test/fixtures/**/*
-
-# A test reads top to bottom as one example: its setup, the call, then each thing it checks. Splitting it to fit the
-# method and class metrics would scatter one example over helpers, so tests are exempt from them, and may check a few
-# more things than the Minitest default of three.
-Metrics/AbcSize:
-  Exclude:
-    - '**/test/**/*'
-Metrics/ClassLength:
-  Exclude:
-    - '**/test/**/*'
-Metrics/MethodLength:
-  Exclude:
-    - '**/test/**/*'
-Minitest/MultipleAssertions:
-  Max: 5

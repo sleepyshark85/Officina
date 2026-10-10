@@ -8,9 +8,9 @@ module Sleepyshark
     # for byte; the core reads only its views, +text+ and +tool_call+. A block the core made, such as the user's
     # message or a tool's result, has no raw form: the provider adapter renders it.
     class Block
-      # A string, kept whole, or the whitespace between tokens.
-      TOKEN = /("(?:[^"\\]|\\.)*")|[ \t\n\r]+/
-      private_constant :TOKEN
+      # A JSON string, kept whole, or the whitespace between tokens.
+      STRING_OR_WHITESPACE = /"(?:[^"\\]|\\.)*"|[ \t\n\r]+/
+      private_constant :STRING_OR_WHITESPACE
 
       # @param text [String, nil] the text, for a text block
       # @param raw [String, nil] the provider's JSON for the block, exactly as received; nil for a block the core made
@@ -30,7 +30,9 @@ module Sleepyshark
       # @param json [String] valid JSON
       # @return [String] frozen
       def self.canonical(json)
-        -json.gsub(TOKEN) { Regexp.last_match(1)&.gsub(/[<>&]/) { |char| DotnetJson.unicode_escape(char) } || '' }
+        -json.gsub(STRING_OR_WHITESPACE) do |token|
+          token.start_with?('"') ? token.gsub(/[<>&]/) { |char| DotnetJson.unicode_escape(char) } : ''
+        end
       end
 
       private

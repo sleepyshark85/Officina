@@ -18,10 +18,10 @@ module Sleepyshark
       # @return [String] identifies the conversation for the host, such as a session id
       attr_reader :id
 
-      # @param id [String] random unless given
+      # @param id [String] 32 random hex digits unless given
       # @param fingerprint [String, nil] and +messages+ as a stored conversation holds them; a new one has neither
       # @param messages [Array<Message>]
-      def initialize(id: SecureRandom.hex(16), fingerprint: nil, messages: [])
+      def initialize(id: SecureRandom.hex, fingerprint: nil, messages: [])
         @id = -id
         @state = State.new(fingerprint: fingerprint && -fingerprint, messages: messages.dup.freeze)
         @lock = Mutex.new
@@ -42,9 +42,9 @@ module Sleepyshark
         # @type var id: String
         # @type var messages: Array[untyped]
         # @type var fingerprint: String?
-        JSON.parse(json, allow_duplicate_key: false, symbolize_names: true) => { id: String => id, **rest }
-        rest => { messages: Array => messages }
-        rest[:fingerprint] => String | nil => fingerprint
+        parsed = JSON.parse(json, allow_duplicate_key: false, symbolize_names: true)
+        parsed => { id: String => id, messages: Array => messages }
+        parsed[:fingerprint] => String | nil => fingerprint
         new(id:, fingerprint:, messages: messages.map { |message| read_message(message) })
       rescue JSON::ParserError => e
         raise Error, "Not a conversation's JSON: #{e.message}"
@@ -89,8 +89,14 @@ module Sleepyshark
         json => Hash
         json[:text] => String | nil => text
         json[:raw] => String | nil => raw
-        JSON.parse(raw, allow_duplicate_key: false) if raw
-        Block.new(text:, raw:, tool_call: read_call(json[:toolCall]), tool_result: read_result(json[:toolResult]))
+        Block.new(text:, raw: raw && valid_json(raw), tool_call: read_call(json[:toolCall]),
+                  tool_result: read_result(json[:toolResult]))
+      end
+
+      # The JSON as given, once it parses: a block's raw JSON is kept byte for byte, never re-encoded.
+      def self.valid_json(json)
+        JSON.parse(json, allow_duplicate_key: false)
+        json
       end
 
       def self.read_call(json)
@@ -108,23 +114,20 @@ module Sleepyshark
           ToolResult.new(call_id:, content:, error:)
         end
       end
-      private_class_method :read_message, :read_block, :read_call, :read_result
+      private_class_method :read_message, :read_block, :valid_json, :read_call, :read_result
 
       private
 
       def append(appended, fingerprint)
-        @state = State.new(fingerprint:, messages: [*@state.messages, *appended].freeze)
+        @state = State.new(fingerprint:, messages: (@state.messages + appended).freeze)
       end
 
       def message_json(message)
         { role: message.role, blocks: message.blocks.map { |block| block_json(block) } }
       end
 
-      # The text is left out when empty in a block that has raw JSON or a tool result, as the other implementations
-      # write it.
       def block_json(block)
-        text = block.text unless block.text.to_s.empty? && (block.raw || block.tool_result)
-        { text:, raw: block.raw, toolCall: block.tool_call&.then { |call| call_json(call) },
+        { text: block.text, raw: block.raw, toolCall: block.tool_call&.then { |call| call_json(call) },
           toolResult: block.tool_result&.then { |result| result_json(result) } }.compact
       end
 

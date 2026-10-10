@@ -26,9 +26,8 @@ module Sleepyshark
         raise Error, 'An agent needs instructions' if instructions.strip.empty?
 
         @tools = tools.sort_by(&:name).freeze
-        names = @tools.map(&:name)
-        twin = names.find { |name| names.count(name) > 1 }
-        raise Error, "Two tools are named #{twin}" if twin
+        duplicate = @tools.map(&:name).tally.find { |_name, count| count > 1 }&.first
+        raise Error, "Two tools are named #{duplicate}" if duplicate
 
         @model = model
         @instructions = -instructions
