@@ -65,14 +65,14 @@ module Sleepyshark
       # "description":…,"inputSchema":…},…]}, with the strings escaped as .NET's default JSON encoder escapes them and
       # each schema as given.
       def prefix_fingerprint(settings)
-        json = DotnetJson.method(:string)
         tools = @tools.map do |tool|
-          described = %("name":#{json.call(tool.name)},"description":#{json.call(tool.description)})
-          %({#{described},"inputSchema":#{tool.input_schema}})
+          name = DotnetJson.string(tool.name)
+          description = DotnetJson.string(tool.description)
+          %({"name":#{name},"description":#{description},"inputSchema":#{tool.input_schema}})
         end
-        Digest::SHA256.hexdigest(
-          %({"model":#{json.call(settings)},"instructions":#{json.call(@instructions)},"tools":[#{tools.join(',')}]})
-        )
+        model = DotnetJson.string(settings)
+        instructions = DotnetJson.string(@instructions)
+        Digest::SHA256.hexdigest(%({"model":#{model},"instructions":#{instructions},"tools":[#{tools.join(',')}]}))
       end
     end
   end
