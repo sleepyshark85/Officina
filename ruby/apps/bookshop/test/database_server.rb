@@ -1,8 +1,8 @@
 # frozen_string_literal: true
 
 require 'bookshop'
-require 'open3'
 require 'pg'
+require_relative 'docker'
 
 # The PostgreSQL server the database tests share, started with Docker once per run, as the compose file runs it: its
 # image, user and password, and the application's schema and seed, which .NET and Go read too. Included in a test,
@@ -51,35 +51,21 @@ module DatabaseServer
 
     # Starts the server and returns its port on this machine; the container is removed when the tests end.
     def start
-      docker('run', '--detach', '--rm', '--name', CONTAINER, '--label', 'officina-test',
-             '--env', "POSTGRES_USER=#{USER}", '--env', "POSTGRES_PASSWORD=#{PASSWORD}",
-             '--env', "POSTGRES_DB=#{SEEDED}", '--publish', '127.0.0.1::5432',
-             '--volume', "#{SCRIPTS}:/docker-entrypoint-initdb.d:ro", IMAGE)
-      Minitest.after_run { Open3.capture2e('docker', 'rm', '--force', CONTAINER) }
-      port = docker('port', CONTAINER, '5432/tcp').lines.first.split(':').last.strip
-      wait_until_ready(port)
+      Docker.start(CONTAINER, '--env', "POSTGRES_USER=#{USER}", '--env', "POSTGRES_PASSWORD=#{PASSWORD}",
+                   '--env', "POSTGRES_DB=#{SEEDED}", '--publish', '127.0.0.1::5432',
+                   '--volume', "#{SCRIPTS}:/docker-entrypoint-initdb.d:ro", IMAGE)
+      port = Docker.port(CONTAINER, '5432/tcp')
+      Docker.wait_until_ready(STARTUP) { ready?(port) }
       port
     end
 
     # The server listens on TCP only once the scripts have run and it has restarted, so the first connection that
     # succeeds finds it ready.
-    def wait_until_ready(port)
-      deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + STARTUP
-      begin
-        PG.connect("postgres://#{USER}:#{PASSWORD}@127.0.0.1:#{port}/#{SEEDED}").close
-      rescue PG::ConnectionBad
-        raise if Process.clock_gettime(Process::CLOCK_MONOTONIC) > deadline
-
-        sleep 0.2
-        retry
-      end
-    end
-
-    def docker(*arguments)
-      output, status = Open3.capture2e('docker', *arguments)
-      raise "docker #{arguments.first} failed: #{output}" unless status.success?
-
-      output
+    def ready?(port)
+      PG.connect("postgres://#{USER}:#{PASSWORD}@127.0.0.1:#{port}/#{SEEDED}").close
+      true
+    rescue PG::ConnectionBad
+      false
     end
   end
 

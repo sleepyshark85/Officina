@@ -1,10 +1,12 @@
 module Bookshop
   class Application
     @database: Database
+    @exports: Sleepyshark::Officina::Mcp::ToolSource?
     @telemetry: Telemetry
     @console: Console
 
-    def initialize: (database: Database, telemetry: Telemetry, console: Console) -> void
+    def initialize: (database: Database, exports: Sleepyshark::Officina::Mcp::ToolSource?, telemetry: Telemetry,
+                     console: Console) -> void
     def run: () -> void
     def close: () -> void
   end
