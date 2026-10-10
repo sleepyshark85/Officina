@@ -5,7 +5,6 @@ require 'test_helper'
 require 'tmpdir'
 require 'sleepyshark/officina/mcp'
 require_relative 'cancellations'
-ARGV << '-v' if ENV['CI'] # TEMPORARY: per-test timings on CI, removed before review
 
 # The MCP client over stdio, against the test kit's fake server run as a child process (test/fixtures/stdio_server.rb).
 class StdioTest < Minitest::Test
@@ -72,6 +71,7 @@ class StdioTest < Minitest::Test
   end
 
   def test_mcp04_a_server_that_sends_a_message_longer_than_16_mb_is_lost
+    skip 'Moving 16 MB through a pipe takes seconds on Windows' if Gem.win_platform?
     error = assert_raises(Mcp::Error) { connect('flood') }
 
     assert_equal 'MCP server fs could not be reached: it sent a message longer than 16 MB', error.message

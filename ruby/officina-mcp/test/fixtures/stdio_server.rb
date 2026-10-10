@@ -23,8 +23,6 @@ when 'complain'
   warn 'configuration file missing'
 when 'flood'
   $stdin.gets
-  # Binary, so Windows does not scan 16 MB for line ends to convert.
-  $stdout.binmode
   $stdout.write('x' * ((16 * 1024 * 1024) + 1))
   $stdin.read
 when 'silent'
