@@ -141,10 +141,21 @@ class ContextSizeTest(unittest.TestCase):
     def run_hook(self, stdin):
         return subprocess.run([sys.executable, SCRIPT], input=stdin, capture_output=True, text=True, check=False)
 
-    def run_report(self, config, session_id):
-        environment = dict(os.environ, CLAUDE_CONFIG_DIR=config)
-        return subprocess.run([sys.executable, SCRIPT, "--report", session_id], env=environment,
-                              capture_output=True, text=True, check=True).stdout
+    def test_the_report_command_defaults_to_this_session(self):
+        config = os.path.join(self.folder.name, "config")
+        sizes = os.path.join(config, "projects", "some-project", "s1", "context-sizes")
+        self.write(os.path.join(sizes, "main.jsonl"), [{"time": "t1", "agent_type": "main", "tokens": 40_000}])
+        self.assertIn("40,000", self.run_report(config, current_session="s1"))
+        self.assertEqual(self.run_report(config), "No context sizes logged for session (none given).\n")
+
+    def run_report(self, config, session_id=None, current_session=None):
+        """Runs --report with the given session id or none, in a session with the given id or none."""
+        environment = {name: value for name, value in os.environ.items() if name != "CLAUDE_CODE_SESSION_ID"}
+        environment["CLAUDE_CONFIG_DIR"] = config
+        if current_session:
+            environment["CLAUDE_CODE_SESSION_ID"] = current_session
+        arguments = [sys.executable, SCRIPT, "--report"] + ([session_id] if session_id else [])
+        return subprocess.run(arguments, env=environment, capture_output=True, text=True, check=True).stdout
 
     def patch(self, name, value):
         original = getattr(hook, name)

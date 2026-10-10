@@ -107,7 +107,7 @@ def report(sizes):
     rows = []
     for name in os.listdir(sizes):
         if latest := next(entries(os.path.join(sizes, name)), None):
-            rows.append((latest["tokens"], name[:-len(".jsonl")], latest["agent_type"], latest["time"]))
+            rows.append((latest["tokens"], os.path.splitext(name)[0], latest["agent_type"], latest["time"]))
     lines = [f"{'agent':<18} {'type':<16} {'tokens':>9}  updated"]
     lines += [f"{agent:<18} {kind:<16} {tokens:>9,}  {time}"
               for tokens, agent, kind, time in sorted(rows, reverse=True)]
