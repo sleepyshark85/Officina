@@ -1,0 +1,9 @@
+inherit_from: ../../.rubocop_tests.yml
+
+# Until Ruby S05B, which owns the run engine and its tests, splits this file by concept.
+Metrics/ClassLength:
+  Exclude:
+    - run_test.rb
+Metrics/MethodLength:
+  Exclude:
+    - run_test.rb

@@ -1,0 +1,21 @@
+# frozen_string_literal: true
+
+require 'test_helper'
+
+# Tokens as the provider bills them.
+class UsageTest < Minitest::Test
+  include Sleepyshark::Officina
+
+  cover 'Sleepyshark::Officina*'
+
+  def test_agt03_usages_add_up_kind_by_kind
+    first = Usage.new(input: 1, output: 2, cache_read: 3, cache_write: 4)
+    second = Usage.new(input: 10, output: 20, cache_read: 30, cache_write: 40)
+
+    assert_equal Usage.new(input: 11, output: 22, cache_read: 33, cache_write: 44), first + second
+  end
+
+  def test_agt03_a_new_usage_counts_no_tokens
+    assert_equal Usage.new(input: 0, output: 0, cache_read: 0, cache_write: 0), Usage.new
+  end
+end
