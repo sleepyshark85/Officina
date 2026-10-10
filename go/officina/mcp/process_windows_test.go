@@ -22,13 +22,17 @@ func watch(t *testing.T, pid int) process {
 	if err != nil {
 		t.Fatalf("open process %d: %v", pid, err)
 	}
-	t.Cleanup(func() { _ = syscall.CloseHandle(h) }) // A handle opened here closes; nothing is lost if not.
+	t.Cleanup(func() { _ = syscall.CloseHandle(h) }) // The close error is dropped: the test has ended and nothing could act on it.
 	return process{pid: pid, h: h}
 }
 
 // exited reports whether the process has exited. Unlike a zombie on Unix, a process left unwaited for cannot be
 // told apart from one held by another process; the client's Wait closes its handle itself.
-func (p process) exited() bool {
-	s, _ := syscall.WaitForSingleObject(p.h, 0) // A failed wait returns WAIT_FAILED, which is not an exit.
+func (p process) exited(t *testing.T) bool {
+	t.Helper()
+	s, err := syscall.WaitForSingleObject(p.h, 0)
+	if s == syscall.WAIT_FAILED {
+		t.Fatalf("wait for process %d: %v", p.pid, err)
+	}
 	return s == syscall.WAIT_OBJECT_0
 }

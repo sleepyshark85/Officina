@@ -20,6 +20,6 @@ func watch(_ *testing.T, pid int) process {
 }
 
 // exited reports whether the process has exited and been waited for: a zombie still takes signal 0.
-func (p process) exited() bool {
+func (p process) exited(_ *testing.T) bool {
 	return errors.Is(syscall.Kill(p.pid, 0), syscall.ESRCH)
 }

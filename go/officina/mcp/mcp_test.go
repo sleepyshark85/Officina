@@ -413,7 +413,7 @@ func TestConnect_MCP04_AConnectCancelledWhileTheServerStartsLeavesNoServerRunnin
 	if got.source != nil || !errors.Is(got.err, context.Canceled) {
 		t.Errorf("Connect() = %v, %v; want context.Canceled", got.source, got.err)
 	}
-	if !proc.exited() {
+	if !proc.exited(t) {
 		t.Errorf("the server process %d outlived the cancelled connect", proc.pid)
 	}
 }
@@ -434,7 +434,7 @@ func TestClose_MCP01_ClosingStopsTheServerAndItsToolsThenGiveErrorResults(t *tes
 
 	source.Close()
 
-	if !proc.exited() {
+	if !proc.exited(t) {
 		t.Errorf("the server process %d outlived Close", pid)
 	}
 	echo := source.Tools()[1]
@@ -482,7 +482,7 @@ func waitForProcesses(t *testing.T, file string) []process {
 func waitExited(t *testing.T, p process) {
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)
-	for !p.exited() {
+	for !p.exited(t) {
 		if time.Now().After(deadline) {
 			t.Errorf("process %d is still running", p.pid)
 			return
