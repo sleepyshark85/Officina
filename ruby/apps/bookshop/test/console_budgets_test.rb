@@ -55,11 +55,10 @@ class ConsoleBudgetsTest < Minitest::Test
   end
 
   def test_app14_a_reply_that_reaches_the_sessions_budget_stops_and_says_to_start_a_new_session
-    select_row(<<~SQL)
+    execute(<<~SQL)
       insert into sessions (id, staff_member, conversation, input_tokens, output_tokens, cache_read_tokens,
                             cache_write_tokens, cost, updated)
       values ('a1b2c3d4e5f6', 'Sam', '{"id":"a1b2c3d4e5f6","messages":[]}', 0, 0, 0, 0, 4.9999, now())
-      returning id
     SQL
     usage = Officina::Usage.new(input: 3000)
     model = ScriptedModel.new(ScriptedModel.tool_use(call('c1', 'search_books', '{"title":"Winter"}'), usage:))

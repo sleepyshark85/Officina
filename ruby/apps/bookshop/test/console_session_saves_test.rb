@@ -56,7 +56,7 @@ class ConsoleSessionSavesTest < Minitest::Test
 
   def test_app10_a_session_another_console_went_on_with_is_not_overwritten_and_the_reply_goes_on
     model = ScriptedModel.new(ScriptedModel.text('Hello.'), ScriptedModel.text('Hello again.'))
-    elsewhere = -> { select_row("update sessions set conversation = replace(conversation, 'Hi.', 'Hi there.')") }
+    elsewhere = -> { execute("update sessions set conversation = replace(conversation, 'Hi.', 'Hi there.')") }
 
     transcript = session(model, 'Sam', 'Hi.', elsewhere, 'Again.', '/quit')
     id = session_id(transcript)

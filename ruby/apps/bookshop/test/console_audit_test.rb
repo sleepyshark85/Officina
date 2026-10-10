@@ -46,6 +46,16 @@ class ConsoleAuditTest < Minitest::Test
                     "Audit of session #{untraced}:\nRun 1, trace: none recorded\n"
   end
 
+  def test_app16_audit_shows_the_tokens_of_a_run_end_whose_cost_is_not_recorded
+    usage = Officina::Usage.new(input: 1200, output: 300, cache_read: 4000)
+    model = ScriptedModel.new(ScriptedModel.text('Hello.', usage:))
+
+    transcript = session(model, 'Sam', 'Hi.', -> { execute('update audit set cost = null') }, '/audit', '/quit')
+
+    assert_includes transcript, '  RunEnded                                completed  ' \
+                                "tokens: 5,200 in (4,000 cached), 300 out, $0.0000\n"
+  end
+
   def test_app20_a_reply_is_one_trace_of_its_run_model_and_tool_calls_with_its_log_record
     telemetry = MemoryTelemetry.new
     kept = []

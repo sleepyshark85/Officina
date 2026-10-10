@@ -54,7 +54,7 @@ class ConsoleSessionsTest < Minitest::Test
   end
 
   def test_app10_resume_says_a_stored_session_cannot_be_read_and_the_session_in_use_goes_on
-    select_row(<<~SQL)
+    execute(<<~SQL)
       insert into sessions (id, staff_member, conversation, input_tokens, output_tokens, cache_read_tokens,
                             cache_write_tokens, cost, updated)
       values ('broken', 'Sam', '{}', 0, 0, 0, 0, 0, now())

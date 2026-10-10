@@ -48,8 +48,8 @@ module Bookshop
 
     def outcome(record)
       case record
-      in { kind: 'RunEnded', usage: Usage => usage, cost: BigDecimal => cost }
-        "#{record.outcome}  #{spent(usage, cost)}"
+      in { kind: 'RunEnded', usage: Usage => usage }
+        "#{record.outcome}  #{spent(usage, record.cost || BigDecimal(0))}"
       in { kind: 'ApprovalAnswered', detail: String => reason } then "#{record.outcome}: #{reason}"
       in { kind: 'ToolEnded', duration: Float => seconds } then "#{record.outcome}  #{milliseconds(seconds)}"
       else record.outcome.to_s

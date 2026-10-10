@@ -95,14 +95,14 @@ class SessionStoreTest < Minitest::Test
   def test_app10_a_session_deleted_elsewhere_is_not_saved_again
     conversation = conversation_after('Hi.', 'Hello.')
     saved = save(conversation)
-    select_row('delete from sessions')
+    execute('delete from sessions')
 
     assert_raises(SessionChangedError) { save(conversation, previous: saved) }
     assert_nil @store.load(conversation.id)
   end
 
   def test_app10_a_stored_session_that_is_not_a_conversation_cannot_be_loaded
-    select_row(<<~SQL)
+    execute(<<~SQL)
       insert into sessions (id, staff_member, conversation, input_tokens, output_tokens, cache_read_tokens,
                             cache_write_tokens, cost, updated)
       values ('broken', 'Sam', '{}', 0, 0, 0, 0, 0, now())
@@ -141,5 +141,5 @@ class SessionStoreTest < Minitest::Test
   end
 
   # Sets the session's time to the start of 2026, as if it was saved then.
-  def backdate(id) = select_row("update sessions set updated = '2026-01-01Z' where id = $1", id)
+  def backdate(id) = execute("update sessions set updated = '2026-01-01Z' where id = $1", id)
 end
