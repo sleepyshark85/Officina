@@ -21,6 +21,7 @@ module Sleepyshark
         def read: (untyped stream) { (model_event event) -> void } -> Reply?
         def take: (untyped event, Array[Block] blocks) { (model_event event) -> void } -> Reply?
         def finish: (untyped word, untyped message, Array[Block] blocks) { (model_event event) -> void } -> Reply
+        def report: () { (model_event event) -> void } -> void
         def block: (untyped content) -> Block
         def usage: (untyped reported) -> Usage
         def delta: (untyped reported) -> Usage

@@ -36,7 +36,7 @@ module Sleepyshark
           Reply.new(blocks: [], stop: :context_full)
         rescue Anthropic::Errors::Error, IncompleteError
           # The tokens of an attempt that failed mid-stream are billed, so they are reported too.
-          yield UsageReported.new(usage: @usage) if @usage
+          report(&)
           raise
         ensure
           stream&.close
@@ -72,16 +72,22 @@ module Sleepyshark
           nil
         end
 
-        def finish(word, message, blocks)
+        def finish(word, message, blocks, &)
           raise IncompleteError, "Claude's reply stopped without a stop reason" unless word
 
-          yield UsageReported.new(usage: @usage) if @usage
+          report(&)
           stop = STOPS.fetch(word.to_sym, :unknown)
           detail = case stop
                    when :refusal then message[:stop_details]&.[](:category)&.to_s
                    when :unknown then word.to_s
                    end
           Reply.new(blocks:, stop:, detail:)
+        end
+
+        # Yields the call's usage once the stream has reported any.
+        def report
+          usage = @usage
+          yield UsageReported.new(usage:) if usage
         end
 
         # A reply block as the conversation keeps it: the gem's JSON for it in the canonical form, with its text or

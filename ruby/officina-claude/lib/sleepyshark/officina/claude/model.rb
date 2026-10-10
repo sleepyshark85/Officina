@@ -23,12 +23,14 @@ module Sleepyshark
         CACHE_LIFETIMES = %w[5m 1h].freeze
         # Attempts per call, the first included.
         ATTEMPTS = 5
-        # Waits up to +seconds+, ending early once +cancel+ is cancelled.
-        WAIT = lambda do |seconds, cancel|
+        # Waits up to +seconds+, ending early once +cancel+ is cancelled. The callback it leaves with the cancellation,
+        # at most one per retry, only closes a queue nobody waits on any more.
+        WAIT = lambda { |seconds, cancel|
           woken = Thread::Queue.new
           cancel.on_cancel { woken.close }
           woken.pop(timeout: seconds)
-        end
+        }.freeze
+        private_constant :ATTEMPTS, :WAIT
 
         # The model and every setting that shapes its requests, in the words .NET's and Go's use, such as
         # "claude model=claude-opus-5-5 effort=medium max_tokens=64000 cache=5m thinking=adaptive"; the cache

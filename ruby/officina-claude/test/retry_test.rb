@@ -28,7 +28,9 @@ class RetryTest < ClaudeTestCase
       'an error event mid-stream is retried' => [[cut_off], [0.5..1]],
       'a connection dropped mid-stream is retried' => [[FakeApi.sse(START, text_events('Hel')[0], cut: true)],
                                                        [0.5..1]],
-      'a stream that ends before its stop reason is retried' => [[FakeApi.sse(START, *text_events('Hel'))], [0.5..1]]
+      'a stream that ends before its stop reason is retried' => [[FakeApi.sse(START, *text_events('Hel'))], [0.5..1]],
+      'a reply that stops without a stop reason is retried' =>
+        [[FakeApi.sse(START, *text_events('Hel'), PARTIAL, '{"type":"message_stop"}')], [0.5..1]]
     }.each do |name, (failures, waits)|
       @waits.clear
       api = serve(*failures, text_reply)
