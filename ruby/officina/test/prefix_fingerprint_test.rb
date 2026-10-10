@@ -20,19 +20,22 @@ class PrefixFingerprintTest < Minitest::Test
   end
 
   def test_ctx01_out01_the_fingerprint_with_an_output_schema_is_the_one_every_implementation_computes
-    fixture = PREFIX['output'].first
     output = Input.define do
       string :title, "A title «short», with <b>&amp; 'quotes' + more."
       integer :copies, minimum: 0
       array :changes, of: :string, optional: true
       string :note, nullable: true
     end
+    model = Model.new(settings: PREFIX['settings'], info: ModelInfo.new(provider: 's', name: 's', compacts: true,
+                                                                        clears_tool_results: true))
 
-    agent = Agent.new(model: Model.new(settings: PREFIX['settings']), instructions: PREFIX['instructions'],
-                      tools: shared_tools, output:)
+    PREFIX['output'].each do |part|
+      agent = Agent.new(model:, instructions: PREFIX['instructions'], tools: shared_tools, output:,
+                        context_management: (context_management(part) if part['compactAt']))
 
-    assert_equal fixture['schema'], output.schema.to_s
-    assert_equal fixture['fingerprint'], agent.fingerprint
+      assert_equal part['schema'], output.schema.to_s
+      assert_equal part['fingerprint'], agent.fingerprint, part.to_s
+    end
   end
 
   def test_ctx01_hist01_the_fingerprint_with_context_management_is_the_one_every_implementation_computes
