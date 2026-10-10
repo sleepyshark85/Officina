@@ -153,7 +153,7 @@ class Spike
 
   # Stops before a call whose worst case (every input token, counted for free, written to cache at 1.25x, plus
   # max_tokens of output) could take the spend over the cap. The output schema is left out of the count (a few hundred
-  # tokens at most here).
+  # tokens at most here), and so is a compaction iteration's own output (about 500 tokens here): a slight under-count.
   def within_cap!(params, raw)
     tokens = @client.beta.messages.count_tokens(**params.slice(*COUNTED), model: MODEL, messages: [],
                                                                           request_options: raw).input_tokens
@@ -209,7 +209,8 @@ class Spike
       "Policy #{i}: when a customer asks about topic #{i}, check the catalog first, never invent stock levels, " \
         "and quote prices in euros."
     end
-    ["You are the assistant of a small bookshop called «Café Libro». Answer briefly and precisely.", *policies].join("\n")
+    intro = "You are the assistant of a small bookshop called «Café Libro». Answer briefly and precisely."
+    [intro, *policies].join("\n")
   end
 
   def system_blocks = [{ type: :text, text: instructions, cache_control: { type: :ephemeral } }]
@@ -318,8 +319,8 @@ class Spike
     end
     puts "  stream: compaction_delta events=#{deltas}"
     first.content.grep(Anthropic::Beta::BetaCompactionBlock).each do |block|
-      # The typed `encrypted_content` reader raises here: content_block_start carried no such key, the coercion error
-      # it recorded outlives the delta that set it, so the field is read raw.
+      # The typed `encrypted_content` reader raises here: the stream helper set the field to the delta's nil, and a
+      # nilable field set to nil through a setter raises on read in this gem version, so the field is read raw.
       puts "  compaction block typed: #{block.class} content=#{block.content.to_s.length}ch " \
            "encrypted_content=#{block[:encrypted_content].inspect[0, 40]}"
       puts "  compaction block stored (first 400 chars): #{short(canonical(block.to_json), 400)}"
