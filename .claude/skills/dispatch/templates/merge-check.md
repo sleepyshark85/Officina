@@ -16,3 +16,6 @@ Put each conflict and how you resolved it in a PR comment. Report in the short f
 needs a new verdict.
 Follow .claude/skills/dispatch/agent-rules.md.
 ```
+
+Where the PR's reviewer is not a new agent for the round, the merge-check follows the fix brief's pattern: the lead
+names the reviewer's id, and the agent sends the round with `SendMessage` and ends with the verdict and head sha.

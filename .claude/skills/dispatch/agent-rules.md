@@ -27,3 +27,7 @@ included; these add what running beside other agents needs.
   denied, one line each: the line count yields to it, never the reverse. Everything else (what changed per finding,
   file lists, survivor tables, mutation counts) goes in the PR description or a PR comment, which the lead reads only
   if it needs to. A hand-back at the context limit adds everything the context hook's warning asks for.
+- **Review rounds.** An agent that fixes a verdict sends the next round straight to the PR's reviewer with
+  `SendMessage`, using the text and the reviewer id its brief gives, waits for the reply before it ends, and finishes
+  with one line: the verdict and the head sha. The reviewer stays the same for the PR's rounds; the lead dispatches any
+  new one, and alone sets auto-merge.

@@ -26,6 +26,16 @@ Kind asked for: `$0` (`developer`, `fix`, `review` or `merge-check`).
 
 - Never read diffs, conflict hunks or full logs yourself: dispatch a merge-check, a fixer or a reviewer, and act on
   its short report ([agent-rules.md](agent-rules.md), *Report*).
-- After each merge, update your status note (the project memory's status file, such as `ruby-port-status`); the
-  plan's Progress row goes in the next PR that touches the plan.
-- When the context hook warns you, update the note and ask the owner to run `/compact`.
+- Update your status note (the project memory's status file, such as `ruby-port-status`) only when the context hook
+  warns at 150k, before `/compact`, and at the end of a session; the plan's Progress row goes in the next PR that
+  touches the plan. At the end of a session also regenerate `docs/agent-usage.md`
+  (`python3 -B scripts/agent-usage.py`), through a docs PR.
+- Never read whole files or logs in the lead: use `head` or `grep`, or ask an agent.
+- Background watchers print only events (a PR merged, closed or behind), never progress.
+- Set auto-merge (`gh pr merge N --auto --merge --delete-branch`) as soon as a PR opens. The required `review` check
+  means it merges only on an approving verdict on its head.
+- Handle each report in one step: decide and send the next brief.
+- Compact at the 150k warning, not earlier (the owner's choice): update the note and ask the owner to run `/compact`.
+  Start a new session per wave.
+- Review rounds run without the lead: the fixer sends each next round to the PR's reviewer (see [fix](templates/fix.md)).
+  The lead still dispatches every new reviewer, takes round 3's outcome to the owner, and alone sets auto-merge.

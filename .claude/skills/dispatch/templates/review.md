@@ -15,9 +15,13 @@ You review this PR only. Apply the code quality bar in docs/conventions.md stric
 verdict as your agent definition says. Follow .claude/skills/dispatch/agent-rules.md.
 ```
 
-The same reviewer's later rounds, by `SendMessage`:
+The same reviewer's later rounds, by `SendMessage` from the lead or, as [fix](fix.md) says, from the agent that fixed
+the verdict:
 
 ```text
 Round {{2 or 3}} of 3 for PR #{{n}}: the head is now {{full sha}}, which answers your verdict at {{sha}}. Review what
 changed since then and anything it could break, and post a verdict naming the new head.
 ```
+
+Reply to whoever resumed you in the short format of agent-rules.md, not in prose: the verdict is on the PR, and the
+sender reads only the reply.
