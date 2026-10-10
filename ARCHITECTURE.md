@@ -114,6 +114,31 @@ allows: dependency injection contracts where the platform composes services thro
 API where the base library has none. Adapters depend on the core; the core never depends on an adapter. Only the
 Claude adapter uses the provider's SDK.
 
+**Layers and packages.** Every implementation has the same packages and the same dependency graph; only their names
+follow the platform (D8). Arrows point from a package to what it depends on.
+
+```mermaid
+flowchart BT
+    Core[Core: run engine, composer, pipeline, memory, output, budgets, events, audit, built-in stores]
+    Claude[Claude adapter] --> Core
+    Mcp[MCP tool source] --> Core
+    Kit[Test kit] --> Core
+    App[Application: Bookshop Assistant] --> Core & Claude & Mcp
+    Samples[Samples] --> Core & Kit
+    Tests[Tests] --> Kit & App
+    Claude --> Sdk[Provider SDK]
+```
+
+| Layer | Holds | May depend on |
+|---|---|---|
+| Host | Interface, composition root, persistence, the application's tools and stores | Every package below |
+| Adapters | One provider or tool source each (Claude, MCP) | The core, and its own external library (the SDK for Claude) |
+| Core | Everything in the table above | The platform only (dependency rule) |
+| Test kit | Boundary replacements (TEST-01) | The core |
+
+The application builds every object in one **composition root**, the only place that knows the concrete types; tests
+call the same composition with the boundaries replaced (D15).
+
 ## 4. Contracts at the boundaries
 
 Each contract is the only way the core reaches what is behind it; tests replace each one (TEST-01).
@@ -224,6 +249,57 @@ write.
 Before each model call the budget guard lowers the call's output limit to what the remaining cost and tokens allow. A
 reply that this lowered limit cuts short, once the budget is used up, ends the run as stopped for the budget rather
 than for the output limit, as the budget is what cut it.
+
+### 5.1 Every way a run ends
+
+The stop-reason table above, completed with the checks around it. Each exit gives exactly one result, and the run's
+end event, audit entry and trace span close it whichever way it ended.
+
+| Where | Signal | Result |
+|---|---|---|
+| Start | The conversation is in use by another run | Refused as a host error, not a result: one run per conversation at a time |
+| Prefix check | The conversation's bound fingerprint differs from the agent's | `Failed(PrefixMismatch)` |
+| Tool sources | A source cannot connect | `Failed(ToolSourceUnavailable)`; cancelled meanwhile, `Stopped(Cancelled)` |
+| Before each call | A budget limit is reached | `Stopped(Budget)`, naming the limit |
+| Before each call | The run has made 25 model calls | `Stopped(IterationLimit)` |
+| Model call | A failure left after retries, or a stream that ends without a stop reason | `Failed(ModelError)` |
+| Stop reason | `end` while the reply asked for tools; `tool_use` with no calls; a reason the run cannot act on | `Failed(UnexpectedStop)` |
+| After the tools | The host cancelled while they ran | `Stopped(Cancelled)`, after every call's result is appended |
+
+A reply is not appended when its call failed or was cancelled, when it is empty, or when it asks for tools but stopped
+for anything but `tool_use`, as calls without results are rejected by the provider.
+
+### 5.2 One reply's tool calls
+
+The pipeline runs a reply's calls in call order, each through the same steps: find the tool → parse and validate the
+input → ask approval if needed → record the attempt (a write, with an audit sink) → invoke → redact secrets → cut the
+result at 64,000 characters with a note.
+
+| Rule | Why |
+|---|---|
+| Read calls run concurrently; a write waits for every call before it and runs alone | TOOL-03: reads cannot interfere; writes keep their order |
+| Approvals are asked one at a time | A person answers one prompt at a time |
+| Every failure is an error result the model reads: unknown tool, invalid input, denied or unattended approval, a write whose attempt could not be recorded, a handler that fails or is cancelled | TOOL-05: nothing in the pipeline ends the run |
+| Every call gets exactly one result, also when the run is cancelled; all results go back in one message, in call order | CTX-06, AGT-05 |
+| The approver may be asked before or after the host has seen the approval-asked event, so a host that answers from its event stream must accept the answer in either order | The pipeline never waits for the host to read an event |
+
+### 5.3 Runtime model
+
+How a run uses time, threads and I/O, whatever the platform. Each implementation's design notes map every row to its
+own mechanism (`docs/implementations/` links them).
+
+| Aspect | The rule |
+|---|---|
+| Streaming | Every model request is streamed. The adapter turns the provider's stream into model events (text deltas, complete blocks, usage, retry notices, stop reason); the run relays them to the host as run events while the reply is still arriving, so the host never waits for a whole reply to show progress |
+| Event order | A run's events reach the host in the order things happened, and the run-ended event is always last. For one call: started → approval asked → approval answered → finished. A reply and the messages it answers are all appended before the first conversation-appended event about them |
+| Consuming a run | The host consumes a run as a stream of events in the platform's own idiom and gets the result when the stream ends. A host that stops consuming early cancels the run |
+| Asynchronous I/O | Everything that waits on the outside (model, tools, approver, memory store, audit sink, tool sources) is non-blocking or runs off the host's path in the platform's idiom, and takes the run's cancellation |
+| Concurrency | Model calls of one run are sequential. Reads of one reply run concurrently. Many runs of one agent run concurrently, each on its own conversation (AGT-04): the agent's definition is immutable, and what it shares between runs (model client, stores, sinks, telemetry) is safe for concurrent use |
+| Hand-over | The pipeline hands its events to the run without waiting for the host; the run passes them on as it receives them |
+| Cancellation | One cancellation per run, from the host. It reaches the model stream and every running tool, and is cooperative: work stops at its next check, never by killing a thread. AGT-05 says what the conversation holds afterwards |
+| Ownership | Every concurrent task the core starts is owned by the run that started it and finished before the run returns, also when cancelled or abandoned: nothing outlives its run |
+| Persistence points | The host is told after every append (AGT-08) and may persist then; a crash loses at most the step in flight (§5) |
+| Time | The clock is a boundary: elapsed time, budgets and audit times come from a clock the host can replace in tests |
 
 ## 6. Context and caching
 
@@ -355,7 +431,7 @@ How the Claude adapter realizes the model contract. These are design choices, no
 | Structured output | The output format setting; forced tool choice is never used |
 | Reasoning | Adaptive thinking; effort set explicitly; blocks replayed unchanged, their text possibly empty. Progress shown to users is the text between tool calls, not reasoning |
 | Refusal | `refusal` stop reason with its category; no fallback in phase 1 (D10) |
-| Transport | Streamed requests; eager tool-input streaming, validated by the pipeline; retries including mid-stream errors; output token limit lowered to the remaining budget |
+| Transport | Streamed requests; eager tool-input streaming, validated by the pipeline; retries including mid-stream errors (rate limit, overload, server errors, network): at most 5 attempts, waiting for `Retry-After` up to 30 s or a backoff with jitter, the failed attempt's text discarded; "prompt is too long" is `context_full`; output token limit lowered to the remaining budget |
 | SDK | The official Anthropic SDK, used only inside this adapter, through its beta surface |
 
 ## 11. North star
@@ -452,6 +528,47 @@ flowchart LR
 | Telemetry dashboard | One container in the compose file; shows traces, metrics and logs | None: outside the application |
 | File memory store | One scope per staff member | Memory store |
 | MCP filesystem server | Exports reports to a mounted folder, over Streamable HTTP through a bridge, as the server speaks stdio only; its write tool needs approval | MCP tool source |
+
+**Layers inside the application.** The same in every implementation:
+
+| Layer | Parts | Depends on |
+|---|---|---|
+| Presentation | Console: reads input and commands, renders events, prompts for approval, turns Ctrl+C into cancelling the reply | Application |
+| Application | The session flow: builds each run's input (context, memory scope, budget), runs the chat agent, persists on every append, runs the summarizer when a session is left, keeps the session's usage and cost | Core, domain, infrastructure (through the core's contracts) |
+| Domain | The bookshop tools: fixed, parameterized queries, one transaction per order change, business rule failures as error results | The database client |
+| Infrastructure | Session store, audit table sink, file memory store, MCP export source, telemetry exporter, database client | External systems |
+| Composition root | Builds all of the above from settings, once at start | Everything |
+
+**One chat turn**, as data flows through it:
+
+```mermaid
+sequenceDiagram
+    participant U as Staff member
+    participant C as Console
+    participant S as Session flow
+    participant E as Run engine
+    participant P as Tool pipeline
+    participant DB as Database
+    U->>C: message
+    C->>S: send(message)
+    S->>E: run(conversation, input: context, scope, budget)
+    loop until the model stops
+        E-->>C: text deltas, tool activity (streamed)
+        E-->>S: conversation appended
+        S->>DB: save session
+        opt tool calls
+            E->>P: run calls
+            P->>DB: reads in parallel, writes in order
+            P-->>C: approval asked
+            C->>U: prompt with the exact input
+            U->>C: yes / no
+            C-->>P: answer
+        end
+    end
+    E-->>S: result with usage
+    S->>DB: save session, usage and cost
+    C->>U: status line
+```
 
 ### 12.2 What each part demonstrates
 
