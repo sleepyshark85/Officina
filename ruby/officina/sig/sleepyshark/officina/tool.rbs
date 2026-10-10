@@ -12,7 +12,7 @@ module Sleepyshark
 
       @input: _Input
       @needs_approval: bool
-      @handler: ^(untyped input, Cancellation cancel) -> untyped
+      @handler: ^(untyped input, Cancellation cancel, String? memory_scope) -> untyped
 
       attr_reader name: String
       attr_reader description: String
@@ -20,21 +20,25 @@ module Sleepyshark
       attr_reader source: _ToolSource?
 
       def initialize: (name: String, description: String, input: _Input, kind: Symbol,
-                       ?needs_approval: bool, ?source: _ToolSource?) { (untyped input, Cancellation cancel) -> untyped } -> void
+                       ?needs_approval: bool, ?source: _ToolSource?) { (untyped input, Cancellation cancel, String? memory_scope) -> untyped } -> void
 
       def input_schema: () -> String
 
       def needs_approval?: () -> bool
 
+      def needs_approval_for?: (String input) -> bool
+
+      def memory?: () -> bool
+
       def write?: () -> bool
 
       def input_problem: (String input) -> String?
 
-      def invoke: (String input, Cancellation cancel) -> (String | ToolFailure)
+      def invoke: (String input, Cancellation cancel, ?String? memory_scope) -> (String | ToolFailure)
 
       private
 
-      def check: (String name, Symbol kind, (^(untyped, Cancellation) -> untyped)? handler) -> void
+      def check: (String name, Symbol kind, (^(untyped, Cancellation, String?) -> untyped)? handler) -> void
     end
   end
 end

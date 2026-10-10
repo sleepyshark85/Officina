@@ -66,6 +66,10 @@ require_relative 'officina/dotnet_json'
 require_relative 'officina/schema_subset'
 require_relative 'officina/schema'
 require_relative 'officina/input'
+require_relative 'officina/memory_view'
+require_relative 'officina/memory_files'
+require_relative 'officina/memory_command'
+require_relative 'officina/memory_tool'
 
 module Sleepyshark
   # Officina's core: a purpose-neutral library for building agentic applications.

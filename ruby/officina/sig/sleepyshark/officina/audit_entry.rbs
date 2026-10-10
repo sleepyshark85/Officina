@@ -8,6 +8,7 @@ module Sleepyshark
       attr_reader run: String
       attr_reader conversation: String
       attr_reader agent: String?
+      attr_reader memory_scope: String?
       attr_reader kind: Symbol
       attr_reader trace_id: String?
       attr_reader span_id: String?
@@ -20,12 +21,12 @@ module Sleepyshark
       attr_reader usage: Usage?
       attr_reader cost: BigDecimal?
 
-      def self.new: (time: Time, sequence: Integer, run: String, conversation: String, agent: String?, kind: Symbol,
+      def self.new: (time: Time, sequence: Integer, run: String, conversation: String, agent: String?, kind: Symbol, ?memory_scope: String?,
                      ?trace_id: String?, ?span_id: String?, ?tool: String?, ?call_id: String?, ?input: String?, ?outcome: String?, ?detail: String?,
                      ?duration: Float?, ?usage: Usage?, ?cost: BigDecimal?) -> instance
 
 
-      def initialize: (time: Time, sequence: Integer, run: String, conversation: String, agent: String?, kind: Symbol,
+      def initialize: (time: Time, sequence: Integer, run: String, conversation: String, agent: String?, kind: Symbol, ?memory_scope: String?,
                        ?trace_id: String?, ?span_id: String?, ?tool: String?, ?call_id: String?, ?input: String?, ?outcome: String?, ?detail: String?,
                        ?duration: Float?, ?usage: Usage?, ?cost: BigDecimal?) -> void
     end

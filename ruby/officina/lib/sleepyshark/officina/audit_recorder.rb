@@ -33,10 +33,7 @@ module Sleepyshark
         span ||= @trace.span
         @lock.synchronize do
           @sequence += 1
-          written?(sink, span, AuditEntry.new(time: @agent.clock.call, sequence: @sequence, run: @run,
-                                              conversation: @conversation, agent: @agent.name, kind:, **ids(span),
-                                              tool:, call_id: call&.id, input: clean(call&.input),
-                                              detail: clean(detail), **fields))
+          written?(sink, span, entry(kind, call, span, tool:, detail:, **fields))
         end
       end
 
@@ -59,6 +56,12 @@ module Sleepyshark
       end
 
       private
+
+      def entry(kind, call, span, tool:, detail:, **fields)
+        AuditEntry.new(time: @agent.clock.call, sequence: @sequence, run: @run, conversation: @conversation,
+                       agent: @agent.name, memory_scope: @trace.memory_scope, kind:, **ids(span), tool:,
+                       call_id: call&.id, input: clean(call&.input), detail: clean(detail), **fields)
+      end
 
       # A sink's failure is a gap in the trail, which telemetry shows and the caller acts on.
       def written?(sink, span, entry)

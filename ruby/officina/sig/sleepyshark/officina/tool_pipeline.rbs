@@ -33,6 +33,8 @@ module Sleepyshark
 
       def run_if_allowed: (Tool tool, ToolCallTrace step, Integer index) -> void
 
+      def denial: (Tool tool, ToolCallTrace step) -> String?
+
       def write: (Tool tool, ToolCallTrace step) -> ToolResult
 
       def read: (Tool tool, ToolCallTrace step, Integer index) -> void

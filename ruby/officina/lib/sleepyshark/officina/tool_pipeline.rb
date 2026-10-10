@@ -65,7 +65,7 @@ module Sleepyshark
 
       def run_if_allowed(tool, step, index)
         call = step.call
-        refusal = tool.input_problem(call.input) || (@approvals.denial(tool, shown(call), step) if tool.needs_approval?)
+        refusal = tool.input_problem(call.input) || denial(tool, step)
         return @results[index] = finish(call, refusal, step:) if refusal
         # The host may have cancelled while the approver decided, or while this write waited for the reads.
         return @results[index] = finish(call, NOT_STARTED, step:) if @cancel.cancelled?
@@ -75,6 +75,12 @@ module Sleepyshark
         else
           read(tool, step, index)
         end
+      end
+
+      # Why the approver denied the call, when it needs approval; nil when it may run.
+      def denial(tool, step)
+        call = step.call
+        @approvals.denial(tool, shown(call), step) if tool.needs_approval_for?(call.input)
       end
 
       # Runs the write once its attempt is in the trail.
@@ -93,7 +99,7 @@ module Sleepyshark
 
       def invoke(tool, step)
         started = @agent.clock.call
-        output = tool.invoke(step.call.input, @cancel)
+        output = tool.invoke(step.call.input, @cancel, @trace.memory_scope)
       rescue StandardError => e
         why = @cancel.cancelled? ? 'The call was cancelled while it ran' : 'The tool failed'
         finish(step.call, "#{why}: #{e}", step:, started:)

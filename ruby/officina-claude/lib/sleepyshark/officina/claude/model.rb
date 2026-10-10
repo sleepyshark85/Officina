@@ -8,11 +8,11 @@ module Sleepyshark
       # Claude with fixed settings, a model for the core. Many runs may stream from one at once.
       #
       # Every request streams, on the SDK's beta messages API, with adaptive thinking and an explicit effort. It is
-      # laid out for the cache: the tools in the order given (the core sorts them), then the instructions with a cache
-      # point on them, then the conversation, which automatic caching follows to its end; an operator message, such as
-      # the run context, goes as a system message where the conversation has it. An output schema goes as the
-      # structured output format, adjusted to what the API accepts; tool choice is never forced. Each block of a reply
-      # is kept as the gem writes it, in the canonical form, and sent back byte for byte.
+      # laid out for the cache: the tools in the order given (the core sorts them), the memory tool as Claude's own,
+      # then the instructions with a cache point on them, then the conversation, which automatic caching follows to its
+      # end; an operator message, such as the run context, goes as a system message where the conversation has it. An
+      # output schema goes as the structured output format, adjusted to what the API accepts; tool choice is never
+      # forced. Each block of a reply is kept as the gem writes it, in the canonical form, and sent back byte for byte.
       #
       # Transient failures (rate limits, overload, server and network errors, also mid-stream) are retried, waiting as
       # long as Retry-After asks or backing off; what remains is raised as a TransientError, an AuthenticationError
@@ -152,7 +152,10 @@ module Sleepyshark
           schema ? { **effort, format: OutputFormat.of(schema) } : effort
         end
 
+        # The memory tool is Claude's own, which the model is trained on: it carries no schema or description of ours.
         def tool(tool)
+          return { name: tool.name, type: 'memory_20250818' } if tool.memory?
+
           { name: tool.name, description: tool.description, input_schema: JSON.parse(tool.input_schema),
             eager_input_streaming: true }
         end
