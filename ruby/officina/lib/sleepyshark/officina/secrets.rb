@@ -23,9 +23,9 @@ module Sleepyshark
       # @param text [String]
       # @return [String]
       def redact(text)
-        # @type var spans: Array[[Integer, Integer]]
-        spans = @forms.flat_map { |form| starts(text, form).map { |at| [at, at + form.length] } }
-        merged(spans.sort).reverse_each.with_object(text.dup) { |(from, to), out| out[from...to] = REDACTED }
+        text.each_char.zip(covered(text)).chunk_while { |one, other| one.last == other.last }.sum('') do |stretch|
+          stretch.first.last ? REDACTED : stretch.map(&:first).join
+        end
       end
 
       private
@@ -46,6 +46,13 @@ module Sleepyshark
         end
       end
 
+      # For each character of the text, whether a form of a secret covers it.
+      def covered(text)
+        covered = Array.new(text.length, false)
+        @forms.each { |form| starts(text, form).each { |at| covered.fill(true, at, form.length) } }
+        covered
+      end
+
       def starts(text, form)
         # @type var found: Array[Integer]
         found = []
@@ -56,21 +63,6 @@ module Sleepyshark
           at = text.index(form, at + 1)
         end
         found
-      end
-
-      # The spans, sorted, with those that overlap or touch joined.
-      def merged(spans)
-        # @type var joined: Array[[Integer, Integer]]
-        joined = []
-        spans.each do |(from, to)|
-          last = joined.last
-          if last && from <= last[1]
-            last[1] = [last[1], to].max
-          else
-            joined << [from, to]
-          end
-        end
-        joined
       end
     end
     private_constant :Secrets

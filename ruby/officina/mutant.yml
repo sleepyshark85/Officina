@@ -6,9 +6,11 @@ includes:
   - lib
   - ../test
 # mutant sets Thread.abort_on_exception, so a mutation that makes one of the run's threads raise ends the test process
-# instead of failing a test; the tests caught it all the same.
+# instead of failing a test, and one that makes a run wait forever stops the tests at the mutation timeout: the tests
+# caught both. The whole suite takes about a second, far below the timeout.
 coverage_criteria:
   process_abort: true
+  timeout: true
 hooks:
   - ../test/mutant_hooks.rb
 requires:

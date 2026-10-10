@@ -23,12 +23,12 @@ module Sleepyshark
         @events = Queue.new
         @report = CallReport.new(audit:, events: @events)
         @approvals = ApprovalDesk.new(approver: agent.approver, cancel:, report: @report)
-        @thread = Thread.new { answer }
+        @thread = quiet_thread { answer }
       end
 
       # Yields each event as the pipeline sends it, until it has answered every call.
       def each_event
-        while (event = @events.pop)
+        while (event = @events.shift)
           yield event
         end
       end
@@ -42,7 +42,6 @@ module Sleepyshark
       # Runs on the pipeline's thread, the only one that touches @results and @reads; a read's thread only returns its
       # result. What it raises, #results raises.
       def answer
-        Thread.current.report_on_exception = false
         @calls.each_with_index { |call, index| start(call, index) unless @cancel.cancelled? }
         join_reads
         @calls.each_with_index.map { |call, index| @results[index] || finish(call, NOT_STARTED, error: true) }
@@ -106,10 +105,7 @@ module Sleepyshark
       # Starts the read on a thread of its own; its attempt is recorded, but it runs without.
       def read(tool, call)
         @audit.record(:tool_started, call:)
-        Thread.new do
-          Thread.current.report_on_exception = false
-          invoke(tool, call)
-        end
+        quiet_thread { invoke(tool, call) }
       end
 
       def invoke(tool, call)
@@ -137,6 +133,16 @@ module Sleepyshark
 
         "#{content[0, MAX_RESULT]}\n[Truncated: the result had #{content.length} characters; only the first " \
           "#{MAX_RESULT} are shown.]"
+      end
+
+      # A thread whose failure is raised where it is joined, not also printed as it ends.
+      # mutant:disable -- the one mutation, Thread.report_on_exception= in place of the thread's own setting, changes
+      #   the default only for threads started later, which no test can tell apart
+      def quiet_thread
+        Thread.new do
+          Thread.current.report_on_exception = false
+          yield
+        end
       end
 
       # The call as events and the approver see it: its input without the agent's secrets.

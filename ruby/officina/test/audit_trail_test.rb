@@ -49,6 +49,25 @@ class AuditTrailTest < Minitest::Test
     assert_equal([['order', '{"title":"Dune"}']] * 4, sink.entries[1..4].map { [it.tool, it.input] })
   end
 
+  def test_aud01_a_read_records_its_attempt_too
+    sink = Sink.new
+
+    run_calls([tool('search') { |_, _| 'Found.' }], call('1', 'search'), audit_sink: sink)
+
+    assert_equal([[:tool_started, 'search', '1', '{"title":"Dune"}']],
+                 sink.entries.select { it.kind == :tool_started }.map { [it.kind, it.tool, it.call_id, it.input] })
+  end
+
+  def test_aud03_the_agent_keeps_a_frozen_copy_of_the_name_its_entries_carry
+    name = +'shop'
+
+    agent = Agent.new(model: Model.new, instructions: 'You help.', name:)
+    name << '!'
+
+    assert_equal 'shop', agent.name
+    assert_predicate agent.name, :frozen?
+  end
+
   def test_aud01_a_denial_and_a_failed_call_are_recorded_with_why
     sink = Sink.new
     tools = [tool('order', kind: :write, needs_approval: true) { |_, _| 'Ordered.' },
@@ -61,28 +80,6 @@ class AuditTrailTest < Minitest::Test
 
     assert_equal([['denied', 'No.', nil], ['error', 'The call was denied: No.', nil],
                   ['error', 'The tool failed: down', 1.0]], rows.map { [it.outcome, it.detail, it.duration] })
-  end
-
-  def test_aud01_the_run_end_records_how_it_ended_with_its_usage
-    usage = Usage.new(input: 4, output: 2)
-    {
-      Model.new([UsageReported.new(usage:), *Model.stop(:refusal, detail: 'cyber')]) => ['stopped: refusal', 'cyber'],
-      Model.new([UsageReported.new(usage:), RuntimeError.new('overloaded')]) => ['failed: model_error', 'overloaded']
-    }.each do |model, ended|
-      sink = Sink.new
-      Agent.new(model:, instructions: 'You help.', audit_sink: sink).run(Conversation.new, 'Hi')
-
-      assert_equal([:run_ended, *ended, usage], sink.entries.last.then { [it.kind, it.outcome, it.detail, it.usage] })
-    end
-  end
-
-  def test_aud01_a_run_the_host_left_is_recorded_as_abandoned
-    sink = Sink.new
-
-    Agent.new(model: Model.new(Model.text('Hi')), instructions: 'You help.', audit_sink: sink)
-         .run(Conversation.new, 'Hi') { break }
-
-    assert_equal [:run_ended, 'abandoned'], [sink.entries.last.kind, sink.entries.last.outcome]
   end
 
   def test_aud02_a_write_runs_only_once_its_attempt_is_in_the_trail

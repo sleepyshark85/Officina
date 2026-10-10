@@ -43,6 +43,20 @@ class ToolCancellingTest < Minitest::Test
     assert_equal [NOT_STARTED, NOT_STARTED], results_in(conversation)
   end
 
+  def test_agt05_a_run_cancelled_before_its_tools_start_starts_none_and_answers_every_call
+    cancel = Cancellation.new
+    events = []
+
+    ran = run_calls(slow_tools, call('1', 'gone'), call('2', 'write'), cancel:) do |event|
+      events << event
+      cancel.cancel if event in ConversationAppended(message: { role: :assistant })
+    end
+
+    assert_equal [NOT_STARTED, NOT_STARTED], ran.results.map(&:content)
+    assert(ran.results.all?(&:error?))
+    assert_empty events.grep(ToolCallStarted)
+  end
+
   # A read that fails beyond what a handler's error result covers takes the run down, but not before the other reads
   # are cancelled and have stopped: none outlives the run. The failure is raised, not also printed by its thread.
   def test_agt05_a_read_that_fails_the_run_stops_the_other_reads_first
@@ -51,7 +65,7 @@ class ToolCancellingTest < Minitest::Test
              tool('waits') { |_, cancel| (sleep 0.001 until cancel.cancelled?) || (stopped << true) }]
 
     error = nil
-    _, printed = capture_io do
+    _, printed = with_threads_ending_quietly do
       error = assert_raises(ScriptError) do
         run_calls(tools, call('1', 'fails'), call('2', 'waits'))
       end
@@ -70,6 +84,16 @@ class ToolCancellingTest < Minitest::Test
   end
 
   def results_in(conversation) = conversation.messages.fetch(2).blocks.map { it.tool_result.content }
+
+  # Captures what is printed. mutant makes a thread that raises end the whole process; the tests run, as the core
+  # does, without that.
+  def with_threads_ending_quietly(&)
+    aborting = Thread.abort_on_exception
+    Thread.abort_on_exception = false
+    capture_io(&)
+  ensure
+    Thread.abort_on_exception = aborting
+  end
 
   # A read that runs until the run is cancelled, then fails, and a write after it.
   def slow_tools

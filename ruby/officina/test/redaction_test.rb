@@ -60,6 +60,7 @@ class RedactionTest < Minitest::Test
     assert_equal 'x[redacted]y cdef[redacted] z',
                  agent_with('abc', 'abcdef', 'cdefgh', '').redact('xabcdefghy cdefabc z')
     assert_equal 'x[redacted]y', agent_with('abcdef', 'cd').redact('xabcdefy')
+    assert_equal 'x[redacted]y', agent_with('ab', 'cd').redact('xabcdy')
     assert_equal '[redacted]', agent_with('aa').redact('aaa')
     assert_equal 'nothing here', agent_with('aa').redact('nothing here')
   end

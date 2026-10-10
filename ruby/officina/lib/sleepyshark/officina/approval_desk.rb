@@ -30,7 +30,7 @@ module Sleepyshark
       def ask(approver, tool, call)
         approver.approve(tool, call, cancel: @cancel)
       rescue StandardError => e
-        Approval.new(approved: false, reason: "asking for approval failed: #{e.message}")
+        Approval.new(approved: false, reason: "asking for approval failed: #{e}")
       end
 
       def reason(approval)

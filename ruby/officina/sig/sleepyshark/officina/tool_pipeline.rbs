@@ -48,6 +48,8 @@ module Sleepyshark
 
       def cut: (String content) -> String
 
+      def quiet_thread: [T] () { () -> T } -> Thread
+
       def shown: (ToolCall call) -> ToolCall
     end
   end

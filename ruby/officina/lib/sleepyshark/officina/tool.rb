@@ -54,7 +54,7 @@ module Sleepyshark
       # @param input [String] JSON text, as the model wrote it
       # @return [String, nil]
       def input_problem(input)
-        problems = @input.schema.validate(JSON.parse(input, allow_duplicate_key: false))
+        problems = @input.schema.validate(JSON.parse(input))
         "The input does not match the tool's schema:\n#{problems.join("\n")}" unless problems.empty?
       rescue JSON::ParserError => e
         "The input is not valid JSON: #{e}"
@@ -66,7 +66,6 @@ module Sleepyshark
       # @return [String] the result for the model
       # @raise [StandardError] whatever the handler raises
       def invoke(input, cancel)
-        # #input_problem has refused duplicate keys already.
         case @handler.call(@input.from_json(JSON.parse(input)), cancel)
         in String => text then text
         in output then JSON.generate(output)
