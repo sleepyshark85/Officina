@@ -1,0 +1,15 @@
+module Sleepyshark
+  module Officina
+    class Approval < Data
+      attr_reader approved: bool
+      attr_reader reason: String?
+
+      def self.new: (approved: bool, ?reason: String?) -> instance
+
+
+      def initialize: (approved: bool, ?reason: String?) -> void
+
+      def approved?: () -> bool
+    end
+  end
+end

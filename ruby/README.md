@@ -40,12 +40,12 @@ bundle exec rake test                # the tests alone: one process, one test at
 A property test that fails prints its seed; `PROPERTY_SEED=<seed> bundle exec rake test` runs it again with the same
 inputs (CI always uses one fixed seed). `SEED=<n>` repeats Minitest's test order. `COVERAGE=1` writes a SimpleCov
 report to `coverage/`. Mutation testing runs from the directory of each gem with a `mutant.yml` (`officina`,
-`officina-claude`):
+`officina-claude`), with CI's property seed:
 
 ```sh
 cd officina
-bundle exec mutant run                # every method, as on a push to main and weekly
-bundle exec mutant run --since main   # only the methods changed since main, as on a pull request
+PROPERTY_SEED=20261010 bundle exec mutant run               # every method, as on a push to main and weekly
+PROPERTY_SEED=20261010 bundle exec mutant run --since main  # the methods changed since main, as on a pull request
 ```
 
 The `hello` sample chats live with Claude Opus 5.5 and shows each call's tokens, cache reads from the second message
@@ -54,6 +54,23 @@ on. It needs an API key in `ANTHROPIC_API_KEY`; the tests run it on a fake API i
 ```sh
 bundle exec ruby examples/hello/hello.rb
 ```
+
+## Bookshop Assistant
+
+The reference application: a console chatbot for bookshop staff over the same PostgreSQL database as the .NET and Go
+ones, from the compose file, schema and seed in [`apps/BookshopAssistant/`](../apps/BookshopAssistant/). It needs
+Docker and `ANTHROPIC_API_KEY`; a reply costs a few cents. From this directory:
+
+```sh
+(cd ../apps/BookshopAssistant && ./start.sh)
+bundle exec apps/bookshop/exe/bookshop
+```
+
+It asks your name, then takes messages, such as *Order the two cheapest fantasy books in stock for Alice Martin and
+tell me the total*. Replies stream with each tool call shown; a change asks for your approval with its exact input.
+Ctrl+C stops a reply in progress, and the session goes on; `/help` lists the commands, `/quit` leaves.
+`BOOKSHOP_DATABASE`, a PostgreSQL URL, names another database than the compose file's, such as one on another port:
+`postgres://bookshop:shelf-demo-41@localhost:5433/bookshop`.
 
 The hooks in `../.claude/` run RuboCop and Steep before a commit that stages anything under `ruby/` but docs, and
 the tests before a push that changes it; they find `bundle` on `PATH`, or else in mise's shims

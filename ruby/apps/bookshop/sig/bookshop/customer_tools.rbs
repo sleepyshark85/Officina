@@ -1,0 +1,16 @@
+module Bookshop
+  module CustomerTools
+    Tool: singleton(Sleepyshark::Officina::Tool)
+    Input: singleton(Sleepyshark::Officina::Input)
+    FIND: Sleepyshark::Officina::Tool::_Input
+    ADD: Sleepyshark::Officina::Tool::_Input
+
+    def self.all: (Customers customers) -> Array[Sleepyshark::Officina::Tool]
+
+    private
+
+    def self.find_customer_tool: (Customers customers) -> Sleepyshark::Officina::Tool
+    def self.add_customer_tool: (Customers customers) -> Sleepyshark::Officina::Tool
+    def self.customer: (Customer customer) -> Hash[Symbol, untyped]
+  end
+end

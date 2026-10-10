@@ -32,6 +32,14 @@ class DatabaseTest < Minitest::Test
     assert_equal 'The Winter Archive', shop.catalogue.restock(book_id: 144, quantity: 1).title
   end
 
+  def test_app18_each_connection_gives_up_on_a_silent_server_and_a_slow_query_within_seconds
+    limits = @database.with do |connection|
+      [connection.conninfo_hash[:connect_timeout], connection.exec('show statement_timeout').getvalue(0, 0)]
+    end
+
+    assert_equal %w[5 10s], limits
+  end
+
   private
 
   # Runs the block on every connection of the pool at once, each held by its own thread until all have run, so none

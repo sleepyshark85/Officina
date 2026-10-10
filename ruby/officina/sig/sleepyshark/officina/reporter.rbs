@@ -1,0 +1,18 @@
+module Sleepyshark
+  module Officina
+    class Reporter
+      @append: ^(Array[Message], String) -> void
+      @fingerprint: String
+      @on_event: (^(run_event) -> void)?
+
+      def initialize: (append: ^(Array[Message], String) -> void, fingerprint: String,
+                       on_event: (^(run_event) -> void)?) -> void
+
+      def emit: (run_event event) -> void
+
+      def append: (*Message messages) -> void
+
+      def append_unreported: (*Message messages) -> void
+    end
+  end
+end

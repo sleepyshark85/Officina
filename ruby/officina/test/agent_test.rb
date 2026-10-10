@@ -94,7 +94,7 @@ class AgentTest < Minitest::Test
   private
 
   def tool(name, description: 'Searches the catalogue.', schema: '{"type":"object"}')
-    Tool.new(name:, description:, input_schema: schema)
+    Tool.new(name:, description:, input: Schema.new(schema), kind: :read) { 'Found.' }
   end
 
   # Runs the changed agent on a conversation that a run of the original bound: it fails before it calls its model, and

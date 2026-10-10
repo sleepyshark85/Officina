@@ -3,4 +3,9 @@
 
 require 'bookshop'
 
-abort 'Bookshop Assistant is not built in Ruby yet: it comes with Ruby S06 (docs/plan/phase-1.md).'
+application = Bookshop.build(input: $stdin, output: $stdout)
+begin
+  application.run
+ensure
+  application.close
+end
