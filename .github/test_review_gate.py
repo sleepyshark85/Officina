@@ -74,9 +74,9 @@ class ReviewGateTest(unittest.TestCase):
         self.git("commit", "--quiet", "--amend", "--no-edit")
         return self.git("rev-parse", "HEAD")
 
-    def gate(self, *comments):
-        self.git("update-ref", "refs/remotes/origin/main", "main")
-        run = subprocess.run([sys.executable, GATE, self.git("rev-parse", "pr"), "main"], cwd=self.repo,
+    def gate(self, *comments, base="main"):
+        self.git("update-ref", f"refs/remotes/origin/{base}", base)
+        run = subprocess.run([sys.executable, GATE, self.git("rev-parse", "pr"), base, "main"], cwd=self.repo,
                              input=json.dumps(comments), capture_output=True, text=True, check=True)
         return tuple(run.stdout.rstrip("\n").split("\t"))
 
@@ -154,6 +154,33 @@ class ReviewGateTest(unittest.TestCase):
         head = self.merge_main()
 
         self.assertEqual(waiting(head), self.gate(approve(approved, by="CONTRIBUTOR")))
+
+    def test_an_approval_does_not_carry_over_merges_of_a_base_other_than_the_default_branch(self):
+        approved = self.commit({"app.txt": "one\ntwo\nthree\nfour\n"})
+        self.git("switch", "--quiet", "--create", "stack", "main")
+        self.commit({"sneaked.txt": "unreviewed\n"})
+        self.git("switch", "--quiet", "pr")
+        self.git("merge", "--quiet", "--no-edit", "stack")
+        head = self.git("rev-parse", "HEAD")
+
+        self.assertEqual(waiting(head, "approvals carry over merges of main only"),
+                         self.gate(approve(approved), base="stack"))
+
+    def test_an_approval_does_not_carry_over_merges_leaving_more_than_one_merge_base(self):
+        # The first merge drops the side branch's line, which the second merge, of the trunk only, doesn't bring back.
+        self.git("switch", "--quiet", "--create", "side", "main")
+        side = self.commit({"other.txt": "other\nchecked\n"})
+        self.on_main({"app.txt": "zero\none\ntwo\nthree\n"})
+        trunk = self.git("rev-parse", "main")
+        self.git("switch", "--quiet", "main")
+        self.git("merge", "--quiet", "--no-edit", "--no-ff", "side")
+        self.git("switch", "--quiet", "pr")
+        approved = self.commit({"app.txt": "one\ntwo\nthree\nfour\n"})
+        self.git("merge", "--quiet", "--no-edit", "--strategy=ours", side)
+        self.git("merge", "--quiet", "--no-edit", "--no-ff", trunk)
+        head = self.git("rev-parse", "HEAD")
+
+        self.assertEqual(waiting(head, "it has more than one merge base with the base"), self.gate(approve(approved)))
 
     def test_an_approval_does_not_carry_over_a_commit_of_the_author(self):
         approved = self.commit({"app.txt": "one\ntwo\nthree\nfour\n"})

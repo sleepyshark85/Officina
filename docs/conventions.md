@@ -55,10 +55,11 @@ R15).
   `**Verdict:` by the owner, a member or a collaborator; a verdict names each commit whose full sha it contains. It
   passes when the newest verdict naming the PR's newest commit is `**Verdict: APPROVE** at <that sha>`, and fails
   when that verdict is anything else. With no verdict naming the newest commit, it passes on an approval of an
-  earlier commit A only when all of these hold, and otherwise waits: that approval is the newest verdict naming any of
-  the PR's commits; every commit after A is a merge whose second parent is on the base branch (none of the author's
-  own); the newest commit is exactly git's clean merge of A's change onto the base it now sits on; and the PR's diff
-  against the base has the same patch id (whitespace kept) as A's. Its status says which case passed ("Approved at"
+  earlier commit A only when all of these hold, and otherwise waits: the PR's base is the default branch (`main`);
+  that approval is the newest verdict naming any of the PR's commits; every commit after A is a merge whose second
+  parent is on `main` (no other commit of the author's); the newest commit has a single merge base with `main` and is
+  exactly git's clean merge of A's change onto it; and the PR's diff against `main` has the same patch id
+  (whitespace kept) as A's. A change of base re-runs it. Its status says which case passed ("Approved at"
   or "carried over clean merges of"), or why it waits. It runs from `main` and reads the PR's commits as git data
   only, never running them.
 - **Each implementation's CI runs only when the pull request changes it**: `.github/changes.py` says what belongs to

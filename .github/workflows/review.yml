@@ -3,12 +3,13 @@ name: Review
 # The review gate: a pull request's "review" status passes when the newest verdict naming its newest commit in full
 # ("**Verdict: APPROVE** at <40-character sha>"), posted by the owner or a collaborator, approves; a short sha is not
 # accepted, as a commit matching one can be forged. An approval of an earlier commit carries over only clean merges of
-# the base branch (.github/review_gate.py says exactly when). Comments run this workflow as it is on main, and every
+# the default branch into a pull request based on it (.github/review_gate.py says exactly when). Comments run this workflow as it is on main, and every
 # run takes the gate script from main: it reads the pull request through the API, and its commits as git data only,
 # never running its code.
 on:
   pull_request:
-    types: [opened, synchronize, reopened]
+    # edited: a change of base can change whether an approval carries over.
+    types: [opened, synchronize, reopened, edited]
   issue_comment:
     types: [created, edited, deleted]
 
@@ -43,6 +44,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           PR: ${{ github.event.pull_request.number || github.event.issue.number }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
           pull=$(gh api "repos/$REPO/pulls/$PR")
           head=$(jq -r .head.sha <<< "$pull")
@@ -50,7 +52,7 @@ jobs:
           # The head is fetched as data: its objects only, never checked out.
           if ! result=$(git fetch --quiet --no-tags origin "$head" "+refs/heads/$base:refs/remotes/origin/$base" &&
                         gh api --paginate "repos/$REPO/issues/$PR/comments" | jq -s 'add // []' |
-                        python3 .github/review_gate.py "$head" "$base"); then
+                        python3 .github/review_gate.py "$head" "$base" "$DEFAULT_BRANCH"); then
             result=$'error\tThe review gate failed; see its run'
           fi
           IFS=$'\t' read -r state description <<< "$result"
