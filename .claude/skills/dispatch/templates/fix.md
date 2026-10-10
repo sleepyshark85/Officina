@@ -14,10 +14,7 @@ Each fix meets the code quality bar in docs/conventions.md and keeps or adds the
 `{{branch}}`, and answer each finding's review thread, where it has one, with the commit that fixes it. Follow
 .claude/skills/dispatch/agent-rules.md.
 
-Then, once CI is green, send the next round to PR #{{n}}'s reviewer, agent `{{reviewer id}}` (the same one for all its
-rounds), with `SendMessage`, not through the lead: "Round {{N}} of 3 for PR #{{n}} at <full head sha>, replying to your
-verdict at <sha>: <one line per fix>. Check CI, post a verdict naming the head, and reply in the short format." Wait
-for the reply before you end, and finish with one line: the verdict and the head sha. Never set auto-merge.
+Then, once CI is green, send reviewer `{{reviewer id}}` (PR #{{n}}'s, the same for all its rounds) the later-round
+text of review.md with `SendMessage`, one line per fix filled in. When the reply resumes you, finish with the verdict
+and the head sha, plus the `Needs the lead` lines from your work and from the reply, copied as written.
 ```
-
-The lead still dispatches every new reviewer, takes round 3's outcome to the owner, and alone sets auto-merge.
