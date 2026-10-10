@@ -135,7 +135,7 @@ def before_commit(here):
         env, workspace = ruby_env(), os.path.join(root, "ruby")
         check(workspace, ["bundle", "exec", "rubocop"],
               "Blocked: RuboCop fails (ruby/.rubocop.yml); fix it, then commit again.", env)
-        check(workspace, ["bundle", "exec", "steep", "check"],
+        check(workspace, ["bundle", "exec", "rake", "steep"],
               "Blocked: Steep fails (ruby/Steepfile); fix it, then commit again.", env)
 
 
