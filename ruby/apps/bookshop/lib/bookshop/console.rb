@@ -3,7 +3,7 @@
 module Bookshop
   # The staff member's console: asks who is using it, then reads messages and commands, streams each reply with its
   # tool activity, asks approval for changes, and cancels the reply in progress on Ctrl+C, after which the session
-  # goes on.
+  # goes on; Ctrl+C with no reply in progress leaves.
   class Console
     HELP = <<~TEXT.chomp
       Commands:
@@ -23,7 +23,8 @@ module Bookshop
       @approvals = approvals
       @clock = clock
       @terminal = Terminal.new(input:, output:)
-      @interrupts = Interrupts.new
+      # Ending the input ends the session, as its end does.
+      @interrupts = Interrupts.new(idle: -> { @terminal.end_input })
     end
 
     # Runs until /quit or the end of the input.
@@ -71,4 +72,5 @@ module Bookshop
       @approvals.clear
     end
   end
+  private_constant :Console
 end

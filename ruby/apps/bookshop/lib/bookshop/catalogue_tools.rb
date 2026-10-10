@@ -67,4 +67,5 @@ module Bookshop
       end
     end
   end
+  private_constant :CatalogueTools
 end

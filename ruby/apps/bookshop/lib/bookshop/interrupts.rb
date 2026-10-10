@@ -1,11 +1,13 @@
 # frozen_string_literal: true
 
 module Bookshop
-  # Turns Ctrl+C into cancelling the reply in progress. The trap only pushes to a queue, as a Mutex raises in trap
-  # context; a thread of its own reads the queue and cancels the reply's Cancellation. Between replies Ctrl+C does
-  # nothing, as at a shell's prompt: /quit, or the end of the input, leaves.
+  # Turns Ctrl+C into cancelling the reply in progress, or, with none in progress, into leaving, as .NET's and Go's
+  # consoles do. The trap only pushes to a queue, as a Mutex raises in trap context; a thread of its own reads the
+  # queue and cancels the reply's Cancellation, or runs +idle+.
   class Interrupts
-    def initialize
+    # @param idle [#call] what Ctrl+C does with no reply in progress, on the watcher's thread
+    def initialize(idle:)
+      @idle = idle
       @signals = Thread::Queue.new
       @lock = Mutex.new
       @reply = nil
@@ -16,7 +18,7 @@ module Bookshop
     # @return the block's value
     def watch
       previous = Signal.trap('INT') { @signals << :interrupt }
-      watcher = Thread.new { @lock.synchronize { @reply&.cancel } while @signals.pop }
+      watcher = Thread.new { interrupt while @signals.pop }
       begin
         yield
       ensure
@@ -36,6 +38,15 @@ module Bookshop
       yield
     ensure
       @lock.synchronize { @reply = nil }
+    end
+
+    private
+
+    def interrupt
+      @lock.synchronize do
+        reply = @reply
+        reply ? reply.cancel : @idle.call
+      end
     end
   end
   private_constant :Interrupts

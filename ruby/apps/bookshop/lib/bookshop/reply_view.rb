@@ -33,7 +33,8 @@ module Bookshop
     #
     # @param result [Sleepyshark::Officina::Completed, Sleepyshark::Officina::Stopped, Sleepyshark::Officina::Failed]
     def finish(result)
-      @terminal.write_line(ending(result) || '')
+      ending = ending(result)
+      ending ? @terminal.write_line(ending) : @terminal.end_line
     end
 
     private
@@ -41,7 +42,7 @@ module Bookshop
     # The reply's text, labelled where it starts; text between tool calls follows their lines.
     def stream(text)
       unless @labelled
-        @terminal.write_line('')
+        @terminal.end_line
         @terminal.write('assistant> ')
         @labelled = true
       end
@@ -51,7 +52,7 @@ module Bookshop
     # Shows the call's exact input and gives the staff member's answer to the pipeline, which waits for it. Ctrl+C at
     # the prompt stops the wait at once, and the line being typed is the next message.
     def ask(call)
-      return if @cancel.cancelled?
+      return if @cancel.cancelled? # asked just before Ctrl+C, shown just after: no prompt for a withdrawn call
 
       @terminal.write_line("  ? #{call.name} needs your approval. Its exact input:")
       @terminal.write_line("    #{call.input}")

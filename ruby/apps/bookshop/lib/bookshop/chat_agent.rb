@@ -47,4 +47,5 @@ module Bookshop
                                                prefix_cache: '1h', conversation_cache: '1h')
     end
   end
+  private_constant :ChatAgent
 end

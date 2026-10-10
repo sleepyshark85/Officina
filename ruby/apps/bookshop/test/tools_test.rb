@@ -2,6 +2,7 @@
 
 require 'bigdecimal'
 require 'json'
+require 'time'
 require 'test_helper'
 require_relative 'database_server'
 
@@ -28,31 +29,62 @@ class ToolsTest < Minitest::Test
     assert_includes invoke('get_book', '{"bookId":144}'), '"price":6.28,'
   end
 
-  def test_app05_find_customer_lists_their_orders_and_get_order_gives_one_with_its_lines
+  def test_app05_search_without_in_stock_finds_books_with_no_copies_too
+    select_integer('update stock set quantity = 0 where book_id = $1 returning quantity', 310)
+    title = JSON.generate(call('get_book', '{"bookId":310}')['title'])
+
+    every = call('search_books', %({"title":#{title}})).map { it['id'] }
+    in_stock = call('search_books', %({"title":#{title},"inStock":true})).map { it['id'] }
+
+    assert_includes every, 310
+    refute_includes in_stock, 310
+  end
+
+  def test_app05_find_customer_matches_part_of_an_email_and_list_customer_orders_lists_theirs
     customers = call('find_customer', '{"nameOrEmail":"alice.martin"}')
     orders = call('list_customer_orders', '{"customerId":1}')
-    order = call('get_order', %({"orderId":#{orders.first['id']}}))
 
     assert_equal [{ 'id' => 1, 'name' => 'Alice Martin', 'email' => 'alice.martin@example.com' }], customers
     assert_equal [%w[id status placedAt total copies]], orders.map(&:keys).uniq
-    assert_equal [%w[id customerId customer status placedAt total], %w[bookId title quantity unitPrice]],
-                 [order['order'].keys, order['lines'].flat_map(&:keys).uniq]
+  end
+
+  def test_app05_get_order_gives_the_order_and_its_lines_which_add_up_to_its_total
+    id = call('list_customer_orders', '{"customerId":1}').first['id']
+    order = call('get_order', %({"orderId":#{id}}))
+
+    assert_equal %w[id customerId customer status placedAt total], order['order'].keys
+    assert_equal [%w[bookId title quantity unitPrice]], order['lines'].map(&:keys).uniq
     assert_match TIME, order['order']['placedAt']
     assert_equal(order['order']['total'], order['lines'].sum { it['unitPrice'] * it['quantity'] })
   end
 
-  def test_app06_the_writes_return_what_they_changed_with_totals_to_the_penny
+  def test_app05_an_order_placed_now_shows_its_time_to_the_microsecond_as_dotnet_does
+    id = call('place_order', '{"customerId":1,"lines":[{"bookId":144,"quantity":1}]}')['orderId']
+    shown = call('get_order', %({"orderId":#{id}}))['order']['placedAt']
+    stored = select_integer('select (extract(epoch from placed_at) * 1000000)::bigint from orders where id = $1', id)
+
+    assert_match(/\A[^.]+(\.\d*[1-9])?Z\z/, shown)
+    assert_equal stored, (Time.iso8601(shown).to_r * 1_000_000).to_i
+  end
+
+  def test_app06_add_customer_and_restock_book_return_what_they_changed
     added = call('add_customer', '{"name":"Zoe Park","email":"zoe.park@example.com"}')
-    lines = '[{"bookId":144,"quantity":1},{"bookId":216,"quantity":1}]'
-    placed = invoke('place_order', %({"customerId":#{added['id']},"lines":#{lines}}))
-    cancelled = call('cancel_order', %({"orderId":#{JSON.parse(placed)['orderId']}}))
     restocked = call('restock_book', '{"bookId":144,"quantity":2}')
 
-    assert_equal ['Zoe Park', 'zoe.park@example.com'], added.values_at('name', 'email')
-    assert_includes placed, %("customer":"Zoe Park","lines":[{"bookId":144,"title":"The Winter Archive","quantity":1,)
-    assert_includes placed, '"total":13.20}'
-    assert_equal ['cancelled', [144, 216]], [cancelled['status'], cancelled['returnedToStock'].map { it['bookId'] }]
+    assert_equal({ 'name' => 'Zoe Park', 'email' => 'zoe.park@example.com' }, added.slice('name', 'email'))
     assert_equal({ 'bookId' => 144, 'title' => 'The Winter Archive', 'stock' => stock(144) }, restocked)
+  end
+
+  def test_app06_place_order_totals_to_the_penny_and_cancel_order_returns_the_copies
+    lines = '[{"bookId":144,"quantity":1},{"bookId":216,"quantity":1}]'
+    placed = invoke('place_order', %({"customerId":1,"lines":#{lines}}))
+    cancelled = call('cancel_order', %({"orderId":#{JSON.parse(placed)['orderId']}}))
+
+    assert_includes placed, '"customer":"Alice Martin","lines":[{"bookId":144,"title":"The Winter Archive",' \
+                            '"quantity":1,'
+    assert_includes placed, '"total":13.20}'
+    assert_equal 'cancelled', cancelled['status']
+    assert_equal([144, 216], cancelled['returnedToStock'].map { it['bookId'] })
   end
 
   def test_app07_too_few_copies_in_stock_is_refused_for_the_model_and_changes_nothing

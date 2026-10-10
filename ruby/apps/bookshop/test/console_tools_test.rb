@@ -13,19 +13,27 @@ class ConsoleToolsTest < Minitest::Test
       say_then_call('Looking.', call('c1', 'find_customer', '{"nameOrEmail":"Alice Martin"}'),
                     call('c2', 'list_customer_orders', '{"customerId":1}'), call('c3', 'get_book', '{"bookId":216}'),
                     call('c4', 'search_books', '{"genre":"Fantasy","inStock":true,"limit":2}')),
-      say_then_call('And order 77.', call('c5', 'get_order', '{"orderId":77}')),
       ScriptedModel.text('Here is what I found.')
     )
 
-    transcript = session(model, 'Sam', 'What do we know about Alice Martin?', '/quit')
+    session(model, 'Sam', 'What do we know about Alice Martin?', '/quit')
+    customer, orders, book, books = results(model, -1)
 
-    reads = results(model, 1)
+    assert_includes customer.content, '"name":"Alice Martin"'
+    assert_includes orders.content, '"status":'
+    assert_includes book.content, '"title":"The Hollow Island"'
+    assert_includes books.content, '"id":144'
+    assert_equal [false] * 4, [customer, orders, book, books].map(&:error?)
+  end
 
-    assert_equal [false] * 4, reads.map(&:error?)
-    assert_equal([true] * 4, reads.zip(['"name":"Alice Martin"', '"status":', '"title":"The Hollow Island"',
-                                        '"id":144']).map { |result, part| result.content.include?(part) })
-    refute_predicate results(model, -1).first, :error?
-    assert_in_order transcript, '  < find_customer: ok', '  < get_order: ok', 'Here is what I found.'
+  def test_app05_get_order_answers_and_the_reply_goes_on
+    model = ScriptedModel.new(say_then_call('Looking.', call('c1', 'get_order', '{"orderId":77}')),
+                              ScriptedModel.text('Here is order 77.'))
+
+    transcript = session(model, 'Sam', 'What is in order 77?', '/quit')
+
+    assert_includes results(model, -1).first.content, '"order":{"id":77,'
+    assert_in_order transcript, '  < get_order: ok', 'Here is order 77.'
   end
 
   def test_app06_a_write_shows_its_exact_input_for_approval_and_runs_only_if_approved
@@ -99,7 +107,6 @@ class ConsoleToolsTest < Minitest::Test
                     'The Winter Archive is in stock.'
     assert_predicate results(model, 1).first, :error?
     refute_predicate results(model, -1).first, :error?
-    refute_includes transcript, DatabaseServer::PASSWORD
   end
 
   private

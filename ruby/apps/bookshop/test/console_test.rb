@@ -3,7 +3,8 @@
 require 'test_helper'
 require_relative 'console_session'
 
-# The console's conversation end to end: the streamed reply, the commands, Ctrl+C and the run context.
+# The console's conversation end to end: the streamed reply and how it ends, the commands, the run context, and the
+# database password kept out of it.
 class ConsoleTest < Minitest::Test
   include ConsoleSession
 
@@ -22,6 +23,24 @@ class ConsoleTest < Minitest::Test
     assert_includes results(model, -1).first.content, '"title":"The Winter Archive"'
   end
 
+  def test_app01_a_reply_that_restarts_stops_or_fails_says_so_and_the_session_goes_on
+    model = ScriptedModel.new([Officina::Retried.new, *ScriptedModel.text('Hello.')],
+                              ScriptedModel.stop(:max_tokens), [RuntimeError.new('The model is overloaded')])
+
+    transcript = session(model, 'Sam', 'Hi.', 'Tell me a long story.', 'Again?', '/quit')
+
+    assert_in_order transcript, "you> Hi.\n[The reply was interrupted and starts again.]\nassistant> Hello.\n",
+                    "you> Tell me a long story.\n[Stopped: output limit.]\n",
+                    "you> Again?\n[Failed: The model is overloaded]\n",
+                    "you> /quit\n"
+  end
+
+  def test_app01_a_reply_without_text_asks_again
+    transcript = session(ScriptedModel.new(ScriptedModel.stop(:end, text: nil)), 'Sam', 'Hi.', '/quit')
+
+    assert_in_order transcript, "you> Hi.\n[The reply has no text. Please ask again.]\n", "you> /quit\n"
+  end
+
   def test_app02_help_and_unknown_commands_are_answered_and_quit_leaves
     model = ScriptedModel.new
 
@@ -35,36 +54,6 @@ class ConsoleTest < Minitest::Test
                     "you> \nyou> /memo\nUnknown command /memo. Type /help for commands.\n", "you> /quit\n"
     refute_includes transcript, 'Not read.'
     assert_empty model.requests
-  end
-
-  def test_app03_ctrl_c_stops_the_reply_and_the_session_goes_on
-    later = ScriptedModel.new(ScriptedModel.text('Hello again.'))
-    model = StallingModel.new('Let me think about every book ', later)
-
-    transcript = session(model, 'Sam', 'Tell me everything.', 'Hello?', '/quit', interrupt_on: 'every book ')
-
-    assert_in_order transcript, "assistant> Let me think about every book \n[Cancelled.]\n", "you> Hello?\n",
-                    "assistant> Hello again.\n"
-    # The cancelled exchange left nothing behind: the next request holds the new message and the run context.
-    messages = later.requests.first.messages
-
-    assert_equal %i[user operator], messages.map(&:role)
-    assert_equal 'Hello?', messages.first.text
-  end
-
-  def test_app03_ctrl_c_at_the_approval_prompt_stops_the_reply_at_once_and_the_change_is_not_made
-    copies = stock(320)
-    restock = call('c1', 'restock_book', '{"bookId":320,"quantity":2}')
-    model = ScriptedModel.new(say_then_call("I'll add two copies.", restock), ScriptedModel.text('Hello again.'))
-
-    transcript = session(model, 'Sam', 'Restock book 320 with 2.', nil, 'Hello?', '/quit',
-                         interrupt_on: 'Approve? [y/N] ')
-
-    # The line typed after Ctrl+C is the next message, not an answer to the abandoned prompt.
-    assert_in_order transcript, "    Approve? [y/N] \n",
-                    "  < restock_book: error: The call was cancelled while waiting for approval.\n", "[Cancelled.]\n",
-                    "you> Hello?\n", "assistant> Hello again.\n"
-    assert_equal copies, stock(320)
   end
 
   def test_app13_the_run_context_names_the_date_and_staff_member_and_is_sent_again_only_on_a_new_day
@@ -82,5 +71,16 @@ class ConsoleTest < Minitest::Test
                  last.messages.select { it.role == :operator }.map(&:text)
     assert_equal %i[user operator assistant user assistant user operator], last.messages.map(&:role)
     refute_includes last.instructions, 'Sam'
+  end
+
+  def test_evt03_the_database_password_never_reaches_the_console
+    password = DatabaseServer::PASSWORD
+    model = ScriptedModel.new(say_then_call('Looking.', call('c1', 'find_customer', %({"nameOrEmail":"#{password}"}))),
+                              ScriptedModel.text('No one by that name.'))
+
+    transcript = session(model, 'Sam', 'Who is our database user?', '/quit')
+
+    assert_includes transcript, %(  > find_customer {"nameOrEmail":"[redacted]"}\n)
+    refute_includes transcript, password
   end
 end

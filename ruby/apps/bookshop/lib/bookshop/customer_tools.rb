@@ -39,4 +39,5 @@ module Bookshop
       def customer(customer) = { id: customer.id, name: customer.name, email: customer.email }
     end
   end
+  private_constant :CustomerTools
 end

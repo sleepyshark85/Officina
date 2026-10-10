@@ -74,8 +74,10 @@ module Bookshop
         end
       end
 
-      # In UTC, as .NET and Go write a time: 2026-10-10T09:30:00Z.
-      def time(time) = time.getutc.iso8601
+      # In UTC with the fraction of a second the database keeps, trailing zeros trimmed, as .NET and Go write a time:
+      # 2026-10-10T09:30:00Z, 2026-10-10T09:30:00.12345Z.
+      def time(time) = time.getutc.iso8601(6).sub(/\.?0*Z\z/, 'Z')
     end
   end
+  private_constant :OrderTools
 end

@@ -12,7 +12,8 @@ module Bookshop
       @input = input
       @output = output
       @echo = !input.tty?
-      # Holds at most the line being read, and a cancellation for each read a reply's cancellation abandoned.
+      # Holds at most the line being read, and a cancellation for each read a reply cancelled: one it abandoned, or
+      # one whose line came first, which the next read skips.
       @lines = Thread::Queue.new
       @reading = nil
       @held = nil
@@ -25,7 +26,7 @@ module Bookshop
     #   next read
     # @return [String, nil] nil at the end of the input, or once cancelled
     def read(prompt, cancel: nil)
-      write_line('')
+      end_line
       write(prompt)
       line = @held || next_line(cancel)
       @held = (line if cancel&.cancelled?)
@@ -43,11 +44,20 @@ module Bookshop
       @at_line_start = text.end_with?("\n")
     end
 
-    # Writes the text as a line of its own; an empty one only ends the line being written.
+    # Writes the text as a line of its own.
     def write_line(text)
-      write("\n") unless @at_line_start
-      write("#{text}\n") unless text.empty?
+      end_line
+      write("#{text}\n")
     end
+
+    # Ends the line being written, if one is.
+    def end_line
+      write("\n") unless @at_line_start
+    end
+
+    # Ends the input, as its end would, from any thread: a read waiting for a line returns nil, and so does every
+    # read after it.
+    def end_input = @input.close
 
     # Stops a read still waiting for a line, by closing the input, and waits for it.
     def close

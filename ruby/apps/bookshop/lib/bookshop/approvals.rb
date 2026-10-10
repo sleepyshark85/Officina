@@ -46,4 +46,5 @@ module Bookshop
     # nothing waits.
     def clear = @answers.clear
   end
+  private_constant :Approvals
 end

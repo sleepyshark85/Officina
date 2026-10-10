@@ -12,6 +12,8 @@ module Bookshop
     def read: (String prompt, ?cancel: Sleepyshark::Officina::Cancellation?) -> String?
     def write: (String text) -> void
     def write_line: (String text) -> void
+    def end_line: () -> void
+    def end_input: () -> void
     def close: () -> void
 
     private
