@@ -99,7 +99,7 @@ jobs:
         # The gems' signatures at the revisions rbs_collection.lock.yaml pins.
         run: |
           bundle exec rbs collection install --frozen
-          bundle exec steep check
+          bundle exec rake steep
 
       - name: Vulnerabilities
         run: bundle exec bundle-audit check --update

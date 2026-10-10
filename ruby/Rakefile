@@ -1,13 +1,20 @@
 # frozen_string_literal: true
 
 require 'minitest/test_task'
+require 'open3'
 require 'rubocop/rake_task'
 
 RuboCop::RakeTask.new
 
+# Steep logs a FATAL when it cannot check a file, skips the file and still exits 0, so its log is read as well.
+STEEP_LOG_PROBLEM = /^\S+ \S+: (FATAL|ERROR): /
+
 desc 'Check the code against its signatures with Steep'
 task :steep do
-  sh 'steep', 'check'
+  output, status = Open3.capture2e('steep', 'check')
+  puts output
+  abort 'Steep failed.' unless status.success?
+  abort 'Steep logged a FATAL or ERROR line (above): it skipped a file.' if output.match?(STEEP_LOG_PROBLEM)
 end
 
 # One process for every gem's tests, one test at a time in random order, with warnings on; test_helper turns each
