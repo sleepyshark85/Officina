@@ -4,4 +4,11 @@ module JSON
   class Fragment
     def initialize: (String json) -> void
   end
+
+  # Where the parser stopped, which the pinned json 3 gives and RBS's signatures do not declare either.
+  class ParserError
+    def line: () -> Integer
+
+    def column: () -> Integer
+  end
 end

@@ -17,8 +17,9 @@ module Sleepyshark
       # The reply, the result of a call that got none, or nil when the run was cancelled, which the loop then stops.
       def call(messages, limit)
         @spending.count_model_call
-        request = Request.new(tools: @agent.tools, instructions: @agent.instructions, messages:,
-                              max_output_tokens: limit, context_management: @agent.context_management)
+        request = Request.new(tools: @agent.tools, instructions: @agent.instructions,
+                              output_schema: @agent.output&.schema&.to_s, messages:, max_output_tokens: limit,
+                              context_management: @agent.context_management)
         @trace.model_call { stream(request) || no_reply("The model's reply ended without a stop reason") }
       end
 

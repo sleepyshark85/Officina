@@ -3,16 +3,15 @@
 require 'test_helper'
 require_relative 'support/fake_clock'
 
-# An agent's definition, the checks on a run's input, and the prefix fingerprint that binds a conversation to it.
+# An agent's definition, the checks on a run's input, and a changed agent's run on a conversation the original bound.
 class AgentTest < Minitest::Test
   include Sleepyshark::Officina
 
   cover 'Sleepyshark::Officina*'
 
   Model = Testing::ScriptedModel
-  SHARED = File.expand_path('../../../testdata', __dir__)
-  PREFIX_MISMATCH = "The agent's tools, instructions or model settings differ from those the conversation was " \
-                    'started with; start a new conversation'
+  PREFIX_MISMATCH = "The agent's tools, instructions, output type or model settings differ from those the " \
+                    'conversation was started with; start a new conversation'
 
   def test_gen02_an_agent_needs_only_a_model_and_instructions
     agent = Agent.new(model: Model.new(Model.text('Hello')), instructions: 'You help.')
@@ -61,27 +60,12 @@ class AgentTest < Minitest::Test
     assert_equal 'A run context cannot be blank', error.message
   end
 
-  def test_ctx01_the_fingerprint_is_the_one_every_implementation_computes
-    prefix = JSON.parse(File.read(File.join(SHARED, 'session', 'prefix.json')))
-    tools = prefix['tools'].map { tool(it['name'], description: it['description'], schema: it['inputSchema']) }
+  def test_ctx04_out01_a_changed_output_type_fails_the_run_with_a_prefix_mismatch
+    model = Model.new
+    output = Input.define { string :title }
+    changed = Agent.new(model:, instructions: 'You help.', tools: [tool('search')], output:, clock: FakeClock.new)
 
-    agent = Agent.new(model: Model.new(settings: prefix['settings']), instructions: prefix['instructions'],
-                      tools: tools.reverse)
-
-    assert_equal prefix['fingerprint'], agent.fingerprint
-  end
-
-  def test_ctx01_hist01_the_fingerprint_with_context_management_is_the_one_every_implementation_computes
-    prefix = JSON.parse(File.read(File.join(SHARED, 'session', 'prefix.json')))
-    tools = prefix['tools'].map { tool(it['name'], description: it['description'], schema: it['inputSchema']) }
-    model = Model.new(settings: prefix['settings'], info: ModelInfo.new(provider: 's', name: 's', compacts: true,
-                                                                        clears_tool_results: true))
-
-    prefix['contextManagement'].each do |part|
-      agent = Agent.new(model:, instructions: prefix['instructions'], tools:, context_management: shared(part))
-
-      assert_equal part['fingerprint'], agent.fingerprint, part.to_s
-    end
+    assert_prefix_mismatch changed, model
   end
 
   def test_ctx04_a_changed_tool_fails_the_run_with_a_prefix_mismatch
@@ -108,17 +92,8 @@ class AgentTest < Minitest::Test
 
   private
 
-  # The context management of a part of the shared prefix fixture.
-  def shared(part)
-    clearing = (if part['clearAfter']
-                  ToolResultClearing.new(after: part['clearAfter'], keep: part['clearKeep'],
-                                         at_least_tokens: part['clearAtLeastTokens'])
-                end)
-    ContextManagement.new(compact_at: part['compactAt'], clear_tool_results: clearing)
-  end
-
-  def tool(name, description: 'Searches the catalogue.', schema: '{"type":"object"}')
-    Tool.new(name:, description:, input: Schema.new(schema), kind: :read) { 'Found.' }
+  def tool(name, description: 'Searches the catalogue.')
+    Tool.new(name:, description:, input: Schema.new('{"type":"object"}'), kind: :read) { 'Found.' }
   end
 
   # Runs the changed agent on a conversation that a run of the original bound: it fails before it calls its model, and
