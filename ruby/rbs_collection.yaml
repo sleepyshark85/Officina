@@ -1,0 +1,23 @@
+# Signatures of the gems in Gemfile.lock, from the community collection where a gem ships none; `bundle exec rbs
+# collection install` puts them in .gem_rbs_collection/, which Steep reads.
+sources:
+  - type: git
+    name: ruby/gem_rbs_collection
+    remote: https://github.com/ruby/gem_rbs_collection.git
+    revision: main
+    repo_dir: gems
+
+path: .gem_rbs_collection
+
+# The workspace's own signatures come from the Steepfile, which checks them.
+gems:
+  - name: bookshop
+    ignore: true
+  - name: sleepyshark-officina
+    ignore: true
+  - name: sleepyshark-officina-claude
+    ignore: true
+  - name: sleepyshark-officina-mcp
+    ignore: true
+  - name: sleepyshark-officina-testing
+    ignore: true

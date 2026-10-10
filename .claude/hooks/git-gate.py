@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Before a Bash command: blocks pushing to main, committing on main and branches without an allowed prefix, as
 docs/conventions.md asks. Before a commit that stages code it runs that implementation's format check and build (.NET
-at the root, Go under go/), and shows the staged files so an unexpected one is caught; before a push of more than docs
+at the root, Go under go/) or lint and type check (Ruby under ruby/), and shows the staged files so an unexpected one is
+caught; before a push of more than docs
 it runs the tests of each implementation it changes. CI runs the same checks; these find a failure before the commit
 or push instead of after it."""
 import json
@@ -67,7 +68,7 @@ def is_dotnet(path):
 
 
 def is_shared(path):
-    """Whether the path is test data every implementation reads, which both test suites must see."""
+    """Whether the path is test data every implementation reads, which every test suite must see."""
     return path.startswith("testdata/")
 
 
@@ -91,15 +92,28 @@ def go_env():
     return env
 
 
+def ruby_env():
+    """The environment for the Ruby checks: Ruby's bundle command on PATH, or else in mise's shims, which run the
+    version in ruby/.ruby-version."""
+    env = dict(os.environ)
+    if not shutil.which("bundle"):
+        env["PATH"] = os.pathsep.join([os.path.expanduser("~/.local/share/mise/shims"), env.get("PATH", "")])
+    if not shutil.which("bundle", path=env["PATH"]):
+        block("Blocked: the Ruby checks need Ruby's bundle command on PATH or in mise's shims (ruby/README.md).")
+    return env
+
+
 def before_commit(here):
-    """Each implementation's format check and build, when the commit stages its code: .NET's outside go/ and ruby/,
-    Go's under go/. They read the working tree, so every staged code file must have no unstaged changes."""
+    """Each implementation's checks, when the commit stages its code: .NET's format check and build outside go/ and
+    ruby/, Go's under go/, and RuboCop and Steep for anything but docs under ruby/. They read the working tree, so
+    every staged code file must have no unstaged changes."""
     staged = git(here, "diff", "--cached", "--name-only").splitlines()
     dotnet = [path for path in staged if CODE.search(path) and is_dotnet(path)]
     go = [path for path in staged if GO_CODE.search(path) and is_go(path)]
-    if not dotnet and not go:
+    ruby = [path for path in staged if is_ruby(path) and not DOCS.search(path)]
+    if not dotnet and not go and not ruby:
         return
-    partly = set(dotnet + go) & set(git(here, "diff", "--name-only").splitlines())
+    partly = set(dotnet + go + ruby) & set(git(here, "diff", "--name-only").splitlines())
     if partly:
         block("Blocked: these staged files also have unstaged changes; stage or stash them first:\n" + "\n".join(sorted(partly)))
     root = git(here, "rev-parse", "--show-toplevel")
@@ -117,13 +131,19 @@ def before_commit(here):
         check(module, ["golangci-lint", "run", "./..."],
               "Blocked: golangci-lint fails (go/.golangci.yml); fix it, then commit again.", env)
         check(module, ["go", "build", "./..."], "Blocked: the Go build fails; fix it, then commit again.", env)
+    if ruby:
+        env, workspace = ruby_env(), os.path.join(root, "ruby")
+        check(workspace, ["bundle", "exec", "rubocop"],
+              "Blocked: RuboCop fails (ruby/.rubocop.yml); fix it, then commit again.", env)
+        check(workspace, ["bundle", "exec", "steep", "check"],
+              "Blocked: Steep fails (ruby/Steepfile); fix it, then commit again.", env)
 
 
 def before_push(here, branch):
     """The tests of each implementation the push's commits change beyond docs: .NET's outside go/ and ruby/, Go's
-    under go/, and both for the shared testdata/. Ruby's checks come with Ruby S01."""
+    under go/, Ruby's under ruby/, and Go's and Ruby's for the shared testdata/."""
     base = git(here, "merge-base", "origin/main", branch or "HEAD")
-    changed = git(here, "diff", "--no-renames", "--name-only", base, branch or "HEAD").splitlines() if base else ["?", "go/?"]
+    changed = git(here, "diff", "--no-renames", "--name-only", base, branch or "HEAD").splitlines() if base else ["?", "go/?", "ruby/?"]
     code = [path for path in changed if not DOCS.search(path)]
     root = git(here, "rev-parse", "--show-toplevel")
     if any(is_dotnet(path) for path in code):
@@ -133,6 +153,9 @@ def before_push(here, branch):
     if any(is_go(path) or is_shared(path) for path in code):
         check(os.path.join(root, "go"), ["go", "test", "-race", "-shuffle=on", "./..."],
               "Blocked: the Go tests fail; fix them, then push again.", go_env())
+    if any(is_ruby(path) or is_shared(path) for path in code):
+        check(os.path.join(root, "ruby"), ["bundle", "exec", "rake", "test"],
+              "Blocked: the Ruby tests fail; fix them, then push again.", ruby_env())
 
 
 def stages_all(rest):

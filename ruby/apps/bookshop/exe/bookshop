@@ -1,0 +1,6 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require 'bookshop'
+
+abort 'Bookshop Assistant is not built in Ruby yet: it comes with Ruby S06 (docs/plan/phase-1.md).'

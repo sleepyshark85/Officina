@@ -1,0 +1,15 @@
+plugins:
+  - rubocop-minitest
+  - rubocop-performance
+  - rubocop-rake
+
+inherit_mode:
+  merge:
+    - Exclude
+
+AllCops:
+  TargetRubyVersion: 4.0
+  NewCops: enable
+  Exclude:
+    # The dependency test's fixture gems: input it reads, never loaded, breaking the rules on purpose.
+    - test/fixtures/**/*
