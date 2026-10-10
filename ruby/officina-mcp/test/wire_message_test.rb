@@ -15,11 +15,14 @@ class WireMessageTest < Minitest::Test
   RESPONSE = { 'jsonrpc' => '2.0', 'id' => ID,
                'result' => { 'content' => [{ 'type' => 'text', 'text' => 'Ünïcode 日本' }] } }.freeze
 
-  def test_mcp01_a_response_is_deeply_frozen
-    id, response = Wire.response(JSON.generate(RESPONSE))
+  def test_mcp01_a_response_is_deeply_frozen_and_keeps_its_text
+    text = JSON.pretty_generate(RESPONSE)
+    id, response = Wire.response(text)
 
     assert_equal ID, id
-    assert_predicate response.dig('result', 'content', 0, 'text'), :frozen?
+    assert_predicate response.message.dig('result', 'content', 0, 'text'), :frozen?
+    assert_equal [text, true], [response.text, response.text.frozen?]
+    assert_equal RESPONSE['result'], response.result
   end
 
   def test_mcp01_an_events_data_is_its_data_lines_without_one_leading_space_joined_as_utf8
@@ -49,7 +52,9 @@ class WireMessageTest < Minitest::Test
         answer = Wire.response(JSON.generate(message))
 
         if response?(fields)
-          assert_equal [fields[:id], message], answer
+          id, response = answer
+
+          assert_equal [fields[:id], message], [id, response.message]
         else
           assert_nil answer
         end

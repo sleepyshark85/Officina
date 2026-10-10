@@ -12,7 +12,7 @@ module Sleepyshark
 
           def self.new: (StreamableHttp transport, Net::HTTP http, Thread worker) -> instance
 
-          def take: (Float? timeout) -> Hash[String, json]?
+          def take: (Float? timeout) -> Wire::Response?
 
           def release: () -> void
 
@@ -55,13 +55,13 @@ module Sleepyshark
 
         def limited_connection: (String host, Integer? port) -> Net::HTTP
 
-        def exchange: (Net::HTTP http, Net::HTTP::Post request, Integer? id) -> (Hash[String, json] | Exception)
+        def exchange: (Net::HTTP http, Net::HTTP::Post request, Integer? id) -> (Wire::Response | Exception)
 
         def raise_unless_ok: (Net::HTTPResponse response, Net::HTTP::Post request) -> void
 
         def keep_session: (Net::HTTPResponse response) -> void
 
-        def answer: (Net::HTTPResponse response, Integer id) -> Hash[String, json]
+        def answer: (Net::HTTPResponse response, Integer id) -> Wire::Response
       end
     end
   end

@@ -1,0 +1,22 @@
+module Sleepyshark
+  module Officina
+    module Mcp
+      module RawJson
+        SCALAR: Regexp
+        BETWEEN: Regexp
+
+        def self.members: (String text) -> Hash[String, String]
+
+        def self.elements: (String text) -> Array[String]
+
+        def self.opened: (String text) -> StringScanner
+
+        def self.closed?: (StringScanner scanner) -> bool
+
+        def self.value: (StringScanner scanner) -> String
+
+        def self.skip_nested: (StringScanner scanner) -> void
+      end
+    end
+  end
+end

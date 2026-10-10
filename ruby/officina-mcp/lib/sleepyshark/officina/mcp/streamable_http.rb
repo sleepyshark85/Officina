@@ -72,7 +72,6 @@ module Sleepyshark
 
           @headers = server.headers
           @mutex = Mutex.new
-          @lost = nil
         end
 
         # Sends text, a request with that id, or a notification when id is nil, and returns what to wait on.
@@ -155,7 +154,6 @@ module Sleepyshark
         # host may set it, and mutant does. Net::HTTP#request's signature has its block return nothing, so Steep takes
         # the method's value for a response, and refuses the break.
         def exchange(http, request, id) # steep:ignore MethodBodyTypeMismatch
-          Thread.current.report_on_exception = false
           # Breaking out of the block leaves the rest of the body unread, as a stream may stay open after the response.
           http.request(request) do |response|
             raise_unless_ok(response, request)

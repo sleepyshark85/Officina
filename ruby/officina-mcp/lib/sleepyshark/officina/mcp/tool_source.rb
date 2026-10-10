@@ -1,15 +1,14 @@
 # frozen_string_literal: true
 
-require 'json'
-
 module Sleepyshark
   module Officina
     module Mcp
       # An MCP server's allowed tools, as tools of the core: it reads the server's tool list once, keeps the tools the
       # host allows, names each <server>__<tool> and pins them, so #tools stays the same for every conversation. It is
       # their tool source: each run checks the connection and reconnects a server that was lost, and fails if it
-      # cannot; a server lost during a run gives error results for its calls. Many runs may share it. Close it when
-      # done.
+      # cannot; a server lost during a run gives error results for its calls. The server's credentials (see
+      # Server#secrets) never leave it: its results and the reasons it reports have them redacted. Many runs may share
+      # it. Close it when done.
       #
       # @example
       #   source = Mcp::ToolSource.new(Mcp::Server.new(name: 'files', url:),
@@ -28,14 +27,12 @@ module Sleepyshark
         # @raise [Officina::Error] when an allowed tool's kind is not :read or :write
         def initialize(server, allowed:, cancel: nil)
           @server = server
-          # Guards the state below; @connecting lets one connect or close at a time check or replace the client.
+          @secrets = Secrets.new(server.secrets)
+          # Guards the client, the changes, the client whose loss is recorded (so a loss many calls meet is recorded
+          # once) and whether it is closed. @connecting lets one connect or close at a time replace the client.
           @mutex = Mutex.new
           @connecting = Mutex.new
-          @client = nil
           @changes = []
-          # The client whose loss is recorded, so a loss many calls meet is recorded once.
-          @lost_client = nil
-          @closed = false
           @tools = pin(connect_client(cancel), allowed, cancel)
         end
 
@@ -44,26 +41,16 @@ module Sleepyshark
 
         # Checks that the server still answers, and reconnects one that does not; the tools stay pinned. Each run
         # calls it before its first model call.
-        # @param cancel [#cancelled?, nil]
+        # @param cancel [#cancelled?]
         # @raise [Mcp::Error] when the server cannot be reached again, cancel is cancelled, or the source is closed
-        def connect(cancel: nil)
-          @connecting.synchronize do
-            raise Error, "MCP server #{name}: the tool source is closed" if closed?
-
-            client = current
-            return if client && answers?(client, cancel)
-
-            drop
-            connect_client(cancel)
-          end
-        end
+        def connect(cancel:) = @connecting.synchronize { reconnect(cancel) }
 
         # @return [Array<ToolSourceChange>] the connection changes since it was last called, oldest first
         def take_changes
           @mutex.synchronize do
-            taken = @changes
+            taken = @changes.freeze
             @changes = []
-            taken.freeze
+            taken
           end
         end
 
@@ -77,6 +64,16 @@ module Sleepyshark
 
         private
 
+        def reconnect(cancel)
+          raise Error, "MCP server #{name}: the tool source is closed" if closed?
+
+          client = current
+          return if client && answers?(client, cancel)
+
+          drop
+          connect_client(cancel)
+        end
+
         def current = @mutex.synchronize { @client }
 
         def closed? = @mutex.synchronize { @closed }
@@ -89,7 +86,7 @@ module Sleepyshark
           raise
         else
           @mutex.synchronize { @client = client }
-          change(:connected, nil)
+          change(:connected)
           client
         end
 
@@ -98,7 +95,7 @@ module Sleepyshark
           client.ping(cancel:)
           true
         rescue Error => e
-          raise if cancel&.cancelled?
+          raise if cancel.cancelled?
 
           lost(client, e.message)
           false
@@ -107,11 +104,11 @@ module Sleepyshark
         # Records the client's loss, once however many calls meet it.
         def lost(client, reason)
           @mutex.synchronize do
-            unless @lost_client.equal?(client)
-              @lost_client = client
-              @changes << ToolSourceChange.new(state: :disconnected, detail: reason)
-            end
+            return if @lost_client.equal?(client)
+
+            @lost_client = client
           end
+          change(:disconnected, reason)
         end
 
         # Closes the client, if any, once calls no longer find it.
@@ -120,12 +117,14 @@ module Sleepyshark
           client&.close
         end
 
-        def change(state, detail) = @mutex.synchronize { @changes << ToolSourceChange.new(state:, detail:) }
+        def change(state, detail = nil)
+          change = ToolSourceChange.new(state:, detail: detail && @secrets.redact(detail))
+          @mutex.synchronize { @changes << change }
+        end
 
         # Pins the core's tool for each allowed tool of the server's list; on any failure, closes the connection.
         def pin(client, allowed, cancel)
           # @type var pinned: Array[Officina::Tool]?
-          pinned = nil
           listed = client.list_tools(cancel:).to_h { [it.name, it] }
           pinned = allowed.map { pinned_tool(it, listed) }.freeze
         ensure
@@ -143,23 +142,28 @@ module Sleepyshark
           raise Error, "MCP server #{name} has no tool #{allowed.name}; it has: #{listed.keys.sort.join(', ')}"
         end
 
+        # The tool's schema, kept as the server wrote it.
         def schema(tool)
-          Schema.new(JSON.generate(tool.input_schema))
+          Schema.new(tool.input_schema)
         rescue SchemaError => e
-          raise Error, "MCP server #{name}'s tool #{tool.name} cannot be used: #{e.message}"
+          raise Error, "MCP server #{name}'s tool #{tool.name} cannot be used: #{e}"
         end
 
-        # Calls the tool on the server, on a call's thread: the tool's error is an error result, as is a server that is
-        # not connected or is lost during the call; any other failure raises, which the run makes an error result too.
+        # Calls the tool on the server, on a call's thread.
         def call(tool, arguments, cancel)
           client = current or return ToolFailure.new(message: "MCP server #{name} is not connected")
-          result = client.call_tool(tool, arguments, cancel:)
-          result.error? ? ToolFailure.new(message: result.text) : result.text
-        rescue Error => e
-          raise unless client&.lost?
+          answer(client, tool, arguments, cancel)
+        end
 
-          lost(client, e.message)
-          ToolFailure.new(message: e.message)
+        # The client's answer to the call: the tool's error is an error result, as is a call that failed, cancelled or
+        # met a server that was lost during it.
+        def answer(client, tool, arguments, cancel)
+          result = client.call_tool(tool, arguments, cancel:)
+          text = @secrets.redact(result.text)
+          result.error? ? ToolFailure.new(message: text) : text
+        rescue Error => e
+          lost(client, e.message) if client.lost?
+          ToolFailure.new(message: @secrets.redact(e.message))
         end
       end
     end

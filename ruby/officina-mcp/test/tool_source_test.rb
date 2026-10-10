@@ -66,8 +66,8 @@ class ToolSourceTest < Minitest::Test
       broke = Officina::ToolFailure.new(message: 'it broke')
 
       assert_equal broke, tool.invoke('{}', Officina::Cancellation.new)
-      error = assert_raises(Mcp::Error) { tool.invoke('{}', Officina::Cancellation.new.tap(&:cancel)) }
-      assert_equal 'MCP server fake, tools/call: cancelled', error.message
+      assert_equal Officina::ToolFailure.new(message: 'MCP server fake, tools/call: cancelled'),
+                   tool.invoke('{}', Officina::Cancellation.new.tap(&:cancel))
       assert_equal broke, tool.invoke('{}', Officina::Cancellation.new)
     end
   end

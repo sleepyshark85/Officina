@@ -14,11 +14,18 @@ class ClientTest < Minitest::Test
   Scripted = ScriptedHttpServer
   SCHEMA = { 'type' => 'object' }.freeze
 
-  def test_mcp01_a_listed_tool_without_a_description_has_an_empty_one
-    tool = { 'name' => 'echo', 'inputSchema' => SCHEMA }
-    tools = with_client(Scripted.results({ 'tools' => [tool] }), &:list_tools)
+  # As the server wrote it, spaces, key order, escapes and number forms included: what every implementation hashes
+  # into the prefix fingerprint.
+  WRITTEN_SCHEMA = %({ "type" : "object",\n  "properties": {"q": {"type": "string", "pattern": "[{\\"\\u00e9]",
+    "maxLength": 1E2}},\t"required": [ "q" ] })
 
-    assert_equal [Mcp::Tool.new(name: 'echo', description: '', input_schema: SCHEMA)], tools
+  def test_mcp01_agt06_a_listed_tool_keeps_its_input_schema_as_written_and_without_a_description_an_empty_one
+    page = %({"jsonrpc": "2.0", "id": 2, "result": {"tools": [ {"inputSchema": #{WRITTEN_SCHEMA}, "name": "echo"},
+      {"name":"upper","inputSchema":{}} ] } })
+    tools = with_client(Scripted::HANDSHAKE + [Scripted.answer(page)], &:list_tools)
+
+    assert_equal [Mcp::Tool.new(name: 'echo', description: '', input_schema: WRITTEN_SCHEMA),
+                  Mcp::Tool.new(name: 'upper', description: '', input_schema: '{}')], tools
     assert_predicate tools, :frozen?
   end
 

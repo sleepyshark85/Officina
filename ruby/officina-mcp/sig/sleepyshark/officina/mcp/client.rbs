@@ -4,7 +4,7 @@ module Sleepyshark
       class Client
         # What a transport hands back for a message: something to wait on for its answer.
         interface _Pending
-          def take: (Float? timeout) -> Hash[String, json]?
+          def take: (Float? timeout) -> Wire::Response?
           def release: () -> void
         end
 
@@ -45,7 +45,7 @@ module Sleepyshark
         def agreed: (json version) -> String
 
         def request: (String method, Hash[String, untyped]? params, cancel: _Cancellation?, ?deadline: Numeric?)
-                   -> Hash[String, json]
+                   -> Wire::Response
 
         def next_id: () -> Integer
 
@@ -54,10 +54,10 @@ module Sleepyshark
         def unreadable: (String method) -> bot
 
         def exchange: (String method, Hash[String, untyped]? params, Integer? id, cancel: _Cancellation?,
-                       deadline: Numeric?) -> Hash[String, json]
+                       deadline: Numeric?) -> Wire::Response
 
         def wait: (_Pending pending, String method, _Cancellation? cancel, Numeric? deadline)
-                -> Hash[String, json]
+                -> Wire::Response
 
         def raise_if_cancelled_or_late: (String method, _Cancellation? cancel, Numeric? deadline) -> void
       end

@@ -14,7 +14,7 @@ class StdioTest < Minitest::Test
   def test_mcp01_a_stdio_server_agrees_on_the_protocol_lists_every_page_of_its_tools_and_runs_them
     with_client do |client|
       tools = client.list_tools(cancel: NeverCancelled.new)
-      echo = { 'type' => 'object', 'properties' => { 'text' => { 'type' => 'string' } } }
+      echo = '{"type":"object","properties":{"text":{"type":"string"}}}'
 
       assert_equal %w[echo upper fail crash stray cut hang], tools.map(&:name)
       assert_equal Mcp::Tool.new(name: 'echo', description: 'The echo tool.', input_schema: echo), tools.first

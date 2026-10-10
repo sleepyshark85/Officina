@@ -29,6 +29,11 @@ module Sleepyshark
           super(name: -name, command:, env: frozen(env), url: url && -url, headers: frozen(headers))
         end
 
+        # The values that may hold credentials: those of env and headers. A ToolSource redacts them from what it
+        # reports; give them to the agent as secrets too, so they never reach its events, telemetry or audit trail.
+        # @return [Array<String>]
+        def secrets = [*env.values, *headers.values].compact.freeze
+
         private
 
         def check_reach(name, command, url, env, headers)

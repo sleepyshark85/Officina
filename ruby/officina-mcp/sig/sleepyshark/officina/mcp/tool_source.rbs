@@ -3,12 +3,13 @@ module Sleepyshark
     module Mcp
       class ToolSource
         @server: Server
+        @secrets: Secrets
         @mutex: Thread::Mutex
         @connecting: Thread::Mutex
         @client: Client?
         @changes: Array[ToolSourceChange]
         @lost_client: Client?
-        @closed: bool
+        @closed: bool?
 
         attr_reader tools: Array[Officina::Tool]
 
@@ -16,7 +17,7 @@ module Sleepyshark
 
         def name: () -> String
 
-        def connect: (?cancel: _Cancellation?) -> void
+        def connect: (cancel: _Cancellation) -> void
 
         def take_changes: () -> Array[ToolSourceChange]
 
@@ -24,19 +25,21 @@ module Sleepyshark
 
         private
 
+        def reconnect: (_Cancellation cancel) -> void
+
         def current: () -> Client?
 
-        def closed?: () -> bool
+        def closed?: () -> bool?
 
         def connect_client: (_Cancellation? cancel) -> Client
 
-        def answers?: (Client client, _Cancellation? cancel) -> bool
+        def answers?: (Client client, _Cancellation cancel) -> bool
 
         def lost: (Client client, String reason) -> void
 
         def drop: () -> void
 
-        def change: (Symbol state, String? detail) -> void
+        def change: (Symbol state, ?String? detail) -> void
 
         def pin: (Client client, Array[AllowedTool] allowed, _Cancellation? cancel) -> Array[Officina::Tool]
 
@@ -47,6 +50,9 @@ module Sleepyshark
         def schema: (Tool tool) -> Schema
 
         def call: (String tool, Hash[String, untyped] arguments, Cancellation cancel) -> (String | ToolFailure)
+
+        def answer: (Client client, String tool, Hash[String, untyped] arguments, Cancellation cancel)
+                  -> (String | ToolFailure)
       end
     end
   end

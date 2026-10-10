@@ -34,7 +34,7 @@ module Sleepyshark
         def list_tools(cancel: nil)
           # @type var cursors: Array[String]
           cursors = []
-          # @type var pages: Array[Hash[String, json]]
+          # @type var pages: Array[Wire::Response]
           pages = []
           loop do
             pages << request('tools/list', { 'cursor' => cursors.last }.compact, cancel:)
@@ -52,8 +52,8 @@ module Sleepyshark
         # @raise [Mcp::Error] when the server has gone, fails, answers with an error, or cancel is cancelled while
         #   it waits; it does not wait for the tool to stop.
         def call_tool(name, arguments, cancel: nil)
-          result = request('tools/call', { 'name' => name, 'arguments' => arguments }, cancel:)
-          Results.call_result(result) || unreadable('tools/call')
+          response = request('tools/call', { 'name' => name, 'arguments' => arguments }, cancel:)
+          Results.call_result(response.result) || unreadable('tools/call')
         end
 
         # Checks that the server still answers.
@@ -80,11 +80,11 @@ module Sleepyshark
           # @type var connected: bool
           connected = false
           deadline = @clock.call + TIMEOUT
-          result = request('initialize', { 'protocolVersion' => PROTOCOL_VERSION, 'capabilities' => {},
-                                           'clientInfo' => { 'name' => 'officina', 'version' => VERSION } },
-                           cancel:, deadline:)
+          response = request('initialize', { 'protocolVersion' => PROTOCOL_VERSION, 'capabilities' => {},
+                                             'clientInfo' => { 'name' => 'officina', 'version' => VERSION } },
+                             cancel:, deadline:)
           # The version agreed on, sent with every later message; none before.
-          @version = agreed(result['protocolVersion'])
+          @version = agreed(response.result['protocolVersion'])
           exchange('notifications/initialized', nil, nil, cancel:, deadline:)
           connected = true
         ensure
@@ -99,13 +99,14 @@ module Sleepyshark
                        "#{PROTOCOL_VERSIONS.join(', ')}"
         end
 
-        # Sends a request and returns its result. JSON.parse makes each value an instance of the class itself, never of
-        # a subclass, so the check is instance_of?.
+        # Sends a request and returns its response, once it holds a result. JSON.parse makes each value an instance of
+        # the class itself, never of a subclass, so the check is instance_of?.
         def request(method, params, cancel:, deadline: nil)
-          error, result = exchange(method, params, next_id, cancel:, deadline:).values_at('error', 'result')
+          response = exchange(method, params, next_id, cancel:, deadline:)
+          error = response.message['error']
           refused(method, error.instance_of?(Hash) ? error['message'] : error) if error
-          unreadable(method) unless result.instance_of?(Hash)
-          result
+          unreadable(method) unless response.result.instance_of?(Hash)
+          response
         end
 
         # mutant:disable -- its one survivor leaves out the lock, which no test can show racing under the VM lock

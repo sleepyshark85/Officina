@@ -5,18 +5,18 @@ module Sleepyshark
         class Pending < Data
           attr_reader transport: Stdio
           attr_reader id: Integer?
-          attr_reader queue: Thread::Queue[Hash[String, json]]
+          attr_reader queue: Thread::Queue[Wire::Response]
 
-          def self.new: (Stdio transport, Integer? id, Thread::Queue[Hash[String, json]] queue) -> instance
+          def self.new: (Stdio transport, Integer? id, Thread::Queue[Wire::Response] queue) -> instance
 
-          def take: (Float? timeout) -> Hash[String, json]?
+          def take: (Float? timeout) -> Wire::Response?
 
           def release: () -> void
         end
 
         @name: String
         @mutex: Thread::Mutex
-        @waiting: Hash[Integer, Thread::Queue[Hash[String, json]]]
+        @waiting: Hash[Integer, Thread::Queue[Wire::Response]]
         @lost: String?
         @process: ChildProcess
 
@@ -28,13 +28,13 @@ module Sleepyshark
 
         def lost: () -> String
 
-        def forget: (Integer? id) -> Thread::Queue[Hash[String, json]]?
+        def forget: (Integer? id) -> Thread::Queue[Wire::Response]?
 
         def close: () -> void
 
         private
 
-        def register: (Integer? id, Thread::Queue[Hash[String, json]] queue) -> void
+        def register: (Integer? id) -> Pending
 
         def write: (String text) -> void
 
