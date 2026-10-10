@@ -10,23 +10,29 @@ module Sleepyshark
     # One run at a time may use it. The host may read and save it while a run uses it, as from the run's block when a
     # message is appended: each read is a snapshot.
     class Conversation
+      # The fingerprint and the messages, frozen together, so a reader on another thread never sees one of an append
+      # without the other: an append replaces the whole state in one assignment.
+      State = Data.define(:fingerprint, :messages)
+      private_constant :State
+
       # @return [String] identifies the conversation for the host, such as a session id
       attr_reader :id
-      # @return [String, nil] the prefix fingerprint of the agent whose run first appended to it; nil before that. A run
-      #   of an agent with another fingerprint fails without calling the model.
-      attr_reader :fingerprint
-      # @return [Array<Message>] oldest first, frozen; later appends do not change it
-      attr_reader :messages
 
       # @param id [String] random unless given
       # @param fingerprint [String, nil] and +messages+ as a stored conversation holds them; a new one has neither
       # @param messages [Array<Message>]
       def initialize(id: SecureRandom.hex(16), fingerprint: nil, messages: [])
         @id = -id
-        @fingerprint = fingerprint && -fingerprint
-        @messages = messages.dup.freeze
+        @state = State.new(fingerprint: fingerprint && -fingerprint, messages: messages.dup.freeze)
         @lock = Mutex.new
       end
+
+      # @return [String, nil] the prefix fingerprint of the agent whose run first appended to it; nil before that. A run
+      #   of an agent with another fingerprint fails without calling the model.
+      def fingerprint = @state.fingerprint
+
+      # @return [Array<Message>] oldest first, frozen; later appends do not change it
+      def messages = @state.messages
 
       # Reads a conversation from the JSON #to_json writes, which the other implementations of Officina write too.
       # @raise [Error] when the JSON is not a conversation's: invalid, of another shape, a message of an unknown role or
@@ -51,11 +57,14 @@ module Sleepyshark
       # store rewrites the JSON around it.
       # @return [String]
       def to_json(*)
-        JSON.generate({ id:, fingerprint:, messages: messages.map { message_json(it) } }.compact)
+        state = @state
+        messages = state.messages.map { message_json(it) }
+        JSON.generate({ id:, fingerprint: state.fingerprint, messages: }.compact)
       end
 
       # Gives the block the conversation for one run, and a lambda that appends messages and binds the fingerprint of
-      # the run's agent. It is the run engine's way in; a host has no need of it.
+      # the run's agent. It is the run engine's way in, public as Ruby has no visibility between classes; a host has no
+      # need of it.
       # @raise [Error] when another run is using the conversation
       def hold
         raise Error, 'Another run is using the conversation; one run at a time may use it' unless @lock.try_lock
@@ -104,8 +113,7 @@ module Sleepyshark
       private
 
       def append(appended, fingerprint)
-        @fingerprint = fingerprint
-        @messages = [*@messages, *appended].freeze
+        @state = State.new(fingerprint:, messages: [*@state.messages, *appended].freeze)
       end
 
       def message_json(message)

@@ -139,6 +139,28 @@ class RunTest < Minitest::Test
     assert_equal 'Again', agent.run(conversation, 'Hi').text
   end
 
+  def test_agt05_breaking_at_a_reply_with_calls_still_answers_them
+    conversation = Conversation.new
+    agent = agent_of(Model.tool_use(Model.tool_use_block('call_1', 'search', '{}')), Model.text('Next'))
+
+    agent.run(conversation, 'Hello') { break if it in ConversationAppended(message: { role: :assistant }) }
+
+    assert_equal %i[user assistant user], conversation.messages.map(&:role)
+    assert_equal 'Next', agent.run(conversation, 'Again').text
+  end
+
+  def test_agt05_raising_at_a_reply_with_calls_still_answers_them
+    conversation = Conversation.new
+    agent = agent_of(Model.tool_use(Model.tool_use_block('call_1', 'search', '{}')), Model.text('Next'))
+
+    assert_raises(KeyError) do
+      agent.run(conversation, 'Hello') { raise KeyError if it in ConversationAppended(message: { role: :assistant }) }
+    end
+
+    assert_equal %i[user assistant user], conversation.messages.map(&:role)
+    assert_equal 'Next', agent.run(conversation, 'Again').text
+  end
+
   def test_evt01_an_exception_from_the_hosts_block_is_the_hosts_own
     conversation = Conversation.new
     agent = agent_of(Model.text('Hello there'))

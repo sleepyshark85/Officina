@@ -5,6 +5,9 @@ module Sleepyshark
       attr_reader name: String
       attr_reader input: String
 
+      def self.new: (id: String, name: String, input: String) -> instance
+
+
       def initialize: (id: String, name: String, input: String) -> void
     end
   end

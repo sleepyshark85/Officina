@@ -82,10 +82,25 @@ module Sleepyshark
       def take(reply, pending)
         calls = reply.blocks.filter_map(&:tool_call)
         result = finish(reply, calls)
-        kept = reply.blocks.any? && (calls.empty? || !result)
-        append(*pending, Message.new(role: :assistant, blocks: reply.blocks)) if kept
-        append(Message.new(role: :user, blocks: calls.map { unrunnable(it) })) unless result
+        return result if reply.blocks.empty? || (result && calls.any?)
+
+        assistant = Message.new(role: :assistant, blocks: reply.blocks)
+        result ? append(*pending, assistant) : answer_after(calls) { append(*pending, assistant) }
         result
+      end
+
+      # Reports the reply through the block, then appends its calls' results. They are appended also when the host
+      # leaves the run at one of the reply's events, as the provider rejects a call without its result, but reported
+      # only when it did not.
+      def answer_after(calls)
+        # @type var reported: bool
+        reported = false
+        yield
+        reported = true
+      ensure
+        answer = Message.new(role: :user, blocks: calls.map { unrunnable(it) })
+        @append.call([answer], @agent.fingerprint)
+        emit(ConversationAppended.new(message: answer)) if reported
       end
 
       # The result a reply's stop leads to, or nil when its calls are to be answered.

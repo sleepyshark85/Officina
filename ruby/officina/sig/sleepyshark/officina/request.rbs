@@ -5,6 +5,9 @@ module Sleepyshark
       attr_reader instructions: String
       attr_reader messages: Array[Message]
 
+      def self.new: (tools: Array[Tool], instructions: String, messages: Array[Message]) -> instance
+
+
       def initialize: (tools: Array[Tool], instructions: String, messages: Array[Message]) -> void
     end
   end

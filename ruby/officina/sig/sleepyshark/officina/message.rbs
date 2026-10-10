@@ -6,6 +6,9 @@ module Sleepyshark
       attr_reader role: Symbol
       attr_reader blocks: Array[Block]
 
+      def self.new: (role: Symbol, blocks: Array[Block]) -> instance
+
+
       def initialize: (role: Symbol, blocks: Array[Block]) -> void
 
       def text: () -> String

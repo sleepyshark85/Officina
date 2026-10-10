@@ -7,6 +7,9 @@ module Sleepyshark
       attr_reader stop: Symbol
       attr_reader detail: String?
 
+      def self.new: (blocks: Array[Block], stop: Symbol, ?detail: String?) -> instance
+
+
       def initialize: (blocks: Array[Block], stop: Symbol, ?detail: String?) -> void
     end
   end

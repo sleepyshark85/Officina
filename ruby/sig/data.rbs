@@ -1,9 +1,6 @@
-# RBS's core signature of Data leaves out that its classes are built and initialized with their members as keywords,
-# so a Data class's new could not be called with them, nor super from an initialize that freezes or checks them. This
-# declares what Ruby does; each class's own initialize signature names the members.
+# RBS's core signature of Data leaves out its initialize, which takes the members as keywords, so a Data class that
+# overrides initialize (to freeze or check its members) could not call super. This declares what Ruby does; each
+# class's own signature declares its new and initialize with its members, so its callers are still checked.
 class Data
-  def self.new: (**untyped) -> instance
-              | ...
-
   def initialize: (**untyped) -> void
 end

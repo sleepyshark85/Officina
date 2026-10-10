@@ -6,6 +6,9 @@ module Sleepyshark
       attr_reader cache_read: Integer
       attr_reader cache_write: Integer
 
+      def self.new: (?input: Integer, ?output: Integer, ?cache_read: Integer, ?cache_write: Integer) -> instance
+
+
       def initialize: (?input: Integer, ?output: Integer, ?cache_read: Integer, ?cache_write: Integer) -> void
 
       def +: (Usage other) -> Usage

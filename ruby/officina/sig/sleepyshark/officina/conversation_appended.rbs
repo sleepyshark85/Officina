@@ -3,6 +3,9 @@ module Sleepyshark
     class ConversationAppended < Data
       attr_reader message: Message
 
+      def self.new: (message: Message) -> instance
+
+
       def initialize: (message: Message) -> void
     end
   end

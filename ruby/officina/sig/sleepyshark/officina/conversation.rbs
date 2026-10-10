@@ -1,11 +1,21 @@
 module Sleepyshark
   module Officina
     class Conversation
+      class State < Data
+        attr_reader fingerprint: String?
+        attr_reader messages: Array[Message]
+
+        def self.new: (fingerprint: String?, messages: Array[Message]) -> instance
+      end
+
       @lock: Thread::Mutex
+      @state: State
 
       attr_reader id: String
-      attr_reader fingerprint: String?
-      attr_reader messages: Array[Message]
+
+      def fingerprint: () -> String?
+
+      def messages: () -> Array[Message]
 
       def initialize: (?id: String, ?fingerprint: String?, ?messages: Array[Message]) -> void
 

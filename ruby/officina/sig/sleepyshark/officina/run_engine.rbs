@@ -33,6 +33,8 @@ module Sleepyshark
 
       def take: (Reply reply, Array[Message] pending) -> result?
 
+      def answer_after: (Array[ToolCall] calls) { () -> void } -> void
+
       def finish:(Reply reply, Array[ToolCall] calls) -> result?
 
       def append: (*Message messages) -> void

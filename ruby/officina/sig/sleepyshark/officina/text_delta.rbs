@@ -3,6 +3,9 @@ module Sleepyshark
     class TextDelta < Data
       attr_reader text: String
 
+      def self.new: (text: String) -> instance
+
+
       def initialize: (text: String) -> void
     end
   end
