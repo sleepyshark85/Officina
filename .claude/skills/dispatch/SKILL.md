@@ -19,13 +19,24 @@ Kind asked for: `$0` (`developer`, `fix`, `review` or `merge-check`).
    - **Files:** with agents working in parallel, each brief lists its own files, and no two briefs share one.
    - **Scratch prefix:** unique among the agents running now (the slice id, plus the part or round).
    - **Live cost cap:** a dollar figure, or "no live calls".
-4. Send it with the Agent tool, as the template says. When the agent reports, merging is the lead's step, under
+4. Send it with the Agent tool, as the template says. When the agent reports, the merge is the lead's step (auto-merge, below), under
    [How we work](../../../docs/conventions.md#how-we-work).
 
 ## Lead's routine
 
-- Never read diffs, conflict hunks or full logs yourself: dispatch a merge-check, a fixer or a reviewer, and act on
-  its short report ([agent-rules.md](agent-rules.md), *Report*).
-- After each merge, update your status note (the project memory's status file, such as `ruby-port-status`); the
-  plan's Progress row goes in the next PR that touches the plan.
-- When the context hook warns you, update the note and ask the owner to run `/compact`.
+- Never read diffs, conflict hunks, whole files or full logs yourself: use `head` or `grep`, or dispatch a
+  merge-check, a fixer or a reviewer, and act on its short report ([agent-rules.md](agent-rules.md), *Report*).
+- Update your status note (the project memory's status file, such as `ruby-port-status`) only when the context hook
+  warns at 150k, before `/compact`, and at the end of a session; the plan's Progress row goes in the next PR that
+  touches the plan. At the end of a session also regenerate `docs/agent-usage.md`
+  (`python3 -B scripts/agent-usage.py`), through a docs PR.
+- Background watchers print only events (a PR merged, closed or behind), never progress.
+- Set auto-merge (`gh pr merge N --auto --merge --delete-branch`) in the same step as reading an approving report
+  with nothing in `Needs the lead`. The required `review` check means it merges only on an approving verdict on its
+  head; to doubt an approval, ask for a strict re-review instead.
+- Handle each report in one step: decide and send the next brief.
+- Compact at the 150k warning, not earlier (the owner's choice): update the note and ask the owner to run `/compact`.
+  Start a new session per batch of parallel slices.
+- Review rounds run without the lead: the fixer sends each next round to the PR's reviewer ([fix](templates/fix.md)).
+  Only the lead dispatches a new reviewer, takes round 3's outcome to the owner and sets auto-merge.
+- Noted improvements, not adopted: [later.md](later.md).
