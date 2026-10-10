@@ -1,0 +1,13 @@
+module Sleepyshark
+  module Officina
+    module Mcp
+      class Tool < Data
+        attr_reader name: String
+        attr_reader description: String
+        attr_reader input_schema: Hash[String, json]
+
+        def self.new: (name: String, description: String, input_schema: Hash[String, json]) -> instance
+      end
+    end
+  end
+end
