@@ -25,7 +25,7 @@ module Sleepyshark
         @version: String
         @transport: _Transport
 
-        def initialize: (Server server, cancel: _Cancellation?, clock: clock) -> void
+        def initialize: (_Transport transport, name: String, cancel: _Cancellation?, clock: clock) -> void
 
         def list_tools: (?cancel: _Cancellation?) -> Array[Tool]
 
@@ -45,19 +45,18 @@ module Sleepyshark
 
         def listed?: (json tool) -> bool
 
-        def request: (String method, Hash[String, untyped]? params, cancel: _Cancellation?, ?deadline: Numeric?)
+        def request: (String method, Hash[String, untyped]? params, cancel: _Cancellation?, ?connect_deadline: Numeric?)
                    -> Hash[String, json]
 
         def unreadable: (String method) -> bot
 
         def exchange: (String method, Hash[String, untyped]? params, Integer? id, cancel: _Cancellation?,
-                       deadline: Numeric?) -> Hash[String, json]
+                       connect_deadline: Numeric?) -> Hash[String, json]
 
-        def wait: (_Pending pending, String method, _Cancellation? cancel, Numeric? deadline) -> Hash[String, json]
+        def wait: (_Pending pending, String method, _Cancellation? cancel, Numeric? connect_deadline)
+                -> Hash[String, json]
 
-        def check: (String method, _Cancellation? cancel, Numeric? deadline) -> void
-
-        def late?: (Numeric? deadline) -> bool
+        def raise_if_cancelled_or_late: (String method, _Cancellation? cancel, Numeric? connect_deadline) -> void
       end
     end
   end

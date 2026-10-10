@@ -2,8 +2,6 @@ module Sleepyshark
   module Officina
     module Mcp
       class Stdio
-        ERRORS_WAIT: Integer
-
         class Pending < Data
           attr_reader transport: Stdio
           attr_reader id: Integer?
@@ -21,9 +19,7 @@ module Sleepyshark
         @mutex: Thread::Mutex
         @waiting: Hash[Integer, Thread::Queue[Hash[String, json]]]
         @lost: String?
-        @writing: Thread::Mutex
         @process: ChildProcess
-        @reader: Thread
 
         def initialize: (Server server, clock: clock) -> void
 
@@ -39,11 +35,7 @@ module Sleepyshark
 
         def write: (String text, Integer? id) -> void
 
-        def read_output: () -> void
-
-        def too_long: () -> void
-
-        def dispatch: (String line) -> void
+        def dispatch: (String message) -> void
 
         def lose: (String reason) -> void
 

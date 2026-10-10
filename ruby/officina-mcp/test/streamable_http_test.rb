@@ -3,6 +3,7 @@
 require 'test_helper'
 require 'sleepyshark/officina/mcp'
 require_relative 'cancellations'
+require_relative 'scripted_http_server'
 
 # The MCP client over Streamable HTTP, against the test kit's fake server on a local port.
 class StreamableHttpTest < Minitest::Test
@@ -60,6 +61,31 @@ class StreamableHttpTest < Minitest::Test
       error = assert_raises(Mcp::Error) { client.call_tool('echo', { 'text' => 'hi' }) }
 
       assert_equal 'MCP server web could not be reached: the server ended the session', error.message
+    end
+  end
+
+  def test_mcp04_a_server_that_answers_with_what_is_not_http_raises_and_stays_lost
+    garbage = ["garbage\r\n\r\n", "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: many\r\n\r\n{}"]
+    garbage.each do |answer|
+      answers = ScriptedHttpServer::HANDSHAKE + [answer, ScriptedHttpServer.response(3, { 'content' => [] })]
+      messages = []
+      answered = ScriptedHttpServer.serve(answers) do |url|
+        client = connect(url)
+        messages = Array.new(2) { assert_raises(Mcp::Error) { echo(client) }.message }
+      ensure
+        client&.close
+      end
+
+      assert_match(/\AMCP server web could not be reached: wrong/, messages.first)
+      assert_equal [messages.first, 3], [messages.last, answered], 'the second call is not sent'
+    end
+  end
+
+  def test_mcp04_a_404_before_a_session_is_a_wrong_url_not_an_ended_session
+    ScriptedHttpServer.serve(["HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"]) do |url|
+      error = assert_raises(Mcp::Error) { connect(url) }
+
+      assert_equal 'MCP server web could not be reached: the server answered HTTP 404 Not Found', error.message
     end
   end
 

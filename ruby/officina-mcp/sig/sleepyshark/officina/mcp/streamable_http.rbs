@@ -46,7 +46,9 @@ module Sleepyshark
 
         def exchange: (Net::HTTP http, Net::HTTP::Post request, Integer? id) -> Hash[String, json]
 
-        def check: (Net::HTTPResponse response, Net::HTTP::Post request) -> void
+        def raise_unless_ok: (Net::HTTPResponse response, Net::HTTP::Post request) -> void
+
+        def keep_session: (Net::HTTPResponse response) -> void
 
         def answer: (Net::HTTPResponse response, Integer id) -> Hash[String, json]
       end

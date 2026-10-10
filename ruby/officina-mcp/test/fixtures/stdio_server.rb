@@ -4,8 +4,9 @@
 # error result), crash (the process exits mid-call) and hang (never answers; exits when its input ends). With a file
 # in FAKE_MCP_PID, it writes its process id there first. The first argument picks something else to be:
 # complain (reads the first request, says why it cannot go on on its error output, and exits), flood (answers the
-# first request with a line longer than 16 MB), silent (never answers, until its input ends) or stubborn (never
-# answers, and ignores the end of its input).
+# first request with a line longer than 16 MB), reverse (once connected, reads requests two at a time and answers the
+# second first), silent (never answers, until its input ends) or stubborn (never answers, and ignores the end of its
+# input).
 
 require 'sleepyshark/officina/testing/fake_mcp_server'
 require 'sleepyshark/officina/testing/fake_mcp_tool'
@@ -16,6 +17,14 @@ if ENV.key?('FAKE_MCP_PID')
   File.rename("#{ENV.fetch('FAKE_MCP_PID')}.new", ENV.fetch('FAKE_MCP_PID'))
 end
 $stdout.sync = true
+
+# The input, two lines (the handshake's request and notification) as they come, then each pair of lines in reverse.
+Reversed = Data.define(:input) do
+  def each_line(&)
+    2.times { yield input.gets }
+    input.each_line.each_slice(2) { |pair| pair.reverse_each(&) }
+  end
+end
 
 case ARGV.first
 when 'complain'
@@ -45,5 +54,5 @@ else
         exit!(0)
       })
     ]
-  ).serve($stdin, $stdout)
+  ).serve(ARGV.first == 'reverse' ? Reversed.new($stdin) : $stdin, $stdout)
 end

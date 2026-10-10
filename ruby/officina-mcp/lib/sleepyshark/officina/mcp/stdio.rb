@@ -7,10 +7,7 @@ module Sleepyshark
       # Responses are matched to requests by id, so requests may overlap. When the process ends, every waiting request
       # fails, with the last line of its error output, which often says why.
       class Stdio
-        # How long the end of the output waits for the error output to end, in seconds.
-        ERRORS_WAIT = 1
-
-        # A request waiting for its response, which the output's reader hands to its queue.
+        # A request waiting for its response, which the output's thread hands to its queue.
         Pending = Data.define(:transport, :id, :queue)
 
         # Reopened rather than given a block, which Steep would not read as the class's body.
@@ -35,11 +32,8 @@ module Sleepyshark
           @mutex = Mutex.new
           @waiting = {}
           @lost = nil
-          # Messages are written whole, one at a time. Not @mutex: a write that waits for the server to read must
-          # not keep the output's reader from handing out responses meanwhile.
-          @writing = Mutex.new
-          @process = ChildProcess.new(server)
-          @reader = Thread.new { read_output }
+          @process = ChildProcess.new(server, on_message: ->(message) { dispatch(message) },
+                                              on_end: ->(reason) { lose(reason) })
         end
 
         # Sends text, a request with that id, or a notification when id is nil, and returns what to wait on.
@@ -68,38 +62,21 @@ module Sleepyshark
         def close
           lose('the connection was closed')
           @process.stop(clock: @clock)
-          @process.finish(@reader, @process.output)
         end
 
         private
 
         def write(text, id)
-          @writing.synchronize { @process.input.write(text, "\n") }
-        rescue SystemCallError, IOError => e
+          @process.write(text)
+        rescue IOError, SystemCallError => e
           forget(id)
           # The server has exited, most likely: the end of its output says why.
-          @reader.join(ERRORS_WAIT)
           raise Error, lost || "MCP server #{@name} could not be written to: #{e.message}"
         end
 
-        def read_output
-          while (line = @process.output.gets("\n", Wire::MAX_MESSAGE + 1))
-            return too_long if line.bytesize > Wire::MAX_MESSAGE
-
-            dispatch(line) if line.end_with?("\n")
-          end
-          lose(['it closed its connection', @process.last_error_line(ERRORS_WAIT)].compact.join(': '))
-        rescue IOError
-          lose('the connection was closed')
-        end
-
-        def too_long
-          lose("it sent a message longer than #{Wire::MAX_MESSAGE / 1024 / 1024} MB")
-          @process.kill
-        end
-
-        def dispatch(line)
-          response = Wire.response(line) or return
+        # Hands a response to the request waiting for it; anything else is skipped.
+        def dispatch(message)
+          response = Wire.response(message) or return
           @mutex.synchronize { @waiting.delete(response['id']) }&.push(response)
         end
 

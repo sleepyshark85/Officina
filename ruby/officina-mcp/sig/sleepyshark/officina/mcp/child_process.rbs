@@ -3,41 +3,63 @@ module Sleepyshark
     module Mcp
       class ChildProcess
         EXIT_WAIT: Integer
+        ERRORS_WAIT: Integer
         ERRORS_KEPT: Integer
         WINDOWS: bool
         GROUP: Hash[Symbol, bool]
 
-        @mutex: Thread::Mutex
-        @errors_tail: String
+        class Reader
+          @pipe: IO
+          @thread: Thread
+
+          def initialize: (IO pipe) { (IO pipe) -> void } -> void
+
+          def ended_within?: (Numeric timeout) -> bool
+
+          def stop: () -> void
+        end
+
+        class ErrorTail
+          @mutex: Thread::Mutex
+          @bytes: String
+
+          def initialize: () -> void
+
+          def read: (IO pipe) -> void
+
+          def last_line: () -> String?
+        end
+
+        @writing: Thread::Mutex
+        @error_tail: ErrorTail
         @pid: Integer
         @input: IO
-        @output: IO
-        @errors: IO
         @exit: Process::Waiter
-        @errors_reader: Thread
+        @errors_reader: Reader
+        @output_reader: Reader
 
-        attr_reader input: IO
-        attr_reader output: IO
+        def initialize: (Server server, on_message: ^(String message) -> void, on_end: ^(String reason) -> void)
+                      -> void
 
-        def initialize: (Server server) -> void
-
-        def last_error_line: (Numeric timeout) -> String?
+        def write: (String message) -> void
 
         def stop: (clock: clock) -> void
 
-        def finish: (Thread reader, IO pipe) -> void
-
-        def kill: () -> void
-
         private
 
-        def spawn: (Server server) -> Integer
+        def spawn_with_pipes: (Server server) -> [Integer, IO, IO, IO]
 
-        def run: (Server server, Hash[Symbol, IO] child_ends) -> Integer
+        def spawn_command: (Server server, **IO ends) -> Integer
 
-        def read_errors: () -> void
+        def read_output: (IO output, ^(String message) -> void on_message, ^(String reason) -> void on_end) -> void
+
+        def too_long: (^(String reason) -> void on_end) -> void
+
+        def last_error_line: () -> String?
 
         def exited_within?: (Numeric seconds, clock: clock) -> bool
+
+        def kill: () -> void
 
         def signal: (Integer pid) -> void
       end

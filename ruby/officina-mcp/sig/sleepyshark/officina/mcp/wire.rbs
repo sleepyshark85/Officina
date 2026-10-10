@@ -23,11 +23,16 @@ module Sleepyshark
 
         class EventStream
           @buffer: String
-          @data: Array[String]?
+          @searched: Integer
+          @data: Array[String]
 
           def initialize: () -> void
 
           def feed: (String chunk) { (String data) -> void } -> void
+
+          private
+
+          def line: (String text) { (String data) -> void } -> void
         end
       end
     end

@@ -30,7 +30,10 @@ module Sleepyshark
       #
       # @raise [Mcp::Error] when the server cannot be started or reached, does not answer in time, speaks another
       #   protocol version, or cancel is cancelled; a server it started is stopped by then.
-      def self.connect(server, cancel: nil, clock: MONOTONIC) = Client.new(server, cancel:, clock:)
+      def self.connect(server, cancel: nil, clock: MONOTONIC)
+        transport = server.command ? Stdio.new(server, clock:) : StreamableHttp.new(server)
+        Client.new(transport, name: server.name, cancel:, clock:)
+      end
     end
   end
 end

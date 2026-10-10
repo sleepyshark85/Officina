@@ -12,9 +12,10 @@ module Sleepyshark
       # loses the connection, as the protocol asks the client to start a new one. Any failure loses it: every later
       # request fails.
       class StreamableHttp
-        # What the network and Net::HTTP raise when a server cannot be reached or breaks off.
-        FAILURES = [IOError, SystemCallError, SocketError, Timeout::Error, Net::ProtocolError,
-                    OpenSSL::SSL::SSLError, Error].freeze
+        # What the network and Net::HTTP raise when a server cannot be reached, breaks off or answers with what is
+        # not HTTP.
+        FAILURES = [IOError, SystemCallError, SocketError, Timeout::Error, Net::ProtocolError, Net::HTTPBadResponse,
+                    Net::HTTPHeaderSyntaxError, OpenSSL::SSL::SSLError, Error].freeze
         # How long opening a connection may take, in seconds. Net::HTTP cannot stop it sooner, so it bounds how long
         # a request cancelled while its connection opens still waits for its thread.
         OPEN_TIMEOUT = 10
@@ -122,23 +123,29 @@ module Sleepyshark
         end
 
         # Runs on the request's own thread: opens the connection, sends the request and reads the answer.
-        def exchange(http, request, id)
+        # Net::HTTP#request's signature has its block return nothing, so Steep takes the method's value for a response,
+        # and refuses the break.
+        def exchange(http, request, id) # steep:ignore MethodBodyTypeMismatch
           Thread.current.report_on_exception = false
           http.start
-          # Returning from the block leaves the rest of the body unread, as a stream may stay open after the response.
+          # Breaking out of the block leaves the rest of the body unread, as a stream may stay open after the response.
           http.request(request) do |response|
-            check(response, request)
-            return id ? answer(response, id) : ACCEPTED
+            raise_unless_ok(response, request)
+            keep_session(response)
+            break id ? answer(response, id) : ACCEPTED # steep:ignore BreakTypeMismatch
           end
-          raise Error, 'the server sent no answer' # Not reached: Net::HTTP yields every response.
         end
 
-        def check(response, request)
+        # A 404 to a request in a session means the server ended the session; to one before, that the URL is wrong.
+        def raise_unless_ok(response, request)
           raise Error, 'the server ended the session' if response.is_a?(Net::HTTPNotFound) && request['Mcp-Session-Id']
-          unless response.is_a?(Net::HTTPSuccess)
-            raise Error, "the server answered HTTP #{response.code} #{response.message}"
-          end
+          return if response.is_a?(Net::HTTPSuccess)
 
+          raise Error, "the server answered HTTP #{response.code} #{response.message}"
+        end
+
+        # The session a server gives is sent back with every later message.
+        def keep_session(response)
           session = response['Mcp-Session-Id']
           @mutex.synchronize { @session = session } if session
         end

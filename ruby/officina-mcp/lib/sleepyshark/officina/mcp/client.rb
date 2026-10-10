@@ -16,23 +16,30 @@ module Sleepyshark
         CONNECT_TIMEOUT = 30
         private_constant :PROTOCOL_VERSION, :PROTOCOL_VERSIONS, :CONNECT_TIMEOUT
 
-        # Starts or reaches server and agrees on the protocol; see Mcp.connect.
-        def initialize(server, cancel:, clock:)
-          @name = server.name
+        # Agrees on the protocol with the server called name over transport, which only Mcp.connect makes; see
+        # Mcp.connect.
+        def initialize(transport, name:, cancel:, clock:)
+          @transport = transport
+          @name = name
           @clock = clock
           @mutex = Mutex.new
           @last_id = 0
           @version = PROTOCOL_VERSION
-          @transport = server.command ? Stdio.new(server, clock:) : StreamableHttp.new(server)
           handshake(cancel)
         end
 
         # Every tool the server lists, from every page of its list.
         #
-        # @raise [Mcp::Error] when the server has gone, fails, answers with an error, or cancel is cancelled.
+        # @raise [Mcp::Error] when the server has gone, fails, answers with an error, gives a page's cursor twice, or
+        #   cancel is cancelled.
         def list_tools(cancel: nil)
           pages = [request('tools/list', nil, cancel:)]
+          # @type var cursors: Array[String]
+          cursors = []
           while (cursor = next_cursor(pages.fetch(-1)))
+            raise Error, "MCP server #{@name} gave the cursor #{cursor.inspect} twice" if cursors.include?(cursor)
+
+            cursors << cursor
             pages << request('tools/list', { 'cursor' => cursor }, cancel:)
           end
           pages.flat_map { listed(it) }.freeze
@@ -47,7 +54,7 @@ module Sleepyshark
           result = request('tools/call', { 'name' => name, 'arguments' => arguments }, cancel:)
           content = result['content']
           unreadable('tools/call') unless content.is_a?(Array) && content.all?(Hash)
-          text = content.map { |item| item['type'] == 'text' ? item['text'].to_s : "[#{item['type']} content]" }
+          text = content.map { |item| item['type'] == 'text' ? item['text'] : "[#{item['type']} content]" }
           CallResult.new(text: text.join("\n").freeze, error: result['isError'] == true)
         end
 
@@ -62,12 +69,12 @@ module Sleepyshark
         def handshake(cancel)
           # @type var connected: bool
           connected = false
-          deadline = @clock.call + CONNECT_TIMEOUT
+          connect_deadline = @clock.call + CONNECT_TIMEOUT
           result = request('initialize', { 'protocolVersion' => PROTOCOL_VERSION, 'capabilities' => {},
                                            'clientInfo' => { 'name' => 'officina', 'version' => VERSION } },
-                           cancel:, deadline:)
+                           cancel:, connect_deadline:)
           @version = agreed(result['protocolVersion'])
-          exchange('notifications/initialized', nil, nil, cancel:, deadline:)
+          exchange('notifications/initialized', nil, nil, cancel:, connect_deadline:)
           connected = true
         ensure
           # However it failed, a server it started does not outlive it.
@@ -99,9 +106,9 @@ module Sleepyshark
         end
 
         # Sends a request and returns its result.
-        def request(method, params, cancel:, deadline: nil)
+        def request(method, params, cancel:, connect_deadline: nil)
           id = @mutex.synchronize { @last_id += 1 }
-          response = exchange(method, params, id, cancel:, deadline:)
+          response = exchange(method, params, id, cancel:, connect_deadline:)
           if (error = response['error'])
             message = error.is_a?(Hash) ? error['message'] : error
             raise Error, "MCP server #{@name} answered #{method} with an error: #{message}"
@@ -114,33 +121,33 @@ module Sleepyshark
         end
 
         # Sends a message, a request when id is not nil, and returns its response, waiting until cancel is
-        # cancelled or the deadline passes.
-        def exchange(method, params, id, cancel:, deadline:)
-          check(method, cancel, nil)
+        # cancelled or, while connecting, the connect deadline passes.
+        def exchange(method, params, id, cancel:, connect_deadline:)
+          raise_if_cancelled_or_late(method, cancel, nil)
           message = { 'jsonrpc' => '2.0', 'id' => id, 'method' => method, 'params' => params }.compact
           pending = @transport.post(JSON.generate(message), id, @version)
           begin
-            wait(pending, method, cancel, deadline)
+            wait(pending, method, cancel, connect_deadline)
           ensure
             pending.release
           end
         end
 
-        def wait(pending, method, cancel, deadline)
+        def wait(pending, method, cancel, connect_deadline)
           loop do
             answer = pending.take(POLL)
             return answer if answer
 
-            check(method, cancel, deadline)
+            raise_if_cancelled_or_late(method, cancel, connect_deadline)
           end
         end
 
-        def check(method, cancel, deadline)
+        def raise_if_cancelled_or_late(method, cancel, connect_deadline)
           raise Error, "MCP server #{@name}, #{method}: cancelled" if cancel&.cancelled?
-          raise Error, "MCP server #{@name} did not answer within #{CONNECT_TIMEOUT} seconds" if late?(deadline)
-        end
+          return unless connect_deadline && @clock.call >= connect_deadline
 
-        def late?(deadline) = !deadline.nil? && @clock.call >= deadline
+          raise Error, "MCP server #{@name} did not answer within #{CONNECT_TIMEOUT} seconds"
+        end
       end
     end
   end

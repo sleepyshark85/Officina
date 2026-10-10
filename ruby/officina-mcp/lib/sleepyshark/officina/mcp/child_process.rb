@@ -3,11 +3,15 @@
 module Sleepyshark
   module Officina
     module Mcp
-      # A stdio server's process: started with pipes for its input and output, the end of its error output kept to say
-      # why it ended, and stopped and reaped with what it started.
+      # A stdio server's process and its pipes: messages are written to its input one line at a time; a thread reads
+      # its output and hands over each line; another keeps the end of its error output, which often says why it
+      # ended. Stopping it reaps it with what it started and ends both threads.
       class ChildProcess
-        # How long a closing server may take to exit once its input is closed before it is killed, in seconds.
+        # How long a closing server may take to exit once its input is closed before it is killed, and how long its
+        # pipes may stay open once it has gone, in seconds.
         EXIT_WAIT = 5
+        # How long a failed write waits for the output to end, so the reason it ended is known, in seconds.
+        ERRORS_WAIT = 1
         # How much of the end of the error output is kept, in bytes.
         ERRORS_KEPT = 4096
         WINDOWS = Gem.win_platform?
@@ -15,46 +19,151 @@ module Sleepyshark
         # them too, and the terminal's Ctrl+C, sent to the foreground group, does not reach it.
         GROUP = (WINDOWS ? { new_pgroup: true } : { pgroup: true }).freeze
 
-        # The write end of the server's input, and the read end of its output.
-        attr_reader :input, :output
+        # A thread reading one of the server's pipes until it ends.
+        class Reader
+          # Reads pipe with the block, on a thread of its own.
+          def initialize(pipe, &)
+            @pipe = pipe
+            @thread = Thread.new(pipe, &)
+          end
 
-        # Starts server's command. Raises Mcp::Error when it cannot start.
-        def initialize(server)
-          @mutex = Mutex.new
-          @errors_tail = String.new(encoding: Encoding::BINARY)
-          @pid = spawn(server)
-          @input.sync = true
-          @exit = Process.detach(@pid)
-          @errors_reader = Thread.new { read_errors }
+          # Whether the read ends within timeout seconds.
+          def ended_within?(timeout) = !@thread.join(timeout).nil?
+
+          # Waits for the read to end, as it does once the server has gone; a process outside the group, or one on
+          # Windows, may hold the pipe open, so after EXIT_WAIT seconds the pipe is closed, which ends the read.
+          def stop
+            @pipe.close unless ended_within?(EXIT_WAIT)
+            @thread.join
+            @pipe.close
+          end
         end
 
-        # The last line of the error output that is not blank, waiting up to timeout seconds for it to end; nil if
-        # none.
-        def last_error_line(timeout)
-          @errors_reader.join(timeout)
-          @mutex.synchronize { @errors_tail.dup }.force_encoding(Encoding::UTF_8).scrub.lines.map(&:strip)
-                .reject(&:empty?).last
+        # The end of the server's error output, which often says why it ended.
+        class ErrorTail
+          def initialize
+            @mutex = Mutex.new
+            @bytes = String.new(encoding: Encoding::BINARY)
+          end
+
+          # Reads pipe until it ends, keeping its last ERRORS_KEPT bytes.
+          def read(pipe)
+            loop do
+              chunk = pipe.readpartial(ERRORS_KEPT)
+              @mutex.synchronize do
+                bytes = @bytes + chunk
+                @bytes = bytes.byteslice([bytes.bytesize - ERRORS_KEPT, 0].max..).to_s
+              end
+            end
+          rescue IOError
+            # The error output ended, or was closed.
+            nil
+          end
+
+          # Its last line that is not blank; nil if none.
+          def last_line
+            @mutex.synchronize { @bytes.dup }.force_encoding(Encoding::UTF_8).scrub.lines.map(&:strip)
+                  .reject(&:empty?).last
+          end
+        end
+        private_constant :Reader, :ErrorTail
+
+        # Starts server's command. Each line of its output, a message, goes to on_message, without its line end; once
+        # the output ends, or a message is longer than Wire::MAX_MESSAGE bytes (and the server is killed), on_end gets
+        # why. Both are called on the output's thread. Raises Mcp::Error when the command cannot start.
+        def initialize(server, on_message:, on_end:)
+          @writing = Mutex.new
+          @error_tail = ErrorTail.new
+          @pid, @input, output, errors = spawn_with_pipes(server)
+          @input.sync = true
+          @exit = Process.detach(@pid)
+          @errors_reader = Reader.new(errors) { @error_tail.read(it) }
+          @output_reader = Reader.new(output) { read_output(it, on_message, on_end) }
+        end
+
+        # Writes message as one line of the server's input, whole even when several threads write. Raises IOError or
+        # SystemCallError when the server cannot be written to, once its output has ended or ERRORS_WAIT has passed,
+        # so on_end has most likely said why.
+        def write(message)
+          # Not the lock of the caller's own state: a write that waits for the server to read must not keep the
+          # output's thread from handing over messages meanwhile.
+          @writing.synchronize { @input.write(message, "\n") }
+        rescue IOError, SystemCallError
+          @output_reader.ended_within?(ERRORS_WAIT)
+          raise
         end
 
         # Closes the input, so the server can exit by itself, as a container must to be removed. One that has not
         # within EXIT_WAIT seconds, by clock, is killed with its process group. Returns once it has exited and been
-        # reaped, and the error output has been read.
+        # reaped, and both threads have ended.
         def stop(clock:)
           @input.close
           kill unless exited_within?(EXIT_WAIT, clock:)
           @exit.join
           # What is left of its group, such as a child that ignored the end of its input or holds its output.
           signal(-@pid) unless WINDOWS
-          finish(@errors_reader, @errors)
+          @output_reader.stop
+          @errors_reader.stop
         end
 
-        # Waits for reader to end, as it does once the server has gone; a process outside the group, or one on
-        # Windows, may hold the pipe open, so after EXIT_WAIT seconds the pipe is closed, which ends the read. Then
-        # closes the pipe.
-        def finish(reader, pipe)
-          pipe.close unless reader.join(EXIT_WAIT)
-          reader.join
-          pipe.close
+        private
+
+        # Returns the process id and this side's ends of its input, output and error output.
+        def spawn_with_pipes(server)
+          child_input, input = IO.pipe
+          output, child_output = IO.pipe
+          errors, child_errors = IO.pipe
+          [spawn_command(server, in: child_input, out: child_output, err: child_errors), input, output, errors]
+        rescue Error
+          [input, output, errors].each { it&.close }
+          raise
+        end
+
+        # Spawns server's command with ends, the server's ends of its pipes. They are its own from then on, so they
+        # are closed here: were they open here too, the reads would never end.
+        def spawn_command(server, **ends)
+          program, *arguments = server.command.to_a
+          # [program, program] runs it without a shell, even with no arguments; Process.spawn's signature leaves
+          # that form out.
+          Process.spawn(server.env, [program, program], *arguments, **ends, **GROUP) # steep:ignore
+        rescue SystemCallError => e
+          raise Error, "MCP server #{server.name} could not be started (#{program}): #{e.message}"
+        ensure
+          ends.each_value(&:close)
+        end
+
+        def read_output(output, on_message, on_end)
+          # A message and its line end, at most; a longer line is cut there, and is then too long.
+          while (line = output.gets("\n", Wire::MAX_MESSAGE + 1))
+            message = line.chomp
+            return too_long(on_end) if message.bytesize > Wire::MAX_MESSAGE
+
+            # A last line without its line end is incomplete.
+            on_message.call(message) if line.end_with?("\n")
+          end
+          on_end.call(['it closed its connection', last_error_line].compact.join(': '))
+        rescue IOError
+          on_end.call('the connection was closed')
+        end
+
+        def too_long(on_end)
+          on_end.call("it sent a message longer than #{Wire::MAX_MESSAGE / 1024 / 1024} MB")
+          kill
+        end
+
+        # The last line of the error output that is not blank, once it has ended or ERRORS_WAIT has passed; nil if
+        # none.
+        def last_error_line
+          @errors_reader.ended_within?(ERRORS_WAIT)
+          @error_tail.last_line
+        end
+
+        def exited_within?(seconds, clock:)
+          deadline = clock.call + seconds
+          until @exit.join(POLL)
+            return false if clock.call >= deadline
+          end
+          true
         end
 
         # Kills the server and what it started.
@@ -66,52 +175,6 @@ module Sleepyshark
             signal(-@pid)
           end
           signal(@pid)
-        end
-
-        private
-
-        def spawn(server)
-          input, @input = IO.pipe
-          @output, output = IO.pipe
-          @errors, errors = IO.pipe
-          child_ends = { in: input, out: output, err: errors }
-          begin
-            run(server, child_ends)
-          ensure
-            # The server holds these ends now; were they open here too, the reads would never end.
-            child_ends.each_value(&:close)
-          end
-        end
-
-        def run(server, child_ends)
-          program, *arguments = server.command.to_a
-          # [program, program] runs it without a shell, even with no arguments; Process.spawn's signature leaves
-          # that form out.
-          Process.spawn(server.env, [program, program], *arguments, **child_ends, **GROUP) # steep:ignore
-        rescue SystemCallError => e
-          [@input, @output, @errors].each(&:close)
-          raise Error, "MCP server #{server.name} could not be started (#{program}): #{e.message}"
-        end
-
-        def read_errors
-          loop do
-            chunk = @errors.readpartial(ERRORS_KEPT)
-            @mutex.synchronize do
-              tail = @errors_tail + chunk
-              @errors_tail = tail.byteslice([tail.bytesize - ERRORS_KEPT, 0].max..).to_s
-            end
-          end
-        rescue IOError
-          # The output ended, or was closed.
-          nil
-        end
-
-        def exited_within?(seconds, clock:)
-          deadline = clock.call + seconds
-          until @exit.join(POLL)
-            return false if clock.call >= deadline
-          end
-          true
         end
 
         def signal(pid)

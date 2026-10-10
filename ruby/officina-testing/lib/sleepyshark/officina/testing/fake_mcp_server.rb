@@ -9,13 +9,53 @@ module Sleepyshark
     module Testing
       # An MCP server with tools given in advance, over stdio (#serve, run by a program the test starts) or Streamable
       # HTTP on a local port (#serve_http). It lists one tool per page, sends a notification before each tool's result
-      # (over HTTP, in an event stream) that clients must skip, and records the calls. Over HTTP it requires the
-      # headers the protocol does (both content types accepted; the protocol version and the session after
-      # initializing), stricter than a real server. It can go down, or end its session.
+      # (over HTTP, in an event stream) that clients must skip, and records the calls. It requires what the protocol
+      # does, stricter than a real server: the client's capabilities and name and version when it initializes, and over
+      # HTTP both content types accepted, then the protocol version and the session. It can go down, or end its
+      # session.
       class FakeMcpServer
         NOTIFICATION = JSON.generate({ 'jsonrpc' => '2.0', 'method' => 'notifications/message',
                                        'params' => { 'level' => 'info', 'data' => 'working' } })
         private_constant :NOTIFICATION
+
+        # Plain HTTP/1.1 on a listener, one request per connection.
+        module Http
+          STATUS = { 200 => 'OK', 202 => 'Accepted', 400 => 'Bad Request', 404 => 'Not Found' }.freeze
+
+          # Answers each connection to listener, until it is closed, with what the block returns for its request's
+          # headers (names in lower case) and body: [status, headers, body], or nil to close it without an answer.
+          def self.serve(listener, &)
+            loop { answer(listener.accept, &) }
+          rescue IOError
+            # The listener was closed: serving is over.
+            nil
+          end
+
+          def self.answer(connection)
+            request_headers, request_body = read(connection)
+            reply = yield(request_headers, request_body) or return
+            status, headers, body = reply
+            connection.write("HTTP/1.1 #{status} #{STATUS[status]}\r\n",
+                             *headers.map { |name, value| "#{name}: #{value}\r\n" },
+                             "Content-Length: #{body.bytesize}\r\nConnection: close\r\n\r\n", body)
+          rescue IOError, SystemCallError
+            # The client went away; the next one is served.
+            nil
+          ensure
+            connection.close
+          end
+
+          def self.read(connection)
+            connection.gets("\r\n")
+            headers = connection.each_line("\r\n").take_while { it != "\r\n" }.to_h do |line|
+              name, value = line.chomp.split(':', 2)
+              [name.to_s.downcase, value.to_s.strip]
+            end
+            [headers, connection.read(Integer(headers.fetch('content-length', '0'))).to_s]
+          end
+          private_class_method :answer, :read
+        end
+        private_constant :Http
 
         # tools are FakeMcpTools; protocol_version is the version the server answers with, by default the one the
         # client asks for.
@@ -54,8 +94,7 @@ module Sleepyshark
         def serve_http
           # TCPServer's signature leaves out the host and port form.
           listener = TCPServer.new('127.0.0.1', 0) # steep:ignore
-          front = Http.new(answer: ->(request) { answer(request) }, session: -> { session }, down: -> { down? })
-          acceptor = Thread.new { front.accept(listener) }
+          acceptor = Thread.new { Http.serve(listener) { |headers, body| reply(headers, body) } }
           begin
             yield "http://127.0.0.1:#{listener.addr[1]}/mcp"
           ensure
@@ -75,12 +114,6 @@ module Sleepyshark
           { 'jsonrpc' => '2.0', 'id' => id, 'error' => { 'code' => -32_601, 'message' => 'Method or tool not found.' } }
         end
 
-        # The current HTTP session's id.
-        def session = @mutex.synchronize { @session }
-
-        # Whether the server went down.
-        def down? = @mutex.synchronize { @down }
-
         def result(method, params)
           case method
           when 'initialize' then initialized(params)
@@ -90,7 +123,12 @@ module Sleepyshark
           end
         end
 
+        # nil, as for an unknown method, unless the client says what the protocol asks of it.
         def initialized(params)
+          client = params['clientInfo']
+          return unless params['capabilities'].is_a?(Hash) && client.is_a?(Hash) &&
+                        client.values_at('name', 'version').all?(String)
+
           { 'protocolVersion' => @protocol_version || params['protocolVersion'],
             'capabilities' => { 'tools' => { 'listChanged' => false } },
             'serverInfo' => { 'name' => 'fake', 'version' => '1.0.0' } }
@@ -114,86 +152,44 @@ module Sleepyshark
           end
         end
 
-        # The HTTP front: reads each request from a connection, and writes the server's answer as Streamable HTTP
-        # does.
-        class Http
-          STATUS = { 200 => 'OK', 202 => 'Accepted', 400 => 'Bad Request', 404 => 'Not Found' }.freeze
+        def session = @mutex.synchronize { @session }
 
-          # The server's answer to a request, its session's id, and whether it is down.
-          def initialize(answer:, session:, down:)
-            @answer = answer
-            @session = session
-            @down = down
-          end
+        def down? = @mutex.synchronize { @down }
 
-          # Answers connections until the listener is closed.
-          def accept(listener)
-            loop { serve(listener.accept) }
-          rescue IOError
-            # The listener was closed: serving is over.
-            nil
-          end
+        # [status, headers, body] for an HTTP request; nil while the server is down.
+        def reply(headers, body)
+          return if down?
 
-          private
+          status, extra, text = handle(headers, JSON.parse(body))
+          # A tool may have made the server go down while it ran.
+          [status, extra, text] unless down?
+        end
 
-          def serve(connection)
-            respond(connection)
-          rescue IOError, SystemCallError
-            # The client went away; the next one is served.
-            nil
-          ensure
-            connection.close
-          end
+        def handle(headers, request)
+          initializing = request['method'] == 'initialize'
+          return [400, {}, ''] unless accepts?(headers) && (initializing || headers.key?('mcp-protocol-version'))
+          return [404, {}, ''] unless initializing || headers['mcp-session-id'] == session
 
-          def respond(connection)
-            headers, body = read(connection)
-            return if @down.call
+          response = answer(request) or return [202, {}, '']
+          content(request['method'], JSON.generate(response))
+        end
 
-            status, extra, text = reply(headers, JSON.parse(body))
-            return if @down.call
+        def accepts?(headers)
+          accept = headers['accept'].to_s
+          accept.include?('application/json') && accept.include?('text/event-stream')
+        end
 
-            connection.write("HTTP/1.1 #{status} #{STATUS[status]}\r\n",
-                             *extra.map { |name, value| "#{name}: #{value}\r\n" },
-                             "Content-Length: #{text.bytesize}\r\nConnection: close\r\n\r\n", text)
-          end
-
-          def read(connection)
-            connection.gets("\r\n")
-            headers = connection.each_line("\r\n").take_while { it != "\r\n" }.to_h do |line|
-              name, value = line.chomp.split(':', 2)
-              [name.to_s.downcase, value.to_s.strip]
-            end
-            [headers, connection.read(Integer(headers.fetch('content-length', '0'))).to_s]
-          end
-
-          # [status, headers, body] for a request.
-          def reply(headers, request)
-            initializing = request['method'] == 'initialize'
-            return [400, {}, ''] unless accepts?(headers) && (initializing || headers.key?('mcp-protocol-version'))
-            return [404, {}, ''] unless initializing || headers['mcp-session-id'] == @session.call
-
-            response = @answer.call(request) or return [202, {}, '']
-            content(request['method'], JSON.generate(response))
-          end
-
-          def accepts?(headers)
-            accept = headers['accept'].to_s
-            accept.include?('application/json') && accept.include?('text/event-stream')
-          end
-
-          def content(method, body)
-            case method
-            when 'initialize'
-              [200, { 'Content-Type' => 'application/json', 'Mcp-Session-Id' => @session.call }, body]
-            when 'tools/call'
-              # The notification's field has no space after the colon, which the event stream format allows.
-              [200, { 'Content-Type' => 'text/event-stream' }, "data:#{NOTIFICATION}\n\ndata: #{body}\n\n"]
-            else
-              [200, { 'Content-Type' => 'application/json' }, body]
-            end
+        def content(method, body)
+          case method
+          when 'initialize'
+            [200, { 'Content-Type' => 'application/json', 'Mcp-Session-Id' => session }, body]
+          when 'tools/call'
+            # The notification's field has no space after the colon, which the event stream format allows.
+            [200, { 'Content-Type' => 'text/event-stream' }, "data:#{NOTIFICATION}\n\ndata: #{body}\n\n"]
+          else
+            [200, { 'Content-Type' => 'application/json' }, body]
           end
         end
-        private_constant :Http
       end
     end
   end

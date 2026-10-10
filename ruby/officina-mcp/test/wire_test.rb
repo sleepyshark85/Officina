@@ -66,6 +66,19 @@ class WireTest < Minitest::Test
     assert_equal 'it sent a message longer than 16 MB', error.message
   end
 
+  # Each byte is searched for a line end once: a 4 MB event in 256-byte chunks reads in about 0.03 s, where searching
+  # the line from its start again for each chunk took 9 s. The bound is far from both.
+  def test_mcp01_a_long_event_in_small_chunks_is_read_in_linear_time
+    response = { 'jsonrpc' => '2.0', 'id' => ID, 'result' => { 'text' => 'x' * (4 * 1024 * 1024) } }
+    stream = "data: #{JSON.generate(response)}\n\n".b
+    chunks = (0...stream.bytesize).step(256).map { stream.byteslice(it, 256) }
+    started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+    answer = Wire.answer(Body.new(chunks), ID, events: true)
+
+    assert_operator Process.clock_gettime(Process::CLOCK_MONOTONIC) - started, :<, 1
+    assert_equal response, answer
+  end
+
   def test_mcp01_any_text_is_no_response
     Pbt.assert do
       Pbt.property(Pbt.printable_string) { |text| assert_nil Wire.response(text) }

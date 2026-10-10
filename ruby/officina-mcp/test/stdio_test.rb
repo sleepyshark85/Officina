@@ -30,7 +30,8 @@ class StdioTest < Minitest::Test
   end
 
   def test_mcp01_requests_from_several_threads_each_get_their_own_response
-    with_client do |client|
+    # The server answers each pair of requests in reverse, so a response handed to any request but its own shows.
+    with_client('reverse') do |client|
       texts = Array.new(8) { |n| "call #{n}" }
       results = texts.map { |text| Thread.new { client.call_tool('echo', { 'text' => text }).text } }.map(&:value)
 
@@ -130,8 +131,8 @@ class StdioTest < Minitest::Test
     Mcp.connect(Mcp::Server.new(name: 'fs', command: [*COMMAND, *arguments], env: WITHOUT_BUNDLER.merge(env)), **)
   end
 
-  def with_client
-    client = connect
+  def with_client(*)
+    client = connect(*)
     yield client
   ensure
     client&.close

@@ -3,6 +3,7 @@ module Sleepyshark
     module Testing
       class FakeMcpServer
         type message = Hash[String, untyped]
+        type reply = [Integer, Hash[String, String], String]
 
         NOTIFICATION: String
 
@@ -12,6 +13,16 @@ module Sleepyshark
         @calls: Array[Array[untyped]]
         @session: String
         @down: bool
+
+        module Http
+          STATUS: Hash[Integer, String]
+
+          def self.serve: (TCPServer listener) { (Hash[String, String] headers, String body) -> reply? } -> void
+
+          def self.answer: (TCPSocket connection) { (Hash[String, String] headers, String body) -> reply? } -> void
+
+          def self.read: (TCPSocket connection) -> [Hash[String, String], String]
+        end
 
         def initialize: (tools: Array[FakeMcpTool], ?protocol_version: String?) -> void
 
@@ -29,45 +40,25 @@ module Sleepyshark
 
         def answer: (message request) -> message?
 
-        def session: () -> String
-
-        def down?: () -> bool
-
         def result: (untyped method, message params) -> message?
 
-        def initialized: (message params) -> message
+        def initialized: (message params) -> message?
 
         def page: (Integer index) -> message
 
         def call: (untyped name, Hash[String, untyped] arguments) -> message?
 
-        class Http
-          type reply = [Integer, Hash[String, String], String]
+        def session: () -> String
 
-          STATUS: Hash[Integer, String]
+        def down?: () -> bool
 
-          @answer: ^(message request) -> message?
-          @session: ^() -> String
-          @down: ^() -> bool
+        def reply: (Hash[String, String] headers, String body) -> reply?
 
-          def initialize: (answer: ^(message request) -> message?, session: ^() -> String, down: ^() -> bool) -> void
+        def handle: (Hash[String, String] headers, message request) -> reply
 
-          def accept: (TCPServer listener) -> void
+        def accepts?: (Hash[String, String] headers) -> bool
 
-          private
-
-          def serve: (TCPSocket connection) -> void
-
-          def respond: (TCPSocket connection) -> void
-
-          def read: (TCPSocket connection) -> [Hash[String, String], String]
-
-          def reply: (Hash[String, String] headers, message request) -> reply
-
-          def accepts?: (Hash[String, String] headers) -> bool
-
-          def content: (untyped method, String body) -> reply
-        end
+        def content: (untyped method, String body) -> reply
       end
     end
   end
