@@ -6,8 +6,8 @@ module Sleepyshark
     # the tools it asked for, and decides the result.
     class RunEngine
       MAX_MODEL_CALLS = 25
-      PREFIX_MISMATCH = "The agent's tools, instructions or model settings differ from those the conversation was " \
-                        'started with; start a new conversation'
+      PREFIX_MISMATCH = "The agent's tools, instructions, output type or model settings differ from those the " \
+                        'conversation was started with; start a new conversation'
 
       # @param trace [RunTrace] the run's, whose span has started
       # @param budget [Budget, nil]

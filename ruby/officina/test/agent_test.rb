@@ -11,8 +11,8 @@ class AgentTest < Minitest::Test
 
   Model = Testing::ScriptedModel
   SHARED = File.expand_path('../../../testdata', __dir__)
-  PREFIX_MISMATCH = "The agent's tools, instructions or model settings differ from those the conversation was " \
-                    'started with; start a new conversation'
+  PREFIX_MISMATCH = "The agent's tools, instructions, output type or model settings differ from those the " \
+                    'conversation was started with; start a new conversation'
 
   def test_gen02_an_agent_needs_only_a_model_and_instructions
     agent = Agent.new(model: Model.new(Model.text('Hello')), instructions: 'You help.')
@@ -69,6 +69,32 @@ class AgentTest < Minitest::Test
                       tools: tools.reverse)
 
     assert_equal prefix['fingerprint'], agent.fingerprint
+  end
+
+  def test_ctx01_out01_the_fingerprint_with_an_output_schema_is_the_one_every_implementation_computes
+    prefix = JSON.parse(File.read(File.join(SHARED, 'session', 'prefix.json')))
+    shared = prefix['output'].first
+    tools = prefix['tools'].map { tool(it['name'], description: it['description'], schema: it['inputSchema']) }
+    output = Input.define do
+      string :title, "A title «short», with <b>&amp; 'quotes' + more."
+      integer :copies, minimum: 0
+      array :changes, of: :string, optional: true
+      string :note, nullable: true
+    end
+
+    agent = Agent.new(model: Model.new(settings: prefix['settings']), instructions: prefix['instructions'], tools:,
+                      output:)
+
+    assert_equal shared['schema'], output.schema.to_s
+    assert_equal shared['fingerprint'], agent.fingerprint
+  end
+
+  def test_ctx04_out01_a_changed_output_type_fails_the_run_with_a_prefix_mismatch
+    model = Model.new
+    output = Input.define { string :title }
+    changed = Agent.new(model:, instructions: 'You help.', tools: [tool('search')], output:, clock: FakeClock.new)
+
+    assert_prefix_mismatch changed, model
   end
 
   def test_ctx04_a_changed_tool_fails_the_run_with_a_prefix_mismatch
