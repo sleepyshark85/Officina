@@ -34,6 +34,7 @@ Assistant's tests (from Ruby S06) need Docker on Linux and skip elsewhere. From 
 bundle install
 bundle exec rbs collection install   # the gems' signatures Steep reads, once and after Gemfile.lock changes
 bundle exec rake                     # rubocop, steep, then the tests
+bundle exec rake steep               # Steep alone; fails also when its log has a FATAL or ERROR line
 bundle exec rake test                # the tests alone: one process, one test at a time, random order
 ```
 
