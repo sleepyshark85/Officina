@@ -7,14 +7,15 @@ is cited with its implementation, such as `Go S03` or `Ruby S03`; G1…G17 and R
 offline tests. A slice's PR is stacked on the previous one until that one is merged.
 
 **Done means, for every slice:** the implementation's gates green (its build, format, lint and test checks, listed
-in [`docs/implementations/`](../implementations/)), the tests offline, fast and deterministic; every required CI check
-green, the other implementations' included; the core within its line budget (principle 11); an Opus review approved
-against [`docs/conventions.md`](../conventions.md) and the implementation's language rules; then merged by the lead.
+in [`docs/implementations/`](../implementations/)), the tests offline, fast and deterministic; every
+[required CI check](../conventions.md#required-checks) green, the other implementations' included; the core within its
+line budget (principle 11); an Opus review approved against [`docs/conventions.md`](../conventions.md) and the
+implementation's language rules; then merged by the lead.
 From S06 on, each APP requirement with a console flow that a slice delivers has its offline end-to-end test (TEST-09).
 Each implementation maps requirement IDs to its tests in its own traceability page.
 
-**The source is the requirements and the architecture**, not another implementation's code. Read it to learn what a
-requirement meant in an edge case; never port its shape.
+**The source is the requirements and the architecture**, not another implementation's code: port the behaviour, never
+the shape ([conventions](../conventions.md#how-we-work)).
 
 ## Slices
 
@@ -52,7 +53,7 @@ Every implementation after the first also meets these, so the implementations st
 |---|---|
 | Every slice | The same layers, run exits, tool-call rules and runtime model (ARCHITECTURE §3, §5, §12); the implementation's design notes map each runtime-model row and record the slice's choices |
 | S02 | The spike doc also records, per feature, what the SDK exposes typed and what only as raw JSON |
-| S04 | Golden request data lives in a top-level `testdata/` that every implementation reads and none rewrites: .NET's request layouts (`tests/Sleepyshark.Officina.Claude.Tests/Fixtures/`) and conversation JSON move there in Go S04. Stored blocks and messages compare byte for byte in the canonical form (compact, `<` `>` `&` escaped): a stored block from either implementation is replayed byte for byte. The typed parts of a request compare as parsed JSON, as each SDK writes its own key order and escapes |
+| S04 | Golden request data lives in the shared top-level `testdata/` ([read only](../conventions.md#tests)): .NET's request layouts (`tests/Sleepyshark.Officina.Claude.Tests/Fixtures/`) and conversation JSON move there in Go S04. Stored blocks and messages compare byte for byte in the canonical form (compact, `<` `>` `&` escaped): a stored block from either implementation is replayed byte for byte. The typed parts of a request compare as parsed JSON, as each SDK writes its own key order and escapes |
 | S07 | The same span names, attributes and metrics, so one dashboard reads every implementation |
 | S06, S08 | The same compose file, SQL schema and seed; a session saved by one implementation resumes in another with the same prefix and cache reads |
 
