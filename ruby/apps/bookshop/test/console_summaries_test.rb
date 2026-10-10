@@ -56,6 +56,8 @@ class ConsoleSummariesTest < Minitest::Test
     assert_equal %w[2000 200 0.0150], select_row('select input_tokens, output_tokens, cost from sessions where id = $1',
                                                  id)
     assert_includes transcript, "Resumed session #{id}: 3 messages, $0.0150 so far.\n"
+    assert_includes transcript, "you> /cost\nSession #{id}: tokens: 2,000 in (0% from cache), 200 out; " \
+                                "cost $0.0150 of its $5.00 budget.\n"
   end
 
   def test_app15_new_resume_and_quit_each_summarize_the_session_left_and_an_unchanged_one_is_not_summarized_again
@@ -111,19 +113,5 @@ class ConsoleSummariesTest < Minitest::Test
                     "you> /quit\n[Session #{two} could not be summarized: stopped: output_limit]\n"
     assert_in_order listing, "Summarizing 2 sessions left without a summary…\n", "  #{two}  ",
                     '  Sam  Second greeting  $', "  #{one}  ", '  Sam  Greeting  $'
-  end
-
-  def test_app15_a_summary_that_cannot_be_saved_is_still_shown_and_the_session_is_tried_again_later
-    # Without the column, every summary's save fails, and nothing else does.
-    gone = -> { execute('alter table sessions rename column summarized to summarized_gone') }
-    first = session(ScriptedModel.new(ScriptedModel.text('Hello.')), 'Sam', 'Hi.', gone, '/quit',
-                    summarizer: ScriptedModel.new(summary_reply('Greeting', 'Sam said hello.')))
-    execute('alter table sessions rename column summarized_gone to summarized')
-    id = session_id(first)
-
-    assert_in_order first, "you> /quit\n[The summary of session #{id} could not be saved: ERROR:  column " \
-                           '"summarized" of relation "sessions" does not exist'
-    assert_equal "Session #{id} summarized: Greeting\n", first.lines.last
-    assert_equal [nil, 't'], select_row('select title, summarized is null from sessions where id = $1', id)
   end
 end

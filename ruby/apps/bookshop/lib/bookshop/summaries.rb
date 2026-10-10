@@ -14,10 +14,12 @@ module Bookshop
     # @param summarizer [Summarizer, nil]
     # @param store [SessionStore] where the summaries are kept
     # @param terminal [Terminal] where they are said
-    def initialize(summarizer:, store:, terminal:)
+    # @param telemetry [Telemetry] which logs a summary that could not be saved
+    def initialize(summarizer:, store:, terminal:, telemetry:)
       @summarizer = summarizer
       @store = store
       @terminal = terminal
+      @telemetry = telemetry
       # The sessions whose summary failed in this console, which listings do not try again.
       @failed = Set.new
     end
@@ -38,7 +40,7 @@ module Bookshop
     # @param listed [Array<SessionListing>]
     # @param current [Session] the session in use
     # @return [Array<SessionListing>]
-    def fill(listed, current)
+    def summarize_left(listed, current)
       return listed unless @summarizer
 
       left = listed.select { left_without_summary?(it, current) }
@@ -100,6 +102,7 @@ module Bookshop
       @store.save_summary(id, summary, usage: result.usage, cost: result.cost)
       summary
     rescue PG::Error => e
+      @telemetry.summary_not_saved(id, e)
       @terminal.write_line("[The summary of session #{id} could not be saved: #{e.message.strip}]")
       summary
     end

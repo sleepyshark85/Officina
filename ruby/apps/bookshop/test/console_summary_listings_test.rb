@@ -19,17 +19,29 @@ class ConsoleSummaryListingsTest < Minitest::Test
     end
     id = select_row('select id from sessions').first
     summaries = ScriptedModel.new(summary_reply('Restock of book 320 not confirmed',
-                                                'The session ended before approval.'))
+                                                'The session ended before approval.', 'None made'))
 
     transcript = session(ScriptedModel.new, 'Sam', '/sessions', '/sessions', '/quit', summarizer: summaries)
 
     assert_in_order transcript, "you> /sessions\nSummarizing 1 session left without a summary…\n",
                     "  #{id}  ", '  Sam  Restock of book 320 not confirmed  $',
-                    "    The session ended before approval.\n",
+                    "    The session ended before approval.\n    Changes: None made\n",
                     "you> /sessions\nSessions, most recent first:\n", '  Sam  Restock of book 320 not confirmed  $'
     summaries.requests => [request]
 
     assert_includes request.messages.first.text, "Tool call restock_book #{RESTOCK}\n"
+  end
+
+  def test_app15_a_listing_never_summarizes_the_session_in_use_which_is_summarized_once_as_it_is_left
+    summaries = ScriptedModel.new(summary_reply('Greeting', 'Sam said hello.'))
+
+    transcript = session(ScriptedModel.new(ScriptedModel.text('Hello.')), 'Sam', 'Hi.', '/sessions', '/quit',
+                         summarizer: summaries)
+
+    refute_includes transcript, 'Summarizing'
+    assert_match(/\* .*  Sam  \(no title yet\)  \$/, transcript)
+    assert_match(/^Session \h{12} summarized: Greeting\n\z/, transcript)
+    assert_equal 1, summaries.requests.size
   end
 
   def test_app15_a_listing_summarizes_a_few_sessions_at_a_time_and_a_failed_summary_keeps_no_title
@@ -77,11 +89,18 @@ class ConsoleSummaryListingsTest < Minitest::Test
   def test_app15_a_session_with_nothing_to_summarize_says_so_and_is_not_tried_again
     left_without_summary('empty', '{"id":"empty","messages":[]}', minutes_ago: 0)
     summaries = ScriptedModel.new
+    telemetry = MemoryTelemetry.new
+    logged = []
 
-    transcript = session(ScriptedModel.new, 'Sam', '/sessions', '/sessions', '/quit', summarizer: summaries)
+    transcript = session(ScriptedModel.new, 'Sam', '/sessions', -> { logged.concat(telemetry.logs) }, '/sessions',
+                         '/quit', summarizer: summaries, telemetry:)
 
     assert_in_order transcript, "[Session empty could not be summarized: A run needs a message]\n",
                     '  empty  ', '  Sam  (no title yet)  $'
+    warnings = logged.map { it.to_h.values_at(:severity_text, :body) }
+
+    assert_equal [['WARN', 'Session empty could not be summarized: A run needs a message']], warnings
+    refute_equal OpenTelemetry::Trace::INVALID_SPAN_ID, logged.first.span_id
     assert_equal 1, transcript.scan('Summarizing').size
     assert_empty summaries.requests
   end

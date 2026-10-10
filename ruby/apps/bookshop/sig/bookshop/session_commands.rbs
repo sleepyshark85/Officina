@@ -10,7 +10,7 @@ module Bookshop
     @summaries: Summaries
 
     def initialize: (agent: Sleepyshark::Officina::Agent, store: SessionStore, clock: ^() -> Time, budgets: Budgets,
-                     terminal: Terminal, summarizer: Summarizer?) -> void
+                     terminal: Terminal, summarizer: Summarizer?, telemetry: Telemetry) -> void
     def start: (String staff_member, ?announced: String) -> Session
     def start_new: (Session left) -> Session
     def leave: (Session session) -> void

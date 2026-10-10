@@ -63,7 +63,18 @@ module Bookshop
     # @param session [String] the session's id
     # @return [Sleepyshark::Officina::Completed, Sleepyshark::Officina::Stopped, Sleepyshark::Officina::Failed] what
     #   the block returns
-    def summary(session, &run) = traced('summary', run) { log_summary(session, it) }
+    def summary(session, &) = traced('summary', -> { refusal_logged(session, &) }) { log_summary(session, it) }
+
+    # Logs, as a warning in a span of its own, a summary the database failed to store.
+    #
+    # @param session [String] the session's id
+    # @param error [StandardError] what the database raised
+    # @return [void]
+    def summary_not_saved(session, error)
+      @traces.tracer(SCOPE).in_span('summary.save') do
+        @logger.warn("Session #{session} summary not saved: #{error.message.strip}")
+      end
+    end
 
     # Sends what is left and stops exporting. The three providers shut down at once, and closing returns once they
     # have or the timeout has passed, whichever is first; a shutdown still waiting on its exporter ends with the
@@ -85,6 +96,14 @@ module Bookshop
     # the block logs is in its trace.
     def traced(name, run)
       @traces.tracer(SCOPE).in_span(name) { run.call.tap { yield it } }
+    end
+
+    # Runs the block, and logs a run the core refuses, which is raised and not returned, before it goes on.
+    def refusal_logged(session)
+      yield
+    rescue Officina::Error => e
+      @logger.warn("Session #{session} could not be summarized: #{e.message}")
+      raise
     end
 
     def log(conversation, result)

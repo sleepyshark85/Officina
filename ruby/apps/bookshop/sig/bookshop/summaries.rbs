@@ -6,11 +6,12 @@ module Bookshop
     @summarizer: Summarizer?
     @store: SessionStore
     @terminal: Terminal
+    @telemetry: Telemetry
     @failed: Set[String]
 
-    def initialize: (summarizer: Summarizer?, store: SessionStore, terminal: Terminal) -> void
+    def initialize: (summarizer: Summarizer?, store: SessionStore, terminal: Terminal, telemetry: Telemetry) -> void
     def leave: (Session session) -> void
-    def fill: (Array[SessionListing] listed, Session current) -> Array[SessionListing]
+    def summarize_left: (Array[SessionListing] listed, Session current) -> Array[SessionListing]
 
     private
 

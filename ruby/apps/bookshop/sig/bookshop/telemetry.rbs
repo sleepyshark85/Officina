@@ -22,6 +22,7 @@ module Bookshop
                      logs: OpenTelemetry::SDK::Logs::LogRecordProcessor) -> void
     def reply: (String conversation) { () -> Sleepyshark::Officina::result } -> Sleepyshark::Officina::result
     def summary: (String session) { () -> Sleepyshark::Officina::result } -> Sleepyshark::Officina::result
+    def summary_not_saved: (String session, StandardError error) -> void
     def close: (?timeout: Numeric) -> void
 
     private
@@ -29,6 +30,7 @@ module Bookshop
     def now: () -> Float
     def traced: (String name, ^() -> Sleepyshark::Officina::result run)
                 { (Sleepyshark::Officina::result result) -> void } -> Sleepyshark::Officina::result
+    def refusal_logged: (String session) { () -> Sleepyshark::Officina::result } -> Sleepyshark::Officina::result
     def log: (String conversation, Sleepyshark::Officina::result result) -> void
     def log_summary: (String session, Sleepyshark::Officina::result result) -> void
     def ended: (String conversation, String how, Sleepyshark::Officina::Usage usage) -> void

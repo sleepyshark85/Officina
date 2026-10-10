@@ -36,7 +36,7 @@ module Bookshop
       @approvals = approvals
       @budgets = budgets
       @terminal = Terminal.new(input:, output:)
-      @sessions = SessionCommands.new(agent:, store:, clock:, budgets:, terminal: @terminal, summarizer:)
+      @sessions = SessionCommands.new(agent:, store:, clock:, budgets:, terminal: @terminal, summarizer:, telemetry:)
       # Ending the input ends the session, as its end does.
       @interrupts = Interrupts.new(idle: -> { @terminal.end_input })
     end

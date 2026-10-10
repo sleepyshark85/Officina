@@ -13,13 +13,14 @@ module Bookshop
     # @param budgets [Budgets] which /cost shows
     # @param terminal [Terminal] where the commands answer
     # @param summarizer [Summarizer, nil] which summarizes the sessions left; nil for none
-    def initialize(agent:, store:, clock:, budgets:, terminal:, summarizer:)
+    # @param telemetry [Telemetry] which logs a summary that could not be saved
+    def initialize(agent:, store:, clock:, budgets:, terminal:, summarizer:, telemetry:)
       @agent = agent
       @store = store
       @clock = clock
       @budgets = budgets
       @terminal = terminal
-      @summaries = Summaries.new(summarizer:, store:, terminal:)
+      @summaries = Summaries.new(summarizer:, store:, terminal:, telemetry:)
       freeze
     end
 
@@ -52,7 +53,7 @@ module Bookshop
       listed = @store.list(LISTED)
       return @terminal.write_line('No sessions yet.') if listed.empty?
 
-      listed = @summaries.fill(listed, current)
+      listed = @summaries.summarize_left(listed, current)
       @terminal.write_line('Sessions, most recent first:')
       listed.each { show(it, current) }
     rescue PG::Error => e
