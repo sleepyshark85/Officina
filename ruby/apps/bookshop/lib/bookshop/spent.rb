@@ -17,21 +17,21 @@ module Bookshop
     # The amount to four decimals, such as 0.0123.
     #
     # @param amount [BigDecimal] US dollars
-    def self.dollars(amount) = decimals(amount, 4)
+    def self.dollars(amount)
+      whole, fraction = amount.round(4, half: :up).to_s('F').split('.')
+      "#{whole}.#{fraction.to_s.ljust(4, '0')}"
+    end
 
     # A budget with two to four decimals, such as 5.00 or 0.125.
     #
     # @param amount [BigDecimal] US dollars
-    def self.budget(amount) = decimals(amount, 4).sub(/(\.\d\d\d?)0+\z/, '\1')
+    def self.budget(amount)
+      whole, fraction = dollars(amount).split('.')
+      "#{whole}.#{fraction.to_s.sub(/0+\z/, '').ljust(2, '0')}"
+    end
 
     # The count, not negative, with its thousands separated by commas, such as 1,000.
     def self.thousands(count) = count.to_s.gsub(/\B(?=(\d{3})+\z)/, ',')
-
-    def self.decimals(amount, places)
-      whole, fraction = amount.round(places, half: :up).to_s('F').split('.')
-      "#{whole}.#{fraction.to_s.ljust(places, '0')}"
-    end
-    private_class_method :decimals
   end
   private_constant :Spent
 end

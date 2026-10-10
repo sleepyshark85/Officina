@@ -4,6 +4,5 @@ module Bookshop
     def self.dollars: (BigDecimal amount) -> String
     def self.budget: (BigDecimal amount) -> String
     def self.thousands: (Integer count) -> String
-    def self.decimals: (BigDecimal amount, Integer places) -> String
   end
 end

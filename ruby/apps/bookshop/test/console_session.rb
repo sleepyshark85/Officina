@@ -132,6 +132,14 @@ module ConsoleSession
     connection&.close
   end
 
+  # The first row of a query of the test's own, outside the application, as text.
+  def select_row(sql, *params)
+    connection = PG.connect(database_url)
+    connection.exec_params(sql, params).values.first
+  ensure
+    connection&.close
+  end
+
   def assert_in_order(transcript, *parts)
     parts.reduce(0) do |at, part|
       found = transcript.index(part, at)
