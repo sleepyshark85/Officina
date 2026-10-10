@@ -13,6 +13,11 @@ written, and this page wins for what the code must do.
   is up to date and the review threads are resolved; the owner has delegated that go-ahead.
   Branches: `slice/<id>-<slug>`, `docs/<topic>`, or `fix/`, `refactor/`, `chore/`, `test/` or `feature/` and a slug.
   Retarget a stacked PR before deleting the branch it is based on (deleting a base closes the PR).
+- **Each implementation's CI runs only when the pull request changes it**: `.github/changes.py` says what belongs to
+  which (Go's and Ruby's folders, spikes and workflows; the shared `testdata/` to all; the rest to .NET). The other
+  implementations' jobs are skipped, which their required checks count as passing; never add a path filter, as a
+  required check that never reports blocks the merge. A job is skipped only when the script says false, so a failed
+  detector runs everything rather than passing it untested.
 - **Claude Code hooks enforce the mechanical rules** (`.claude/settings.json`, scripts in `.claude/hooks/`): no push
   to `main`, no commit on `main`, branch prefixes, and each implementation's format, build and test checks. Stage
   files in their own command before `git commit` (no `add` in the same line, no `commit -a`): the hook runs before the

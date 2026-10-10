@@ -2,8 +2,8 @@ name: Go
 
 # The Go implementation in go/: the suite offline on Linux and Windows (TEST-03), the quality gates and mutation
 # testing. It runs on every pull request, with no path filter, so its required checks always report; when a pull
-# request changes nothing under go/ (nor this workflow), every job after `changes` is skipped, which a required check
-# counts as passing.
+# request changes nothing of Go (.github/changes.py says what is), every job after `changes` is skipped, which a
+# required check counts as passing.
 on:
   push:
     branches: [main]
@@ -37,23 +37,15 @@ jobs:
       - name: Diff
         id: diff
         working-directory: .
-        env:
-          EVENT: ${{ github.event_name }}
-          BASE_REF: ${{ github.base_ref }}
-        run: |
-          if [ "$EVENT" != pull_request ] || ! git diff --quiet "origin/$BASE_REF...HEAD" -- go testdata .github/workflows/go.yml; then
-            echo "go=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "Nothing under go/ or testdata/ changed; the Go jobs are skipped."
-            echo "go=false" >> "$GITHUB_OUTPUT"
-          fi
+        run: python3 .github/changes.py go >> "$GITHUB_OUTPUT"
 
   # Two jobs rather than a matrix: a skipped matrix job reports its name unexpanded, and the required checks need
   # these names exactly.
   ubuntu:
     name: go-ubuntu
     needs: changes
-    if: needs.changes.outputs.go == 'true'
+    # Skipped only when the detector says false: if it fails, its output is empty and the jobs run.
+    if: ${{ !cancelled() && needs.changes.outputs.go != 'false' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps: &test
@@ -77,7 +69,8 @@ jobs:
   windows:
     name: go-windows
     needs: changes
-    if: needs.changes.outputs.go == 'true'
+    # Skipped only when the detector says false: if it fails, its output is empty and the jobs run.
+    if: ${{ !cancelled() && needs.changes.outputs.go != 'false' }}
     runs-on: windows-latest
     timeout-minutes: 15
     steps: *test
@@ -85,7 +78,8 @@ jobs:
   quality:
     name: go-quality
     needs: changes
-    if: needs.changes.outputs.go == 'true'
+    # Skipped only when the detector says false: if it fails, its output is empty and the jobs run.
+    if: ${{ !cancelled() && needs.changes.outputs.go != 'false' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -119,7 +113,8 @@ jobs:
   mutation:
     name: go-mutation
     needs: changes
-    if: needs.changes.outputs.go == 'true'
+    # Skipped only when the detector says false: if it fails, its output is empty and the jobs run.
+    if: ${{ !cancelled() && needs.changes.outputs.go != 'false' }}
     runs-on: ubuntu-latest
     # About 26 minutes usually; a slow runner has taken 55, so leave room before it is cancelled.
     timeout-minutes: 90

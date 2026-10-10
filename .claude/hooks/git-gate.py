@@ -57,6 +57,15 @@ def is_go(path):
     return path.startswith("go/")
 
 
+def is_ruby(path):
+    return path.startswith("ruby/")
+
+
+def is_dotnet(path):
+    """Whether the path is .NET's: anything outside the other implementations' folders."""
+    return not is_go(path) and not is_ruby(path)
+
+
 def is_shared(path):
     """Whether the path is test data every implementation reads, which both test suites must see."""
     return path.startswith("testdata/")
@@ -83,10 +92,10 @@ def go_env():
 
 
 def before_commit(here):
-    """Each implementation's format check and build, when the commit stages its code: .NET's outside go/, Go's under
-    it. They read the working tree, so every staged code file must have no unstaged changes."""
+    """Each implementation's format check and build, when the commit stages its code: .NET's outside go/ and ruby/,
+    Go's under go/. They read the working tree, so every staged code file must have no unstaged changes."""
     staged = git(here, "diff", "--cached", "--name-only").splitlines()
-    dotnet = [path for path in staged if CODE.search(path) and not is_go(path)]
+    dotnet = [path for path in staged if CODE.search(path) and is_dotnet(path)]
     go = [path for path in staged if GO_CODE.search(path) and is_go(path)]
     if not dotnet and not go:
         return
@@ -111,13 +120,13 @@ def before_commit(here):
 
 
 def before_push(here, branch):
-    """The tests of each implementation the push's commits change beyond docs: .NET's outside go/, Go's under it, and
-    both for the shared testdata/."""
+    """The tests of each implementation the push's commits change beyond docs: .NET's outside go/ and ruby/, Go's
+    under go/, and both for the shared testdata/. Ruby's checks come with Ruby S01."""
     base = git(here, "merge-base", "origin/main", branch or "HEAD")
     changed = git(here, "diff", "--no-renames", "--name-only", base, branch or "HEAD").splitlines() if base else ["?", "go/?"]
     code = [path for path in changed if not DOCS.search(path)]
     root = git(here, "rev-parse", "--show-toplevel")
-    if any(not is_go(path) for path in code):
+    if any(is_dotnet(path) for path in code):
         require_dotnet()
         check(root, ["dotnet", "test", "--configuration", "Release", "--nologo",
               "--verbosity", "quiet", "--blame-hang-timeout", "2m"], "Blocked: the tests fail; fix them, then push again.")

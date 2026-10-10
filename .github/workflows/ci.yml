@@ -1,6 +1,9 @@
 name: CI
 
-# TEST-03: the suite runs offline, on Linux and Windows. Warnings are errors (Directory.Build.props).
+# TEST-03: the suite runs offline, on Linux and Windows. Warnings are errors (Directory.Build.props). It runs on every
+# pull request, with no path filter, so its required checks always report; when a pull request changes only another
+# implementation (go/, ruby/, their spikes and workflows), every job after `changes` is skipped, which a required check
+# counts as passing.
 on:
   push:
     branches: [main]
@@ -14,13 +17,30 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build-and-test:
-    name: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest]
-    runs-on: ${{ matrix.os }}
+  changes:
+    name: dotnet-changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      dotnet: ${{ steps.diff.outputs.dotnet }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # Comparing with the base branch needs its history.
+          fetch-depth: 0
+
+      - name: Diff
+        id: diff
+        run: python3 .github/changes.py dotnet >> "$GITHUB_OUTPUT"
+
+  # Two jobs rather than a matrix: a skipped matrix job reports its name unexpanded, and the required checks need
+  # these names exactly. Linux runs every test and measures coverage; Windows skips those that need Docker.
+  ubuntu:
+    name: ubuntu-latest
+    needs: changes
+    # Skipped only when the detector says false: if it fails, its output is empty and the jobs run.
+    if: ${{ !cancelled() && needs.changes.outputs.dotnet != 'false' }}
+    runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
       DOTNET_NOLOGO: true
@@ -42,26 +62,54 @@ jobs:
         run: dotnet build --no-restore --configuration Release
 
       - name: Test
-        # A hanging test fails the run with a dump instead of stalling CI. Linux, which runs every test, also measures
-        # coverage of Officina's own assemblies (coverage.runsettings).
+        # A hanging test fails the run with a dump instead of stalling CI. Linux also measures coverage of Officina's
+        # own assemblies (coverage.runsettings).
         run: >-
           dotnet test --no-build --configuration Release --blame-hang-timeout 2m
-          ${{ matrix.os == 'ubuntu-latest' && '--collect "Code Coverage" --settings coverage.runsettings --results-directory coverage' || '' }}
+          --collect "Code Coverage" --settings coverage.runsettings --results-directory coverage
 
       - name: Coverage summary
-        if: matrix.os == 'ubuntu-latest'
         run: python3 .github/coverage-summary.py coverage >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload coverage
-        if: matrix.os == 'ubuntu-latest'
         uses: actions/upload-artifact@v7
         with:
           name: coverage-report
           path: coverage/**/*.cobertura.xml
 
+  windows:
+    name: windows-latest
+    needs: changes
+    # Skipped only when the detector says false: if it fails, its output is empty and the jobs run.
+    if: ${{ !cancelled() && needs.changes.outputs.dotnet != 'false' }}
+    runs-on: windows-latest
+    timeout-minutes: 15
+    env:
+      DOTNET_NOLOGO: true
+      TESTCONTAINERS_RYUK_DISABLED: true
+      DOTNET_CLI_TELEMETRY_OPTOUT: true
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build --no-restore --configuration Release
+
+      - name: Test
+        run: dotnet test --no-build --configuration Release --blame-hang-timeout 2m
+
   # Checks that need one OS only: formatting and known-vulnerable packages.
   quality:
     name: quality
+    needs: changes
+    # Skipped only when the detector says false: if it fails, its output is empty and the jobs run.
+    if: ${{ !cancelled() && needs.changes.outputs.dotnet != 'false' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:

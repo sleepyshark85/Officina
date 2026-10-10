@@ -3,6 +3,7 @@ name: Mutation
 # Stryker.NET on the library packages, each set up by its stryker-config.json. A pull request mutates only the files it
 # changed and fails below the package's break threshold; the weekly and manual runs mutate everything and only report.
 # The test runner is Stryker's Microsoft Testing Platform one, as the default runner does not reach xunit v3's tests.
+# A pull request that changes only another implementation skips it, as ci.yml does.
 on:
   pull_request:
   schedule:
@@ -17,8 +18,26 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  changes:
+    name: dotnet-mutation-changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      dotnet: ${{ steps.diff.outputs.dotnet }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Diff
+        id: diff
+        run: python3 .github/changes.py dotnet >> "$GITHUB_OUTPUT"
+
   mutation:
     name: mutation
+    needs: changes
+    # Skipped only when the detector says false: if it fails, its output is empty and the jobs run.
+    if: ${{ !cancelled() && needs.changes.outputs.dotnet != 'false' }}
     runs-on: ubuntu-latest
     timeout-minutes: 90
     env:
