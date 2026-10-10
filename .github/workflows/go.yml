@@ -121,7 +121,8 @@ jobs:
     needs: changes
     if: needs.changes.outputs.go == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    # About 26 minutes usually; a slow runner has taken 55, so leave room before it is cancelled.
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v7
         with:
