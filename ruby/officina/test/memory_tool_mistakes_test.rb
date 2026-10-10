@@ -30,9 +30,24 @@ class MemoryToolMistakesTest < Minitest::Test
     end
   end
 
+  def test_mem01_a_str_replace_on_the_largest_file_names_the_line_of_each_occurrence_in_well_under_a_second
+    each_store do |store|
+      store.write('sam', 'a.md', "e#{'x' * 48}\n" * 1000)
+      started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+
+      result, = run_memory(store, 'sam', { command: 'str_replace', path: '/memories/a.md', old_str: 'e' })
+
+      assert_operator Process.clock_gettime(Process::CLOCK_MONOTONIC) - started, :<, 0.5
+      assert_equal 'No replacement was performed. Multiple occurrences of old_str `e` in lines: ' \
+                   "#{(1..1000).to_a.join(', ')}. Please ensure it is unique", result.content
+    end
+  end
+
   MISTAKES = {
     { command: 'str_replace', path: '/memories/a.md', old_str: 'x', new_str: 'y' } =>
       'No replacement was performed. Multiple occurrences of old_str `x` in lines: 1, 2. Please ensure it is unique',
+    { command: 'str_replace', path: '/memories/a.md', old_str: "\n" } =>
+      "No replacement was performed. Multiple occurrences of old_str `\n` in lines: 1, 2. Please ensure it is unique",
     { command: 'str_replace', path: '/memories/a.md', old_str: 'z', new_str: 'y' } =>
       'No replacement was performed, old_str `z` did not appear verbatim in /memories/a.md.',
     { command: 'str_replace', path: '/memories/a.md' } =>

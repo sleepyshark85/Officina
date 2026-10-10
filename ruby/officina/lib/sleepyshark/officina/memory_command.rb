@@ -71,14 +71,14 @@ module Sleepyshark
         in [start] then replace(text, start, old)
         else
           failure("No replacement was performed. Multiple occurrences of old_str `#{old}` in lines: " \
-                  "#{starts.map { MemoryView.line_of(text, it) }.uniq.join(', ')}. Please ensure it is unique")
+                  "#{MemoryView.lines_at(text, starts).uniq.join(', ')}. Please ensure it is unique")
         end
       end
 
       def replace(text, start, old)
         new_text = @input['new_str'] || ''
         edited = "#{text[0, start]}#{new_text}#{text[(start + old.length)..]}"
-        write(edited) || MemoryView.snippet(@path, edited, MemoryView.line_of(text, start), new_text.count("\n"))
+        write(edited) || MemoryView.snippet(@path, edited, start, new_text.count("\n"))
       end
 
       def insert

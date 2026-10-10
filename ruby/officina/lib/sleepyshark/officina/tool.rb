@@ -29,8 +29,8 @@ module Sleepyshark
       # @param needs_approval [Boolean] whether the agent's approver must approve each call before it runs
       # @yieldparam input [Data, Object] the call's input, valid against the schema
       # @yieldparam cancel [Cancellation] the run's, to stop at the next check once the host cancels
-      # @yieldparam memory_scope [String, nil] whose memory the run sees, as the host named it. A block may leave it
-      #   out; a lambda gets it only when it takes a third parameter, so a lambda of (input, cancel) alone still works
+      # @yieldparam memory_scope [String, nil] whose memory the run sees, as the host named it. The handler is called
+      #   with all three: a block may leave the scope out, and a lambda takes it
       # @yieldreturn [String, ToolFailure, Object] the result for the model: a String as it is, a ToolFailure as an
       #   error result with its message as written, anything else as JSON.generate writes it. An exception is an error
       #   result saying the tool failed, with its message; the run goes on either way.
@@ -42,7 +42,7 @@ module Sleepyshark
         @description = -description
         @kind = kind
         @needs_approval = needs_approval
-        @handler = with_scope(handler)
+        @handler = handler
         freeze
       end
 
@@ -84,14 +84,6 @@ module Sleepyshark
       end
 
       private
-
-      # The handler, called as (input, cancel, memory_scope): one that cannot take a third positional parameter is
-      # wrapped in one that leaves the scope out, which a lambda needs and a block does not mind.
-      def with_scope(handler)
-        kinds = handler.parameters.map(&:first)
-        takes_scope = kinds.include?(:rest) || kinds.count { %i[req opt].include?(it) } >= 3
-        takes_scope ? handler : ->(input, cancel, _memory_scope) { handler.call(input, cancel) }
-      end
 
       def check(name, kind, handler)
         raise Error, 'A tool needs a name' unless name.match?(/\S/)

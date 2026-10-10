@@ -3,6 +3,7 @@ module Sleepyshark
     class MemoryTool < Tool
       DESCRIPTION: String
       SCHEMA: Schema
+      UNDER_ROOT: String
 
       def initialize: (_MemoryStore store, ?needs_approval: bool) -> void
 

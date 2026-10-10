@@ -7,17 +7,19 @@ module Sleepyshark
 
       def self.listing: (String shown, Array[MemoryFile] files, String at) -> String
 
-      def self.snippet: (String path, String text, Integer line, Integer added) -> String
+      def self.snippet: (String path, String text, Integer start, Integer added) -> String
 
       def self.lines: (String text) -> Array[String]
 
-      def self.line_of: (String text, Integer index) -> Integer
+      def self.lines_at: (String text, Array[Integer] indexes) -> Array[Integer]
 
       def self.occurrences: (String text, String old) -> Array[Integer]
 
       def self.numbered: (Array[String] lines, Integer from, Integer to) -> String
 
       private
+
+      def self.line_at: (String text, Integer index) -> Integer
 
       def self.sizes: (Array[MemoryFile] files, String at) -> Hash[String, Integer]
 

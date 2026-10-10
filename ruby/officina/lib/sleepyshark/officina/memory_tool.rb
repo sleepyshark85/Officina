@@ -26,7 +26,9 @@ module Sleepyshark
         "old_str":{"type":"string"},"new_str":{"type":"string"},"insert_line":{"type":"integer"},"insert_text":{"type":"string"},
         "old_path":{"type":"string"},"new_path":{"type":"string"}},"required":["command"]}
       JSON
-      private_constant :DESCRIPTION, :SCHEMA
+      # What starts every path under the memory directory.
+      UNDER_ROOT = "#{MemoryCommand::ROOT}/".freeze
+      private_constant :DESCRIPTION, :SCHEMA, :UNDER_ROOT
 
       # @param store [_MemoryStore] where the files are kept; one store may serve many agents and runs
       # @param needs_approval [Boolean] whether the agent's approver must approve each command that changes memory
@@ -39,7 +41,7 @@ module Sleepyshark
       def memory? = true
 
       # A view only reads, so it never needs approval.
-      def needs_approval_for?(input) = super && JSON.parse(input).fetch('command') != 'view'
+      def needs_approval_for?(input) = super && !(JSON.parse(input, symbolize_names: true) in { command: 'view' })
 
       private
 
@@ -69,8 +71,10 @@ module Sleepyshark
         path = path&.delete_suffix('/')
         return '' if path == MemoryCommand::ROOT
 
-        rest = path&.delete_prefix("#{MemoryCommand::ROOT}/")
-        rest if rest != path && MemoryRules.valid_path?(rest)
+        return unless path&.start_with?(UNDER_ROOT)
+
+        rest = path.delete_prefix(UNDER_ROOT)
+        rest if MemoryRules.valid_path?(rest)
       end
     end
   end

@@ -23,11 +23,8 @@ module Sleepyshark
       # @return [Array<MemoryFile>]
       def under(at) = at.empty? ? @files : @files.select { it.path.start_with?("#{at}/") }
 
-      # The first of the path's directories that is a file, if any.
-      def file_above(at)
-        parts = at.split('/')
-        (1...parts.size).map { parts.take(it).join('/') }.find { file?(it) }
-      end
+      # The file that one of the path's directories is, if any.
+      def file_above(at) = @files.map(&:path).find { |file| at.start_with?("#{file}/") }
 
       # The file's text, or nil when there is no such file.
       def read(at) = (@store.read(@scope, at) if file?(at))

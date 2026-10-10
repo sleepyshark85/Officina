@@ -33,18 +33,37 @@ module Sleepyshark
           "#{["#{size(files.sum(&:size))}\t#{shown}", *entries].join("\n")}"
       end
 
-      # The edited lines of a file, from +line+ and +added+ lines more, with four lines of context on either side.
-      def self.snippet(path, text, line, added)
+      # The edited lines of a file, from the line of the edit's start and +added+ lines more, with four lines of
+      # context on either side.
+      # @param start [Integer] the index in the text where the edit starts
+      def self.snippet(path, text, start, added)
         lines = lines(text)
+        line = line_at(text, start)
         "The memory file has been edited. A snippet of #{path} with line numbers:\n" \
           "#{numbered(lines, [1, line - 4].max, [lines.size, line + added + 4].min)}"
       end
 
       # The text's lines; an empty text is one empty line.
+      # mutant:disable -- its survivors are equivalent: [nil] for [''] (a nil line is written as ''), and -2 for -1 (any
+      # negative limit keeps the trailing empty lines)
       def self.lines(text) = text.empty? ? [''] : text.split("\n", -1)
 
       # The line, from 1, of the character at the index.
-      def self.line_of(text, index) = text.each_char.take(index).count("\n") + 1
+      # mutant:disable -- its one survivor, fetch(-1), takes the same, only line
+      def self.line_at(text, index) = lines_at(text, [index]).fetch(0)
+
+      # The line, from 1, of the character at each index, the indexes in order: one pass over the text, however many.
+      def self.lines_at(text, indexes)
+        line = 1
+        line_break = text.index("\n")
+        indexes.map do |index|
+          while line_break && line_break < index
+            line += 1
+            line_break = text.index("\n", line_break + 1)
+          end
+          line
+        end
+      end
 
       # Where each occurrence of +old+ in the text starts, each after the one before it ends.
       def self.occurrences(text, old)
@@ -95,7 +114,7 @@ module Sleepyshark
         else format('%.1fM', bytes / (1024.0 * 1024))
         end
       end
-      private_class_method :sizes, :valid_range?, :cut, :size
+      private_class_method :line_at, :sizes, :valid_range?, :cut, :size
     end
     private_constant :MemoryView
   end

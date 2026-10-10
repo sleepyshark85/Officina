@@ -71,7 +71,7 @@ class RunPropertyTest < Minitest::Test
 
   # The run's tools; each write notes its call when the trail lacks its attempt.
   def tools(sink, unaudited)
-    write = lambda do |input, _|
+    write = lambda do |input, _, _|
       audited = sink.nil? || sink.entries.any? { it.kind == :tool_started && it.call_id == input.id }
       unaudited << input.id unless audited
       'Saved.'
