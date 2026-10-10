@@ -1,0 +1,57 @@
+module Sleepyshark
+  module Officina
+    module Input
+      # The class methods of a class `define` returns.
+      interface _Class
+        def schema: () -> Schema
+
+        def from_json: (Hash[String, untyped] object) -> Data
+      end
+
+      def self.define: () { () [self: Declaration] -> void } -> (singleton(Data) & _Class)
+
+      def self.value_class: (Array[Field] fields, Schema schema) -> (singleton(Data) & _Class)
+
+      def self.object_schema: (Array[Field] fields) -> String
+
+      class Field < Data
+        attr_reader name: Symbol
+        attr_reader json_name: String
+        attr_reader schema: String
+        attr_reader optional: bool
+        attr_reader read: ^(untyped) -> untyped
+
+        def self.new: (name: Symbol, json_name: String, schema: String, optional: bool, read: ^(untyped) -> untyped) -> Field
+      end
+
+      class Declaration
+        SCALARS: Array[Symbol]
+        SAME: ^(untyped) -> untyped
+
+        attr_reader fields: Array[Field]
+
+        def initialize: () -> void
+
+        def string: (Symbol name, ?String? description, ?optional: bool, ?nullable: bool, ?enum: Array[String]?) -> void
+
+        def integer: (Symbol name, ?String? description, ?optional: bool, ?nullable: bool, ?minimum: Integer?) -> void
+
+        def number: (Symbol name, ?String? description, ?optional: bool, ?nullable: bool, ?minimum: Integer?) -> void
+
+        def boolean: (Symbol name, ?String? description, ?optional: bool, ?nullable: bool) -> void
+
+        def array: (Symbol name, ?String? description, ?of: Symbol?, ?optional: bool, ?nullable: bool) ?{ () [self: Declaration] -> void } -> void
+
+        private
+
+        def array_of_objects: (Symbol name, String? description, bool optional, bool nullable) { () [self: Declaration] -> void } -> void
+
+        def add: (Symbol name, String? description, bool optional, String body, ?^(untyped) -> untyped read) -> void
+
+        def type: (String name, bool nullable) -> String
+
+        def bound: (Symbol name, Integer? minimum) -> String
+      end
+    end
+  end
+end

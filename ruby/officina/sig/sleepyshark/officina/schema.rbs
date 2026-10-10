@@ -1,0 +1,36 @@
+module Sleepyshark
+  module Officina
+    class Schema
+      RULES: Hash[String, Array[untyped]]
+      PATTERN_TIMEOUT: Float
+
+      @text: String
+      @root: untyped
+      @patterns: Hash[String, Regexp]
+
+      def initialize: (String json) -> void
+
+      def to_s: () -> String
+
+      def validate: (untyped value) -> Array[String]
+
+      private
+
+      def parse: (String json) -> untyped
+
+      def problems: (untyped schema, untyped value, String path) -> Array[String]
+
+      def problem: (String keyword, untyped rule, untyped value) -> String?
+
+      def any_of_problem: (Array[untyped] options, untyped value) -> String?
+
+      def pattern_problem: (String pattern, untyped value) -> String?
+
+      def inner_problems: (Hash[String, untyped] schema, untyped value, String path) -> Array[String]
+
+      def object_problems: (Hash[String, untyped] schema, Hash[String, untyped] value, String path) -> Array[String]
+
+      def shown: (String path) -> String
+    end
+  end
+end

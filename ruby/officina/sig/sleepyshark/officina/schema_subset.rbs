@@ -1,0 +1,22 @@
+module Sleepyshark
+  module Officina
+    module SchemaSubset
+      TYPES: Hash[String, Proc]
+      ANY: ^(untyped) -> bool
+      COUNT: ^(untyped) -> bool
+      KEYWORDS: Hash[String, Array[untyped]]
+
+      def self.check: (untyped schema, timeout: Float) -> Hash[String, Regexp]
+
+      def self.check_at: (untyped schema, String path, Hash[String, Regexp] patterns, Float timeout) -> void
+
+      def self.check_keyword: (String keyword, untyped value, String at, Hash[String, Regexp] patterns, Float timeout) -> void
+
+      def self.subschemas: (String keyword, untyped value) -> Array[[String, untyped]]
+
+      def self.compile: (String pattern, String at, Float timeout) -> Regexp
+
+      def self.refuse: (String path, String problem) -> bot
+    end
+  end
+end

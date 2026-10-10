@@ -1,0 +1,10 @@
+module Sleepyshark
+  module Officina
+    module DotnetJson
+      SHORT: Hash[String, String]
+      ESCAPED: Regexp
+
+      def self.string: (String text) -> String
+    end
+  end
+end

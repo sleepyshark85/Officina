@@ -2,6 +2,11 @@
 
 require_relative 'officina/version'
 require_relative 'officina/error'
+require_relative 'officina/schema_error'
+require_relative 'officina/dotnet_json'
+require_relative 'officina/schema_subset'
+require_relative 'officina/schema'
+require_relative 'officina/input'
 require_relative 'officina/usage'
 require_relative 'officina/cancellation'
 require_relative 'officina/tool'
