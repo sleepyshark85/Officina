@@ -1,0 +1,9 @@
+# frozen_string_literal: true
+
+# The gems' and the application's code against their signatures in sig/. Tests are not checked.
+target :lib do
+  signature 'officina/sig', 'officina-claude/sig', 'officina-mcp/sig', 'officina-testing/sig', 'apps/bookshop/sig'
+  check 'officina/lib', 'officina-claude/lib', 'officina-mcp/lib', 'officina-testing/lib', 'apps/bookshop/lib'
+
+  configure_code_diagnostics(Steep::Diagnostic::Ruby.strict)
+end

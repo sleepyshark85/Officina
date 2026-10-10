@@ -1,0 +1,6 @@
+module Sleepyshark
+  module Officina
+    class Error < StandardError
+    end
+  end
+end

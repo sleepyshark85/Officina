@@ -18,7 +18,7 @@ container, exceptions as panics, builders for everything), rewrite it.
 - `gofmt` and `goimports`; `go vet`; `golangci-lint run` with `.golangci.yml`; `go mod tidy` leaves no diff;
   `govulncheck ./...` clean; `go test -race -shuffle=on ./...` green. All before a commit or push, as for .NET.
 - Required checks before a merge, from `.github/workflows/go.yml`: `go-changes`, `go-ubuntu`, `go-windows`,
-  `go-quality`, `go-mutation`, besides the four .NET ones (every PR needs all nine).
+  `go-quality`, `go-mutation`, besides the .NET and Ruby ones (every PR needs all fourteen).
 - No `GOEXPERIMENT`, no `unsafe`, no `cgo`, no `init()` functions. No `reflect` outside tests, except where the core
   derives a JSON Schema from a Go type (typed tools and typed output), and only there.
 - New dependencies need a line in `docs/implementations/go.md` saying why the standard library is not enough.

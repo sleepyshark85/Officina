@@ -1,0 +1,13 @@
+module Sleepyshark
+  module Officina
+    module Testing
+      module ThreadLeakCheck : Minitest::Test
+        @threads_before_test: Array[Thread]
+
+        def before_setup: () -> void
+
+        def after_teardown: () -> void
+      end
+    end
+  end
+end

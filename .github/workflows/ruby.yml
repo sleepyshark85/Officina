@@ -1,0 +1,136 @@
+name: Ruby
+
+# The Ruby implementation in ruby/: the suite offline on Linux and Windows (TEST-03), the quality gates and mutation
+# testing. It runs on every pull request, with no path filter, so its required checks always report; when a pull
+# request changes nothing of Ruby (.github/changes.py says what is), every job after `changes` is skipped, which a
+# required check counts as passing.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ruby-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: ruby
+    shell: bash
+
+jobs:
+  changes:
+    name: ruby-changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      ruby: ${{ steps.diff.outputs.ruby }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # Comparing with the base branch needs its history.
+          fetch-depth: 0
+
+      - name: Diff
+        id: diff
+        working-directory: .
+        run: python3 .github/changes.py ruby >> "$GITHUB_OUTPUT"
+
+  # Two jobs rather than a matrix: a skipped matrix job reports its name unexpanded, and the required checks need
+  # these names exactly.
+  ubuntu:
+    name: ruby-ubuntu
+    needs: changes
+    # Skipped only when the detector says false: if it fails, its output is empty and the jobs run.
+    if: ${{ !cancelled() && needs.changes.outputs.ruby != 'false' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps: &test
+      - uses: actions/checkout@v7
+
+      # Ruby from ruby/.ruby-version, the gems from ruby/Gemfile.lock, cached.
+      - uses: ruby/setup-ruby@14594264cd68ce8a2345dd349bc3d138a4ef85c8 # v1.327.0
+        with:
+          working-directory: ruby
+          bundler-cache: true
+
+      - name: Test
+        # The property tests run with a fixed seed here, so CI is deterministic; locally each run draws a new one,
+        # and a failure prints the seed that reproduces it. The tests run in random order either way.
+        env:
+          PROPERTY_SEED: "20261010"
+        run: bundle exec rake test
+
+  windows:
+    name: ruby-windows
+    needs: changes
+    # Skipped only when the detector says false: if it fails, its output is empty and the jobs run.
+    if: ${{ !cancelled() && needs.changes.outputs.ruby != 'false' }}
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps: *test
+
+  quality:
+    name: ruby-quality
+    needs: changes
+    # Skipped only when the detector says false: if it fails, its output is empty and the jobs run.
+    if: ${{ !cancelled() && needs.changes.outputs.ruby != 'false' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: ruby/setup-ruby@14594264cd68ce8a2345dd349bc3d138a4ef85c8 # v1.327.0
+        with:
+          working-directory: ruby
+          bundler-cache: true
+
+      - name: RuboCop
+        run: bundle exec rubocop
+
+      - name: Steep
+        # The gems' signatures at the revisions rbs_collection.lock.yaml pins.
+        run: |
+          bundle exec rbs collection install --frozen
+          bundle exec steep check
+
+      - name: Vulnerabilities
+        run: bundle exec bundle-audit check --update
+
+      - name: Coverage
+        # Reported, not gated, as for .NET.
+        env:
+          COVERAGE: "1"
+          PROPERTY_SEED: "20261010"
+        run: |
+          bundle exec rake test
+          echo "Ruby line coverage: $(ruby -rjson -e 'puts JSON.parse(File.read("coverage/.last_run.json")).dig("result", "line")')%" >> "$GITHUB_STEP_SUMMARY"
+
+  mutation:
+    name: ruby-mutation
+    needs: changes
+    # Skipped only when the detector says false: if it fails, its output is empty and the jobs run.
+    if: ${{ !cancelled() && needs.changes.outputs.ruby != 'false' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: ruby/setup-ruby@14594264cd68ce8a2345dd349bc3d138a4ef85c8 # v1.327.0
+        with:
+          working-directory: ruby
+          bundler-cache: true
+
+      - name: Mutate
+        # The core with its own tests (ruby/officina/mutant.yml). mutant has no threshold: it fails on any surviving
+        # mutant. Until Ruby S05 decides the bar from a first measured run, survivors are reported as a warning; a run
+        # that does not reach its summary (no "Alive:" line) still fails the job.
+        working-directory: ruby/officina
+        run: |
+          if ! bundle exec mutant run | tee "$RUNNER_TEMP/mutant.log"; then
+            grep -q '^Alive:' "$RUNNER_TEMP/mutant.log" || exit 1
+            echo "::warning::Mutants survived in the core (the log lists them); there is no bar until Ruby S05."
+          fi

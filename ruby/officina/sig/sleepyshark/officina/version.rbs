@@ -1,0 +1,5 @@
+module Sleepyshark
+  module Officina
+    VERSION: String
+  end
+end
