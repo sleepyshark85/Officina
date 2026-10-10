@@ -62,7 +62,7 @@ module Sleepyshark
         { **@run.dimensions, 'gen_ai.tool.name' => @call.name, 'officina.tool.outcome' => outcome.to_s }
       end
 
-      def source(tool) = tool&.source&.name || 'application'
+      def source(tool) = tool&.source&.name || (tool&.memory? ? 'memory' : 'application')
 
       def started(tool)
         { 'gen_ai.operation.name' => 'execute_tool', 'gen_ai.tool.name' => @call.name,

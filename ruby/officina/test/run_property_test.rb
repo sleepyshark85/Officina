@@ -21,6 +21,8 @@ class RunPropertyTest < Minitest::Test
                   Pbt.integer(min: 0, max: 3))
   CALLS = [%w[look {"id":"%s"}], %w[fail {"id":"%s"}], %w[save {"id":"%s"}], %w[order {"id":"%s"}],
            %w[gone {"id":"%s"}], %w[look {"id":1}]].freeze
+  # The result of a call whose handler raised: only the failing read's handler should, so every write ran.
+  RAISED = /\A(The tool failed|The call was cancelled while it ran): /
 
   def test_test07_any_session_keeps_the_conversation_valid_answers_every_call_once_and_audits_every_write_first
     Pbt.assert do
@@ -30,15 +32,20 @@ class RunPropertyTest < Minitest::Test
         session.each_with_index { |run, at| run_once(conversation, run, at, unaudited) }
 
         assert_empty unaudited, 'A write ran before its attempt was in the audit trail'
-        calls = conversation.messages.flat_map(&:blocks).filter_map { it.tool_call&.id }
-        answers = conversation.messages.flat_map(&:blocks).filter_map { it.tool_result&.call_id }
-
-        assert_equal calls.sort, answers.sort
+        answered_once_by_handlers_that_ran(conversation.messages.flat_map(&:blocks))
       end
     end
   end
 
   private
+
+  # Every call has one result, and only the failing read's handler raised, so every write that ran did its work.
+  def answered_once_by_handlers_that_ran(blocks)
+    results = blocks.filter_map(&:tool_result)
+
+    assert_equal blocks.filter_map { it.tool_call&.id }.sort, results.map(&:call_id).sort
+    assert_empty results.map(&:content).grep(RAISED).grep_v(/: down\z/), 'A handler but the failing read raised'
+  end
 
   def run_once(conversation, (replies, how, stop_at, sink_kind), at, unaudited)
     sink = sink(sink_kind)
@@ -71,7 +78,7 @@ class RunPropertyTest < Minitest::Test
 
   # The run's tools; each write notes its call when the trail lacks its attempt.
   def tools(sink, unaudited)
-    write = lambda do |input, _|
+    write = lambda do |input, _, _|
       audited = sink.nil? || sink.entries.any? { it.kind == :tool_started && it.call_id == input.id }
       unaudited << input.id unless audited
       'Saved.'

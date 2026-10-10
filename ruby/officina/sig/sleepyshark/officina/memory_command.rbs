@@ -1,0 +1,45 @@
+module Sleepyshark
+  module Officina
+    class MemoryCommand
+      ROOT: String
+
+      @files: MemoryFiles
+      @input: Hash[String, untyped]
+      @path: String
+      @at: String
+      @within: Hash[String, String]
+
+      def initialize: (MemoryFiles files, Hash[String, untyped] input, String path, Hash[String, String] within) -> void
+
+      def run: () -> (String | ToolFailure)
+
+      private
+
+      def view: () -> (String | ToolFailure)
+
+      def create: () -> (String | ToolFailure)
+
+      def str_replace: () -> (String | ToolFailure)
+
+      def replace_once: (String text, String old) -> (String | ToolFailure)
+
+      def replace: (String text, Integer start, String old) -> (String | ToolFailure)
+
+      def insert: () -> (String | ToolFailure)
+
+      def insert_line: (Array[String] lines, Integer line, String text) -> (String | ToolFailure)
+
+      def delete: () -> (String | ToolFailure)
+
+      def rename: () -> (String | ToolFailure)
+
+      def rename_problem: (String new_path, String to) -> String?
+
+      def write: (String text) -> ToolFailure?
+
+      def missing: () -> String
+
+      def failure: (String message) -> ToolFailure
+    end
+  end
+end

@@ -3,10 +3,12 @@
 require 'test_helper'
 require 'tmpdir'
 require_relative 'memory_store_contract'
+require_relative 'support/symbolic_links'
 
 # The file store, against the tests every memory store passes, and the links it never follows.
 class FileMemoryStoreTest < Minitest::Test
   include MemoryStoreContract
+  include SymbolicLinks
 
   cover 'Sleepyshark::Officina::FileMemoryStore*'
   cover 'Sleepyshark::Officina::MemoryRules*'
@@ -111,11 +113,5 @@ class FileMemoryStoreTest < Minitest::Test
     inside = "#{scope_directory(scope)}/"
     Dir.glob('**/*', File::FNM_DOTMATCH, base: @temp).map { File.join(@temp, it) }
        .select { File.file?(it) && !it.start_with?(inside) } - [File.join(@outside, 'secret.md')]
-  end
-
-  def link(target, at)
-    File.symlink(target, at)
-  rescue NotImplementedError, Errno::EPERM, Errno::EACCES => e
-    skip "This system does not let the tests make a symbolic link (#{e.class})."
   end
 end

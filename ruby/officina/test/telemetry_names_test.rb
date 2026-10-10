@@ -14,8 +14,6 @@ class TelemetryNamesTest < Minitest::Test
   ROOT = File.expand_path('../../..', __dir__)
   DOTNET = %w[src/Sleepyshark.Officina/Telemetry/Telemetry.cs src/Sleepyshark.Officina/Runs/RunEngine.cs].freeze
   GO = %w[go/officina/telemetry.go go/officina/run.go].freeze
-  # The attributes of what Ruby does not have yet: memory scopes.
-  NOT_YET = %w[officina.memory.scope].freeze
   # An instrument as .NET makes one: kind, name, unit and description.
   DOTNET_INSTRUMENT = /Create(Histogram|Counter)<\w+>\(\s*"([^"]+)",\s*"([^"]+)",\s*"([^"]+)"\)/
   # As Go does, its description perhaps in pieces joined with +.
@@ -35,7 +33,7 @@ class TelemetryNamesTest < Minitest::Test
 
     assert_equal 13, dotnet.size
     assert_equal dotnet.sort, go.sort
-    assert_equal dotnet.reject { NOT_YET.include?(it[1]) }.sort, ruby.sort
+    assert_equal dotnet.sort, ruby.sort
   end
 
   def test_evt02_the_spans_events_and_metrics_carry_the_attributes_dotnet_and_go_name
@@ -45,7 +43,7 @@ class TelemetryNamesTest < Minitest::Test
     exercise(collector)
 
     assert_equal dotnet, go
-    assert_equal dotnet - NOT_YET, keys(collector)
+    assert_equal dotnet, keys(collector)
   end
 
   def test_evt02_the_spans_and_metrics_come_from_the_scope_of_officinas_name
@@ -72,8 +70,8 @@ class TelemetryNamesTest < Minitest::Test
   end
 
   # Runs that make every instrument and attribute the core has: a retry, text, usage, an approved write blocked as its
-  # attempt cannot be audited, a read that runs, with content on; then a model call that fails, and one for which the
-  # provider cleared tool results and compacted the conversation.
+  # attempt cannot be audited, a read that runs, with content on, in a memory scope; then a model call that fails, and
+  # one for which the provider cleared tool results and compacted the conversation.
   def exercise(collector)
     model = Model.new([Retried.new, *reply('Saving.', usage(1, 1), call('1', 'save'), call('2', 'search'),
                                            stop: :tool_use)], Model.text('Done.'))
@@ -82,7 +80,7 @@ class TelemetryNamesTest < Minitest::Test
                              audit_sink: Testing::RecordingAuditSink.new(fails: lambda { |entry|
                                entry.kind == :tool_started
                              }))
-      .run(Conversation.new, 'Save.')
+      .run(Conversation.new, 'Save.', memory_scope: 'sam')
     traced(collector, Model.new([RuntimeError.new('down')]), name: 'clerk').run(Conversation.new, 'Again.')
     traced(collector, shortening, name: 'clerk', context_management: ContextManagement.new(
       compact_at: 50_000, clear_tool_results: ToolResultClearing.new(after: 1)
