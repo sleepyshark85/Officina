@@ -11,16 +11,24 @@ Tests are under `ruby/`, shortened as:
 | Deps | `test/dependencies_test.rb` (`DependenciesTest`), fixture gems in `test/fixtures/dependencies/` |
 | Agent | `officina/test/agent_test.rb` (`AgentTest`) |
 | Conv | `officina/test/conversation_test.rb` (`ConversationTest`), with the shared `testdata/conversation/conversation.json` |
+| Refusal | `officina/test/conversation_refusal_test.rb` (`ConversationRefusalTest`) |
+| Usage | `officina/test/usage_test.rb` (`UsageTest`) |
 | Prefix | `officina/test/prefix_stability_test.rb` (`PrefixStabilityTest`) |
+| Kit | `officina-testing/test/scripted_model_test.rb` (`ScriptedModelTest`) |
+| Core | `officina/test/` |
 | Loop | `officina/test/run_loop_test.rb` (`RunLoopTest`) |
 | Leave | `officina/test/run_leaving_test.rb` (`RunLeavingTest`) |
 | Events | `officina/test/run_events_test.rb` (`RunEventsTest`) |
 | Conc | `officina/test/run_concurrency_test.rb` (`RunConcurrencyTest`) |
-| Kit | `officina-testing/test/scripted_model_test.rb` (`ScriptedModelTest`) |
-| Core | `officina/test/` |
 | Tool | `officina/test/tool_test.rb` (`ToolTest`) |
-| Pipe | `officina/test/tool_pipeline_test.rb` (`ToolPipelineTest`) |
-| Audit | `officina/test/audit_test.rb` (`AuditTest`) |
+| Results | `officina/test/tool_call_results_test.rb` (`ToolCallResultsTest`) |
+| Reads | `officina/test/tool_concurrency_test.rb` (`ToolConcurrencyTest`) |
+| Approval | `officina/test/approval_test.rb` (`ApprovalTest`) |
+| Cancel | `officina/test/tool_cancelling_test.rb` (`ToolCancellingTest`) |
+| Redact | `officina/test/redaction_test.rb` (`RedactionTest`) |
+| Trail | `officina/test/audit_trail_test.rb` (`AuditTrailTest`) |
+| Order | `officina/test/audit_order_test.rb` (`AuditOrderTest`) |
+| Sink | `officina/test/json_lines_audit_sink_test.rb` (`JsonLinesAuditSinkTest`) |
 | Prop | `officina/test/run_property_test.rb` (`RunPropertyTest`) |
 | Approver | `officina-testing/test/scripted_approver_test.rb` (`ScriptedApproverTest`) |
 | App | `apps/bookshop/test/`: `CatalogueTest`, `CustomersTest`, `OrdersTest`, `DatabaseTest` (against the seeded database in Docker, Linux only, skipping elsewhere with the reason) and `SqlTest` (static) |
@@ -29,20 +37,20 @@ Tests are under `ruby/`, shortened as:
 
 | ID | Tests | Also checked by |
 |---|---|---|
-| GEN-02 | Agent: `test_gen02_an_agent_needs_only_a_model_and_instructions`; Audit: `test_gen02_without_a_sink_there_is_no_trail_and_a_write_runs` | |
+| GEN-02 | Agent: `test_gen02_an_agent_needs_only_a_model_and_instructions`; Trail: `test_gen02_without_a_sink_there_is_no_trail_and_a_write_runs` | |
 | GEN-03 | Loop: `test_gen03_a_run_is_stateless_on_a_new_conversation_and_stateful_on_a_kept_one` | |
-| GEN-04 | Pipe: `test_gen04_an_unattended_run_denies_calls_that_need_approval_and_runs_the_rest` | |
+| GEN-04 | Approval: `test_gen04_an_unattended_run_denies_calls_that_need_approval_and_runs_the_rest` | |
 
 ## Agent and turn loop (AGT)
 
 | ID | Tests | Also checked by |
 |---|---|---|
-| AGT-01 | Agent: `test_agt01_an_agent_is_frozen_with_its_tools_sorted_by_name`, `test_agt01_a_definition_that_cannot_work_is_refused` | |
-| AGT-02 | Loop: `test_agt02_a_scripted_multi_turn_run_completes_with_text`, `test_agt02_each_tool_call_gets_a_result_and_the_model_is_called_again` | |
-| AGT-03 | Loop: `test_agt03_each_way_a_reply_ends_the_run_gives_its_result_and_keeps_what_the_provider_accepts`, `test_agt03_a_result_carries_the_usage_of_every_model_call`, `test_agt03_a_failed_run_carries_the_usage_reported_before_it_failed`, `test_agt03_a_run_stops_at_the_iteration_limit_after_25_model_calls` | |
+| AGT-01 | Agent: `test_agt01_an_agent_is_frozen_with_a_sorted_copy_of_its_tools`, `test_agt01_blank_instructions_are_refused`, `test_agt01_two_tools_with_one_name_are_refused_whatever_their_descriptions` | |
+| AGT-02 | Agent: `test_agt02_a_blank_message_is_refused`; Loop: `test_agt02_a_scripted_multi_turn_run_completes_with_text`, `test_agt02_each_tool_call_gets_a_result_and_the_model_is_called_again` | |
+| AGT-03 | Usage: `test_agt03_usages_add_up_kind_by_kind`, `test_agt03_a_new_usage_counts_no_tokens`; Loop: `test_agt03_each_way_a_reply_ends_the_run_gives_its_result_and_keeps_what_the_provider_accepts`, `test_agt03_a_result_carries_the_usage_of_every_model_call`, `test_agt03_a_failed_run_carries_the_usage_reported_before_it_failed`, `test_agt03_a_run_stops_at_the_iteration_limit_after_25_model_calls` | |
 | AGT-04 | Conc: `test_agt04_one_hundred_concurrent_runs_of_one_agent_each_complete_on_their_own_conversation`, `test_agt04_a_second_run_on_a_conversation_in_use_is_refused` | |
-| AGT-05 | Leave: `test_agt05_cancelling_mid_stream_appends_nothing`, `test_agt05_a_run_cancelled_before_it_starts_calls_no_model`, `test_agt05_cancelling_after_a_reply_with_calls_answers_them_and_calls_the_model_no_more`, `test_agt05_a_block_that_breaks_mid_run_ends_it_and_leaves_no_thread`, `test_agt05_breaking_at_a_reply_with_calls_still_answers_them_and_reports_nothing_more`, `test_agt05_raising_at_a_reply_with_calls_still_answers_them`; Pipe: `test_agt05_cancelling_while_tools_run_stops_them_and_answers_every_call`, `test_agt05_breaking_while_tools_run_cancels_them_waits_for_them_and_still_answers_every_call`, `test_agt05_cancelling_while_waiting_for_approval_denies_the_call` | The thread-leak check, after every test; Prop (TEST-07) |
-| AGT-06 | Conv: `test_agt06_the_shared_conversation_reads_and_writes_back_byte_for_byte`, `test_agt06_a_round_trip_keeps_blocks_with_escapes_and_non_ascii_byte_for_byte`, `test_agt06_any_text_round_trips` (property), `test_agt06_json_that_is_not_a_conversation_is_refused` | |
+| AGT-05 | Leave: `test_agt05_cancelling_mid_stream_appends_nothing`, `test_agt05_a_run_cancelled_before_it_starts_calls_no_model`, `test_agt05_cancelling_after_a_reply_with_calls_answers_them_and_calls_the_model_no_more`, `test_agt05_a_block_that_breaks_mid_run_ends_it_and_leaves_no_thread`, `test_agt05_breaking_at_a_reply_with_calls_still_answers_them_and_reports_nothing_more`, `test_agt05_raising_at_a_reply_with_calls_still_answers_them`; Approval: `test_agt05_cancelling_while_waiting_for_approval_denies_the_call_and_starts_no_other`, `test_agt05_a_denial_while_the_run_is_cancelled_says_so`; Cancel: `test_agt05_cancelling_while_tools_run_stops_them_and_answers_every_call`, `test_agt05_breaking_while_tools_run_cancels_them_waits_for_them_and_still_answers_every_call`, `test_agt05_breaking_before_the_tools_start_answers_every_call_without_running_one`, `test_agt05_a_read_that_fails_the_run_stops_the_other_reads_first` | The thread-leak check, after every test; Prop (TEST-07) |
+| AGT-06 | Conv: `test_agt06_the_shared_conversation_reads_and_writes_back_byte_for_byte`, `test_agt06_a_round_trip_keeps_blocks_with_escapes_and_non_ascii_byte_for_byte`, `test_agt06_a_tool_result_reads_back_with_its_error_flag`, `test_agt06_any_text_round_trips` (property), `test_agt06_a_conversation_no_run_has_bound_is_written_without_a_fingerprint`, `test_agt06_a_new_conversation_has_a_random_id_of_32_hex_digits`, `test_agt06_what_a_run_appends_is_frozen`; Refusal: `test_agt06_json_of_another_shape_is_refused`, `test_agt06_a_message_of_another_shape_is_refused`, `test_agt06_a_message_without_blocks_is_refused`, `test_agt06_a_block_of_another_shape_is_refused`, `test_agt06_a_block_with_neither_text_raw_json_nor_a_tool_result_is_refused`, `test_agt06_json_that_does_not_parse_is_refused_with_the_parsers_reason` | |
 | AGT-08 | Events: `test_agt08_every_append_is_reported_once_all_of_a_step_is_appended` | |
 
 ## Context and caching (CTX)
@@ -50,36 +58,37 @@ Tests are under `ruby/`, shortened as:
 | ID | Tests | Also checked by |
 |---|---|---|
 | CTX-01 | Agent: `test_ctx01_the_fingerprint_is_the_one_every_implementation_computes` (against `testdata/session/prefix.json`); Loop: `test_ctx01_the_run_context_follows_the_users_message_as_an_operator_message` | |
-| CTX-04 | Agent: `test_ctx04_a_changed_tool_instruction_or_model_setting_fails_the_run_with_a_prefix_mismatch` | |
-| CTX-06 | Pipe: `test_ctx06_results_of_one_reply_return_in_one_message_in_call_order` | Prop (TEST-07) |
+| CTX-02 | Agent: `test_ctx02_a_blank_run_context_is_refused` | |
+| CTX-04 | Agent: `test_ctx04_a_changed_tool_fails_the_run_with_a_prefix_mismatch`, `test_ctx04_changed_instructions_fail_the_run_with_a_prefix_mismatch`, `test_ctx04_a_changed_model_setting_fails_the_run_with_a_prefix_mismatch` | |
+| CTX-06 | Results: `test_ctx06_results_of_one_reply_return_in_one_message_in_call_order` | Prop (TEST-07) |
 
 ## Events and observability (EVT)
 
 | ID | Tests | Also checked by |
 |---|---|---|
-| EVT-01 | Events: `test_evt01_a_run_streams_text_and_usage_then_returns_its_result`; Leave: `test_evt01_an_exception_from_the_hosts_block_is_the_hosts_own`; Pipe: `test_evt01_a_calls_events_come_started_asked_answered_finished_then_its_results_are_appended` | |
-| EVT-03 | Pipe: `test_evt03_secrets_are_redacted_from_results_tool_events_the_runs_result_and_the_audit_trail`, `test_evt03_every_form_of_every_secret_is_redacted_whole_however_they_overlap` | Telemetry and exceptions: Ruby S07 |
+| EVT-01 | Leave: `test_evt01_an_exception_from_the_hosts_block_is_the_hosts_own`; Events: `test_evt01_a_run_streams_text_and_usage_then_returns_its_result`; Approval: `test_evt01_a_calls_events_come_started_asked_answered_finished_then_its_results_are_appended`, `test_evt01_a_denied_call_is_reported_as_not_approved` | |
+| EVT-03 | Redact: `test_evt03_secrets_are_redacted_from_results_and_the_runs_text_but_not_from_the_conversation`, `test_evt03_every_tool_event_shows_the_call_without_the_secrets`, `test_evt03_a_failed_runs_detail_has_no_secret`, `test_evt03_secrets_that_overlap_touch_or_contain_one_another_are_redacted_whole`, `test_evt03_every_form_a_json_writer_may_give_a_secret_is_redacted` | Telemetry and exceptions: Ruby S07 |
 
 ## Tools (TOOL)
 
 | ID | Tests | Also checked by |
 |---|---|---|
-| TOOL-01 | Core/InputTest: `test_tool01_options_are_written_in_dotnets_key_order_and_names_in_camel_case`, `test_tool01_arrays_of_scalars_and_of_objects_may_be_nullable_and_optional`, `test_tool01_the_value_class_is_a_frozen_data_class_with_the_declared_members_in_order`, `test_tool01_valid_json_becomes_a_value_with_nested_values_and_absent_members_nil`, `test_tool01_an_array_becomes_a_frozen_array_and_an_absent_one_nil`, `test_tool01_an_integer_member_given_as_an_integral_float_becomes_an_integer`, `test_tool01_number_members_keep_their_floats`; Core/InputDotnetTest: `test_tool01_bookshops_search_books_input_has_dotnets_schema`, `test_tool01_bookshops_place_order_input_with_an_array_of_objects_has_dotnets_schema`, `test_tool01_descriptions_are_escaped_as_dotnets_encoder_escapes_them`, `test_tool01_invalid_utf8_is_written_as_the_replacement_character` (.NET's bytes in `officina/test/fixtures/dotnet-schemas.tsv` and the shared `testdata/session/prefix.json`); Core/SchemaTest: `test_tool01_the_schema_keeps_its_text_as_given_for_the_request`; Tool: `test_tool01_a_tool_from_a_declared_input_gets_its_value_and_describes_itself_with_its_schema`, `test_tool01_a_tool_from_a_schema_gets_the_json_value_and_a_result_that_is_not_text_is_sent_as_json`, `test_tool01_a_definition_that_cannot_work_is_refused`; Pipe: `test_tool01_each_call_runs_its_tool_and_the_model_reads_the_results` |  |
-| TOOL-02 | Core/SchemaTest: `test_tool02_each_keyword_accepts_valid_input_and_names_the_problem_with_invalid_input`, `test_tool02_the_false_schema_allows_nothing`, `test_tool02_keywords_for_other_kinds_of_value_do_not_apply`, `test_tool02_problems_of_nested_values_are_named_by_their_json_pointer`, `test_tool02_a_pattern_that_takes_too_long_is_a_problem_of_the_value_not_an_error`, `test_tool02_a_nested_pattern_has_the_same_timeout`; Core/InputTest: `test_tool02_the_declared_schema_validates_input`; Tool: `test_tool02_input_that_cannot_reach_the_handler_is_said_for_the_model`; Pipe: `test_tool02_invalid_input_comes_back_as_an_error_result_and_the_handler_never_runs` |  |
-| TOOL-03 | Pipe: `test_tool03_reads_overlap_and_a_write_waits_for_every_call_before_it_and_runs_alone` | |
-| TOOL-04 | Pipe: `test_tool04_a_denial_goes_back_to_the_model_as_the_calls_result`, `test_tool04_an_approver_that_raises_denies_the_call`, `test_tool04_a_host_may_answer_approval_from_its_events_in_either_order` | |
-| TOOL-05 | Pipe: `test_tool05_a_handler_that_raises_gives_an_error_result_and_the_run_goes_on` | Prop (TEST-07) |
-| TOOL-06 | Pipe: `test_tool06_a_result_over_64000_characters_is_cut_with_a_note_and_one_at_the_limit_is_not` | |
+| TOOL-01 | Core/InputTest: `test_tool01_options_are_written_in_dotnets_key_order_and_names_in_camel_case`, `test_tool01_arrays_of_scalars_and_of_objects_may_be_nullable_and_optional`, `test_tool01_the_value_class_is_a_frozen_data_class_with_the_declared_members_in_order`, `test_tool01_valid_json_becomes_a_value_with_nested_values_and_absent_members_nil`, `test_tool01_an_array_becomes_a_frozen_array_and_an_absent_one_nil`, `test_tool01_an_integer_member_given_as_an_integral_float_becomes_an_integer`, `test_tool01_number_members_keep_their_floats`; Core/InputDotnetTest: `test_tool01_bookshops_search_books_input_has_dotnets_schema`, `test_tool01_bookshops_place_order_input_with_an_array_of_objects_has_dotnets_schema`, `test_tool01_descriptions_are_escaped_as_dotnets_encoder_escapes_them`, `test_tool01_invalid_utf8_is_written_as_the_replacement_character` (.NET's bytes in `officina/test/fixtures/dotnet-schemas.tsv` and the shared `testdata/session/prefix.json`); Core/SchemaTest: `test_tool01_the_schema_keeps_its_text_as_given_for_the_request`; Tool: `test_tool01_a_tool_from_a_declared_input_gets_its_value_and_describes_itself_with_its_schema`, `test_tool01_a_tool_from_a_schema_gets_the_json_value_and_a_result_that_is_not_text_is_sent_as_json`, `test_tool01_the_handler_gets_the_runs_cancellation`, `test_tool01_a_definition_that_cannot_work_is_refused_saying_why`, `test_tool01_a_tool_keeps_frozen_copies_of_its_strings`; Results: `test_tool01_each_call_runs_its_tool_and_the_model_reads_the_results` | |
+| TOOL-02 | Core/SchemaTest: `test_tool02_each_keyword_accepts_valid_input_and_names_the_problem_with_invalid_input`, `test_tool02_the_false_schema_allows_nothing`, `test_tool02_keywords_for_other_kinds_of_value_do_not_apply`, `test_tool02_problems_of_nested_values_are_named_by_their_json_pointer`, `test_tool02_a_pattern_that_takes_too_long_is_a_problem_of_the_value_not_an_error`, `test_tool02_a_nested_pattern_has_the_same_timeout`; Core/InputTest: `test_tool02_the_declared_schema_validates_input`; Tool: `test_tool02_input_that_cannot_reach_the_handler_is_said_for_the_model`; Results: `test_tool02_invalid_input_comes_back_as_an_error_result_and_the_handler_never_runs` | |
+| TOOL-03 | Reads: `test_tool03_the_reads_of_a_reply_overlap`, `test_tool03_a_write_waits_for_every_call_before_it_and_a_later_call_waits_for_the_write` | |
+| TOOL-04 | Approval: `test_tool04_a_denial_goes_back_to_the_model_as_the_calls_result`, `test_tool04_the_approver_gets_the_tool_and_the_call_without_the_agents_secrets`, `test_tool04_an_approver_that_raises_denies_the_call`, `test_tool04_a_host_may_answer_approval_from_its_events_in_either_order`, `test_tool04_an_approval_keeps_a_frozen_copy_of_its_reason` | |
+| TOOL-05 | Results: `test_tool05_a_handler_that_raises_gives_an_error_result_and_the_run_goes_on` | Prop (TEST-07) |
+| TOOL-06 | Results: `test_tool06_a_result_over_64000_characters_is_cut_with_a_note_and_one_at_the_limit_is_not` | |
 
 ## Audit (AUD)
 
 | ID | Tests | Also checked by |
 |---|---|---|
-| AUD-01 | Audit: `test_aud01_a_run_records_its_start_and_end_and_each_call_and_approval`, `test_aud01_the_run_end_records_how_it_ended_with_its_usage` | Memory writes, budget stops, compactions and MCP sources: the slices that build them |
-| AUD-02 | Audit: `test_aud02_a_write_runs_only_once_its_attempt_is_in_the_trail`, `test_aud02_a_write_whose_attempt_cannot_be_recorded_never_runs_and_a_read_still_does` | Prop (TEST-07) |
-| AUD-03 | Audit: `test_aud03_each_entry_carries_its_time_sequence_run_conversation_and_agent` | Memory scope: Ruby S09; trace and span: Ruby S07 |
-| AUD-04 | Audit: `test_aud04_the_json_lines_sink_appends_each_entry_as_one_object_per_line`, `test_aud04_a_sink_that_cannot_write_raises` | |
-| AUD-05 | Audit: `test_aud05_audit_text_is_redacted_and_cut_at_4000_characters_with_its_length_noted`; Pipe: `test_evt03_secrets_are_redacted_from_results_tool_events_the_runs_result_and_the_audit_trail` | |
+| AUD-01 | Trail: `test_aud01_a_run_records_its_start_and_end_and_each_call_and_approval`, `test_aud01_a_denial_and_a_failed_call_are_recorded_with_why`, `test_aud01_the_run_end_records_how_it_ended_with_its_usage`, `test_aud01_a_run_the_host_left_is_recorded_as_abandoned` | Memory writes, budget stops, compactions and MCP sources: the slices that build them |
+| AUD-02 | Trail: `test_aud02_a_write_runs_only_once_its_attempt_is_in_the_trail`, `test_aud02_a_write_whose_attempt_cannot_be_recorded_never_runs_and_a_read_still_does` | Prop (TEST-07) |
+| AUD-03 | Trail: `test_aud03_each_entry_carries_its_time_sequence_run_conversation_and_agent`, `test_aud03_without_a_clock_entries_carry_the_real_time` | Memory scope: Ruby S09; trace and span: Ruby S07 |
+| AUD-04 | Order: `test_aud04_entries_reach_the_sink_one_at_a_time_in_sequence_order`; Sink: `test_aud04_each_entry_is_appended_as_one_json_object_with_its_members_in_camel_case`, `test_aud04_members_an_entry_does_not_have_are_left_out`, `test_aud04_entries_written_at_once_are_each_one_whole_line`, `test_aud04_a_sink_that_cannot_write_raises` | |
+| AUD-05 | Redact: `test_aud05_no_secret_reaches_the_audit_trail`; Trail: `test_aud05_audit_text_is_redacted_and_cut_at_4000_characters_with_its_length_noted` | |
 
 ## Output (OUT)
 
@@ -105,10 +114,9 @@ The data layer so far (Ruby S06 part A); the tools, console and end-to-end tests
 
 | ID | Tests | Also checked by |
 |---|---|---|
-| TEST-01 | Kit: `test_test01_it_streams_its_replies_in_order_and_records_each_request`, `test_test01_it_rejects_messages_the_provider_would_reject`, `test_test01_it_accepts_a_conversation_with_answered_calls_and_a_run_context`, `test_test01_a_run_on_a_model_with_no_reply_left_fails` (the scripted model); Approver: `test_test01_the_approver_answers_as_scripted_in_order_and_records_each_call`, `test_test01_the_recording_sink_keeps_its_entries_and_fails_when_told` (the fake MCP server comes in Ruby S11) | |
+| TEST-01 | Kit: `test_test01_it_streams_its_replies_in_order_and_records_each_request`, `test_test01_it_rejects_messages_the_provider_would_reject`, `test_test01_it_accepts_a_conversation_with_answered_calls_and_a_run_context`, `test_test01_a_run_on_a_model_with_no_reply_left_fails` (the scripted model); Approver: `test_test01_the_approver_answers_as_scripted_in_order_and_records_each_call`, `test_test01_the_recording_sink_keeps_its_entries_and_fails_when_told` | |
 | TEST-02 | Prefix: `test_test02_the_prefix_is_stable_across_the_calls_of_a_run_and_across_runs`, `test_test02_the_prefix_is_stable_across_a_save_a_new_process_and_a_resume`, `test_test02_the_check_finds_a_changed_prefix` | |
 | TEST-03 | — | The Ruby workflow (`.github/workflows/ruby.yml`): `ruby-ubuntu` and `ruby-windows`, offline; the App database tests run on `ruby-ubuntu` (in CI, a missing Docker fails them) and skip on Windows, saying why |
 | TEST-05 | Deps: `test_test05_the_workspace_keeps_the_rule`, `test_test05_a_fixture_keeping_the_rule_passes`, `test_test05_the_anthropic_sdk_used_anywhere_but_the_claude_gem_fails`, `test_test05_the_core_using_more_than_its_rule_allows_fails` (the core's own rule, D15 and R6, and the other gems', as well) | |
-| TEST-07 | Prop: `test_test07_any_session_keeps_the_conversation_valid_answers_every_call_once_and_audits_every_write_first`; Conv: `test_agt06_any_text_round_trips` | Save and resume, secrets in telemetry, budgets and memory paths: Ruby S07…S10 |
-| TEST-08 | Core/SchemaPropertyTest: `test_test08_on_generated_schemas_and_values_it_accepts_and_rejects_as_json_schemer_does`, `test_test08_a_generated_schema_with_any_keyword_outside_the_subset_is_refused_where_it_is`; Core/SchemaTest: `test_test08_a_schema_outside_the_subset_is_refused_when_it_is_defined_saying_where_and_why`, `test_test08_a_schema_that_is_not_json_is_refused`; Core/InputTest: `test_test08_a_malformed_declaration_is_refused_when_it_is_defined` | |
-| TEST-08 | Core/SchemaPropertyTest: `test_test08_on_generated_schemas_and_values_it_accepts_and_rejects_as_json_schemer_does`, `test_test08_a_generated_schema_with_any_keyword_outside_the_subset_is_refused_where_it_is`; Core/SchemaTest: `test_test08_a_schema_outside_the_subset_is_refused_when_it_is_defined_saying_where_and_why`, `test_test08_a_schema_that_is_not_json_is_refused_with_the_parsers_detail`; Core/InputTest: `test_test08_a_malformed_declaration_is_refused_when_it_is_defined`, `test_test08_a_declaration_reaches_only_the_member_methods` | |
+| TEST-07 | Conv: `test_agt06_any_text_round_trips`; Prop: `test_test07_any_session_keeps_the_conversation_valid_answers_every_call_once_and_audits_every_write_first` | Save and resume, secrets in telemetry, budgets and memory paths: Ruby S07…S10 |
+| TEST-08 | Core/SchemaPropertyTest: `test_test08_on_generated_schemas_and_values_it_accepts_and_rejects_as_json_schemer_does`, `test_test08_a_generated_schema_with_any_keyword_outside_the_subset_is_refused_where_it_is`; Core/SchemaRefusalTest: `test_test08_a_schema_outside_the_subset_is_refused_when_it_is_defined_saying_where_and_why`, `test_test08_a_schema_that_is_not_json_is_refused_with_the_parsers_detail`; Core/InputDeclarationTest: `test_test08_a_malformed_declaration_is_refused_when_it_is_defined`, `test_test08_a_declaration_reaches_only_the_member_methods` | |

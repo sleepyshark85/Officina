@@ -31,6 +31,8 @@ module Sleepyshark
 
       def self.read_block: (untyped json) -> Block
 
+      def self.valid_json: (String json) -> String
+
       def self.read_call: (untyped json) -> ToolCall?
 
       def self.read_result: (untyped json) -> ToolResult?

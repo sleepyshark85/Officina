@@ -42,12 +42,16 @@ module Sleepyshark
       # Runs on the pipeline's thread, the only one that touches @results and @reads; a read's thread only returns its
       # result. What it raises, #results raises.
       def answer
+        Thread.current.report_on_exception = false
         @calls.each_with_index { |call, index| start(call, index) unless @cancel.cancelled? }
         join_reads
         @calls.each_with_index.map { |call, index| @results[index] || finish(call, NOT_STARTED, error: true) }
       ensure
-        stop_reads
-        @events.close
+        begin
+          stop_reads
+        ensure
+          @events.close
+        end
       end
 
       def start(call, index)
@@ -74,17 +78,22 @@ module Sleepyshark
       end
 
       # Stops the reads still running when the pipeline ends early, on an exception already on its way: cancels them
-      # and waits for each, so none outlives the run. A read's own failure, raised here again, must not replace that
-      # exception.
+      # and waits for each, so none outlives the run.
       def stop_reads
         return if @reads.empty?
 
         @cancel.cancel
-        @reads.each_value do |read|
-          read.join
-        rescue StandardError
-          next
-        end
+        join_all(@reads.values)
+      end
+
+      # Joins every thread; what the first that failed raised is raised once all have ended.
+      def join_all(threads)
+        # @type var thread: Thread?
+        # @type var rest: Array[Thread]
+        thread, *rest = threads
+        thread&.join
+      ensure
+        join_all(rest) if thread
       end
 
       # Runs the write once its attempt is in the trail.
@@ -97,7 +106,10 @@ module Sleepyshark
       # Starts the read on a thread of its own; its attempt is recorded, but it runs without.
       def read(tool, call)
         @audit.record(:tool_started, call:)
-        Thread.new { invoke(tool, call) }
+        Thread.new do
+          Thread.current.report_on_exception = false
+          invoke(tool, call)
+        end
       end
 
       def invoke(tool, call)

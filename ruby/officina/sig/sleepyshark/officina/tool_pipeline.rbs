@@ -36,6 +36,8 @@ module Sleepyshark
 
       def stop_reads: () -> void
 
+      def join_all: (Array[Thread] threads) -> void
+
       def write: (Tool tool, ToolCall call) -> ToolResult
 
       def read: (Tool tool, ToolCall call) -> Thread

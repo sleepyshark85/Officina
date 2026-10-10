@@ -9,9 +9,8 @@ module Sleepyshark
     class JsonLinesAuditSink
       # @param path [String] the file, created when the first entry is written
       def initialize(path)
-        @path = -path
+        @path = path
         @lock = Mutex.new
-        freeze
       end
 
       # Appends the entry: its time in ISO 8601 UTC with microseconds, its members in camel case, those it does not
@@ -19,6 +18,8 @@ module Sleepyshark
       # @param entry [AuditEntry]
       # @return [void]
       # @raise [SystemCallError] when the file cannot be written
+      # mutant:disable -- what the tests cannot see: that each line is on disk before it returns (fsync), and that two
+      #   runs' lines never interleave (the lock), which a single write in append mode already ensures on Linux
       def write(entry)
         line = "#{JSON.generate(fields(entry))}\n"
         @lock.synchronize do

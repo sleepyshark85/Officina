@@ -87,7 +87,7 @@ module Sleepyshark
       private
 
       def given(instructions)
-        raise Error, 'An agent needs instructions' if instructions.strip.empty?
+        raise Error, 'An agent needs instructions' unless instructions.match?(/\S/)
 
         -instructions
       end

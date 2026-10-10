@@ -10,7 +10,7 @@ module Sleepyshark
       @cancel: Cancellation
       @usage: Usage
       @model_calls: Integer
-      @host_raised: bool
+      @host_raised: bool?
       @audit: AuditRecorder
       @tool_step: ToolStep
 
@@ -27,13 +27,13 @@ module Sleepyshark
 
       def step: (Array[Message] pending) -> result?
 
-      def call_model: (Array[Message] messages) -> (Reply | Stopped | Failed)
+      def call_model: (Array[Message] messages) -> (Reply | Failed | nil)
 
-      def stream: (Request request) -> (Reply | Stopped | Failed | nil)
+      def stream: (Request request) -> (Reply | Failed | nil)
 
       def relay: (model_event event) -> void
 
-      def no_reply: (String why) -> (Stopped | Failed)
+      def no_reply: (String why) -> Failed?
 
       def after_reply: (Reply reply, Array[Message] pending) -> result?
 

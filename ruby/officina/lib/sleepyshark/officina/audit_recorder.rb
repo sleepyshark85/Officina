@@ -13,7 +13,7 @@ module Sleepyshark
       def initialize(agent:, conversation:)
         @agent = agent
         @conversation = conversation.id
-        @run = SecureRandom.hex(16)
+        @run = SecureRandom.hex
         @sequence = 0
         @lock = Mutex.new
       end

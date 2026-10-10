@@ -79,7 +79,7 @@ module Sleepyshark
         raise Error, 'A tool needs a name' unless name.match?(/\S/)
         raise Error, "Tool #{name}'s kind must be :read or :write, not #{kind.inspect}" unless KINDS.include?(kind)
         raise Error, "Tool #{name} needs a handler" unless handler
-        raise Error, "The input schema of tool #{name} is not an object's" unless JSON.parse(input_schema) in Hash
+        raise Error, "The input schema of tool #{name} is not a JSON object" unless JSON.parse(input_schema) in Hash
       end
     end
   end

@@ -12,6 +12,23 @@ class RunLoopTest < Minitest::Test
   CALL = Model.tool_use_block('call_1', 'search', '{}')
   NONE = Usage.new
   OUTPUT_LIMIT = Stopped.new(reason: :output_limit, detail: nil, usage: NONE)
+  UNEXPECTED = ->(detail) { Failed.new(reason: :unexpected_stop, detail:, usage: NONE) }
+  MODEL_ERROR = ->(detail) { Failed.new(reason: :model_error, detail:, usage: NONE) }
+  # Each reply that ends a run: the result it ends the run with, and how many messages the conversation keeps.
+  ENDINGS = {
+    Model.stop(:max_tokens) => [OUTPUT_LIMIT, 2],
+    Model.stop(:refusal, detail: 'cyber') => [Stopped.new(reason: :refusal, detail: 'cyber', usage: NONE), 2],
+    Model.stop(:context_full) => [Stopped.new(reason: :context_full, detail: nil, usage: NONE), 2],
+    Model.stop(:unknown, detail: 'pause_turn') => [UNEXPECTED["The run cannot act on the model's stop: pause_turn"], 2],
+    Model.stop(:tool_use) => [UNEXPECTED['The model stopped to use tools but called none'], 2],
+    [Reply.new(blocks: [CALL],
+               stop: :end)] => [UNEXPECTED["The model's reply called tools but did not stop for them"],
+                                0],
+    [Reply.new(blocks: [CALL], stop: :max_tokens)] => [OUTPUT_LIMIT, 0],
+    Model.stop(:end, text: nil) => [Completed.new(text: '', usage: NONE), 0],
+    [TextDelta.new(text: 'Hel'), RuntimeError.new('overloaded')] => [MODEL_ERROR['overloaded'], 0],
+    [TextDelta.new(text: 'Hel'), nil] => [MODEL_ERROR["The model's reply ended without a stop reason"], 0]
+  }.freeze
 
   def test_agt02_a_scripted_multi_turn_run_completes_with_text
     conversation = Conversation.new
@@ -40,20 +57,7 @@ class RunLoopTest < Minitest::Test
   end
 
   def test_agt03_each_way_a_reply_ends_the_run_gives_its_result_and_keeps_what_the_provider_accepts
-    {
-      Model.stop(:max_tokens) => [OUTPUT_LIMIT, 2],
-      Model.stop(:refusal, detail: 'cyber') => [Stopped.new(reason: :refusal, detail: 'cyber', usage: NONE), 2],
-      Model.stop(:context_full) => [Stopped.new(reason: :context_full, detail: nil, usage: NONE), 2],
-      Model.stop(:unknown, detail: 'pause_turn') =>
-        [failed(:unexpected_stop, "The run cannot act on the model's stop: pause_turn"), 2],
-      Model.stop(:tool_use) => [failed(:unexpected_stop, 'The model stopped to use tools but called none'), 2],
-      [Reply.new(blocks: [CALL], stop: :end)] =>
-        [failed(:unexpected_stop, "The model's reply called tools but did not stop for them"), 0],
-      [Reply.new(blocks: [CALL], stop: :max_tokens)] => [OUTPUT_LIMIT, 0],
-      Model.stop(:end, text: nil) => [Completed.new(text: '', usage: NONE), 0],
-      [TextDelta.new(text: 'Hel'), RuntimeError.new('overloaded')] => [failed(:model_error, 'overloaded'), 0],
-      [TextDelta.new(text: 'Hel'), nil] => [failed(:model_error, "The model's reply ended without a stop reason"), 0]
-    }.each do |reply, (expected, appended)|
+    ENDINGS.each do |reply, (expected, appended)|
       conversation = Conversation.new
 
       assert_equal expected, agent_of(Model.new(reply)).run(conversation, 'Hello'), reply.inspect
@@ -123,5 +127,4 @@ class RunLoopTest < Minitest::Test
   private
 
   def agent_of(model) = Agent.new(model:, instructions: 'You help customers of a bookshop.')
-  def failed(reason, detail) = Failed.new(reason:, detail:, usage: NONE)
 end
