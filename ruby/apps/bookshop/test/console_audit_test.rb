@@ -12,21 +12,19 @@ class ConsoleAuditTest < Minitest::Test
   AuditTable = Bookshop.const_get(:AuditTable)
   START = Time.new(2026, 10, 10, 8)
   ADD = '{"name":"Jo Bloggs","email":"jo@example.com"}'
-  # A model priced as Claude Opus 5.5 is, in dollars per million tokens.
-  PRICED = Officina::ModelInfo.new(provider: 'scripted', name: 'scripted', price: Officina::Price.new(
-    input: BigDecimal('5'), output: BigDecimal('25'), cache_read: BigDecimal('0.5'), cache_write: BigDecimal('6.25'),
-    cache_write_hour: BigDecimal('10')
-  ))
 
   def test_app16_audit_shows_the_sessions_entries_by_run_with_a_link_to_each_runs_trace
     telemetry = MemoryTelemetry.new
     spans = []
     usage = Officina::Usage.new(input: 1200, output: 300, cache_read: 4000)
     model = ScriptedModel.new(say_then_call('Adding Jo.', call('c1', 'add_customer', ADD)), ScriptedModel.text('Done.'),
-                              ScriptedModel.text('Hello.', usage:), info: PRICED)
+                              ScriptedModel.text('Hello.', usage:))
+    clock = Clock.new(START)
 
-    transcript = session(model, 'Sam', 'Add Jo Bloggs, jo@example.com.', 'y', 'Hi.', -> { spans = telemetry.spans },
-                         '/audit', '/audit nobody', '/quit', clock: ticking, telemetry:)
+    # The staff member takes three seconds to approve, and a minute before the next message.
+    transcript = session(model, 'Sam', 'Add Jo Bloggs, jo@example.com.', -> { clock.advance(3) }, 'y',
+                         -> { clock.advance(60) }, 'Hi.', -> { spans = telemetry.spans }, '/audit', '/audit nobody',
+                         '/quit', clock:, telemetry:)
 
     assert_in_order transcript, trail(*spans.select { it.name == 'reply' }.map(&:hex_trace_id)),
                     "you> /audit nobody\nNo audit entries for session nobody.\n"
@@ -46,6 +44,16 @@ class ConsoleAuditTest < Minitest::Test
     assert_in_order transcript, "Run 1, trace: http://dash/traces/detail/#{trace}\n",
                     "  ApprovalAnswered  add_customer          denied: the staff member declined\n",
                     "Audit of session #{untraced}:\nRun 1, trace: none recorded\n"
+  end
+
+  def test_app16_audit_shows_the_tokens_of_a_run_end_whose_cost_is_not_recorded
+    usage = Officina::Usage.new(input: 1200, output: 300, cache_read: 4000)
+    model = ScriptedModel.new(ScriptedModel.text('Hello.', usage:))
+
+    transcript = session(model, 'Sam', 'Hi.', -> { execute('update audit set cost = null') }, '/audit', '/quit')
+
+    assert_includes transcript, '  RunEnded                                completed  ' \
+                                "tokens: 5,200 in (4,000 cached), 300 out, $0.0000\n"
   end
 
   def test_app20_a_reply_is_one_trace_of_its_run_model_and_tool_calls_with_its_log_record
@@ -78,43 +86,38 @@ class ConsoleAuditTest < Minitest::Test
 
   private
 
-  # What /audit shows of the first test's session, whose replies are the traces given.
+  # What /audit shows of the first test's session, whose replies are the traces given: the clock moved only while the
+  # staff member approved and between the replies, and the tool took no time on it.
   def trail(first, second)
     ended = 'completed  tokens: 0 in (0 cached), 0 out, $0.0000'
     <<~TEXT
       you> /audit
       Audit of session #{conversation}:
       Run 1, trace: http://localhost:18888/traces/detail/#{first}
-        #{at(4)}  RunStarted
-        #{at(13)}  ApprovalAsked     add_customer
-        #{at(16)}  ApprovalAnswered  add_customer          approved
-        #{at(17)}  ToolStarted       add_customer
-        #{at(20)}  ToolEnded         add_customer          ok  1,000 ms
-        #{at(30)}  RunEnded                                #{ended}
+        #{at(0)}  RunStarted
+        #{at(0)}  ApprovalAsked     add_customer
+        #{at(3)}  ApprovalAnswered  add_customer          approved
+        #{at(3)}  ToolStarted       add_customer
+        #{at(3)}  ToolEnded         add_customer          ok  0 ms
+        #{at(3)}  RunEnded                                #{ended}
       Run 2, trace: http://localhost:18888/traces/detail/#{second}
-        #{at(35)}  RunStarted
-        #{at(43)}  RunEnded                                completed  tokens: 5,200 in (4,000 cached), 300 out, $0.0155
+        #{at(63)}  RunStarted
+        #{at(63)}  RunEnded                                completed  tokens: 5,200 in (4,000 cached), 300 out, $0.0155
     TEXT
   end
 
   # The id of a conversation whose one run an agent without telemetry audited, so that its rows have no trace.
   def untraced_conversation
     database = Bookshop::Database.new(database_url)
-    agent = Officina::Agent.new(name: 'bookshop', model: ScriptedModel.new(ScriptedModel.text('Hello.'), info: PRICED),
-                                instructions: 'Help.', audit_sink: AuditTable.new(database:, price: PRICED.price))
+    agent = Officina::Agent.new(name: 'bookshop', model: ScriptedModel.new(ScriptedModel.text('Hello.')),
+                                instructions: 'Help.', audit_sink: AuditTable.new(database:))
     Officina::Conversation.new.tap { agent.run(it, 'Hi.') { nil } }.id
   ensure
     database&.close
   end
 
-  # A clock that ticks a second each time it is read.
-  def ticking
-    now = START
-    -> { now += 1 }
-  end
-
-  # The local time shown for the clock's nth reading.
-  def at(ticks) = (START + ticks).strftime('%H:%M:%S')
+  # The local time shown for the given seconds after the start.
+  def at(seconds) = (START + seconds).strftime('%H:%M:%S')
 
   # The id of the session's conversation, the one the audit table holds.
   def conversation

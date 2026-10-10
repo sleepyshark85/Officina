@@ -1,0 +1,11 @@
+module Bookshop
+  class SessionListing < Data
+    attr_reader id: String
+    attr_reader staff_member: String
+    attr_reader title: String?
+    attr_reader cost: BigDecimal
+    attr_reader updated: Time
+
+    def self.new: (id: String, staff_member: String, title: String?, cost: BigDecimal, updated: Time) -> instance
+  end
+end

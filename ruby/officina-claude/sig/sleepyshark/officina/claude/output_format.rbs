@@ -1,0 +1,19 @@
+module Sleepyshark
+  module Officina
+    module Claude
+      module OutputFormat
+        UNSUPPORTED: Array[String]
+
+        def self.of: (String schema) -> Hash[Symbol, untyped]
+
+        def self.adjust: (untyped schema) -> untyped
+
+        def self.rejected?: (String keyword, untyped value) -> bool
+
+        def self.inner: (String keyword, untyped value) -> untyped
+
+        def self.object?: (Hash[String, untyped] schema) -> bool
+      end
+    end
+  end
+end
