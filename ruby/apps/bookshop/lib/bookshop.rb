@@ -68,7 +68,7 @@ module Bookshop
   #
   # @param input [IO] the staff member's lines
   # @param output [IO] where the console writes
-  # @param model [Sleepyshark::Officina::_Model, nil] the chat agent's model; Claude (ChatAgent.claude) if nil
+  # @param model [Sleepyshark::Officina::_Model, nil] the chat agent's model; Claude (the mode's) if nil
   # @param env [#fetch] the settings: BOOKSHOP_DATABASE, a PostgreSQL URL, the compose file's database if not set;
   #   BOOKSHOP_DASHBOARD, the telemetry dashboard /audit links to, the compose file's if not set;
   #   BOOKSHOP_REPLY_BUDGET, a reply's budget in US dollars, $0.50 if not set or empty
@@ -83,14 +83,15 @@ module Bookshop
     budgets = Budgets.from(env)
     url = env.fetch('BOOKSHOP_DATABASE', COMPOSE_DATABASE)
     database = Database.new(url)
-    model ||= ChatAgent.claude(demo:)
+    mode = ChatAgent.mode(demo:)
+    model ||= mode.claude
     telemetry ||= Telemetry.otlp
     approvals = Approvals.new
     audit = AuditTable.new(database:)
     agent = Sleepyshark::Officina::Agent.new(
       name: 'bookshop', model:, instructions: ChatAgent::INSTRUCTIONS, tools: Tools.all(Shop.new(database:)),
       approver: approvals, audit_sink: audit, secrets: [Database.password(url)].compact, clock:,
-      telemetry: telemetry.officina, context_management: ChatAgent.context_management(demo:)
+      telemetry: telemetry.officina, context_management: mode.context_management
     )
     view = AuditView.new(table: audit, dashboard: env.fetch('BOOKSHOP_DASHBOARD', COMPOSE_DASHBOARD))
     console = Console.new(agent:, approvals:, input:, output:, clock:, store: SessionStore.new(database:),

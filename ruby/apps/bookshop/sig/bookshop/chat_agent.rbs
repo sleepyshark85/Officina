@@ -1,12 +1,22 @@
 module Bookshop
   module ChatAgent
+    Officina: singleton(Sleepyshark::Officina)
     INSTRUCTIONS: String
-    LONG_CONVERSATIONS: Sleepyshark::Officina::ContextManagement
-    DEMO: Sleepyshark::Officina::ContextManagement
-    DEMO_ANNOUNCEMENT: String
+    STANDARD: Mode
+    DEMO_COMPACT_AT: Integer
+    DEMO_CLEARING: Sleepyshark::Officina::ToolResultClearing
+    DEMO: Mode
+
+    class Mode < Data
+      attr_reader context_management: Sleepyshark::Officina::ContextManagement
+      attr_reader cache: String
+
+      def self.new: (context_management: Sleepyshark::Officina::ContextManagement, cache: String) -> Mode
+      def claude: () -> Sleepyshark::Officina::Claude::Model
+    end
 
     def self.context: (Time now, String staff_member) -> String
-    def self.context_management: (demo: bool) -> Sleepyshark::Officina::ContextManagement
-    def self.claude: (demo: bool) -> Sleepyshark::Officina::Claude::Model
+    def self.mode: (demo: bool) -> Mode
+    def self.demo_announcement: () -> String
   end
 end

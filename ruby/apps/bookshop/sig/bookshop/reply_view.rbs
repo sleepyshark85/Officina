@@ -18,8 +18,6 @@ module Bookshop
     private
 
     def stream: (String text) -> void
-    def tool: (Sleepyshark::Officina::ToolCallStarted | Sleepyshark::Officina::ApprovalAsked
-               | Sleepyshark::Officina::ToolCallFinished event) -> void
     def note: (Sleepyshark::Officina::run_event | SessionNotSaved event) -> void
     def compacted: (Sleepyshark::Officina::ConversationCompacted event) -> void
     def cleared: (Sleepyshark::Officina::ToolResultsCleared event) -> void

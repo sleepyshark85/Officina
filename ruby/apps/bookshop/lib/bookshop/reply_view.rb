@@ -26,7 +26,9 @@ module Bookshop
     def show(event)
       case event
       in Officina::TextDelta(text:) then stream(text)
-      in Officina::ToolCallStarted | Officina::ApprovalAsked | Officina::ToolCallFinished then tool(event)
+      in Officina::ToolCallStarted(call:) then @terminal.write_line("  > #{call.name} #{call.input}")
+      in Officina::ApprovalAsked(call:) then ask(call)
+      in Officina::ToolCallFinished(call:, result:) then @terminal.write_line("  < #{call.name}: #{outcome(result)}")
       else note(event)
       end
     end
@@ -54,16 +56,8 @@ module Bookshop
       @terminal.write(text)
     end
 
-    # A tool call's line, or its approval prompt.
-    def tool(event)
-      case event
-      in Officina::ToolCallStarted(call:) then @terminal.write_line("  > #{call.name} #{call.input}")
-      in Officina::ApprovalAsked(call:) then ask(call)
-      in Officina::ToolCallFinished(call:, result:) then @terminal.write_line("  < #{call.name}: #{outcome(result)}")
-      end
-    end
-
-    # A note on what happened to the reply or its conversation besides the model's text and tool calls.
+    # A note on what happened to the reply or its conversation besides the model's text and tool calls; the events
+    # that show nothing come here too.
     def note(event)
       case event
       in Officina::Retried then @terminal.write_line('[The reply was interrupted and starts again.]')

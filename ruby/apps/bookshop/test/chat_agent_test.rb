@@ -9,8 +9,8 @@ class ChatAgentTest < Minitest::Test
 
   def test_app17_demo_mode_keeps_claudes_caches_five_minutes_and_otherwise_an_hour
     assert_equal 'claude model=claude-opus-5-5 effort=medium max_tokens=16000 cache=5m thinking=adaptive',
-                 ChatAgent.claude(demo: true).settings
+                 ChatAgent.mode(demo: true).claude.settings
     assert_equal 'claude model=claude-opus-5-5 effort=medium max_tokens=16000 cache=1h thinking=adaptive',
-                 ChatAgent.claude(demo: false).settings
+                 ChatAgent.mode(demo: false).claude.settings
   end
 end
