@@ -21,6 +21,15 @@ class RunEventsTest < Minitest::Test
     assert_equal Completed.new(text: 'Hello', usage:), result
   end
 
+  def test_evt01_a_retry_the_model_reports_reaches_the_host_and_the_run_goes_on
+    events = []
+
+    result = agent_of(Model.new([Retried.new, *Model.text('Hello')])).run(Conversation.new, 'Hi') { events << it }
+
+    assert_equal 'Hello', result.text
+    assert_equal [Retried.new, TextDelta.new(text: 'Hello')], events.first(2)
+  end
+
   def test_agt08_every_append_is_reported_once_all_of_a_step_is_appended
     conversation = Conversation.new
     model = Model.new(Model.tool_use(Model.tool_use_block('call_1', 'search', '{}')), Model.text('Hello'))

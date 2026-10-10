@@ -62,7 +62,7 @@ class ToolCancellingTest < Minitest::Test
   def test_agt05_a_read_that_fails_the_run_stops_the_other_reads_first
     stopped = Thread::Queue.new
     tools = [tool('fails') { |_, _| raise ScriptError, 'broken tool' },
-             tool('waits') { |_, cancel| (sleep 0.001 until cancel.cancelled?) || (stopped << true) }]
+             tool('waits') { |_, cancel| stop_late(cancel, stopped) }]
 
     error = nil
     _, printed = with_threads_ending_quietly do
@@ -71,7 +71,7 @@ class ToolCancellingTest < Minitest::Test
       end
     end
 
-    assert_equal ['broken tool', 1, ''], [error.message, stopped.size, printed]
+    assert_equal ['broken tool', 1, '', true], [error.message, stopped.size, printed, Thread.report_on_exception]
   end
 
   private
@@ -84,6 +84,14 @@ class ToolCancellingTest < Minitest::Test
   end
 
   def results_in(conversation) = conversation.messages.fetch(2).blocks.map { it.tool_result.content }
+
+  # Waits for the cancellation, then a little longer before it notes that it stopped, so a run that did not join it
+  # would end before the note.
+  def stop_late(cancel, stopped)
+    sleep 0.001 until cancel.cancelled?
+    sleep 0.05
+    stopped << true
+  end
 
   # Captures what is printed. mutant makes a thread that raises end the whole process; the tests run, as the core
   # does, without that.

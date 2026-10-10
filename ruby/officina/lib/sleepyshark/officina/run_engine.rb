@@ -82,7 +82,7 @@ module Sleepyshark
         # @type var usage: Usage
         case event
         in UsageReported(usage:) then @usage += usage
-        in TextDelta then nil
+        else nil
         end
         @reporter.emit(event)
       rescue StandardError

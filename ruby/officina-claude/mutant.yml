@@ -11,6 +11,9 @@ coverage_criteria:
   timeout: true
 hooks:
   - ../test/mutant_hooks.rb
+mutation:
+  # The tests take about two seconds; a mutation that makes them wait forever stops at this many.
+  timeout: 20.0
 requires:
   - sleepyshark/officina/claude
 matcher:

@@ -58,7 +58,7 @@ class ApprovalTest < Minitest::Test
                  ran.results.map(&:content)
   end
 
-  def test_tool04_a_host_may_answer_approval_from_its_events_in_either_order
+  def test_tool04_a_host_may_answer_approval_from_its_events_whether_or_not_the_approver_is_waiting
     answers = Thread::Queue.new
     approver = Object.new
     approver.define_singleton_method(:approve) { |_tool, _call, **| Approval.new(approved: answers.pop(timeout: 5)) }
@@ -71,7 +71,7 @@ class ApprovalTest < Minitest::Test
     assert_equal %w[Ordered. Ordered.], ran.results.map(&:content)
   end
 
-  def test_agt05_cancelling_while_waiting_for_approval_denies_the_call_and_starts_no_other
+  def test_agt05_a_call_approved_after_the_run_was_cancelled_never_starts_nor_does_any_other
     cancel = Cancellation.new
     approver = Object.new
     approver.define_singleton_method(:approve) do |_tool, _call, cancel:|

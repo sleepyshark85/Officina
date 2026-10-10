@@ -18,20 +18,22 @@ module Sleepyshark
       # @param entry [AuditEntry]
       # @return [void]
       # @raise [SystemCallError] when the file cannot be written
-      # mutant:disable -- what the tests cannot see: that each line is on disk before it returns (fsync), and that two
-      #   runs' lines never interleave (the lock), which a single write in append mode already ensures on Linux
       def write(entry)
-        line = "#{JSON.generate(fields(entry))}\n"
+        append("#{JSON.generate(fields(entry))}\n")
+      end
+
+      private
+
+      # mutant:disable -- what no test can see: that the line is on disk before it returns (fsync), and that two runs'
+      #   lines never interleave (the lock), which a single write in append mode already ensures on Linux
+      def append(line)
         @lock.synchronize do
           File.open(@path, 'a') do |file|
             file.write(line)
             file.fsync
           end
         end
-        nil
       end
-
-      private
 
       def fields(entry)
         fields = entry.to_h.merge(time: entry.time.utc.iso8601(6), usage: entry.usage&.to_h)

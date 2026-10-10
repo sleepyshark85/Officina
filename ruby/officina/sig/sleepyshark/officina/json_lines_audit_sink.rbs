@@ -10,6 +10,8 @@ module Sleepyshark
 
       private
 
+      def append: (String line) -> void
+
       def fields: (AuditEntry entry) -> Hash[Symbol, untyped]
     end
   end

@@ -150,8 +150,11 @@ jobs:
             else
               (cd "$gem" && bundle exec mutant run) | tee "$RUNNER_TEMP/mutant.log" || true
               coverage=$(sed -n 's/^Coverage: *\([0-9.]*\)%$/\1/p' "$RUNNER_TEMP/mutant.log" | tail -n 1)
-              if [ -z "$coverage" ] || awk -v c="$coverage" -v bar="$MUTATION_BAR" 'BEGIN { exit !(c < bar) }'; then
-                echo "::error::$gem: mutation coverage ${coverage:-unknown}% is below the bar of $MUTATION_BAR%."
+              if [ -z "$coverage" ]; then
+                echo "::error::$gem: the mutation run did not reach its summary."
+                status=1
+              elif awk -v c="$coverage" -v bar="$MUTATION_BAR" 'BEGIN { exit !(c < bar) }'; then
+                echo "::error::$gem: mutation coverage $coverage% is below the bar of $MUTATION_BAR%."
                 status=1
               fi
             fi
