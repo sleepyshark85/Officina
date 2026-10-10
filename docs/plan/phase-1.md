@@ -50,10 +50,10 @@ Every implementation after the first also meets these, so the implementations st
 
 | Slice | Check |
 |---|---|
+| Every slice | The same layers, run exits, tool-call rules and runtime model (ARCHITECTURE §3, §5, §12); the implementation's design notes map each runtime-model row and record the slice's choices |
 | S02 | The spike doc also records, per feature, what the SDK exposes typed and what only as raw JSON |
 | S04 | Golden request data lives in a top-level `testdata/` that every implementation reads and none rewrites: .NET's request layouts (`tests/Sleepyshark.Officina.Claude.Tests/Fixtures/`) and conversation JSON move there in Go S04. Stored blocks and messages compare byte for byte in the canonical form (compact, `<` `>` `&` escaped): a stored block from either implementation is replayed byte for byte. The typed parts of a request compare as parsed JSON, as each SDK writes its own key order and escapes |
 | S07 | The same span names, attributes and metrics, so one dashboard reads every implementation |
-| Every slice | The same layers, run exits, tool-call rules and runtime model (ARCHITECTURE §3, §5, §12); the implementation's design notes map each runtime-model row and record the slice's choices |
 | S06, S08 | The same compose file, SQL schema and seed; a session saved by one implementation resumes in another with the same prefix and cache reads |
 
 ## Per implementation

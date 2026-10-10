@@ -209,10 +209,11 @@ Each row of ARCHITECTURE §5.3, and the layers of §3, in .NET terms. Go's and R
 | ARCHITECTURE element | .NET |
 |---|---|
 | Consuming a run | `Agent.StreamAsync` returns `IAsyncEnumerable<RunEvent>`; `RunEnded` comes last and carries the `RunResult`. `RunAsync` is the same run without the events |
-| Host stops consuming | Disposing the enumerator cancels the run's token and waits for its tools |
-| Asynchronous I/O | `Task`-returning contracts (`IModel`, `IApprover`, `IMemoryStore`, `IAuditSink`, tool handlers), each taking a `CancellationToken` |
+| Host stops consuming | Disposing the enumerator cancels the tools' linked token and awaits them, and disposes an open model stream |
+| Asynchronous I/O | Asynchronous contracts, each taking a `CancellationToken`: `IModel.StreamAsync` returns an `IAsyncEnumerable`; `IApprover`, `IMemoryStore`, `IAuditSink` and tool handlers return a `Task` |
 | Concurrent reads | Each read call is a task; `Task.WhenAll` joins them before the next write |
 | Hand-over | The pipeline runs on its own task and writes events to an unbounded `Channel<RunEvent>` that the engine relays |
+| Event order | **Diverges from §5.3:** the engine appends and reports each message in turn, so a host that stops reading at the first `ConversationAppended` holds the user message without the reply that answers it. Go appends them all first; .NET is to follow |
 | Cancellation | One `CancellationToken` per run, linked to the host's |
 | One run per conversation | An interlocked flag on `Conversation`; a second run throws |
 | Ownership | The engine awaits the pipeline's task in a `finally` |

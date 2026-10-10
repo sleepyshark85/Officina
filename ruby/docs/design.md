@@ -13,8 +13,8 @@ rows for the choices it makes, and fills in its rows of the runtime-model table 
 | A warning about a file of the workspace fails the tests; one about a gem's file is printed. Done by prepending a module to `Warning.warn`, loaded before anything else | R13. Ruby has no switch that turns warnings into errors; Warning.warn is its documented hook. The pinned `anthropic` gem warns as it loads, which the workspace cannot fix |
 | The thread-leak check is a module included in `Minitest::Test` that compares `Thread.list` before setup and after teardown, so tests run one at a time | R11. Ruby has no goroutine-style leak detector; every thread a test starts must be joined before it ends. With parallel tests another test's threads would count |
 | Property tests use `pbt`, seeded from `PROPERTY_SEED` when set, and print the seed on failure | R12, TEST-07. The planned `prop_check` and its fallback `rantly` take no seed, so a failure could not be replayed |
-| Mutation testing runs from each gem's `mutant.yml` with `usage: opensource` | R13. mutant is free only for open-source projects, which the setting declares |
-| The core's only public API so far is `Sleepyshark::Officina::Error < StandardError` | ruby/CLAUDE.md: misuse and a broken environment raise errors of the core's own hierarchy; a run's outcome is a result value (from Ruby S03) |
+| Mutation testing runs from the core's `mutant.yml` with `usage: opensource` | R13. mutant is free only for open-source projects, which the setting declares |
+| The core's public API so far is its `VERSION` and `Sleepyshark::Officina::Error < StandardError` | ruby/CLAUDE.md: misuse and a broken environment raise errors of the core's own hierarchy; a run's outcome is a result value (from Ruby S03) |
 | Stored blocks are sent through the request's raw `messages` field (`extra_body`), each as a `JSON::Fragment` of its canonical bytes; nilable block fields are read as `block[:field]` (from Ruby S04) | R9, Ruby S02: the gem re-encodes typed messages, and raises when a nilable field set to `nil` is read through its accessor. One raw field, inside the Claude gem only |
 
 ## How Ruby realizes the runtime model

@@ -124,8 +124,8 @@ flowchart BT
     Mcp[MCP tool source] --> Core
     Kit[Test kit] --> Core
     App[Application: Bookshop Assistant] --> Core & Claude & Mcp
-    Samples[Samples] --> Core & Kit
-    Tests[Tests] --> Kit & App
+    Samples[Samples] --> Core & Claude & Mcp
+    Tests[Tests] --> Kit & App & Samples
     Claude --> Sdk[Provider SDK]
 ```
 
@@ -134,7 +134,7 @@ flowchart BT
 | Host | Interface, composition root, persistence, the application's tools and stores | Every package below |
 | Adapters | One provider or tool source each (Claude, MCP) | The core, and its own external library (the SDK for Claude) |
 | Core | Everything in the table above | The platform only (dependency rule) |
-| Test kit | Boundary replacements (TEST-01) | The core |
+| Test kit | Boundary replacements (TEST-01) | The core, and the platform's test framework |
 
 The application builds every object in one **composition root**, the only place that knows the concrete types; tests
 call the same composition with the boundaries replaced (D15).
@@ -252,8 +252,9 @@ than for the output limit, as the budget is what cut it.
 
 ### 5.1 Every way a run ends
 
-The stop-reason table above, completed with the checks around it. Each exit gives exactly one result, and the run's
-end event, audit entry and trace span close it whichever way it ended.
+The stop-reason table above, completed with the checks around it. Each exit gives exactly one result, the last thing the
+host gets (as a final event, or once the event stream ends); the run-ended audit entry and trace span close the run
+whichever way it ended.
 
 | Where | Signal | Result |
 |---|---|---|
@@ -272,8 +273,9 @@ for anything but `tool_use`, as calls without results are rejected by the provid
 ### 5.2 One reply's tool calls
 
 The pipeline runs a reply's calls in call order, each through the same steps: find the tool → parse and validate the
-input → ask approval if needed → record the attempt (a write, with an audit sink) → invoke → redact secrets → cut the
-result at 64,000 characters with a note.
+input → ask approval if needed → record the attempt (with an audit sink; a write whose attempt cannot be recorded does
+not run) → invoke → redact secrets → cut the result at 64,000 (characters or bytes, as the implementation counts
+text) with a note.
 
 | Rule | Why |
 |---|---|
@@ -291,15 +293,15 @@ own mechanism (`docs/implementations/` links them).
 | Aspect | The rule |
 |---|---|
 | Streaming | Every model request is streamed. The adapter turns the provider's stream into model events (text deltas, complete blocks, usage, retry notices, stop reason); the run relays them to the host as run events while the reply is still arriving, so the host never waits for a whole reply to show progress |
-| Event order | A run's events reach the host in the order things happened, and the run-ended event is always last. For one call: started → approval asked → approval answered → finished. A reply and the messages it answers are all appended before the first conversation-appended event about them |
+| Event order | A run's events reach the host in the order things happened, and the result is always the last thing it gets. For one call: started → approval asked → approval answered → finished. A reply and the messages it answers are all appended before the first conversation-appended event about them |
 | Consuming a run | The host consumes a run as a stream of events in the platform's own idiom and gets the result when the stream ends. A host that stops consuming early cancels the run |
-| Asynchronous I/O | Everything that waits on the outside (model, tools, approver, memory store, audit sink, tool sources) is non-blocking or runs off the host's path in the platform's idiom, and takes the run's cancellation |
+| Asynchronous I/O | Everything that waits on the outside (model, tools, approver, memory store, audit sink, tool sources) waits in the platform's own idiom (an asynchronous call, or a blocking call on the run's or a tool's own thread) and takes the run's cancellation, so the host can always stop it |
 | Concurrency | Model calls of one run are sequential. Reads of one reply run concurrently. Many runs of one agent run concurrently, each on its own conversation (AGT-04): the agent's definition is immutable, and what it shares between runs (model client, stores, sinks, telemetry) is safe for concurrent use |
 | Hand-over | The pipeline hands its events to the run without waiting for the host; the run passes them on as it receives them |
 | Cancellation | One cancellation per run, from the host. It reaches the model stream and every running tool, and is cooperative: work stops at its next check, never by killing a thread. AGT-05 says what the conversation holds afterwards |
 | Ownership | Every concurrent task the core starts is owned by the run that started it and finished before the run returns, also when cancelled or abandoned: nothing outlives its run |
 | Persistence points | The host is told after every append (AGT-08) and may persist then; a crash loses at most the step in flight (§5) |
-| Time | The clock is a boundary: elapsed time, budgets and audit times come from a clock the host can replace in tests |
+| Time | The clock is a boundary: elapsed time, budgets and audit times come from a clock tests can replace (an injected clock, or the platform's fake time) |
 
 ## 6. Context and caching
 
