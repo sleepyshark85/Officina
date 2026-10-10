@@ -4,6 +4,7 @@ module Bookshop
 
     @demo: bool
     @audit: AuditView
+    @memory: StaffMemory
     @telemetry: Telemetry
     @approvals: Approvals
     @budgets: Budgets
@@ -13,7 +14,7 @@ module Bookshop
 
     def initialize: (agent: Sleepyshark::Officina::Agent, approvals: Approvals, input: IO, output: IO,
                      clock: ^() -> Time, store: SessionStore, budgets: Budgets, audit: AuditView,
-                     telemetry: Telemetry, summarizer: Summarizer?, demo: bool) -> void
+                     memory: StaffMemory, telemetry: Telemetry, summarizer: Summarizer?, demo: bool) -> void
     def run: () -> void
 
     private
@@ -21,6 +22,7 @@ module Bookshop
     def ask_staff_member: () -> String?
     def converse: (Session session) -> Session
     def command: (String command, Session session) -> Session
+    def answer: (String command, Session session) -> void
     def audited: (String command, Session session) -> String
     def argument: (String command) -> String
     def reply: (Session session, String message) -> void

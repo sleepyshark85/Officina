@@ -91,10 +91,10 @@ How each implementation realizes a slice, where it differs from the shared crite
 | S06 | Merged | Merged (#63) | Part A merged (#94); part B in review (#108) |
 | S07 | Merged | Merged (#64) | Part A merged (#107); part B merged (#111) |
 | S08 | Merged | Merged (#68) | Part A merged (#112); part B merged (#114) |
-| S09 | Merged | Merged (#71) | Part A merged (#95); part B, step 1 (the memory tool in the core and the Claude gem) in review (#117) |
+| S09 | Merged | Merged (#71) | Part A merged (#95); part B, step 1 (the memory tool in the core and the Claude gem) merged (#117); step 2 (the staff member, `/memory` and the live preference check) in review (#124) |
 | S10 | Merged | Merged (#70) | Part A merged (#115); part B in review (#120) |
 | S11 | Merged | Merged (#69) | Part A merged (#92); part B step 1, the tool source through the pipeline, merged (#119); step 2, the Bookshop export, in review |
-| S12 | Merged | Merged (#72) | Part A merged (#116); part B in review (#121) |
+| S12 | Merged | Merged (#72) | Merged (#116, #121) |
 | S13 | Merged | Merged (#73) | Not started |
 
 ## Team

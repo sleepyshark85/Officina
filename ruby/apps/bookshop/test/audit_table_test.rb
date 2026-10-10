@@ -41,7 +41,7 @@ class AuditTableTest < Minitest::Test
     assert_equal [[run.attributes['officina.run.id'], conversation.id, 'bookshop', run.hex_trace_id]],
                  rows.map { it.values_at('run', 'conversation', 'agent', 'trace_id') }.uniq
     assert_equal([run, tool, tool, run].map(&:hex_span_id), rows.map { it['span_id'] })
-    assert_equal [nil], rows.map { it['memory_scope'] }.uniq
+    assert_equal ['sam'], rows.map { it['memory_scope'] }.uniq
   end
 
   def test_aud03_a_call_and_the_run_end_keep_what_they_record
@@ -96,16 +96,17 @@ class AuditTableTest < Minitest::Test
                                 info: PRICED))
   end
 
-  # Runs the agent, auditing to the table, on a clock that moves only while the search runs, by a second; returns the
-  # conversation and the result.
+  # Runs the agent, auditing to the table, in Sam's memory, on a clock that moves only while the search runs, by a
+  # second; returns the conversation and the result.
   def run_agent(model)
     clock = Clock.new(START)
     tools = Bookshop::Tools.all(shop).map { it.name == 'search_books' ? taking_a_second(it, clock) : it }
+    tools << Officina::MemoryTool.new(Officina::HashMemoryStore.new)
     agent = Officina::Agent.new(name: 'bookshop', model:, instructions: 'Help the staff.', tools:,
                                 audit_sink: AuditTable.new(database: @database), clock:,
                                 telemetry: @telemetry.telemetry.officina)
     conversation = Officina::Conversation.new
-    [conversation, agent.run(conversation, 'Do we have The Winter Archive?') { nil }]
+    [conversation, agent.run(conversation, 'Do we have The Winter Archive?', memory_scope: 'sam') { nil }]
   end
 
   # The tool, which moves the clock on a second as it runs.

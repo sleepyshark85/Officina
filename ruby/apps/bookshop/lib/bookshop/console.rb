@@ -5,7 +5,8 @@ module Bookshop
   # tool activity, asks approval for changes, and cancels the reply in progress on Ctrl+C, after which the session
   # goes on; Ctrl+C with no reply in progress leaves. Each conversation is a session, saved after every step of a
   # reply; each reply ends with a status line of its tokens and cost, and stops at its own or its session's budget.
-  # Each reply is traced and logged; /audit shows a session's audit trail.
+  # Each reply is traced and logged; /audit shows a session's audit trail. Each staff member has their own memory,
+  # which /memory shows.
   class Console
     HELP = <<~TEXT.chomp
       Commands:
@@ -15,6 +16,7 @@ module Bookshop
         /resume <id>   Go on with the session with that id.
         /cost          Show this session's tokens and cost.
         /audit [<id>]  Show the audit trail of this session, or of the session with that id.
+        /memory        Show what the assistant remembers for you.
         /quit          Leave the assistant.
       Anything else is a message to the assistant. Ctrl+C stops a reply in progress.
     TEXT
@@ -28,13 +30,15 @@ module Bookshop
     # @param store [SessionStore] where the sessions are kept
     # @param budgets [Budgets]
     # @param audit [AuditView] what /audit shows
+    # @param memory [StaffMemory] what /memory shows
     # @param telemetry [Telemetry] which traces and logs each reply
     # @param summarizer [Summarizer, nil] which summarizes each session left; nil for none
     # @param demo [Boolean] whether to say at the start that the agent compacts and clears early (ChatAgent.mode)
-    def initialize(agent:, approvals:, input:, output:, clock:, store:, budgets:, audit:, telemetry:, summarizer:,
-                   demo:)
+    def initialize(agent:, approvals:, input:, output:, clock:, store:, budgets:, audit:, memory:, telemetry:,
+                   summarizer:, demo:)
       @demo = demo
       @audit = audit
+      @memory = memory
       @telemetry = telemetry
       @approvals = approvals
       @budgets = budgets
@@ -59,13 +63,17 @@ module Bookshop
 
     private
 
-    # The staff member's name, asked until it is given; nil at the end of the input.
+    # The staff member's name, asked until one that can name their memory is given; nil at the end of the input.
     def ask_staff_member
-      while (name = @terminal.read('Who is using the assistant? Your name: '))
-        next if name.strip.empty?
+      while (line = @terminal.read('Who is using the assistant? Your name: '))
+        name = line.strip
+        next if name.empty?
 
-        @terminal.write_line("Hello, #{name.strip}.")
-        return name.strip
+        if StaffMemory.valid_name?(name)
+          @terminal.write_line("Hello, #{name}.")
+          return name
+        end
+        @terminal.write_line('That name cannot be used. Please give another name.')
       end
     end
 
@@ -85,15 +93,24 @@ module Bookshop
     # Answers the command and returns the session to go on with.
     def command(command, session)
       case command
-      when '/new' then return @sessions.start_new(session)
-      when %r{\A/resume(\s|\z)} then return @sessions.resume(argument(command), session)
+      when '/new' then @sessions.start_new(session)
+      when %r{\A/resume(\s|\z)} then @sessions.resume(argument(command), session)
+      else
+        answer(command, session)
+        session
+      end
+    end
+
+    # Answers a command that goes on with the session in use.
+    def answer(command, session)
+      case command
       when '/sessions' then @sessions.list(session)
       when '/cost' then @sessions.cost(session)
       when '/help' then @terminal.write_line(HELP)
+      when '/memory' then @terminal.write_line(@memory.show(session.staff_member))
       when %r{\A/audit(\s|\z)} then @terminal.write_line(@audit.show(audited(command, session)))
       else @terminal.write_line("Unknown command #{command}. Type /help for commands.")
       end
-      session
     end
 
     # The id of the session an /audit command names, the session in use's if it names none.

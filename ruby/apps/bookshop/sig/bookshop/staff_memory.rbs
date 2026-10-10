@@ -1,0 +1,18 @@
+module Bookshop
+  class StaffMemory
+    Officina: singleton(Sleepyshark::Officina)
+    ROOT: String
+
+    @store: Sleepyshark::Officina::_MemoryStore
+
+    def self.scope: (String staff_member) -> String
+    def self.valid_name?: (String staff_member) -> bool
+
+    def initialize: (Sleepyshark::Officina::_MemoryStore store) -> void
+    def show: (String staff_member) -> String
+
+    private
+
+    def file: (String scope, String path) -> Array[String]
+  end
+end

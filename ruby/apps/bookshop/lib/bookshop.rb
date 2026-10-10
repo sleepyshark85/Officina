@@ -52,6 +52,7 @@ require_relative 'bookshop/summarizer'
 require_relative 'bookshop/summaries'
 require_relative 'bookshop/session'
 require_relative 'bookshop/session_commands'
+require_relative 'bookshop/staff_memory'
 require_relative 'bookshop/audit_record'
 require_relative 'bookshop/audit_table'
 require_relative 'bookshop/audit_view'
@@ -79,6 +80,8 @@ module Bookshop
   # @param model [Sleepyshark::Officina::_Model, nil] the chat agent's model; Claude (the mode's) if nil
   # @param summarizer [Sleepyshark::Officina::_Model, nil] the session summarizer's model, which needs a price; Claude
   #   (Summarizer.claude) unless given, and nil for none: sessions then keep no title
+  # @param memory [Sleepyshark::Officina::_MemoryStore] what the assistant remembers for each staff member: files under
+  #   data/memory in the working directory unless given, the folder .NET's and Go's applications keep it in
   # @param env [#fetch] the settings: BOOKSHOP_DATABASE, a PostgreSQL URL, the compose file's database if not set;
   #   BOOKSHOP_DASHBOARD, the telemetry dashboard /audit links to, the compose file's if not set;
   #   BOOKSHOP_REPLY_BUDGET, a reply's budget in US dollars, $0.50 if not set or empty; BOOKSHOP_EXPORTS, the export
@@ -91,8 +94,9 @@ module Bookshop
   # @raise [SettingError] when BOOKSHOP_REPLY_BUDGET is not an amount above zero, or BOOKSHOP_EXPORTS not a URL
   # @raise [ExportServerError] when the export server cannot be reached
   # rubocop:disable-next Metrics/AbcSize, Metrics/MethodLength -- the composition root names every part in one place
-  def self.build(input:, output:, model: nil, summarizer: Summarizer.claude, env: ENV, clock: -> { Time.now },
-                 telemetry: nil, demo: false)
+  def self.build(input:, output:, model: nil, summarizer: Summarizer.claude,
+                 memory: Sleepyshark::Officina::FileMemoryStore.new(File.join('data', 'memory')), env: ENV,
+                 clock: -> { Time.now }, telemetry: nil, demo: false)
     budgets = Budgets.from(env)
     # Before the telemetry starts, which a failure here would leave running.
     exports = Exports.from(env)
@@ -103,7 +107,7 @@ module Bookshop
     telemetry ||= Telemetry.otlp
     approvals = Approvals.new
     audit = AuditTable.new(database:)
-    tools = [*Tools.all(Shop.new(database:)), *exports&.tools]
+    tools = [*Tools.all(Shop.new(database:)), Sleepyshark::Officina::MemoryTool.new(memory), *exports&.tools]
     agent = Sleepyshark::Officina::Agent.new(
       name: 'bookshop', model:, instructions: ChatAgent::INSTRUCTIONS, tools:,
       approver: approvals, audit_sink: audit, secrets: [Database.password(url)].compact, clock:,
@@ -111,7 +115,7 @@ module Bookshop
     )
     view = AuditView.new(table: audit, dashboard: env.fetch('BOOKSHOP_DASHBOARD', COMPOSE_DASHBOARD))
     console = Console.new(agent:, approvals:, input:, output:, clock:, store: SessionStore.new(database:),
-                          budgets:, audit: view, telemetry:, demo:,
+                          budgets:, audit: view, memory: StaffMemory.new(memory), telemetry:, demo:,
                           summarizer: summarizer && Summarizer.new(model: summarizer, clock:, telemetry:))
     Application.new(database:, exports:, telemetry:, console:)
   end
