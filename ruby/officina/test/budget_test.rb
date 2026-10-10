@@ -48,6 +48,8 @@ class BudgetTest < Minitest::Test
   BOUNDARIES = {
     # $0.00002 buys exactly one output token at $20 per million: the call is made, limited to it.
     'what is left buys one output token' => [OPUS, '0.00002', [1], false],
+    # $20 buys a million.
+    'twenty dollars left' => [OPUS, '20', [1_000_000], false],
     # Nothing is left, so nothing more may be spent, even where output costs nothing.
     'nothing left, output free' => [OPUS.with(output: BigDecimal(0)), '0', [], true],
     # Output that costs nothing is not limited by what is left.
@@ -78,21 +80,25 @@ class BudgetTest < Minitest::Test
     assert_equal :output_limit, own_cut.reason
   end
 
-  # Each limit, and the reason it stops a run whose one call used 1,500 tokens in a search of ten seconds.
+  # Each limit, and the reason it stops a run whose one call used 1,000,500 tokens of every kind in a search of ten
+  # seconds.
   LIMITS = {
     Budget.new(model_calls: 1) => 'The model call budget is used up: 1 of 1.',
-    Budget.new(tokens: 100) => 'The token budget is used up: 1,500 of 100 tokens.',
-    Budget.new(time: 5) => 'The time budget is used up: 10 s of 5 s.'
+    Budget.new(tokens: 1_000_500) => 'The token budget is used up: 1,000,500 of 1,000,500 tokens.',
+    Budget.new(tokens: 100) => 'The token budget is used up: 1,000,500 of 100 tokens.',
+    Budget.new(time: 5.0) => 'The time budget is used up: 10 s of 5 s.'
   }.freeze
+  BIG = Usage.new(input: 1_000_000, output: 300, cache_read: 100, cache_write: 100)
 
   def test_bud01_model_call_time_and_token_limits_stop_the_run_before_the_next_call
     LIMITS.each do |budget, reason|
-      model = priced(search_call('c1', Usage.new(input: 1_000, output: 500)), Model.text('Unused.'))
+      model = priced(search_call('c1', BIG), Model.text('Unused.'))
 
       result = run_priced(model, budget:, seconds: 10)
 
-      assert_equal Stopped.new(reason: :budget, detail: reason, usage: Usage.new(input: 1_000, output: 500),
-                               cost: dollars('0.014'), model_calls: 1, tool_calls: 1, duration: 10.0), result
+      # $4 × 1,000,000 + $20 × 300 + $0.20 × 100 + $5 × 100 per million.
+      assert_equal Stopped.new(reason: :budget, detail: reason, usage: BIG, cost: dollars('4.00652'), model_calls: 1,
+                               tool_calls: 1, duration: 10.0), result
       assert_equal 1, model.requests.size
     end
   end
@@ -104,6 +110,7 @@ class BudgetTest < Minitest::Test
     result = run_priced(model, budget: Budget.new(cost: BigDecimal(0)), conversation:)
 
     assert_equal Stopped.new(reason: :budget, detail: 'The cost budget is used up: $0 of $0.'), result
+    assert_instance_of BigDecimal, result.cost
     assert_empty model.requests
     assert_empty conversation.messages
   end
@@ -117,12 +124,13 @@ class BudgetTest < Minitest::Test
     assert_equal 'The cost budget is used up: $0.0014 of $0.00141.', result.detail
   end
 
-  def test_bud01_a_cost_budget_needs_a_model_with_a_price
-    agent = Agent.new(model: Model.new, instructions: 'You help.')
+  def test_bud01_a_cost_budget_needs_a_model_with_a_price_and_other_limits_do_not
+    agent = Agent.new(model: Model.new(Model.text('Done.')), instructions: 'You help.')
 
     error = assert_raises(Error) { agent.run(Conversation.new, 'Go.', budget: Budget.new(cost: BigDecimal(1))) }
 
     assert_equal 'A cost budget needs a model with a price', error.message
+    assert_equal 'Done.', agent.run(Conversation.new, 'Go.', budget: Budget.new(tokens: 100)).text
   end
 
   def test_bud01_a_call_budget_used_up_on_the_last_allowed_call_stops_for_the_budget_not_the_iteration_limit

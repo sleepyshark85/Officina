@@ -47,6 +47,33 @@ class BudgetReportTest < Minitest::Test
     assert_equal BigDecimal(0), result.cost
   end
 
+  NOTHING_USED = { usage: Usage.new, cost: BigDecimal(0), model_calls: 0, tool_calls: 0, duration: 0.0 }.freeze
+  # Each kind of result's own members.
+  KINDS = { Completed => { text: '' }, Stopped => { reason: :cancelled, detail: nil },
+            Failed => { reason: :model_error, detail: '' } }.freeze
+
+  def test_bud03_a_result_made_without_what_its_run_used_reports_nothing_used
+    KINDS.each do |kind, members|
+      made = kind.new(**members)
+
+      assert_equal kind.new(**members, **NOTHING_USED), made
+      assert_instance_of BigDecimal, made.cost
+    end
+  end
+
+  def test_bud01_a_reply_with_calls_cut_short_by_the_budget_is_not_kept_and_its_calls_do_not_run
+    model = priced([UsageReported.new(usage: Usage.new(input: 10, output: 50)),
+                    Reply.new(blocks: [Model.tool_use_block('c1', 'search', '{}')], stop: :max_tokens)])
+    conversation = Conversation.new
+
+    result = run_priced(model, budget: Budget.new(cost: dollars('0.001')), conversation:)
+
+    assert_equal Stopped.new(reason: :budget, detail: 'The cost budget is used up: $0.00104 of $0.001.',
+                             usage: Usage.new(input: 10, output: 50), cost: dollars('0.00104'), model_calls: 1),
+                 result
+    assert_empty conversation.messages
+  end
+
   # One planned model call: its prompt's tokens, the output it wants, and whether it compacts, which reads the
   # prompt twice.
   CALL = Pbt.tuple(Pbt.integer(min: 1, max: 3_000), Pbt.integer(min: 0, max: 20_000), Pbt.integer(min: 0, max: 5_000),

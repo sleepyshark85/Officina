@@ -14,9 +14,7 @@ module Sleepyshark
       # @param audit [AuditRecorder]
       # @return [Message, nil] the message of their error results; nil when the last message is not a reply with calls
       def self.answer(messages, audit)
-        # @type var calls: Array[ToolCall]
-        last = messages.last
-        calls = last&.role == :assistant ? last.blocks.filter_map(&:tool_call) : []
+        calls = Array(messages.last&.blocks).filter_map(&:tool_call)
         return if calls.empty?
 
         results = calls.map do |call|

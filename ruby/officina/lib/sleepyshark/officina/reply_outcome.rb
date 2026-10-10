@@ -11,7 +11,7 @@ module Sleepyshark
       # The result the reply ends the run with, or nil when the run goes on to answer its calls.
       # @param budget_used_up [String, nil] the budget limit used up, when the budget lowered the call's output limit:
       #   a reply cut short then stopped for the budget, which cut it, rather than for the output limit
-      def self.of(reply, budget_used_up: nil)
+      def self.of(reply, budget_used_up:)
         return Stopped.new(reason: :budget, detail: budget_used_up) if budget_used_up && reply.stop == :max_tokens
 
         reason = STOP_REASONS[reply.stop]

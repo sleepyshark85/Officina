@@ -51,6 +51,12 @@ class JsonLinesAuditSinkTest < Minitest::Test
     assert_raises(SystemCallError) { sink.write(entry(1, kind: :run_started)) }
   end
 
+  def test_aud01_aud04_a_runs_cost_is_written_as_a_json_number_of_its_digits
+    lines = written(raw: true) { |sink| sink.write(entry(1, kind: :run_ended, cost: BigDecimal('0.00926'))) }
+
+    assert_includes lines[0], %("cost":0.00926})
+  end
+
   private
 
   # An entry at 9:00:00.5 in UTC+2.
@@ -59,12 +65,12 @@ class JsonLinesAuditSinkTest < Minitest::Test
                    agent: 'shop', kind:, **members)
   end
 
-  # The lines of a new file, parsed, once the block has written to a sink of it.
-  def written
+  # The lines of a new file, parsed unless raw, once the block has written to a sink of it.
+  def written(raw: false)
     Dir.mktmpdir do |directory|
       path = File.join(directory, 'audit.jsonl')
       yield JsonLinesAuditSink.new(path)
-      File.readlines(path).map { JSON.parse(it) }
+      File.readlines(path).map { raw ? it : JSON.parse(it) }
     end
   end
 end

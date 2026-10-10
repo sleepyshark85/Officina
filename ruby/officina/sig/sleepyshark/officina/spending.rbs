@@ -1,8 +1,10 @@
 module Sleepyshark
   module Officina
     class Spending
+      FREE: Price
+
       @budget: Budget
-      @price: Price?
+      @price: Price
       @clock: ^() -> Time
       @started: Time
       @tool_calls: Integer

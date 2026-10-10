@@ -7,6 +7,10 @@ module Sleepyshark
     # What a run has used so far, against its budget: its tokens and their cost, its model and tool calls, and its
     # time on the agent's clock.
     class Spending
+      # The price of a model whose price is not known: its tokens cost nothing.
+      FREE = Price.new(input: BigDecimal(0), output: BigDecimal(0), cache_read: BigDecimal(0),
+                       cache_write: BigDecimal(0), cache_write_hour: BigDecimal(0))
+
       # @return [Usage] the tokens of every model call so far
       attr_reader :usage
       # @return [BigDecimal] what they cost, in US dollars; nothing when the model's price is not known
@@ -19,7 +23,7 @@ module Sleepyshark
       # @param clock [#call] the agent's
       def initialize(budget:, price:, clock:)
         @budget = budget || Budget.new
-        @price = price
+        @price = price || FREE
         @clock = clock
         @started = clock.call
         @usage = Usage.new
@@ -31,15 +35,15 @@ module Sleepyshark
       # Counts the usage a model call reported, and its cost.
       def add(usage)
         @usage += usage
-        price = @price
-        @cost += price.cost(usage) if price
+        @cost += @price.cost(usage)
       end
 
       def count_model_call = @model_calls += 1
       def count_tool_calls(count) = @tool_calls += count
 
-      # @return [Integer, nil] the most output tokens the next call may use; nil when the budget does not limit them
-      def output_limit = [tokens_left, affordable].compact.min&.clamp(0..)
+      # @return [Integer, nil] the most output tokens the next call may use, at least one once #reached is nil; nil when
+      #   the budget does not limit them
+      def output_limit = [tokens_left, affordable].compact.min
 
       # @return [String, nil] which limit is used up, as a sentence; nil when the run may call the model again
       def reached = calls_used_up || time_used_up || tokens_used_up || cost_used_up
@@ -58,19 +62,20 @@ module Sleepyshark
       # The output tokens what is left of the cost budget buys; nil when cost is not limited or output costs nothing.
       def affordable
         limit = @budget.cost
-        output = @price&.output
-        ((limit - @cost) * 1_000_000 / output).floor if limit && output&.positive?
+        output = @price.output
+        ((limit - @cost) * 1_000_000 / output).floor if limit && output.positive?
       end
 
+      # Each call is counted before it is made, which the limit checks first: the count reaches it, never passes it.
       def calls_used_up
         limit = @budget.model_calls
-        "The model call budget is used up: #{@model_calls} of #{limit}." if limit && @model_calls >= limit
+        "The model call budget is used up: #{@model_calls} of #{limit}." if @model_calls == limit
       end
 
       def time_used_up
         limit = @budget.time
-        elapsed = self.elapsed
-        "The time budget is used up: #{seconds(elapsed)} s of #{seconds(limit)} s." if limit && elapsed >= limit
+        spent = elapsed
+        "The time budget is used up: #{seconds(spent)} s of #{seconds(limit)} s." if limit && spent >= limit
       end
 
       def tokens_used_up
