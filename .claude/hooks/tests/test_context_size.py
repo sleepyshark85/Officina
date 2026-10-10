@@ -118,6 +118,16 @@ class ContextSizeTest(unittest.TestCase):
         self.assertEqual(warned.returncode, 0)
         self.assertIn("past 150,000", json.loads(warned.stdout)["hookSpecificOutput"]["additionalContext"])
 
+    def test_the_two_warnings_say_different_things(self):
+        early, late = hook.warning(160_000, 150_000), hook.warning(310_000, 300_000)
+        self.assertIn("past 150,000", early)
+        self.assertIn("committed as you go", early)
+        self.assertNotIn("Hand back", early)
+        self.assertIn("past 300,000", late)
+        self.assertIn("Hand back now", late)
+        self.assertIn("git diff --binary HEAD", late)
+        self.assertIn("base commit", late)
+
     def test_a_subagent_without_a_transcript_yet_is_not_logged(self):
         payload = {"transcript_path": self.main_transcript(assistant(1, 1_000)), "agent_id": "new"}
         result = self.run_hook(json.dumps(payload))
