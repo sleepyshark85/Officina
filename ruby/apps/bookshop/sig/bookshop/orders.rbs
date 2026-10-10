@@ -1,0 +1,29 @@
+module Bookshop
+  class Orders
+    CUSTOMER_EXISTS: String
+    OF_CUSTOMER: String
+    FIND: String
+    LINES: String
+    INSERT: String
+    INSERT_LINE: String
+    LOCK: String
+    CANCEL: String
+
+    def initialize: (database: Database) -> void
+    def find: (Integer id) -> Order
+    def of_customer: (Integer customer_id) -> Array[OrderSummary]
+    def place: (customer_id: Integer, lines: Array[Stock::_Line]) -> Order
+    def cancel: (Integer id) -> Order
+
+    private
+
+    @database: Database
+
+    def read: (PG::Connection connection, Integer id) -> Order
+    def read_lines: (PG::Connection connection, Integer id) -> Array[OrderLine]
+    def insert: (PG::Connection connection, Integer customer_id, Array[Stock::_Line] lines,
+                 Hash[Integer, BigDecimal] prices) -> Integer
+    def check_customer: (PG::Connection connection, Integer id) -> void
+    def check_lines: (Array[Stock::_Line] lines) -> void
+  end
+end
