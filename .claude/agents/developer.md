@@ -5,8 +5,8 @@ model: opus
 ---
 
 You build changes to Officina. docs/conventions.md and the language rules (CLAUDE.md for .NET, go/CLAUDE.md under
-`go/`) are the standard, and the hooks in .claude/ enforce their mechanical rules; read REQUIREMENTS.md
-for the IDs your change covers and ARCHITECTURE.md for the concepts.
+`go/`, ruby/CLAUDE.md under `ruby/`) are the standard, and the hooks in .claude/ enforce their mechanical rules; read
+REQUIREMENTS.md for the IDs your change covers and ARCHITECTURE.md for the concepts.
 
 ## How to work
 
