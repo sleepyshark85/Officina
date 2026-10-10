@@ -4,10 +4,10 @@ using Sleepyshark.Officina.Testing;
 namespace Sleepyshark.Officina.Tests;
 
 /// <summary>
-/// A prefix, and a session that crashed while its tools ran, shared with the Go implementation in the repository's
-/// testdata/session: each implementation checks that it writes its own session file byte for byte as stored, and
-/// resumes the other's, which neither rewrites. The prefix's strings hold every kind of character JSON escapes, and a
-/// schema is written with odd spacing and an escape, as the fingerprint takes it as given.
+/// A prefix, and a session that crashed while its tools ran, shared with the Go and Ruby implementations in the
+/// repository's testdata/session: each implementation checks that it writes its own session file byte for byte as
+/// stored, and resumes the others', which none rewrites. The prefix's strings hold every kind of character JSON
+/// escapes, and a schema is written with odd spacing and an escape, as the fingerprint takes it as given.
 /// </summary>
 public class SharedSessionTests
 {
@@ -114,10 +114,12 @@ public class SharedSessionTests
         }
     }
 
-    [Fact]
-    public async Task A_session_the_Go_implementation_saved_mid_reply_resumes_with_its_prefix_and_interrupted_calls_answered()
+    [Theory]
+    [InlineData("go-session.json", "go_02")]
+    [InlineData("ruby-session.json", "rb_02")]
+    public async Task APP_10_A_session_another_implementation_saved_mid_reply_resumes_with_its_prefix_and_interrupted_calls_answered(string file, string interruptedCallId)
     {
-        var stored = Fixture("go-session.json");
+        var stored = Fixture(file);
         var conversation = JsonSerializer.Deserialize<Conversation>(stored)!;
         var model = new ScriptedModel { Settings = Settings }.Reply("The order may or may not have been placed; let me check.");
         var agent = Shared(model);
@@ -129,7 +131,7 @@ public class SharedSessionTests
         var messages = Assert.Single(model.Requests).Messages;
         Assert.Equal(JsonSerializer.Deserialize<Conversation>(stored)!.Messages, messages[..^2]);
         var interrupted = Assert.Single(messages[^2].Blocks).ToolResult!;
-        Assert.Equal(("go_02", true), (interrupted.CallId, interrupted.IsError));
+        Assert.Equal((interruptedCallId, true), (interrupted.CallId, interrupted.IsError));
         Assert.Contains("interrupted", interrupted.Content, StringComparison.Ordinal);
         Assert.Null(RoleSequence.Problem(messages));
     }
