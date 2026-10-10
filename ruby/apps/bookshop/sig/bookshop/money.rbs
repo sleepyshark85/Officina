@@ -1,0 +1,5 @@
+module Bookshop
+  module Money
+    def self.json: (BigDecimal amount) -> JSON::Fragment
+  end
+end

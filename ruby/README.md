@@ -55,6 +55,23 @@ on. It needs an API key in `ANTHROPIC_API_KEY`; the tests run it on a fake API i
 bundle exec ruby examples/hello/hello.rb
 ```
 
+## Bookshop Assistant
+
+The reference application: a console chatbot for bookshop staff over the same PostgreSQL database as the .NET and Go
+ones, from the compose file, schema and seed in [`apps/BookshopAssistant/`](../apps/BookshopAssistant/). It needs
+Docker and `ANTHROPIC_API_KEY`; a reply costs a few cents. From this directory:
+
+```sh
+(cd ../apps/BookshopAssistant && ./start.sh)
+bundle exec apps/bookshop/exe/bookshop
+```
+
+It asks your name, then takes messages, such as *Order the two cheapest fantasy books in stock for Alice Martin and
+tell me the total*. Replies stream with each tool call shown; a change asks for your approval with its exact input.
+Ctrl+C stops a reply in progress, and the session goes on; `/help` lists the commands, `/quit` leaves.
+`BOOKSHOP_DATABASE`, a PostgreSQL URL, names another database than the compose file's, such as one on another port:
+`postgres://bookshop:shelf-demo-41@localhost:5433/bookshop`.
+
 The hooks in `../.claude/` run RuboCop and Steep before a commit that stages anything under `ruby/` but docs, and
 the tests before a push that changes it; they find `bundle` on `PATH`, or else in mise's shims
 (`~/.local/share/mise/shims`), which run the Ruby in `.ruby-version`.

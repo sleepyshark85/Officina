@@ -64,10 +64,21 @@ def crossed(previous, current):
     return passed[-1] if passed else None
 
 
-def warning(tokens, limit):
-    return (f"Your context is large: {tokens:,} tokens, past {limit:,}. Every further step re-sends all of it. "
-            "Finish the step you are on, then hand back: report what is done, what is left and anything open, "
-            "and do not start new work.")
+def warning(tokens, limit, lead=False):
+    """The warning for an agent past the limit; the lead (the main session, which dispatches and merges) keeps a
+    status note and compacts instead of handing back."""
+    head = f"Your context is large: {tokens:,} tokens, past {limit:,}. Every further step re-sends all of it. "
+    if lead:
+        if limit < max(THRESHOLDS):
+            return head + "Update your status note; consider asking the owner to /compact at the next milestone."
+        return head + "Update your status note now and ask the owner to run /compact; dispatch nothing new until then."
+    if limit < max(THRESHOLDS):
+        return head + ("Plan to finish at a natural point, and keep your work committed as you go, so a fresh agent "
+                       "can pick it up.")
+    return head + ("Hand back now. Commit what passes the checks; save the rest with `git diff --binary HEAD > "
+                   "<your scratchpad>/<prefix>-wip.patch` (after `git add -N` for new files). Report the commit "
+                   "the patch applies to (`git rev-parse HEAD`, after your commits), the patch path, exactly where "
+                   "you stopped and what is left.")
 
 
 def previous_size(log):
@@ -99,7 +110,8 @@ def on_tool_use(payload, session):
     append(log, {"time": now(), "agent_type": payload.get("agent_type") or MAIN, "tokens": tokens})
     if limit is None:
         return None
-    return {"hookSpecificOutput": {"hookEventName": "PostToolUse", "additionalContext": warning(tokens, limit)}}
+    text = warning(tokens, limit, lead=not agent)
+    return {"hookSpecificOutput": {"hookEventName": "PostToolUse", "additionalContext": text}}
 
 
 def report(sizes):

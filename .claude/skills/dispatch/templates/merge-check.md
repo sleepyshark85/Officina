@@ -1,7 +1,8 @@
 # Merge check
 
-For a PR whose base moved: it is behind its base, conflicts with it, or was retargeted. Agent: `fixer`, with
-`isolation: "worktree"`; a conflict that needs a design choice goes to `developer`.
+For a PR whose base moved: it is behind its base, conflicts with it, or was retargeted. The agent resolves any
+conflicts, so the lead never reads a hunk. Agent: `fixer`, with `isolation: "worktree"`; a conflict that needs a
+design choice goes to `developer`.
 
 ```text
 Bring PR #{{n}} (branch `{{branch}}`) up to date with `origin/{{base}}`{{, now that #N it was stacked on has merged, or nothing}}.
@@ -10,7 +11,8 @@ survive; where a side's intent is unclear, stop and report the conflict instead.
 both sides' changes touch, then push.
 Scratch prefix: `{{prefix}}-`. No live calls.
 
-Report whether it merged cleanly, each conflict and how you resolved it, the new head, and its `review` status: the
-gate carries an approval over a clean merge, and anything else needs a new verdict.
+Put each conflict and how you resolved it in a PR comment. Report in the short format of agent-rules.md, with
+`Verdict:` the `review` status of the new head: the gate carries an approval over a clean merge, and anything else
+needs a new verdict.
 Follow .claude/skills/dispatch/agent-rules.md.
 ```

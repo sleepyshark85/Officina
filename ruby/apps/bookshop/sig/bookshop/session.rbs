@@ -1,0 +1,15 @@
+module Bookshop
+  class Session
+    Appended: singleton(Sleepyshark::Officina::ConversationAppended)
+
+    @agent: Sleepyshark::Officina::Agent
+    @staff_member: String
+    @clock: ^() -> Time
+    @conversation: Sleepyshark::Officina::Conversation
+    @context: String?
+
+    def initialize: (agent: Sleepyshark::Officina::Agent, staff_member: String, clock: ^() -> Time) -> void
+    def reply: (String message, cancel: Sleepyshark::Officina::Cancellation)
+                { (Sleepyshark::Officina::run_event event) -> void } -> Sleepyshark::Officina::result
+  end
+end
