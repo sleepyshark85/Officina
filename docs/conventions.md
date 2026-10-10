@@ -56,11 +56,11 @@ reviewer applies it to every changed line as its next maintainer would read it, 
 | Area | Must-fix |
 |---|---|
 | Names and comments | A name that doesn't say what a thing is or does. A comment that restates the code, or code so unclear it needs a comment to say what it does; a comment saying *why* is welcome |
-| Structure | Duplication; a method doing more than one thing; deep nesting; a long parameter list; a table padded with filler entries; a lint or analyzer rule disabled or suppressed (a RuboCop cop, a `nolint`, a warning pragma) to let any of these through |
+| Structure | Duplication; a method doing more than one thing; deep nesting; a long parameter list; a lookup table padded with entries that do nothing (a placeholder message, a check that always passes); a lint or analyzer rule disabled or suppressed (a RuboCop cop, a `nolint`, a warning pragma) to let any of these through |
 | Errors | Rescuing or catching too broadly; swallowing an error; losing its cause; turning a bug into a silent default; treating a permanent failure as transient |
 | Concurrency and resources | A thread, task or process without a clear owner, guard or join; a resource (stream, connection, file, child process) not released on every path, `break` and exceptions included |
 | Idiom and size | Code that fights the language's idiom; a workaround larger or wider than the problem it works around; an abstraction, setting or option without a current user |
-| Tests | A test that passes for another reason than its name, or that would still pass if the behaviour it names broke; an error test that checks only the class, not the message; a test with logic (loops, branches) instead of focused cases; packing several values into one assertion to dodge an assertion limit |
+| Tests | A test that passes for another reason than its name, or that would still pass if the behaviour it names broke; an error test that doesn't pin which failure it is (its sentinel, type or code), or skips the message where the type doesn't identify the failure or the message is part of the contract; logic that decides what a test asserts (case tables, table-driven subtests and property tests are welcome); packing several values into one assertion to dodge an assertion limit |
 | Mutation | A surviving mutant in the code a PR changes. Kill it, delete the code that makes it equivalent, or show in the PR description why it is equivalent (or exclude it in the mutation tool's config with that reason), and the reviewer judges each. CI's mutation thresholds are a floor, not the bar |
 
 How it is applied:
@@ -73,7 +73,8 @@ How it is applied:
   survivor that is "equivalent") becomes a rule or an exclusion only once it is shown.
 - **Nits are true trivia** (wording, a redundant character); they never block. Everything in the table above is a
   must-fix, never a nit.
-- Code merged before the bar was set is audited against it and brought up to it in its own PRs.
+- Code merged before the bar was set is audited against it by the lead, once per implementation, and brought up to it
+  in its own PRs.
 
 ## Design rules that code must keep
 

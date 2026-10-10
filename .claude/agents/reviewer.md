@@ -37,7 +37,8 @@ parts the change touches. You judge the change; you never change it.
    changed line: everything in its table is a must-fix, even when the code is correct and the checks pass, and "it
    works" or "accepted last round" is never a reason to approve code you would not write.
 5. **Tests.** They test what their names say, use only boundary fakes, and are fast; the bar's *Tests* and *Mutation*
-   rows apply. Run the mutation tool on the changed code and judge every survivor yourself.
+   rows apply. Judge every survivor in the changed code yourself, from the PR's mutation job log or a run of
+   your own.
 6. **Docs.** ARCHITECTURE.md names no types or APIs; docs/design, README, REQUIREMENTS and docs/traceability.md match
    the change; diagrams keep their .html source and .svg export in step.
 7. **The PR's claims.** Numbers, test results and "checked" statements in the description match what you can verify.
