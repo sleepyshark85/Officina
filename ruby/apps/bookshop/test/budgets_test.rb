@@ -18,17 +18,21 @@ class BudgetsTest < Minitest::Test
                  %w[0 4.5 4.75 5.5].map { budgets.for_reply(BigDecimal(it)).cost })
   end
 
+  def test_app14_an_empty_reply_budget_setting_is_unset
+    assert_equal BigDecimal('0.5'), Budgets.from({ 'BOOKSHOP_REPLY_BUDGET' => '' }).reply
+  end
+
   def test_app14_a_budget_stop_says_which_budget_was_reached
     budgets = Budgets.from({ 'BOOKSHOP_REPLY_BUDGET' => '0.125' })
 
-    assert_equal 'this reply has reached its budget of $0.125.', budgets.reached(BigDecimal('4.875') - 1)
+    assert_equal 'this reply has reached its budget of $0.125.', budgets.reached(BigDecimal('3.875'))
     assert_equal 'this session has reached its budget of $5.00. Type /new to start a new session.',
                  budgets.reached(BigDecimal('4.875'))
   end
 
   def test_app14_a_reply_budget_that_is_not_an_amount_above_zero_is_refused
     %w[0 -1 abc].each do |setting|
-      error = assert_raises(ArgumentError) { Budgets.from({ 'BOOKSHOP_REPLY_BUDGET' => setting }) }
+      error = assert_raises(Bookshop::SettingError) { Budgets.from({ 'BOOKSHOP_REPLY_BUDGET' => setting }) }
 
       assert_equal %(BOOKSHOP_REPLY_BUDGET "#{setting}" is not an amount of US dollars above zero), error.message
     end

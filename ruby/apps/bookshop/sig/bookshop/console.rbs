@@ -20,7 +20,7 @@ module Bookshop
     def ask_staff_member: () -> String?
     def converse: (Session session) -> void
     def command: (String command, Session session) -> Session
-    def other_command: (String command, Session session) -> void
+    def audited: (String command, Session session) -> String
     def argument: (String command) -> String
     def reply: (Session session, String message) -> void
   end

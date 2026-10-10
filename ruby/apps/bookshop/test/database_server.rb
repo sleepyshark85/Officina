@@ -114,13 +114,16 @@ module DatabaseServer
     DatabaseServer.admin("alter database #{@database_name} allow_connections true")
   end
 
-  # Runs a query of the test's own, outside the shop, and returns its one value as an Integer.
-  def select_integer(sql, *params)
+  # Runs a query or command of the test's own, outside the shop, and returns its first row as text, nil if none.
+  def select_row(sql, *params)
     connection = PG.connect(database_url)
-    Integer(connection.exec_params(sql, params).getvalue(0, 0))
+    connection.exec_params(sql, params).values.first
   ensure
     connection&.close
   end
+
+  # Runs a query of the test's own, outside the shop, and returns its one value as an Integer.
+  def select_integer(sql, *params) = Integer(select_row(sql, *params).first)
 
   def stock(book_id) = select_integer('select quantity from stock where book_id = $1', book_id)
 end

@@ -7,7 +7,11 @@ require 'bookshop'
 # while the dashboard is not running, would land in the middle of it.
 OpenTelemetry.logger = Logger.new(File::NULL)
 
-application = Bookshop.build(input: $stdin, output: $stdout)
+begin
+  application = Bookshop.build(input: $stdin, output: $stdout)
+rescue Bookshop::SettingError => e
+  abort e.message
+end
 begin
   application.run
 ensure

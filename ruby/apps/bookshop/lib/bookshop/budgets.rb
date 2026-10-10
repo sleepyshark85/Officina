@@ -8,15 +8,15 @@ module Bookshop
   # Each reply's and the session's budget.
   class Budgets
     # Reads BOOKSHOP_REPLY_BUDGET, a reply's budget in US dollars, such as 0.01 to show a budget stop; $0.50 if not
-    # set. A session may spend $5.
+    # set or empty, as Go reads it. A session may spend $5.
     #
     # @param env [#fetch]
-    # @raise [ArgumentError] when the setting is not an amount above zero
+    # @raise [SettingError] when the setting is not an amount above zero
     def self.from(env)
-      setting = env.fetch('BOOKSHOP_REPLY_BUDGET', '0.50')
-      reply = BigDecimal(setting, exception: false)
+      setting = env.fetch('BOOKSHOP_REPLY_BUDGET', '')
+      reply = setting.empty? ? BigDecimal('0.50') : BigDecimal(setting, exception: false)
       unless reply&.positive?
-        raise ArgumentError, "BOOKSHOP_REPLY_BUDGET #{setting.inspect} is not an amount of US dollars above zero"
+        raise SettingError, "BOOKSHOP_REPLY_BUDGET #{setting.inspect} is not an amount of US dollars above zero"
       end
 
       new(reply:, session: BigDecimal(5))

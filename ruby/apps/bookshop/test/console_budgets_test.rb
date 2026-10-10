@@ -71,8 +71,4 @@ class ConsoleBudgetsTest < Minitest::Test
                     "[tokens: 3,000 in (0% from cache), 0 out · reply $0.0150 · session $5.0149]\n"
     assert_equal 1, model.requests.size
   end
-
-  private
-
-  def session_id(transcript) = transcript[/^Session (\h{12})\.$/, 1]
 end

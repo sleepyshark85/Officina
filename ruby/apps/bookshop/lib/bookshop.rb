@@ -36,6 +36,7 @@ require_relative 'bookshop/tools'
 require_relative 'bookshop/chat_agent'
 require_relative 'bookshop/approvals'
 require_relative 'bookshop/spent'
+require_relative 'bookshop/setting_error'
 require_relative 'bookshop/budgets'
 require_relative 'bookshop/stored_session'
 require_relative 'bookshop/session_listing'
@@ -70,11 +71,11 @@ module Bookshop
   # @param model [Sleepyshark::Officina::_Model, nil] the chat agent's model; Claude (ChatAgent.claude) if nil
   # @param env [#fetch] the settings: BOOKSHOP_DATABASE, a PostgreSQL URL, the compose file's database if not set;
   #   BOOKSHOP_DASHBOARD, the telemetry dashboard /audit links to, the compose file's if not set;
-  #   BOOKSHOP_REPLY_BUDGET, a reply's budget in US dollars, $0.50 if not set
+  #   BOOKSHOP_REPLY_BUDGET, a reply's budget in US dollars, $0.50 if not set or empty
   # @param clock [#call] returns the current Time, for the run context, the audit trail and telemetry
   # @param telemetry [Telemetry, nil] where traces, metrics and logs go; OTLP to the compose file's dashboard if nil
   # @return [Application]
-  # @raise [ArgumentError] when BOOKSHOP_REPLY_BUDGET is not an amount above zero
+  # @raise [SettingError] when BOOKSHOP_REPLY_BUDGET is not an amount above zero
   # rubocop:disable-next Metrics/AbcSize, Metrics/MethodLength -- the composition root names every part in one place
   def self.build(input:, output:, model: nil, env: ENV, clock: -> { Time.now }, telemetry: nil)
     budgets = Budgets.from(env)

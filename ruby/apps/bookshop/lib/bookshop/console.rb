@@ -81,20 +81,15 @@ module Bookshop
       when %r{\A/resume(\s|\z)} then return @sessions.resume(argument(command), session)
       when '/sessions' then @sessions.list(session)
       when '/cost' then @sessions.cost(session)
-      else other_command(command, session)
+      when '/help' then @terminal.write_line(HELP)
+      when %r{\A/audit(\s|\z)} then @terminal.write_line(@audit.show(audited(command, session)))
+      else @terminal.write_line("Unknown command #{command}. Type /help for commands.")
       end
       session
     end
 
-    def other_command(command, session)
-      case command
-      when '/help' then @terminal.write_line(HELP)
-      when %r{\A/audit(\s|\z)}
-        id = argument(command)
-        @terminal.write_line(@audit.show(id.empty? ? session.id : id))
-      else @terminal.write_line("Unknown command #{command}. Type /help for commands.")
-      end
-    end
+    # The id of the session an /audit command names, the session in use's if it names none.
+    def audited(command, session) = argument(command).then { it.empty? ? session.id : it }
 
     # What follows the command's name, trimmed.
     def argument(command) = command.split(/\s+/, 2)[1].to_s.strip

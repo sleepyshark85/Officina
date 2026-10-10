@@ -79,8 +79,13 @@ module Bookshop
       end
     end
 
-    # The cost of the usage at the model's price; nothing when it has none, as the core counts it.
-    def priced(usage) = @agent.model.info.price&.cost(usage) || BigDecimal(0)
+    # The cost of the usage at the model's price, an estimate the run's end replaces with the result's cost. The model
+    # has a price: every reply has a cost budget, which the run refuses for a model without one.
+    def priced(usage)
+      # @type var price: Sleepyshark::Officina::Price
+      @agent.model.info => { price: Officina::Price => price }
+      price.cost(usage)
+    end
 
     # Saves the conversation with the totals given, which replace the stored ones; a save that fails is told once a
     # reply.

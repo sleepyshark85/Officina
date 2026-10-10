@@ -21,5 +21,6 @@ module Bookshop
     def continues?: (StoredSession stored) -> bool
     def resumed: (StoredSession stored, Session current) -> Session
     def refusal: (String id, StoredSession? stored) -> String
+    def refuse: (String reason, Session current) -> Session
   end
 end

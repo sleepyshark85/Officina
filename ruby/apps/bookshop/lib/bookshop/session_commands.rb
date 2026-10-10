@@ -50,14 +50,14 @@ module Bookshop
     #
     # @return [Session]
     def resume(id, current)
-      stored = id.empty? ? nil : @store.load(id)
+      return refuse('Which session? Type /resume <id>; /sessions lists them.', current) if id.empty?
+
+      stored = @store.load(id)
       return resumed(stored, current) if stored && continues?(stored)
 
-      @terminal.write_line(refusal(id, stored))
-      current
+      refuse(refusal(id, stored), current)
     rescue PG::Error, Sleepyshark::Officina::Error => e
-      @terminal.write_line("The session could not be read: #{e.message.strip}")
-      current
+      refuse("The session could not be read: #{e.message.strip}", current)
     end
 
     # Shows what the session used and cost, against its budget.
@@ -85,13 +85,18 @@ module Bookshop
       session
     end
 
+    # Why the session with the id, stored as +stored+ or not at all, cannot go on.
     def refusal(id, stored)
-      if id.empty? then 'Which session? Type /resume <id>; /sessions lists them.'
-      elsif stored.nil? then "There is no session #{id}. Type /sessions to list them."
-      else
-        "Session #{id} was started with another version of the assistant, so it cannot go on. " \
-          'Type /new to start a new session.'
-      end
+      return "There is no session #{id}. Type /sessions to list them." unless stored
+
+      "Session #{id} was started with another version of the assistant, so it cannot go on. " \
+        'Type /new to start a new session.'
+    end
+
+    # Says why the session in use goes on, and returns it.
+    def refuse(reason, current)
+      @terminal.write_line(reason)
+      current
     end
   end
   private_constant :SessionCommands

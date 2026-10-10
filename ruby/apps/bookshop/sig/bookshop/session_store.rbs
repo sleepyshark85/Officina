@@ -16,9 +16,9 @@ module Bookshop
 
     private
 
-    def written?: (PG::Connection connection, Array[untyped] values, String? expected) -> bool
-    def written_over_earlier?: (PG::Connection connection, Sleepyshark::Officina::Conversation conversation,
-                                Array[untyped] values) -> bool
+    def write: (PG::Connection connection, Array[untyped] values, String? expected) -> Integer
+    def write_over_earlier: (PG::Connection connection, Sleepyshark::Officina::Conversation conversation,
+                             Array[untyped] values) -> Integer
     def earlier?: (String stored, Sleepyshark::Officina::Conversation conversation) -> bool
     def stored: (Hash[Symbol, untyped] row) -> StoredSession
   end

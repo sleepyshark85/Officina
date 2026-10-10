@@ -132,12 +132,12 @@ module ConsoleSession
     connection&.close
   end
 
-  # The first row of a query of the test's own, outside the application, as text.
-  def select_row(sql, *params)
-    connection = PG.connect(database_url)
-    connection.exec_params(sql, params).values.first
-  ensure
-    connection&.close
+  # The id of the session the transcript started.
+  def session_id(transcript) = transcript[/^Session (\h{12})\.$/, 1]
+
+  # The conversation the session with the id is stored with.
+  def stored(id)
+    Officina::Conversation.from_json(select_row('select conversation from sessions where id = $1', id).first)
   end
 
   def assert_in_order(transcript, *parts)

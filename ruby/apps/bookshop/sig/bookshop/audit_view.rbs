@@ -14,7 +14,7 @@ module Bookshop
     def link: (Array[AuditRecord] run) -> String
     def line: (AuditRecord record) -> String
     def outcome: (AuditRecord record) -> String
-    def spent: (AuditRecord record, Sleepyshark::Officina::Usage usage) -> String
+    def spent: (Sleepyshark::Officina::Usage usage, BigDecimal cost) -> String
     def milliseconds: (Float seconds) -> String
   end
 end

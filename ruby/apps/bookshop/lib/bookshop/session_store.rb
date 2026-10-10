@@ -59,7 +59,7 @@ module Bookshop
       values = [conversation.id, staff_member, saved, usage.input, usage.output, usage.cache_read, usage.cache_write,
                 cost]
       written = @database.with do |connection|
-        written?(connection, values, previous) || written_over_earlier?(connection, conversation, values)
+        write(connection, values, previous).positive? || write_over_earlier(connection, conversation, values).positive?
       end
       return saved if written
 
@@ -93,17 +93,21 @@ module Bookshop
 
     private
 
-    # Writes the values as a new row, with no +expected+, or over the row holding the +expected+ conversation.
-    def written?(connection, values, expected)
-      return connection.exec_params(CREATE, values).cmd_tuples == 1 unless expected
+    # Writes the values as a new row, with no +expected+, or over the row holding the +expected+ conversation; returns
+    # how many rows it wrote, 1 or 0.
+    def write(connection, values, expected)
+      return connection.exec_params(CREATE, values).cmd_tuples unless expected
 
-      connection.exec_params(UPDATE, [*values, expected]).cmd_tuples == 1
+      connection.exec_params(UPDATE, [*values, expected]).cmd_tuples
     end
 
-    # Writes the values over the stored row if its conversation holds the first messages of this one, and no others.
-    def written_over_earlier?(connection, conversation, values)
+    # Writes the values over the stored row if its conversation holds the first messages of this one, and no others;
+    # returns how many rows it wrote, 1 or 0.
+    def write_over_earlier(connection, conversation, values)
       stored = connection.exec_params(STORED, [conversation.id]).first&.fetch(:conversation)
-      stored && earlier?(stored, conversation) && written?(connection, values, stored)
+      return 0 unless stored && earlier?(stored, conversation)
+
+      write(connection, values, stored)
     end
 
     def earlier?(stored, conversation)

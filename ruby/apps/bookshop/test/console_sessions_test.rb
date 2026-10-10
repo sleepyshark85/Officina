@@ -3,16 +3,10 @@
 require 'test_helper'
 require_relative 'console_session'
 
-# Sessions end to end: each saved after every step of a reply, resumed after a restart or a crash, listed and
-# started anew.
+# The session commands end to end: a session resumed after a restart, or refused, and the sessions listed and started
+# anew.
 class ConsoleSessionsTest < Minitest::Test
   include ConsoleSession
-
-  # The process ending in the middle of a reply.
-  class Crash < StandardError
-  end
-
-  ADD = '{"name":"Jo Bloggs","email":"jo@example.com"}'
 
   def test_app10_quit_restart_and_resume_go_on_with_the_saved_conversation_and_its_prefix
     first = ScriptedModel.new(ScriptedModel.text('Hello.'))
@@ -34,21 +28,14 @@ class ConsoleSessionsTest < Minitest::Test
     assert_equal %i[user operator assistant user operator assistant], stored(id).messages.map(&:role)
   end
 
-  def test_app10_a_crash_mid_reply_loses_only_the_step_in_flight_and_resuming_tells_the_model
-    model = ScriptedModel.new(say_then_call('Adding Jo.', call('c1', 'add_customer', ADD)))
-    assert_raises(Crash) { session(model, 'Sam', 'Add Jo Bloggs, jo@example.com.', -> { raise Crash }) }
-    id = select_text('select id from sessions')
+  def test_app13_resuming_as_the_same_staff_member_on_the_same_day_sends_no_new_context
+    noon = -> { Time.new(2026, 10, 10, 12) }
+    id = session_id(session(ScriptedModel.new(ScriptedModel.text('Hello.')), 'Sam', 'Hi.', '/quit', clock: noon))
+    model = ScriptedModel.new(ScriptedModel.text('Hello again.'))
 
-    assert_equal %i[user operator assistant], stored(id).messages.map(&:role)
-    later = ScriptedModel.new(ScriptedModel.text('Jo may not have been added.'))
+    session(model, 'Sam', "/resume #{id}", 'Again.', '/quit', clock: noon)
 
-    session(later, 'Sam', "/resume #{id}", 'Was Jo added?', '/quit')
-
-    interrupted = later.requests.first.messages[3].blocks.filter_map(&:tool_result)
-
-    assert_equal([['c1', true]], interrupted.map { [it.call_id, it.error?] })
-    assert_includes interrupted.first.content, 'interrupted'
-    assert_equal 0, select_integer("select count(*) from customers where email = 'jo@example.com'")
+    assert_equal %i[user operator assistant user], model.requests.first.messages.map(&:role)
   end
 
   def test_app10_resume_refuses_a_session_another_version_started_and_the_session_in_use_goes_on
@@ -66,6 +53,22 @@ class ConsoleSessionsTest < Minitest::Test
     assert_equal %i[user operator], model.requests.first.messages.map(&:role)
   end
 
+  def test_app10_resume_says_a_stored_session_cannot_be_read_and_the_session_in_use_goes_on
+    select_row(<<~SQL)
+      insert into sessions (id, staff_member, conversation, input_tokens, output_tokens, cache_read_tokens,
+                            cache_write_tokens, cost, updated)
+      values ('broken', 'Sam', '{}', 0, 0, 0, 0, 0, now())
+    SQL
+    model = ScriptedModel.new(ScriptedModel.text('Hello.'))
+
+    transcript = session(model, 'Sam', '/resume broken', 'Hi.', '/quit')
+
+    assert_in_order transcript, "you> /resume broken\nThe session could not be read: Not a conversation's JSON: " \
+                                "a member is missing or of the wrong type\n",
+                    "assistant> Hello.\n"
+    assert_equal %i[user operator], model.requests.first.messages.map(&:role)
+  end
+
   def test_app02_sessions_lists_the_latest_first_marking_the_one_in_use_and_new_starts_another
     model = ScriptedModel.new(ScriptedModel.text('One.'), ScriptedModel.text('Two.'))
 
@@ -79,27 +82,15 @@ class ConsoleSessionsTest < Minitest::Test
     assert_equal([%i[user operator assistant]] * 2, [first, second].map { stored(it).messages.map(&:role) })
   end
 
-  def test_app10_a_session_that_cannot_be_saved_is_told_once_a_reply_and_the_next_save_stores_everything
-    model = ScriptedModel.new(say_then_call('Adding Jo.', call('c1', 'add_customer', ADD)),
-                              ScriptedModel.text('It could not be added.'), ScriptedModel.text('Back again.'))
+  def test_app02_sessions_says_so_when_the_sessions_cannot_be_read
+    transcript = session(ScriptedModel.new, 'Sam', -> { take_database_down }, '/sessions', -> { bring_database_back },
+                         '/quit')
 
-    transcript = session(model, 'Sam', 'Add Jo Bloggs, jo@example.com.', -> { take_database_down }, 'y',
-                         -> { bring_database_back }, 'Are you back?', '/quit')
-
-    assert_equal 1, transcript.scan('[The session could not be saved: ').size
-    assert_equal %i[user operator assistant user assistant user assistant],
-                 stored(session_id(transcript)).messages.map(&:role)
+    assert_match %r{you> /sessions\nThe sessions could not be read: .+\nyou> /quit\n}, transcript
   end
 
   private
 
   # What a request sends before its messages: the instructions and the tools.
   def prefix(request) = [request.instructions, request.tools.map { [it.name, it.description, it.input_schema] }]
-
-  def session_id(transcript) = transcript[/^Session (\h{12})\.$/, 1]
-
-  # The conversation the session with the id is stored with.
-  def stored(id) = Officina::Conversation.from_json(select_text('select conversation from sessions where id = $1', id))
-
-  def select_text(sql, *params) = select_row(sql, *params).first
 end

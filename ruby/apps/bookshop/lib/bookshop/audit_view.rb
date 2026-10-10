@@ -48,7 +48,8 @@ module Bookshop
 
     def outcome(record)
       case record
-      in { kind: 'RunEnded', usage: Usage => usage } then "#{record.outcome}  #{spent(record, usage)}"
+      in { kind: 'RunEnded', usage: Usage => usage, cost: BigDecimal => cost }
+        "#{record.outcome}  #{spent(usage, cost)}"
       in { kind: 'ApprovalAnswered', detail: String => reason } then "#{record.outcome}: #{reason}"
       in { kind: 'ToolEnded', duration: Float => seconds } then "#{record.outcome}  #{milliseconds(seconds)}"
       else record.outcome.to_s
@@ -56,9 +57,9 @@ module Bookshop
     end
 
     # A run's tokens and cost.
-    def spent(record, usage)
+    def spent(usage, cost)
       "tokens: #{Spent.thousands(usage.all_input)} in (#{Spent.thousands(usage.cache_read)} cached), " \
-        "#{Spent.thousands(usage.output)} out, $#{Spent.dollars(record.cost || BigDecimal(0))}"
+        "#{Spent.thousands(usage.output)} out, $#{Spent.dollars(cost)}"
     end
 
     def milliseconds(seconds) = "#{Spent.thousands((seconds * 1000).round)} ms"

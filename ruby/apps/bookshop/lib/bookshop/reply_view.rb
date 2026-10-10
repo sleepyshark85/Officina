@@ -77,9 +77,6 @@ module Bookshop
       case result
       in Officina::Completed(text:) then ('[The reply has no text. Please ask again.]' if text.strip.empty?)
       in Officina::Stopped(reason:) then stopped(reason)
-      in Officina::Failed(reason: :prefix_mismatch)
-        '[This session was started with another version of the assistant, so it cannot go on. ' \
-        'Type /new to start a new session.]'
       in Officina::Failed(detail:) then "[Failed: #{detail}]"
       end
     end
