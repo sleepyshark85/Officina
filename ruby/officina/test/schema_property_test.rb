@@ -7,6 +7,7 @@ require 'json_schemer'
 # values; and every schema outside the subset refused.
 class SchemaPropertyTest < Minitest::Test
   cover 'Sleepyshark::Officina::Schema*'
+  cover 'Sleepyshark::Officina::SchemaSubset*'
 
   Schema = Sleepyshark::Officina::Schema
   SchemaError = Sleepyshark::Officina::SchemaError

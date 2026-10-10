@@ -5,6 +5,7 @@ require 'test_helper'
 # The core's validator for the JSON Schema subset, by example; schema_property_test.rb compares it with a reference.
 class SchemaTest < Minitest::Test
   cover 'Sleepyshark::Officina::Schema*'
+  cover 'Sleepyshark::Officina::SchemaSubset*'
 
   Schema = Sleepyshark::Officina::Schema
   SchemaError = Sleepyshark::Officina::SchemaError

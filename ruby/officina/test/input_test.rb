@@ -40,6 +40,16 @@ class InputTest < Minitest::Test
     assert_equal [Integer] * 3, [value.count, *value.sizes].map(&:class)
   end
 
+  def test_tool01_number_members_keep_their_floats
+    value = Input.define do
+      number :weight
+      array :prices, of: :number
+    end.from_json({ 'weight' => 2.0, 'prices' => [1.5, 2.0] })
+
+    assert_equal [Float] * 3, [value.weight, *value.prices].map(&:class)
+    assert_equal [2.0, [1.5, 2.0]], [value.weight, value.prices]
+  end
+
   def test_tool01_an_array_becomes_a_frozen_array_and_an_absent_one_nil
     tagged = arrays.from_json({ 'tags' => [1, 2] })
     parted = arrays.from_json({ 'parts' => [{ 'n' => 3 }] })
