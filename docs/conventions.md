@@ -31,7 +31,10 @@ written, and this page wins for what the code must do.
 - **Who codes and reviews:** the agents in `.claude/agents/`: `developer` (Opus) for big or risky slices, `fixer`
   (Sonnet) only for small, well-bounded fixes, and `reviewer` (Opus), which approves each PR with a verdict comment the
   review gate reads, checking these conventions, the implementation's language rules, the design rules below and
-  over-complication; at most 3 review rounds, then stop and summarize for the owner.
+  over-complication; at most 3 review rounds, then stop and summarize for the owner. **Each PR gets a new reviewer**,
+  kept for that PR's rounds only, as one carrying many PRs' history approves too easily. A later PR gets another new
+  one, and so does a strict re-review: one the lead asks for when it doubts an approval, which counts as one of the
+  PR's three rounds. The lead writes each agent's brief with the `dispatch` skill (`.claude/skills/dispatch/`).
 - Review comments may arrive as a pending review: read them with GraphQL
   `pullRequest(number: N) { reviewThreads { … } }`, as the REST endpoints don't return them.
 

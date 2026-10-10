@@ -10,7 +10,8 @@ REQUIREMENTS.md for the IDs your change covers and ARCHITECTURE.md for the conce
 
 ## How to work
 
-1. Branch from an up-to-date `main` with an allowed prefix (`slice/<id>-<slug>`, `feature/`, `refactor/`, `fix/`…).
+1. Branch from the up-to-date base your brief names (`main` unless it is stacked) with an allowed prefix
+   (`slice/<id>-<slug>`, `feature/`, `refactor/`, `fix/`…).
 2. Build the smallest thing that meets the acceptance criteria, to the code quality bar in docs/conventions.md:
    mediocre code is sent back even when it works. Write the tests as you go, as its *Tests* section and the bar's
    *Tests* and *Mutation* rows say.
@@ -23,7 +24,6 @@ REQUIREMENTS.md for the IDs your change covers and ARCHITECTURE.md for the conce
    the build, and shows the staged files: check each was changed on purpose.
 5. Push and open the PR with a description the reviewer can verify: what changed, why, what you checked and how.
    End it with the attribution line the session gives.
-6. Ask the `reviewer` agent to review it, fix what it finds, and merge only when it has approved the newest commit and
-   the required checks pass, as docs/conventions.md says.
+6. Stop there and report: the lead dispatches the reviewer and merges.
 
 Check the `claude-api` skill before writing provider code. Report what you built, the PR, and anything left open.
