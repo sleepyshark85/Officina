@@ -6,13 +6,13 @@ module Sleepyshark
         attr_reader command: Array[String]?
         attr_reader env: Hash[String, String?]
         attr_reader url: String?
-        attr_reader headers: Hash[String, String?]
+        attr_reader headers: Hash[String, String]
 
         def self.new: (name: String, ?command: Array[String]?, ?env: Hash[String, String?]?, ?url: String?,
-                       ?headers: Hash[String, String?]?) -> instance
+                       ?headers: Hash[String, String]?) -> instance
 
         def initialize: (name: String, ?command: Array[String]?, ?env: Hash[String, String?]?, ?url: String?,
-                         ?headers: Hash[String, String?]?) -> void
+                         ?headers: Hash[String, String]?) -> void
 
         private
 

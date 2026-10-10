@@ -3,8 +3,9 @@
 # The test kit's fake MCP server over stdio, as a program the MCP tests start. Its tools: echo, upper, fail (an
 # error result), crash (the process exits mid-call) and hang (never answers; exits when its input ends). With a file
 # in FAKE_MCP_PID, it writes its process id there first. The first argument picks something else to be:
-# complain (reads the first request, says why it cannot go on on its error output, and exits), silent (never
-# answers, until its input ends) or stubborn (never answers, and ignores the end of its input).
+# complain (reads the first request, says why it cannot go on on its error output, and exits), flood (answers the
+# first request with a line longer than 16 MB), silent (never answers, until its input ends) or stubborn (never
+# answers, and ignores the end of its input).
 
 require 'sleepyshark/officina/testing/fake_mcp_server'
 require 'sleepyshark/officina/testing/fake_mcp_tool'
@@ -20,6 +21,10 @@ case ARGV.first
 when 'complain'
   $stdin.gets
   warn 'configuration file missing'
+when 'flood'
+  $stdin.gets
+  $stdout.write('x' * ((16 * 1024 * 1024) + 1))
+  $stdin.read
 when 'silent'
   $stdin.read
 when 'stubborn'

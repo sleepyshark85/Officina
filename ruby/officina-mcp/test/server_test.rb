@@ -9,8 +9,9 @@ class ServerTest < Minitest::Test
 
   Server = Sleepyshark::Officina::Mcp::Server
 
-  def test_mcp01_a_server_is_reached_by_either_a_command_or_a_url
-    [{}, { command: ['server'], url: 'http://127.0.0.1/mcp' }].each do |reach|
+  def test_mcp01_a_server_is_reached_by_either_a_command_and_its_env_or_a_url_and_its_headers
+    [{}, { command: ['server'], url: 'http://127.0.0.1/mcp' }, { url: 'http://127.0.0.1/mcp', env: {} },
+     { command: ['server'], headers: {} }].each do |reach|
       assert_raises(ArgumentError) { Server.new(name: 'fs', **reach) }
     end
   end

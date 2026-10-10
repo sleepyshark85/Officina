@@ -29,7 +29,7 @@ module Sleepyshark
         private_constant :Pending
 
         # Starts server's command; see ChildProcess. clock times the wait for it to exit.
-        def initialize(server, clock)
+        def initialize(server, clock:)
           @name = server.name
           @clock = clock
           @mutex = Mutex.new
@@ -67,7 +67,7 @@ module Sleepyshark
         # Stops the server (see ChildProcess#stop), and returns once every thread started for it has ended.
         def close
           lose('the connection was closed')
-          @process.stop(@clock)
+          @process.stop(clock: @clock)
           @process.finish(@reader, @process.output)
         end
 

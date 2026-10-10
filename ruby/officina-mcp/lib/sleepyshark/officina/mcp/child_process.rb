@@ -39,9 +39,9 @@ module Sleepyshark
         # Closes the input, so the server can exit by itself, as a container must to be removed. One that has not
         # within EXIT_WAIT seconds, by clock, is killed with its process group. Returns once it has exited and been
         # reaped, and the error output has been read.
-        def stop(clock)
+        def stop(clock:)
           @input.close
-          kill unless exited_within?(EXIT_WAIT, clock)
+          kill unless exited_within?(EXIT_WAIT, clock:)
           @exit.join
           # What is left of its group, such as a child that ignored the end of its input or holds its output.
           signal(-@pid) unless WINDOWS
@@ -106,7 +106,7 @@ module Sleepyshark
           nil
         end
 
-        def exited_within?(seconds, clock)
+        def exited_within?(seconds, clock:)
           deadline = clock.call + seconds
           until @exit.join(POLL)
             return false if clock.call >= deadline

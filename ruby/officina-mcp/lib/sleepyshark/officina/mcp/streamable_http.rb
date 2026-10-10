@@ -15,6 +15,9 @@ module Sleepyshark
         # What the network and Net::HTTP raise when a server cannot be reached or breaks off.
         FAILURES = [IOError, SystemCallError, SocketError, Timeout::Error, Net::ProtocolError,
                     OpenSSL::SSL::SSLError, Error].freeze
+        # How long opening a connection may take, in seconds. Net::HTTP cannot stop it sooner, so it bounds how long
+        # a request cancelled while its connection opens still waits for its thread.
+        OPEN_TIMEOUT = 10
 
         # A request waiting for its response, which a thread of its own reads. The request's connection is its own,
         # so closing it is how a cancelled request stops that thread.
@@ -30,17 +33,26 @@ module Sleepyshark
             raise Error, transport.lose(e.message)
           end
 
-          # Ends the request, if still running, and waits for its thread.
+          # Ends the request, if still running, and waits for its thread. A connection still opening cannot be closed,
+          # so it is closed once open, or the opening fails within OPEN_TIMEOUT.
           def release
-            begin
-              http.finish if http.started?
-            rescue IOError
-              nil # Finished meanwhile.
+            loop do
+              stop
+              break if worker.join(POLL)
             end
-            worker.join
           rescue *FAILURES
             # Taken already, or abandoned: either way, how it ended no longer matters.
             nil
+          ensure
+            stop
+          end
+
+          private
+
+          def stop
+            http.finish if http.started?
+          rescue IOError
+            nil # Finished meanwhile.
           end
         end
         private_constant :Pending
@@ -60,10 +72,10 @@ module Sleepyshark
         end
 
         # Sends text, a request with that id, or a notification when id is nil, and returns what to wait on.
-        # Raises Mcp::Error once the connection is lost, or when the server cannot be connected to.
+        # Raises Mcp::Error once the connection is lost.
         def post(text, id, version)
           request = build(text, version)
-          http = open
+          http = connection
           Pending.new(self, http, Thread.new { exchange(http, request, id) })
         end
 
@@ -97,21 +109,22 @@ module Sleepyshark
           request
         end
 
-        def open
+        # A connection of the request's own, opened on its thread.
+        def connection
           http = Net::HTTP.new(@uri.host.to_s, @uri.port)
           http.use_ssl = @uri.scheme == 'https'
+          http.open_timeout = OPEN_TIMEOUT
           # A run's cancellation ends a call, not a timeout. Net::HTTP takes nil for none, which its signature leaves
           # out.
           http.read_timeout = nil # steep:ignore
           http.write_timeout = nil # steep:ignore
-          http.start
-        rescue *FAILURES => e
-          raise Error, lose(e.message)
+          http
         end
 
-        # Runs on the request's own thread: sends it and reads the answer.
+        # Runs on the request's own thread: opens the connection, sends the request and reads the answer.
         def exchange(http, request, id)
           Thread.current.report_on_exception = false
+          http.start
           # Returning from the block leaves the rest of the body unread, as a stream may stay open after the response.
           http.request(request) do |response|
             check(response, request)

@@ -11,9 +11,12 @@ module Sleepyshark
 
       # Reopened rather than given a block, which Steep would not read as the class's body.
       class Server
-        # @raise [ArgumentError] unless exactly one of command and url is given.
+        # @raise [ArgumentError] unless exactly one of command and url is given, or when env comes without a command
+        #   or headers without a url, where they would mean nothing.
         def initialize(name:, command: nil, env: nil, url: nil, headers: nil)
-          raise ArgumentError, "MCP server #{name}: give either a command or a url" unless command.nil? ^ url.nil?
+          stdio = !command.nil?
+          raise ArgumentError, "MCP server #{name}: give either a command or a url" unless stdio ^ !url.nil?
+          raise ArgumentError, "MCP server #{name}: env is for a command, headers for a url" if stdio ? headers : env
 
           command = command&.map(&:-@).freeze
           # Data's own initialize, which takes the members, has no signature Steep reads.

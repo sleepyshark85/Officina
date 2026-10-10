@@ -23,7 +23,7 @@ module Sleepyshark
           @mutex = Mutex.new
           @last_id = 0
           @version = PROTOCOL_VERSION
-          @transport = server.command ? Stdio.new(server, clock) : StreamableHttp.new(server)
+          @transport = server.command ? Stdio.new(server, clock:) : StreamableHttp.new(server)
           handshake(cancel)
         end
 
@@ -53,7 +53,8 @@ module Sleepyshark
 
         # Ends the connection. A server it started has its input closed, so it can exit by itself; one that has not
         # within 5 seconds is killed with every process it started (on Unix, its process group). Returns once the
-        # server has exited and been reaped, and every thread the client started has ended.
+        # server has exited and been reaped, and its readers have ended. Each request's own thread ends with the
+        # request, so close it once no request is in flight.
         def close = @transport.close
 
         private

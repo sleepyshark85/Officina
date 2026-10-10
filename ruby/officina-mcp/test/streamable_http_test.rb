@@ -1,9 +1,8 @@
 # frozen_string_literal: true
 
-require 'socket'
 require 'test_helper'
 require 'sleepyshark/officina/mcp'
-require_relative 'cancelled_after'
+require_relative 'cancellations'
 
 # The MCP client over Streamable HTTP, against the test kit's fake server on a local port.
 class StreamableHttpTest < Minitest::Test
@@ -34,9 +33,13 @@ class StreamableHttpTest < Minitest::Test
   end
 
   def test_mcp04_an_http_server_down_at_connect_raises_clearly
-    error = assert_raises(Mcp::Error) { connect("http://127.0.0.1:#{free_port}/mcp") }
+    server = FakeServer.new(tools: [ECHO])
+    server.go_down
+    server.serve_http do |url|
+      error = assert_raises(Mcp::Error) { connect(url) }
 
-    assert_match(/\AMCP server web could not be reached: .*refused/i, error.message)
+      assert_match(/\AMCP server web could not be reached: /, error.message)
+    end
   end
 
   def test_mcp04_an_http_server_that_goes_down_mid_call_raises_and_stays_lost
@@ -101,13 +104,5 @@ class StreamableHttpTest < Minitest::Test
     ensure
       client&.close
     end
-  end
-
-  # A local port nothing listens on.
-  def free_port
-    listener = TCPServer.new('127.0.0.1', 0)
-    listener.addr[1]
-  ensure
-    listener&.close
   end
 end

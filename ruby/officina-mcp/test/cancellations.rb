@@ -9,3 +9,8 @@ class CancelledAfter
 
   def cancelled? = (@checks -= 1) <= 0
 end
+
+# A cancellation cancelled once a file exists, such as the one a server writes its process id to as it starts.
+CancelledOnceExists = Data.define(:path) do
+  def cancelled? = File.exist?(path)
+end

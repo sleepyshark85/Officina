@@ -3,6 +3,7 @@ module Sleepyshark
     module Mcp
       class StreamableHttp
         FAILURES: Array[singleton(Exception)]
+        OPEN_TIMEOUT: Integer
 
         class Pending < Data
           attr_reader transport: StreamableHttp
@@ -14,11 +15,15 @@ module Sleepyshark
           def take: (Float? timeout) -> Hash[String, json]?
 
           def release: () -> void
+
+          private
+
+          def stop: () -> void
         end
 
         @name: String
         @uri: URI::HTTP
-        @headers: Hash[String, String?]
+        @headers: Hash[String, String]
         @mutex: Thread::Mutex
         @session: String?
         @lost: String?
@@ -37,7 +42,7 @@ module Sleepyshark
 
         def build: (String text, String version) -> Net::HTTP::Post
 
-        def open: () -> Net::HTTP
+        def connection: () -> Net::HTTP
 
         def exchange: (Net::HTTP http, Net::HTTP::Post request, Integer? id) -> Hash[String, json]
 

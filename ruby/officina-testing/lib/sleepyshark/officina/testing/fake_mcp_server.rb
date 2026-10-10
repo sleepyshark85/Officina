@@ -54,7 +54,8 @@ module Sleepyshark
         def serve_http
           # TCPServer's signature leaves out the host and port form.
           listener = TCPServer.new('127.0.0.1', 0) # steep:ignore
-          acceptor = Thread.new { Http.new(self).accept(listener) }
+          front = Http.new(answer: ->(request) { answer(request) }, session: -> { session }, down: -> { down? })
+          acceptor = Thread.new { front.accept(listener) }
           begin
             yield "http://127.0.0.1:#{listener.addr[1]}/mcp"
           ensure
@@ -63,7 +64,9 @@ module Sleepyshark
           end
         end
 
-        # The response to a JSON-RPC request, a Hash; nil for a notification. For the HTTP front.
+        private
+
+        # The response to a JSON-RPC request, a Hash; nil for a notification.
         def answer(request)
           id = request['id'] or return
           result = result(request['method'], request['params'] || {})
@@ -72,13 +75,11 @@ module Sleepyshark
           { 'jsonrpc' => '2.0', 'id' => id, 'error' => { 'code' => -32_601, 'message' => 'Method or tool not found.' } }
         end
 
-        # The current HTTP session's id. For the HTTP front.
+        # The current HTTP session's id.
         def session = @mutex.synchronize { @session }
 
-        # Whether the server went down. For the HTTP front.
+        # Whether the server went down.
         def down? = @mutex.synchronize { @down }
-
-        private
 
         def result(method, params)
           case method
@@ -118,8 +119,11 @@ module Sleepyshark
         class Http
           STATUS = { 200 => 'OK', 202 => 'Accepted', 400 => 'Bad Request', 404 => 'Not Found' }.freeze
 
-          def initialize(server)
-            @server = server
+          # The server's answer to a request, its session's id, and whether it is down.
+          def initialize(answer:, session:, down:)
+            @answer = answer
+            @session = session
+            @down = down
           end
 
           # Answers connections until the listener is closed.
@@ -143,10 +147,10 @@ module Sleepyshark
 
           def respond(connection)
             headers, body = read(connection)
-            return if @server.down?
+            return if @down.call
 
             status, extra, text = reply(headers, JSON.parse(body))
-            return if @server.down?
+            return if @down.call
 
             connection.write("HTTP/1.1 #{status} #{STATUS[status]}\r\n",
                              *extra.map { |name, value| "#{name}: #{value}\r\n" },
@@ -166,9 +170,9 @@ module Sleepyshark
           def reply(headers, request)
             initializing = request['method'] == 'initialize'
             return [400, {}, ''] unless accepts?(headers) && (initializing || headers.key?('mcp-protocol-version'))
-            return [404, {}, ''] unless initializing || headers['mcp-session-id'] == @server.session
+            return [404, {}, ''] unless initializing || headers['mcp-session-id'] == @session.call
 
-            response = @server.answer(request) or return [202, {}, '']
+            response = @answer.call(request) or return [202, {}, '']
             content(request['method'], JSON.generate(response))
           end
 
@@ -180,7 +184,7 @@ module Sleepyshark
           def content(method, body)
             case method
             when 'initialize'
-              [200, { 'Content-Type' => 'application/json', 'Mcp-Session-Id' => @server.session }, body]
+              [200, { 'Content-Type' => 'application/json', 'Mcp-Session-Id' => @session.call }, body]
             when 'tools/call'
               # The notification's field has no space after the colon, which the event stream format allows.
               [200, { 'Content-Type' => 'text/event-stream' }, "data:#{NOTIFICATION}\n\ndata: #{body}\n\n"]

@@ -4,7 +4,8 @@ require 'rbconfig'
 require 'test_helper'
 require 'tmpdir'
 require 'sleepyshark/officina/mcp'
-require_relative 'cancelled_after'
+require_relative 'cancellations'
+ARGV << '-v' if ENV['CI'] # TEMPORARY: per-test timings on CI, removed before review
 
 # The MCP client over stdio, against the test kit's fake server run as a child process (test/fixtures/stdio_server.rb).
 class StdioTest < Minitest::Test
@@ -17,11 +18,6 @@ class StdioTest < Minitest::Test
   COMMAND = [RbConfig.ruby, '--disable-gems', '-I', File.expand_path('../../officina-testing/lib', __dir__),
              SERVER].freeze
   WITHOUT_BUNDLER = { 'RUBYOPT' => nil }.freeze
-
-  # Cancelled once the server has started, which it says by writing its process id.
-  CancelledOnceStarted = Data.define(:pid_file) do
-    def cancelled? = File.exist?(pid_file)
-  end
 
   def test_mcp01_a_stdio_server_agrees_on_the_protocol_lists_every_page_of_its_tools_and_runs_them
     with_client do |client|
@@ -54,6 +50,7 @@ class StdioTest < Minitest::Test
       error = assert_raises(Mcp::Error) { client.call_tool('missing', {}) }
 
       assert_equal 'MCP server fs answered tools/call with an error: Method or tool not found.', error.message
+      assert_equal 'HI', client.call_tool('upper', { 'text' => 'hi' }).text, 'the connection is kept'
     end
   end
 
@@ -72,6 +69,12 @@ class StdioTest < Minitest::Test
     error = assert_raises(Mcp::Error) { Mcp.connect(server) }
 
     assert_match(/\AMCP server fs could not be started \(officina-no-such-program\): /, error.message)
+  end
+
+  def test_mcp04_a_server_that_sends_a_message_longer_than_16_mb_is_lost
+    error = assert_raises(Mcp::Error) { connect('flood') }
+
+    assert_equal 'MCP server fs could not be reached: it sent a message longer than 16 MB', error.message
   end
 
   def test_mcp04_a_server_that_exits_while_connecting_raises_with_what_it_said
@@ -97,7 +100,7 @@ class StdioTest < Minitest::Test
   def test_mcp04_a_connect_cancelled_while_the_server_starts_leaves_no_server_running
     with_pid_file do |pid_file|
       error = assert_raises(Mcp::Error) do
-        connect('silent', env: { 'FAKE_MCP_PID' => pid_file }, cancel: CancelledOnceStarted.new(pid_file))
+        connect('silent', env: { 'FAKE_MCP_PID' => pid_file }, cancel: CancelledOnceExists.new(pid_file))
       end
 
       assert_equal 'MCP server fs, initialize: cancelled', error.message
@@ -134,11 +137,7 @@ class StdioTest < Minitest::Test
     client&.close
   end
 
-  def with_pid_file
-    Dir.mktmpdir { |directory| yield File.join(directory, 'pid') }
-  end
+  def with_pid_file = Dir.mktmpdir { |directory| yield File.join(directory, 'pid') }
 
-  def refute_running(pid_file)
-    assert_raises(Errno::ESRCH) { Process.kill(0, Integer(File.read(pid_file))) }
-  end
+  def refute_running(pid_file) = assert_raises(Errno::ESRCH) { Process.kill(0, Integer(File.read(pid_file))) }
 end

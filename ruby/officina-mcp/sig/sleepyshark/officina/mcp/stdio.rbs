@@ -25,7 +25,7 @@ module Sleepyshark
         @process: ChildProcess
         @reader: Thread
 
-        def initialize: (Server server, clock clock) -> void
+        def initialize: (Server server, clock: clock) -> void
 
         def post: (String text, Integer? id, String _version) -> Pending
 

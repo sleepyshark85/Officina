@@ -25,13 +25,13 @@ module Sleepyshark
 
         def serve_http: () { (String url) -> void } -> void
 
+        private
+
         def answer: (message request) -> message?
 
         def session: () -> String
 
         def down?: () -> bool
-
-        private
 
         def result: (untyped method, message params) -> message?
 
@@ -46,9 +46,11 @@ module Sleepyshark
 
           STATUS: Hash[Integer, String]
 
-          @server: FakeMcpServer
+          @answer: ^(message request) -> message?
+          @session: ^() -> String
+          @down: ^() -> bool
 
-          def initialize: (FakeMcpServer server) -> void
+          def initialize: (answer: ^(message request) -> message?, session: ^() -> String, down: ^() -> bool) -> void
 
           def accept: (TCPServer listener) -> void
 

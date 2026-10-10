@@ -23,7 +23,7 @@ module Sleepyshark
 
         def last_error_line: (Numeric timeout) -> String?
 
-        def stop: (clock clock) -> void
+        def stop: (clock: clock) -> void
 
         def finish: (Thread reader, IO pipe) -> void
 
@@ -37,7 +37,7 @@ module Sleepyshark
 
         def read_errors: () -> void
 
-        def exited_within?: (Numeric seconds, clock clock) -> bool
+        def exited_within?: (Numeric seconds, clock: clock) -> bool
 
         def signal: (Integer pid) -> void
       end

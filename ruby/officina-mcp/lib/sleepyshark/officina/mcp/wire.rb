@@ -59,7 +59,8 @@ module Sleepyshark
 
         # Splits an event stream, fed in chunks of any size, into events, and yields each event's data: its data
         # lines, joined with line feeds. Other fields and comments are skipped, and so is an event the stream ends
-        # without, as it is incomplete.
+        # without, as it is incomplete. Lines end in LF or CRLF; a lone CR, which the format allows but no MCP server
+        # is known to send, is not taken as a line end.
         class EventStream
           def initialize
             # Bytes, as a chunk may end inside a character.
