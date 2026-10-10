@@ -2,9 +2,11 @@ module Bookshop
   class Database
     POOL_SIZE: Integer
     CHECKOUT_TIMEOUT: Integer
+    LIMITS: Hash[Symbol, untyped]
 
     def self.containing: (String? part) -> String?
     def self.nil_if_blank: (String? text) -> String?
+    def self.password: (String url) -> String?
 
     def initialize: (String url) -> void
     def with: [T] () { (PG::Connection) -> T } -> T

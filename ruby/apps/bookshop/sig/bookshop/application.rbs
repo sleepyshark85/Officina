@@ -1,0 +1,10 @@
+module Bookshop
+  class Application
+    @shop: Shop
+    @console: Console
+
+    def initialize: (shop: Shop, console: Console) -> void
+    def run: () -> void
+    def close: () -> void
+  end
+end
