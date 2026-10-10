@@ -59,8 +59,8 @@ module Sleepyshark
       def ended(result)
         case result
         in Completed then { outcome: 'completed' }
-        in Stopped(reason:, detail:) then { outcome: "stopped: #{reason}", detail: }
-        in Failed(reason:, detail:) then { outcome: "failed: #{reason}", detail: }
+        in Stopped then { outcome: "stopped: #{result.reason}", detail: result.detail }
+        in Failed then { outcome: "failed: #{result.reason}", detail: result.detail }
         in nil then { outcome: 'abandoned' }
         end
       end
