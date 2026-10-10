@@ -8,10 +8,13 @@ if ENV['COVERAGE']
 end
 
 require 'minitest/autorun'
-require 'minitest/error_on_warning'
 require 'mutant/minitest/coverage'
 require 'pbt'
 require 'sleepyshark/officina/testing'
+require_relative 'workspace_warnings'
+
+# Ruby's documented way to handle warnings is to override Warning.warn.
+Warning.singleton_class.prepend(WorkspaceWarnings)
 
 # Property tests draw one seed per run, which a failure prints; PROPERTY_SEED sets it, to reproduce one or for CI.
 Pbt.configure { |config| config.seed = Integer(ENV.fetch('PROPERTY_SEED')) } if ENV.key?('PROPERTY_SEED')

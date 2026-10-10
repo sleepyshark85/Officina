@@ -18,7 +18,7 @@ Layout (R2, R3); each gem has `lib/`, `sig/` (its RBS signatures), `test/` and i
 | `officina-claude/` | Gem `sleepyshark-officina-claude`: the Claude adapter, the only user of the Anthropic SDK |
 | `officina-mcp/` | Gem `sleepyshark-officina-mcp`: the MCP client (stdio and Streamable HTTP) |
 | `officina-testing/` | Gem `sleepyshark-officina-testing`: the thread-leak check every test runs; scripted model and approver, fake MCP server, prefix stability check |
-| `test/` | `test_helper.rb`, which every test loads first, and the dependency check `dependencies_test.rb` (TEST-05), with fixture gems in `test/fixtures/dependencies/` |
+| `test/` | `test_helper.rb`, which every test loads first (with `workspace_warnings.rb`: a warning about a workspace file fails the tests, a gem's is printed), and the dependency check `dependencies_test.rb` (TEST-05), with fixture gems in `test/fixtures/dependencies/` |
 | `apps/bookshop/` | Bookshop Assistant (from Ruby S06), run by `exe/bookshop` |
 | `examples/` | `hello`, a live chat; the GEN-06 samples `extraction`, `chat` and `background` (planned) |
 | `docs/` | Ruby spike notes and traceability |
@@ -33,7 +33,7 @@ Assistant's tests (from Ruby S06) need Docker on Linux and skip elsewhere. From 
 bundle install
 bundle exec rbs collection install   # the gems' signatures Steep reads, once and after Gemfile.lock changes
 bundle exec rake                     # rubocop, steep, then the tests
-bundle exec rake test                # the tests alone: one process, one test at a time, random order, warnings fail
+bundle exec rake test                # the tests alone: one process, one test at a time, random order
 ```
 
 A property test that fails prints its seed; `PROPERTY_SEED=<seed> bundle exec rake test` runs it again with the same

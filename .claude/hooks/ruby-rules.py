@@ -22,17 +22,23 @@ def requirement_ids(root):
 
 def comments(text):
     """Each comment with its line number: a # outside a string literal to the end of the line, and =begin/=end blocks.
-    A line-by-line reading: a # after an odd number of quotes on its line counts as inside a string."""
+    A line-by-line reading of '…' and "…" literals, escapes included; other literals (%q, heredocs) are not read."""
     block = False
     for number, line in enumerate(text.splitlines(), 1):
         if block or line.startswith("=begin"):
             block = not line.startswith("=end")
             yield number, line
             continue
-        at = 0
-        while (at := line.find("#", at)) >= 0:
-            before = line[:at]
-            if before.count('"') % 2 == 0 and before.count("'") % 2 == 0:
+        quote, at = None, 0
+        while at < len(line):
+            char = line[at]
+            if quote and char == "\\":
+                at += 1
+            elif quote:
+                quote = None if char == quote else quote
+            elif char in "'\"":
+                quote = char
+            elif char == "#":
                 yield number, line[at:]
                 break
             at += 1

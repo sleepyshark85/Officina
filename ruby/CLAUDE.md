@@ -19,7 +19,8 @@ would do), rewrite it.
 ## Tooling (enforced by hooks and CI)
 
 - `bundle exec rubocop` and `bundle exec steep check` before a commit; `bundle exec rake test`, with warnings on and
-  none printed, before a push, as for .NET and Go. `bundler-audit` runs in `ruby-quality`, as it needs the network.
+  any warning about the workspace's own files failing them, before a push, as for .NET and Go. `bundler-audit` runs in
+  `ruby-quality`, as it needs the network.
 - Required checks before a merge, from `.github/workflows/ruby.yml`: `ruby-changes`, `ruby-ubuntu`, `ruby-windows`,
   `ruby-quality`, `ruby-mutation`, besides the .NET and Go ones.
 - Every file starts with `# frozen_string_literal: true`.

@@ -14,7 +14,7 @@ class DependenciesTest < Minitest::Test
     'sleepyshark-officina' => %w[bigdecimal json opentelemetry-api opentelemetry-metrics-api].freeze,
     CLAUDE => %w[anthropic sleepyshark-officina].freeze,
     'sleepyshark-officina-mcp' => %w[sleepyshark-officina].freeze,
-    'sleepyshark-officina-testing' => %w[sleepyshark-officina].freeze
+    'sleepyshark-officina-testing' => %w[minitest sleepyshark-officina].freeze
   }.freeze
   STANDARD_LIBRARY = RbConfig::CONFIG.values_at('rubylibdir', 'rubyarchdir').freeze
 
