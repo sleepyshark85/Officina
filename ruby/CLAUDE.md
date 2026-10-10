@@ -11,36 +11,37 @@ order of precedence: [The Ruby Style Guide](https://rubystyle.guide/), RuboCop's
 is broken only with a `# rubocop:disable Department/Cop -- <reason>` on the line or a comment saying why, and the
 reviewer must agree with the reason.
 
-Port the behaviour, never the C# or the Go. If Ruby code reads like Java or C# (abstract base classes raising
+The rules every implementation shares are in the conventions, and only there; a rule below marked "(conventions)" is
+how Ruby realizes the one of that name.
+
+Port the behaviour, never the shape (conventions). Ruby code that reads like Java or C# (abstract base classes raising
 `NotImplementedError`, `I`-prefixed modules, `get_x` methods, a container, builders, exceptions for a run's outcome) or
 like Go (multiple return values for errors, `ctx` threaded through everything, a type switch on classes where a method
-would do), rewrite it.
+would do) is rewritten.
 
 ## Tooling (enforced by hooks and CI)
 
 - `bundle exec rubocop` and `bundle exec steep check` before a commit; `bundle exec rake test`, with warnings on and
   any warning about the workspace's own files failing them, before a push, as for .NET and Go. `bundler-audit` runs in
   `ruby-quality`, as it needs the network.
-- Required checks before a merge, from `.github/workflows/ruby.yml`: `ruby-changes`, `ruby-ubuntu`, `ruby-windows`,
-  `ruby-quality`, `ruby-mutation`, besides the .NET and Go ones.
 - Every file starts with `# frozen_string_literal: true`.
 - No monkey patching or refinements of classes Officina does not own; no `method_missing` or `respond_to_missing?`;
   no `eval`, `instance_eval` or `class_eval` of strings; no global variables, class variables (`@@`) or mutable
   constants (freeze them); no `ObjectSpace`; `send` to a private method only in tests, and even there prefer the public
   API.
-- New dependencies need a line in `docs/implementations/ruby.md` saying why the standard library is not enough.
+- A new dependency meets the conventions' *Dependencies* row, with its line in `docs/implementations/ruby.md`.
 
 ## Gems and API
 
 - Names follow the RubyGems guide (R2): `Sleepyshark::Officina` and nested modules; snake-case files named after the
   constant they define. No module named `Utils`, `Helpers`, `Common`, `Models` or `Types`. No stutter:
   `Officina::Agent`, not `Officina::OfficinaAgent`; `Claude::Model`, not `Claude::ClaudeModel`.
-- Keep the public API minimal. Internals are `private_constant` and private methods. Every public class, module and
-  method has an RBS signature in `sig/` and a YARD comment saying what it is for and what the signature cannot
-  (meaning, units, `@raise`); no tag that only repeats a type.
+- The conventions' minimal API, in Ruby: internals are `private_constant` and private methods. Every public class,
+  module and method has an RBS signature in `sig/` and a YARD comment saying what it is for and what the signature
+  cannot (meaning, units, `@raise`); no tag that only repeats a type.
 - **Contracts are duck types**, written as RBS interfaces (`_Model`, `_Approver`, `_MemoryStore`, `_AuditSink`,
-  `_ToolSource`), defined beside their consumer, small (one to three methods). No base class whose methods raise
-  `NotImplementedError`; no interface with one implementation and no consumer that needs to swap it.
+  `_ToolSource`) beside their consumer, under the conventions' contract rules. No base class whose methods raise
+  `NotImplementedError`.
 - **Values are immutable:** `Data.define` for value objects (usage, messages, results, events), frozen collections
   inside them. No `attr_writer` or `attr_accessor` on shared objects: an agent is frozen once built (AGT-01). A field
   reader is `name`, never `get_name`; a predicate ends in `?` (`cancelled?`); a `!` marks only the more dangerous
@@ -49,46 +50,42 @@ would do), rewrite it.
   two values a call is obviously about (`agent.run(conversation, input, cancel:)`). Optional settings default to
   `nil` or a frozen constant, never a shared mutable object.
 - Results are values, decided with `case … in` pattern matching on `Data` classes where a branch depends on the kind.
-- No setting without a known case, per the "simplest thing" rule: a constant until then.
 
 ## Errors
 
-- Exceptions are for the API misused or the environment broken; a run's outcome (completed, stopped, failed) is a
-  result value, never raised (AGT-03). Officina's errors inherit from `Sleepyshark::Officina::Error < StandardError`,
-  and their names end in `Error`.
+- A run's outcome is a result value, never raised (conventions' design rules). Officina's errors inherit from
+  `Sleepyshark::Officina::Error < StandardError`, and their names end in `Error`.
 - Rescue specific classes, as narrowly as the code allows. Never `rescue Exception`, never a bare `rescue nil`, never
   rescue `Interrupt` or `SignalException` except to cancel and re-raise. `rescue StandardError` only at the boundaries
   that must turn any failure into a value: a tool handler (an error result for the model), a stream from the provider
   (a classified failure), a sink write (a reported audit failure).
-- Handle an error once: return it as a value, raise it, or log it, never two of them. A message says what failed and
-  with what, never a secret (EVT-03).
+- An error is handled once (conventions): returned as a value, raised, or logged, never two of them. A message says
+  what failed and with what.
 
 ## Concurrency
 
-- Threads from the standard library (R11). **Every thread has an owner that joins it**, in an `ensure`, and a way to
-  stop (the run's `Cancellation`). No fire-and-forget. The test helper that compares `Thread.list` before and after
-  each test proves it, which is why tests run one at a time.
+- Threads from the standard library (R11). **A thread's owner (conventions) joins it in an `ensure`;** the run's
+  `Cancellation` stops it. No fire-and-forget. The test helper that compares `Thread.list` before and after each test
+  proves it, which is why tests run one at a time.
 - Never `Thread#raise`, `Thread#kill`, `Timeout.timeout` or `Thread.abort_on_exception = true`; cancellation is
   cooperative (R10). A signal trap only pushes to a `Thread::Queue` that an owned thread reads: no `Mutex`, I/O,
   logging or `Cancellation#cancel` in trap context, where a `Mutex` raises.
-- Shared mutable state lives behind one `Mutex` owned by the object that holds it; work is handed over through a
-  `Thread::Queue`, closed by the side that sends. A value shared across threads is frozen; an object shared across
-  threads that has state (a store, a sink, a client) guards it itself.
-- A block passed to `run` may `break`: the code that started tools waits for them in an `ensure`.
+- Shared mutable state lives behind one `Mutex` owned by the object that holds it (conventions); work is handed over
+  through a `Thread::Queue`, closed by the side that sends (conventions). A value shared across threads is frozen.
+- A block passed to `run` may `break`: the code that started tools waits for them in an `ensure` (conventions).
 
 ## Tests
 
-- Minitest (`Minitest::Test`), plain `assert_*` and `refute_*`; no matcher library, no `mocha`. Test names carry the
-  requirement ID in lower case: `test_agt05_cancelling_mid_stream_appends_nothing`. Each test is independent and runs
+- Minitest (`Minitest::Test`), plain `assert_*` and `refute_*`; no matcher library, no `mocha`. The requirement ID
+  in a test name is lower case: `test_agt05_cancelling_mid_stream_appends_nothing`. Each test is independent and runs
   in random order (Minitest's default), one at a time: no `parallelize_me!`, as the thread-leak check needs it.
-- Fakes only at the boundaries (docs/conventions.md); never a stub of an Officina object. `assert_equal expected,
-  actual`, expected first.
-- Property tests with `pbt` for TEST-07, generated inputs for every parser and validator (JSON Schema subset,
-  MCP messages, memory paths); CI runs a fixed seed, and a failure prints the seed that reproduces it.
+- Never a stub of an Officina object (conventions: fakes only at the boundaries). `assert_equal expected, actual`,
+  expected first.
+- Property tests with `pbt` for TEST-07 and for the generated inputs every parser and validator has (conventions);
+  CI runs a fixed seed.
 - Each sample in `examples/` runs as a test.
-- Golden files under the gem's `test/fixtures/`, updated only with `UPDATE_GOLDEN=1`, reviewed like code. The shared
-  files in the repository's top-level `testdata/` are never written by a test: .NET and Go read them too. A new shared
-  fixture (Ruby S08's `ruby-session.json`) is added once, by its own documented step, and reviewed like code.
+- Golden files under the gem's `test/fixtures/`, updated only with `UPDATE_GOLDEN=1`, which never writes the shared
+  top-level `testdata/` (conventions); Ruby S08's new shared fixture, `ruby-session.json`, is added by its own step.
 
 ## Files
 
