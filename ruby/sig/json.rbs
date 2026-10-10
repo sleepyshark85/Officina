@@ -1,0 +1,7 @@
+# The json gem's JSON::Fragment (2.10 and later), which RBS's signatures of json do not declare yet: JSON it writes as
+# it is, unchanged, when it generates a document holding it.
+module JSON
+  class Fragment
+    def initialize: (String json) -> void
+  end
+end

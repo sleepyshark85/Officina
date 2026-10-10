@@ -3,12 +3,15 @@ module Sleepyshark
     class Cancellation
       @lock: Thread::Mutex
       @cancelled: bool
+      @callbacks: Array[^() -> void]
 
       def initialize: () -> void
 
-      def cancel: () -> nil
+      def cancel: () -> void
 
       def cancelled?: () -> bool
+
+      def on_cancel: () { () -> void } -> void
     end
   end
 end
