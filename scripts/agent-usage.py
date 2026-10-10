@@ -164,7 +164,7 @@ python3 -B scripts/agent-usage.py
 - **Output** is not shown: transcripts record a message's usage as its stream begins, before the output is counted.
 - **Peak context:** the input of the agent's largest single request, what it carried at its fullest. The context-size
   hook (`.claude/hooks/context-size.py`) warns an agent at 150k and 300k.
-- **Start, End:** the times (UTC) of the agent's first and last model call.
+- **Start, End:** the times (UTC) of the agent's first and last transcript entry, prompts and tool results included.
 - **Active minutes:** the time between the agent's consecutive transcript entries, leaving out every gap of {idle}
   minutes or more as idle (a night, the owner away). Waits for tools and CI shorter than that count as active.
 """

@@ -13,7 +13,7 @@ python3 -B scripts/agent-usage.py
 - **Output** is not shown: transcripts record a message's usage as its stream begins, before the output is counted.
 - **Peak context:** the input of the agent's largest single request, what it carried at its fullest. The context-size
   hook (`.claude/hooks/context-size.py`) warns an agent at 150k and 300k.
-- **Start, End:** the times (UTC) of the agent's first and last model call.
+- **Start, End:** the times (UTC) of the agent's first and last transcript entry, prompts and tool results included.
 - **Active minutes:** the time between the agent's consecutive transcript entries, leaving out every gap of 30
   minutes or more as idle (a night, the owner away). Waits for tools and CI shorter than that count as active.
 
@@ -107,19 +107,19 @@ python3 -B scripts/agent-usage.py
 |---|---|---|---|---|---|---|---|---|---|
 | lead | lead | This session's main conversation | 2026-10-06 07:38 | 2026-10-06 07:44 | 13 | 598k | 572k | 49k | 7 |
 
-## Session 882087f6 (2026-10-10 02:00 to 2026-10-10 18:20 UTC)
+## Session 882087f6 (2026-10-10 02:00 to 2026-10-10 18:22 UTC)
 
 | Role | Agents | Input processed |
 |---|---|---|
-| lead | 1 | 329,118k |
-| reviewer | 55 | 200,391k |
-| developer | 56 | 1,139,442k |
-| fixer | 13 | 25,845k |
+| lead | 1 | 329,643k |
+| reviewer | 56 | 200,614k |
+| developer | 56 | 1,140,641k |
+| fixer | 13 | 25,981k |
 | claude-code-guide | 2 | 115k |
 
 | Agent | Role | Task | Start (UTC) | End (UTC) | Calls | Input processed | Of which cache reads | Peak context | Active minutes |
 |---|---|---|---|---|---|---|---|---|---|
-| lead | lead | This session's main conversation | 2026-10-10 02:00 | 2026-10-10 18:20 | 752 | 329,118k | 327,693k | 960k | 770 |
+| lead | lead | This session's main conversation | 2026-10-10 02:00 | 2026-10-10 18:22 | 756 | 329,643k | 328,214k | 960k | 771 |
 | a8eb4164 | reviewer | Review Ruby plan and licence PRs | 2026-10-10 02:10 | 2026-10-10 08:57 | 190 | 41,017k | 38,076k | 384k | 152 |
 | a033fe44 | developer | Ruby S02 Claude features spike | 2026-10-10 04:36 | 2026-10-10 04:56 | 96 | 18,555k | 18,276k | 279k | 19 |
 | a9bee389 | reviewer | Review PR #83 Ruby S02 | 2026-10-10 04:50 | 2026-10-10 04:55 | 28 | 1,676k | 1,593k | 83k | 5 |
@@ -241,8 +241,9 @@ python3 -B scripts/agent-usage.py
 | a64eb13f | reviewer | Merge-check verdict for PR #117 | 2026-10-10 16:44 | 2026-10-10 17:42 | 35 | 1,329k | 1,065k | 60k | 58 |
 | ae1bc73e | developer | Ruby S11 part B-2 CSV export | 2026-10-10 17:07 | 2026-10-10 17:43 | 91 | 13,378k | 12,810k | 206k | 35 |
 | a60cb98a | reviewer | Review PR #123 Ruby S11B-2 | 2026-10-10 17:19 | 2026-10-10 18:19 | 61 | 5,117k | 4,658k | 122k | 61 |
-| aaf14983 | developer | Ruby S09 part B-2 Bookshop memory | 2026-10-10 17:42 | 2026-10-10 18:20 | 90 | 12,589k | 12,032k | 195k | 38 |
+| aaf14983 | developer | Ruby S09 part B-2 Bookshop memory | 2026-10-10 17:42 | 2026-10-10 18:21 | 96 | 13,788k | 13,222k | 204k | 39 |
 | a26ba814 | reviewer | Review PR #124 Ruby S09B-2 | 2026-10-10 17:53 | 2026-10-10 18:18 | 44 | 2,831k | 2,588k | 90k | 25 |
 | a9cf94ab | fixer | Fix missing require in transcript_test | 2026-10-10 18:09 | 2026-10-10 18:13 | 18 | 886k | 828k | 58k | 4 |
 | ad37fade | reviewer | Review PR #125 test require fix | 2026-10-10 18:14 | 2026-10-10 18:16 | 7 | 127k | 109k | 22k | 3 |
-| adcbcec8 | fixer | Add start/end times to agent-usage | 2026-10-10 18:20 | 2026-10-10 18:20 | 5 | 198k | 155k | 43k | 0 |
+| adcbcec8 | fixer | Add start/end times to agent-usage | 2026-10-10 18:20 | 2026-10-10 18:22 | 8 | 334k | 288k | 46k | 2 |
+| a936aa5f | reviewer | Review PR #126 agent-usage times | 2026-10-10 18:21 | 2026-10-10 18:22 | 10 | 223k | 199k | 29k | 1 |
