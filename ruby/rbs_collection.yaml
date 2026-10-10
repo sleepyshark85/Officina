@@ -21,3 +21,6 @@ gems:
     ignore: true
   - name: sleepyshark-officina-testing
     ignore: true
+  # The application's, which ignoring the bookshop gem leaves out.
+  - name: bigdecimal
+  - name: connection_pool

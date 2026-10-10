@@ -1,0 +1,21 @@
+module Bookshop
+  module Stock
+    LOCK_BOOKS: String
+    TAKE: String
+    LOCK_ORDER: String
+    GIVE_BACK: String
+
+    # A line of an order: which book, how many copies.
+    interface _Line
+      def book_id: () -> Integer
+      def quantity: () -> Integer
+    end
+
+    def self.take: (PG::Connection connection, Array[_Line] lines) -> Hash[Integer, BigDecimal]
+    def self.give_back: (PG::Connection connection, Integer order_id) -> void
+
+    private
+
+    def self.check: (Hash[Symbol, untyped]? book, _Line line) -> void
+  end
+end
