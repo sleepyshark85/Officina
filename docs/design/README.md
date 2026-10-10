@@ -202,6 +202,24 @@ attempt could not be audited, a handler that throws or is cancelled. Calls that 
 cancelled get an error result too, so every call in the reply is answered, in one message, in call order. The finish
 step redacts the agent's secrets and cuts the result at 64,000 characters with a note saying so.
 
+## How .NET realizes the runtime model
+
+Each row of ARCHITECTURE §5.3, and the layers of §3, in .NET terms. Go's and Ruby's design notes hold the same table.
+
+| ARCHITECTURE element | .NET |
+|---|---|
+| Consuming a run | `Agent.StreamAsync` returns `IAsyncEnumerable<RunEvent>`; `RunEnded` comes last and carries the `RunResult`. `RunAsync` is the same run without the events |
+| Host stops consuming | Disposing the enumerator cancels the tools' linked token and awaits them, and disposes an open model stream |
+| Asynchronous I/O | Asynchronous contracts, each taking a `CancellationToken`: `IModel.StreamAsync` returns an `IAsyncEnumerable`; `IApprover`, `IMemoryStore`, `IAuditSink` and tool handlers return a `Task` |
+| Concurrent reads | Each read call is a task; `Task.WhenAll` joins them before the next write |
+| Hand-over | The pipeline runs on its own task and writes events to an unbounded `Channel<RunEvent>` that the engine relays |
+| Event order | **Diverges from §5.3:** the engine appends and reports each message in turn, so a host that stops reading at the first `ConversationAppended` holds the user message without the reply that answers it. Go appends them all first; .NET is to follow |
+| Cancellation | One `CancellationToken` per run, linked to the host's |
+| One run per conversation | An interlocked flag on `Conversation`; a second run throws |
+| Ownership | The engine awaits the pipeline's task in a `finally` |
+| Time | `TimeProvider` on the agent (`FakeTimeProvider` in tests) |
+| Composition root | `BookshopServices` composes every package's `Add…` registrations in one `IServiceCollection` (N5) |
+
 ## Principles and trade-offs
 
 | Principle | In the code | Trade-off |

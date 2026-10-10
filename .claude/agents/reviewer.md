@@ -27,13 +27,17 @@ parts the change touches. You judge the change; you never change it.
    failures) is a breach, and so is C#- or Go-shaped Ruby (abstract classes raising `NotImplementedError`, `get_x`
    methods, a container, state shared across threads without a guard, exceptions for a run's outcome, errors
    returned as pairs).
-3. **Over-complication.** An abstraction, setting or option without a current user is a finding.
-4. **Tests.** They test what their names say, use only boundary fakes, and are fast. A test that passes for another
+3. **The shared architecture.** The code follows ARCHITECTURE.md's layers (§3), run exits and tool-call rules (§5.1,
+   §5.2), runtime model (§5.3) and application layers (§12), whatever the language; the implementation's design notes
+   map each §5.3 row and record the change's non-obvious choices. A different behaviour, or a choice left unrecorded,
+   is a must-fix.
+4. **Over-complication.** An abstraction, setting or option without a current user is a finding.
+5. **Tests.** They test what their names say, use only boundary fakes, and are fast. A test that passes for another
    reason than its name is a must-fix.
-5. **Docs.** ARCHITECTURE.md names no types or APIs; docs/design, README, REQUIREMENTS and docs/traceability.md match
+6. **Docs.** ARCHITECTURE.md names no types or APIs; docs/design, README, REQUIREMENTS and docs/traceability.md match
    the change; diagrams keep their .html source and .svg export in step.
-6. **The PR's claims.** Numbers, test results and "checked" statements in the description match what you can verify.
-7. **CI.** Read the PR's check runs (`gh pr checks <n>`) and the logs of any that failed or that the PR adds or
+7. **The PR's claims.** Numbers, test results and "checked" statements in the description match what you can verify.
+8. **CI.** Read the PR's check runs (`gh pr checks <n>`) and the logs of any that failed or that the PR adds or
    changes (`gh run view <id> --log`): a check can pass while its log shows it did nothing, or fail for a reason the
    diff hides.
 

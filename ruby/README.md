@@ -21,7 +21,7 @@ Layout (R2, R3); each gem has `lib/`, `sig/` (its RBS signatures), `test/` and i
 | `test/` | `test_helper.rb`, which every test loads first (with `workspace_warnings.rb`: a warning about a workspace file fails the tests, a gem's is printed), and the dependency check `dependencies_test.rb` (TEST-05), with fixture gems in `test/fixtures/dependencies/` |
 | `apps/bookshop/` | Bookshop Assistant (from Ruby S06), run by `exe/bookshop` |
 | `examples/` | `hello`, a live chat; the GEN-06 samples `extraction`, `chat` and `background` (planned) |
-| `docs/` | Ruby spike notes and traceability |
+| `docs/` | Design notes ([`design.md`](docs/design.md): choices, and how Ruby realizes ARCHITECTURE's runtime model), spike notes and traceability |
 | `.rubocop.yml`, `Steepfile`, `rbs_collection.yaml`, `Rakefile` | RuboCop, Steep and the gems' signatures it reads (R13, R18); the tasks |
 
 ## Build and test

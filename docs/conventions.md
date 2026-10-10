@@ -48,6 +48,11 @@ written, and this page wins for what the code must do.
 
 ## Design rules that code must keep
 
+- **One architecture, every language.** The layers, the data flow and the runtime model (streaming, event order,
+  concurrency, cancellation, persistence points) are defined once, in ARCHITECTURE.md §3, §5 and §12. Each
+  implementation realizes them in its own idiom, and its design notes map every row of §5.3 to its mechanism
+  ([`docs/design/`](design/README.md) for .NET, [`go/docs/design.md`](../go/docs/design.md),
+  [`ruby/docs/design.md`](../ruby/docs/design.md)). A change to a shared rule changes ARCHITECTURE.md first.
 - **One primitive:** a run of one agent. Everything else composes runs.
 - **Structured signals decide:** stop reasons, tool calls, validated output. Never parse free text to decide.
 - **Append-only conversation:** the core never edits, reorders or drops a message. Compaction and clearing old tool
