@@ -63,6 +63,19 @@ class TelemetryTest < Minitest::Test
     assert_equal(replies.map { [it.trace_id, it.span_id] }, @memory.logs.map { [it.trace_id, it.span_id] })
   end
 
+  def test_app20_what_is_logged_in_a_summary_is_in_its_span_with_the_severity_of_its_kind
+    @telemetry.summary do
+      @telemetry.info('done')
+      @telemetry.warn('not done')
+    end
+
+    span = @memory.spans.find { it.name == 'summary' }
+
+    assert_equal([['INFO', 9, 'done'], ['WARN', 13, 'not done']],
+                 @memory.logs.map { it.to_h.values_at(:severity_text, :severity_number, :body) })
+    assert_equal([[span.trace_id, span.span_id]] * 2, @memory.logs.map { [it.trace_id, it.span_id] })
+  end
+
   def test_app20_logger_records_carry_logger_severities_and_respect_its_level
     logger = TelemetryLogger.new(OpenTelemetry::SDK::Logs::LoggerProvider.new.tap do |provider|
       provider.add_log_record_processor(OpenTelemetry::SDK::Logs::Export::SimpleLogRecordProcessor.new(exported))

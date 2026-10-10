@@ -13,13 +13,13 @@ module Bookshop
 
     def initialize: (agent: Sleepyshark::Officina::Agent, approvals: Approvals, input: IO, output: IO,
                      clock: ^() -> Time, store: SessionStore, budgets: Budgets, audit: AuditView,
-                     telemetry: Telemetry, demo: bool) -> void
+                     telemetry: Telemetry, summarizer: Summarizer?, demo: bool) -> void
     def run: () -> void
 
     private
 
     def ask_staff_member: () -> String?
-    def converse: (Session session) -> void
+    def converse: (Session session) -> Session
     def command: (String command, Session session) -> Session
     def audited: (String command, Session session) -> String
     def argument: (String command) -> String

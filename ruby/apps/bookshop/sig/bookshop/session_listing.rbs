@@ -3,9 +3,15 @@ module Bookshop
     attr_reader id: String
     attr_reader staff_member: String
     attr_reader title: String?
+    attr_reader summary: String?
+    attr_reader changes: Array[String]
     attr_reader cost: BigDecimal
     attr_reader updated: Time
+    attr_reader stale: bool
 
-    def self.new: (id: String, staff_member: String, title: String?, cost: BigDecimal, updated: Time) -> instance
+    def self.new: (id: String, staff_member: String, title: String?, summary: String?, changes: Array[String],
+                   cost: BigDecimal, updated: Time, stale: bool) -> instance
+
+    def with: (?title: String?, ?summary: String?, ?changes: Array[String]) -> instance
   end
 end

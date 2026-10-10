@@ -28,13 +28,22 @@ module Bookshop
     SQL
 
     LIST = <<~SQL
-      select id, staff_member, title, cost, updated
+      select id, staff_member, title, summary, coalesce(changes, '{}') as changes, cost, updated,
+             summarized is null or summarized < updated as stale
       from sessions
       order by updated desc
       limit $1
     SQL
 
-    private_constant :CREATE, :UPDATE, :STORED, :LOAD, :LIST
+    SUMMARY = <<~SQL
+      update sessions
+      set title = $2, summary = $3, changes = $4, summarized = now(), input_tokens = input_tokens + $5,
+          output_tokens = output_tokens + $6, cache_read_tokens = cache_read_tokens + $7,
+          cache_write_tokens = cache_write_tokens + $8, cost = cost + $9
+      where id = $1
+    SQL
+
+    private_constant :CREATE, :UPDATE, :STORED, :LOAD, :LIST, :SUMMARY
 
     def initialize(database:)
       @database = database
@@ -85,10 +94,24 @@ module Bookshop
     def list(count)
       @database.with do |connection|
         connection.exec_params(LIST, [count]).map do |row|
-          SessionListing.new(id: row[:id], staff_member: row[:staff_member], title: row[:title], cost: row[:cost],
-                             updated: row[:updated])
+          SessionListing.new(id: row[:id], staff_member: row[:staff_member], title: row[:title], summary: row[:summary],
+                             changes: row[:changes], cost: row[:cost], updated: row[:updated], stale: row[:stale])
         end
       end
+    end
+
+    # Stores the summary of the session with the id, as of now, and adds what it cost to the session's totals. A save
+    # the session's console makes afterwards replaces the totals with its own, so the cost of a summary written while
+    # another console has the session is lost, as in .NET and Go.
+    #
+    # @param summary [SessionSummary]
+    # @param usage [Sleepyshark::Officina::Usage] what the summary used
+    # @param cost [BigDecimal] what it cost, in US dollars
+    # @raise [PG::Error] when the database cannot be reached
+    def save_summary(id, summary, usage:, cost:)
+      values = [id, summary.title, summary.summary, summary.changes, usage.input,
+                usage.output, usage.cache_read, usage.cache_write, cost]
+      @database.with { |connection| connection.exec_params(SUMMARY, values) }
     end
 
     private

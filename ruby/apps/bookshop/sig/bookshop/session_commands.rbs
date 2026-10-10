@@ -7,16 +7,20 @@ module Bookshop
     @clock: ^() -> Time
     @budgets: Budgets
     @terminal: Terminal
+    @summaries: Summaries
 
     def initialize: (agent: Sleepyshark::Officina::Agent, store: SessionStore, clock: ^() -> Time, budgets: Budgets,
-                     terminal: Terminal) -> void
+                     terminal: Terminal, summarizer: Summarizer?, telemetry: Telemetry) -> void
     def start: (String staff_member, ?announced: String) -> Session
+    def start_new: (Session left) -> Session
+    def leave: (Session session) -> void
     def list: (Session current) -> void
     def resume: (String id, Session current) -> Session
     def cost: (Session session) -> void
 
     private
 
+    def show: (SessionListing listing, Session current) -> void
     def line: (SessionListing listing, Session current) -> String
     def continues?: (StoredSession stored) -> bool
     def resumed: (StoredSession stored, Session current) -> Session

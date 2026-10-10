@@ -1,0 +1,10 @@
+module Bookshop
+  class SessionSummary < Data
+    attr_reader title: String
+    attr_reader summary: String
+    attr_reader changes: Array[String]
+
+    def self.schema: () -> Sleepyshark::Officina::Schema
+    def self.from_json: (Hash[String, untyped] object) -> SessionSummary
+  end
+end
