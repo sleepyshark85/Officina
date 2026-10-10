@@ -33,6 +33,4 @@ module Budgets
 
   # The output limit of each request the model received.
   def limits(model) = model.requests.map(&:max_output_tokens)
-
-  def dollars(text) = BigDecimal(text)
 end

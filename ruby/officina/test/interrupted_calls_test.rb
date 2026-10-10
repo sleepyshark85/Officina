@@ -12,8 +12,6 @@ class InterruptedCallsTest < Minitest::Test
   cover 'Sleepyshark::Officina*'
 
   Model = Testing::ScriptedModel
-  INTERRUPTED = 'The call was interrupted: the application stopped before its result was recorded, so it may or ' \
-                'may not have taken effect.'
   SEARCHES = Model.tool_use(Model.tool_use_block('c1', 'search', '{"query":"a"}'),
                             Model.tool_use_block('c2', 'search', '{"query":"b"}'))
   # A run of the property: its reply (0 text, 1 a search then text, 2 a search while which the application stops),
@@ -31,8 +29,8 @@ class InterruptedCallsTest < Minitest::Test
     assert_equal(%w[c1 c2], events.first.message.blocks.map { it.tool_result.call_id })
     interrupted = sink.entries.select { it.outcome == 'interrupted' }
 
-    assert_equal([[:tool_ended, 'c1', 'search', '{"query":"a"}', INTERRUPTED],
-                  [:tool_ended, 'c2', 'search', '{"query":"b"}', INTERRUPTED]],
+    assert_equal([[:tool_ended, 'c1', 'search', '{"query":"a"}', SharedSession::INTERRUPTED],
+                  [:tool_ended, 'c2', 'search', '{"query":"b"}', SharedSession::INTERRUPTED]],
                  interrupted.map { [it.kind, it.call_id, it.tool, it.input, it.detail] })
     assert_nil Testing::ConversationRules.problem(resumed.messages)
   end

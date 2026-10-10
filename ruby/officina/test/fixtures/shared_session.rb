@@ -10,6 +10,9 @@ module SharedSession
   Officina = Sleepyshark::Officina
   Model = Officina::Testing::ScriptedModel
   SESSION = File.expand_path('../../../../testdata/session', __dir__)
+  # The result each call left without one gets when the conversation is resumed.
+  INTERRUPTED = 'The call was interrupted: the application stopped before its result was recorded, so it may or ' \
+                'may not have taken effect.'
   # A thinking block as the provider might send it: odd spacing and escapes, kept byte for byte.
   THINKING = '{ "type":"thinking",  "thinking":"caf\\u00e9 \\"quoted\\" \\/ é", "signature":"c2ln+/=" }'
 

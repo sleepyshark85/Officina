@@ -22,7 +22,7 @@ class BudgetReportTest < Minitest::Test
     result = run_priced(model, seconds: 1)
 
     # $4 × 110 + $20 × 30 + $0.20 × 1,100 + $8 × 1,000 per million; each search takes a second.
-    assert_equal Completed.new(text: 'Done.', usage: USED, cost: dollars('0.00926'), model_calls: 2, tool_calls: 2,
+    assert_equal Completed.new(text: 'Done.', usage: USED, cost: BigDecimal('0.00926'), model_calls: 2, tool_calls: 2,
                                duration: 2.0), result
   end
 
@@ -36,7 +36,7 @@ class BudgetReportTest < Minitest::Test
 
     assert_equal :run_ended, ended.kind
     assert_equal USED, ended.usage
-    assert_equal dollars('0.00926'), ended.cost
+    assert_equal BigDecimal('0.00926'), ended.cost
   end
 
   def test_bud03_a_model_without_a_price_costs_nothing
@@ -66,10 +66,10 @@ class BudgetReportTest < Minitest::Test
                     Reply.new(blocks: [Model.tool_use_block('c1', 'search', '{}')], stop: :max_tokens)])
     conversation = Conversation.new
 
-    result = run_priced(model, budget: Budget.new(cost: dollars('0.001')), conversation:)
+    result = run_priced(model, budget: Budget.new(cost: BigDecimal('0.001')), conversation:)
 
     assert_equal Stopped.new(reason: :budget, detail: 'The cost budget is used up: $0.00104 of $0.001.',
-                             usage: Usage.new(input: 10, output: 50), cost: dollars('0.00104'), model_calls: 1),
+                             usage: Usage.new(input: 10, output: 50), cost: BigDecimal('0.00104'), model_calls: 1),
                  result
     assert_empty conversation.messages
   end

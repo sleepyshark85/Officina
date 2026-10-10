@@ -15,10 +15,10 @@ class BudgetTest < Minitest::Test
     model = priced(search_call('c1', Usage.new(input: 100, output: 50)), Model.text('Unused.'))
     conversation = Conversation.new
 
-    result = run_priced(model, budget: Budget.new(cost: dollars('0.001')), conversation:)
+    result = run_priced(model, budget: Budget.new(cost: BigDecimal('0.001')), conversation:)
 
     assert_equal Stopped.new(reason: :budget, detail: 'The cost budget is used up: $0.0014 of $0.001.',
-                             usage: Usage.new(input: 100, output: 50), cost: dollars('0.0014'), model_calls: 1,
+                             usage: Usage.new(input: 100, output: 50), cost: BigDecimal('0.0014'), model_calls: 1,
                              tool_calls: 1), result
     assert_equal 1, model.requests.size
     assert_equal %i[user assistant user], conversation.messages.map(&:role)
@@ -27,7 +27,7 @@ class BudgetTest < Minitest::Test
   def test_bud01_each_calls_output_limit_is_lowered_to_what_the_cost_and_tokens_left_allow
     model = priced(search_call('c1', Usage.new(input: 200, output: 100)), Model.text('Done.'), Model.text('Free.'))
 
-    run_priced(model, budget: Budget.new(cost: dollars('0.01'), tokens: 1_000))
+    run_priced(model, budget: Budget.new(cost: BigDecimal('0.01'), tokens: 1_000))
     run_priced(model)
 
     # $0.01 buys 500 output tokens, and 1,000 tokens are left; then $0.0072 buys 360, and 700 tokens are left; then
@@ -60,7 +60,7 @@ class BudgetTest < Minitest::Test
     BOUNDARIES.each do |name, (price, cost, requests, stopped)|
       model = priced(Model.text('Y'), price:)
 
-      result = run_priced(model, budget: Budget.new(cost: dollars(cost)))
+      result = run_priced(model, budget: Budget.new(cost: BigDecimal(cost)))
 
       assert_equal requests, limits(model), name
       assert_equal stopped, result.is_a?(Stopped), name
@@ -71,11 +71,11 @@ class BudgetTest < Minitest::Test
     model = priced(Model.stop(:max_tokens, usage: Usage.new(input: 10, output: 50)),
                    Model.stop(:max_tokens, usage: Usage.new(input: 10, output: 30)))
 
-    budget_cut = run_priced(model, budget: Budget.new(cost: dollars('0.001')))
-    own_cut = run_priced(model, budget: Budget.new(cost: dollars('0.01')))
+    budget_cut = run_priced(model, budget: Budget.new(cost: BigDecimal('0.001')))
+    own_cut = run_priced(model, budget: Budget.new(cost: BigDecimal('0.01')))
 
     assert_equal Stopped.new(reason: :budget, detail: 'The cost budget is used up: $0.00104 of $0.001.',
-                             usage: Usage.new(input: 10, output: 50), cost: dollars('0.00104'), model_calls: 1),
+                             usage: Usage.new(input: 10, output: 50), cost: BigDecimal('0.00104'), model_calls: 1),
                  budget_cut
     assert_equal :output_limit, own_cut.reason
   end
@@ -97,7 +97,7 @@ class BudgetTest < Minitest::Test
       result = run_priced(model, budget:, seconds: 10)
 
       # $4 × 1,000,000 + $20 × 300 + $0.20 × 100 + $5 × 100 per million.
-      assert_equal Stopped.new(reason: :budget, detail: reason, usage: BIG, cost: dollars('4.00652'), model_calls: 1,
+      assert_equal Stopped.new(reason: :budget, detail: reason, usage: BIG, cost: BigDecimal('4.00652'), model_calls: 1,
                                tool_calls: 1, duration: 10.0), result
       assert_equal 1, model.requests.size
     end
@@ -119,7 +119,7 @@ class BudgetTest < Minitest::Test
     # The first call costs $0.0014; the $0.00001 left would buy half an output token at $20 per million.
     model = priced(search_call('c1', Usage.new(input: 100, output: 50)), Model.text('Unused.'))
 
-    result = run_priced(model, budget: Budget.new(cost: dollars('0.00141')))
+    result = run_priced(model, budget: Budget.new(cost: BigDecimal('0.00141')))
 
     assert_equal 'The cost budget is used up: $0.0014 of $0.00141.', result.detail
   end

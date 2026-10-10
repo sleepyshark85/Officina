@@ -43,7 +43,7 @@ module Sleepyshark
 
       def cost_used_up: () -> String?
 
-      def seconds: (Numeric value) -> String
+      def seconds: (Integer | Float value) -> String
 
       def dollars: (BigDecimal value) -> String
 

@@ -12,8 +12,6 @@ class SharedSessionTest < Minitest::Test
   cover 'Sleepyshark::Officina*'
 
   Model = Testing::ScriptedModel
-  INTERRUPTED = 'The call was interrupted: the application stopped before its result was recorded, so it may or ' \
-                'may not have taken effect.'
   # Each implementation's session, and the call its crash left without a result.
   SAVED = { 'dotnet-session.json' => 'toolu_02', 'go-session.json' => 'go_02', 'ruby-session.json' => 'rb_02' }.freeze
 
@@ -33,7 +31,7 @@ class SharedSessionTest < Minitest::Test
       request = model.requests.first
       # The stored messages, raw blocks included, go out as stored: the prefix the saving request cached.
       assert_stable_prefix [request.with(messages: stored), request]
-      assert_equal [ToolResult.new(call_id:, content: INTERRUPTED, error: true)],
+      assert_equal [ToolResult.new(call_id:, content: SharedSession::INTERRUPTED, error: true)],
                    request.messages[stored.size].blocks.map(&:tool_result), name
     end
   end

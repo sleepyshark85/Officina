@@ -12,7 +12,8 @@ module Sleepyshark
       #   with a price
       # @param tokens [Integer, nil] the most tokens the run may use: input, output, cache reads and writes
       # @param model_calls [Integer, nil] the most model calls the run may make
-      # @param time [Numeric, nil] the longest the run may take, in seconds; a call that starts in time may end after it
+      # @param time [Integer, Float, nil] the longest the run may take, in seconds; a call that starts in time may end
+      #   after it
       def initialize(cost: nil, tokens: nil, model_calls: nil, time: nil) = super
     end
   end

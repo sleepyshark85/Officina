@@ -66,10 +66,9 @@ module Sleepyshark
         ((limit - @cost) * 1_000_000 / output).floor if limit && output.positive?
       end
 
-      # Each call is counted before it is made, which the limit checks first: the count reaches it, never passes it.
       def calls_used_up
         limit = @budget.model_calls
-        "The model call budget is used up: #{@model_calls} of #{limit}." if @model_calls == limit
+        "The model call budget is used up: #{@model_calls} of #{limit}." if limit && @model_calls >= limit
       end
 
       def time_used_up
@@ -92,9 +91,10 @@ module Sleepyshark
         "The cost budget is used up: $#{dollars(@cost)} of $#{dollars(limit)}."
       end
 
-      # As .NET writes them: seconds with at most one decimal, dollars with at most six, thousands with commas.
-      def seconds(value) = format('%.1f', value).delete_suffix('.0')
-      def dollars(value) = format('%.6f', value).sub(/\.?0+\z/, '')
+      # As .NET writes them: seconds with at most one decimal, dollars with at most six, each rounded half away from
+      # zero (for dollars whatever rounding mode the host's thread gives BigDecimal), and thousands with commas.
+      def seconds(value) = value.round(1).to_s.delete_suffix('.0')
+      def dollars(value) = value.round(6, half: :up).to_s('F').delete_suffix('.0')
       def thousands(value) = value.to_s.gsub(/\B(?=(\d{3})+\z)/, ',')
     end
     private_constant :Spending

@@ -4,11 +4,11 @@ module Sleepyshark
       attr_reader cost: BigDecimal?
       attr_reader tokens: Integer?
       attr_reader model_calls: Integer?
-      attr_reader time: Numeric?
+      attr_reader time: (Integer | Float)?
 
-      def self.new: (?cost: BigDecimal?, ?tokens: Integer?, ?model_calls: Integer?, ?time: Numeric?) -> instance
+      def self.new: (?cost: BigDecimal?, ?tokens: Integer?, ?model_calls: Integer?, ?time: (Integer | Float)?) -> instance
 
-      def initialize: (?cost: BigDecimal?, ?tokens: Integer?, ?model_calls: Integer?, ?time: Numeric?) -> void
+      def initialize: (?cost: BigDecimal?, ?tokens: Integer?, ?model_calls: Integer?, ?time: (Integer | Float)?) -> void
     end
   end
 end
