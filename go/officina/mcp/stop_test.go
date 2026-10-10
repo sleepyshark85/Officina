@@ -31,12 +31,12 @@ func TestClose_MCP01_AServerThatIgnoresItsClosedInputIsStoppedWithEveryProcessIt
 	if err != nil {
 		t.Fatalf("Connect() error = %v", err)
 	}
-	pids := waitForPIDs(t, file)
+	procs := waitForProcesses(t, file)
 
 	source.Close()
 
-	for _, pid := range pids {
-		waitExited(t, pid)
+	for _, p := range procs {
+		waitExited(t, p)
 	}
 }
 
@@ -51,7 +51,7 @@ func TestClose_MCP01_AChildThatHoldsTheOutputOfAServerThatExitedIsStoppedAtOnce(
 	if err != nil {
 		t.Fatalf("Connect() error = %v", err)
 	}
-	pids := waitForPIDs(t, file)
+	procs := waitForProcesses(t, file)
 
 	started := time.Now()
 	source.Close()
@@ -59,8 +59,8 @@ func TestClose_MCP01_AChildThatHoldsTheOutputOfAServerThatExitedIsStoppedAtOnce(
 	if took := time.Since(started); took > 10*time.Second {
 		t.Errorf("Close() took %v, want it to return once the server has exited", took)
 	}
-	for _, pid := range pids {
-		waitExited(t, pid)
+	for _, p := range procs {
+		waitExited(t, p)
 	}
 }
 
@@ -93,15 +93,15 @@ func TestConnect_MCP04_ACancelledConnectStopsAStubbornServerWithEveryProcessItSt
 		_, err = mcp.Connect(ctx, server, nil)
 	})
 
-	pids := waitForPIDs(t, file)
+	procs := waitForProcesses(t, file)
 	cancel()
 	connecting.Wait()
 
 	if !errors.Is(err, context.Canceled) {
 		t.Errorf("Connect() error = %v, want context.Canceled", err)
 	}
-	for _, pid := range pids {
-		waitExited(t, pid)
+	for _, p := range procs {
+		waitExited(t, p)
 	}
 }
 
