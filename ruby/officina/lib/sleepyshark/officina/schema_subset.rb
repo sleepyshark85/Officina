@@ -14,55 +14,47 @@ module Sleepyshark
         'boolean' => ->(value) { [true, false].include?(value) },
         'null' => :nil?.to_proc
       }.freeze
-      ANY = ->(_) { true }
-      COUNT = ->(value) { value.is_a?(Integer) && !value.negative? }
-      # The keywords of the subset: the problem a schema has when the keyword's value is malformed, and the check of
-      # that value. The annotations only describe a value.
-      KEYWORDS = {
-        'type' => ['unknown type', ->(value) { !Array(value).empty? && Array(value).all? { |type| TYPES.key?(type) } }],
-        'properties' => ['must be an object', ->(value) { value.is_a?(Hash) }],
-        'required' => ['must be an array of names', ->(value) { value.is_a?(Array) && value.all?(String) }],
-        'additionalProperties' => [nil, ANY],
-        'items' => [nil, ANY],
-        'anyOf' => ['must be a non-empty array', ->(value) { value.is_a?(Array) && !value.empty? }],
-        'enum' => ['must be an array', ->(value) { value.is_a?(Array) }],
-        'const' => [nil, ANY],
-        'minLength' => ['must be a non-negative integer', COUNT],
-        'maxLength' => ['must be a non-negative integer', COUNT],
-        'minItems' => ['must be a non-negative integer', COUNT],
-        'maxItems' => ['must be a non-negative integer', COUNT],
-        'minimum' => ['must be a number', ->(value) { value.is_a?(Numeric) }],
-        'maximum' => ['must be a number', ->(value) { value.is_a?(Numeric) }],
-        'pattern' => ['must be a string', ->(value) { value.is_a?(String) }]
-      }.merge(
-        %w[$schema $id $comment title description default examples format readOnly writeOnly deprecated]
-          .to_h { |annotation| [annotation, [nil, ANY]] }
-      ).transform_values(&:freeze).freeze
-      private_constant :ANY, :COUNT, :KEYWORDS
+      COUNT = ->(value) { 'must be a non-negative integer' unless value.is_a?(Integer) && !value.negative? }
+      NUMBER = ->(value) { 'must be a number' unless value.is_a?(Numeric) }
+      # The keywords whose value must have a shape, each with the problem a schema has when its value has not.
+      SHAPES = {
+        'type' => ->(value) { 'unknown type' if Array(value).empty? || !Array(value).all? { |type| TYPES.key?(type) } },
+        'properties' => ->(value) { 'must be an object' unless value.is_a?(Hash) },
+        'required' => ->(value) { 'must be an array of names' unless value.is_a?(Array) && value.all?(String) },
+        'anyOf' => ->(value) { 'must be a non-empty array' unless value.is_a?(Array) && !value.empty? },
+        'enum' => ->(value) { 'must be an array' unless value.is_a?(Array) },
+        'minLength' => COUNT, 'maxLength' => COUNT, 'minItems' => COUNT, 'maxItems' => COUNT,
+        'minimum' => NUMBER, 'maximum' => NUMBER,
+        'pattern' => ->(value) { 'must be a string' unless value.is_a?(String) }
+      }.freeze
+      # The subset's other keywords, whose value may be anything: a subschema, checked as one, or an annotation.
+      UNCHECKED = %w[
+        additionalProperties items const
+        $schema $id $comment title description default examples format readOnly writeOnly deprecated
+      ].freeze
+      # Seconds a pattern may take on one value; one that takes longer is that value's problem.
+      PATTERN_TIMEOUT = 0.1
+      private_constant :COUNT, :NUMBER, :SHAPES, :UNCHECKED, :PATTERN_TIMEOUT
 
       # @param schema [Object] a schema as JSON.parse returns it.
-      # @param timeout [Float] seconds a pattern may take on one value.
-      # @return [Hash{String => Regexp}] the schema's patterns, compiled.
+      # @return [Hash{String => Regexp}] the schema's patterns, compiled, each limited in the time it takes on a value.
       # @raise [SchemaError] naming where the schema leaves the subset.
-      def self.check(schema, timeout:)
-        # @type var patterns: Hash[String, Regexp]
-        patterns = {}
-        check_at(schema, '', patterns, timeout)
-        patterns.freeze
-      end
+      def self.check(schema) = patterns_in(schema, '').freeze
 
-      def self.check_at(schema, path, patterns, timeout)
-        return if [true, false].include?(schema)
+      def self.patterns_in(schema, path)
+        return {} if [true, false].include?(schema)
 
         refuse(path, 'a schema must be an object or a boolean') unless schema.is_a?(Hash)
-        schema.each { |keyword, value| check_keyword(keyword, value, "#{path}/#{keyword}", patterns, timeout) }
+        schema.map { |keyword, value| check_keyword(keyword, value, "#{path}/#{keyword}") }.reduce({}, :merge)
       end
 
-      def self.check_keyword(keyword, value, at, patterns, timeout)
-        problem, valid = KEYWORDS.fetch(keyword) { refuse(at, 'is not a supported keyword') }
-        refuse(at, problem) unless valid.call(value)
-        subschemas(keyword, value).each { |name, subschema| check_at(subschema, "#{at}#{name}", patterns, timeout) }
-        patterns[value] ||= compile(value, at, timeout) if keyword == 'pattern'
+      def self.check_keyword(keyword, value, at)
+        refuse(at, 'is not a supported keyword') unless SHAPES.key?(keyword) || UNCHECKED.include?(keyword)
+        problem = SHAPES[keyword]&.call(value)
+        refuse(at, problem) if problem
+        return { value => compile(value, at) } if keyword == 'pattern'
+
+        subschemas(keyword, value).map { |name, subschema| patterns_in(subschema, "#{at}#{name}") }.reduce({}, :merge)
       end
 
       def self.subschemas(keyword, value)
@@ -74,8 +66,8 @@ module Sleepyshark
         end
       end
 
-      def self.compile(pattern, at, timeout)
-        Regexp.new(pattern, timeout:)
+      def self.compile(pattern, at)
+        Regexp.new(pattern, timeout: PATTERN_TIMEOUT)
       rescue RegexpError => e
         refuse(at, e.message)
       end
@@ -83,7 +75,7 @@ module Sleepyshark
       def self.refuse(path, problem)
         raise SchemaError, "The schema at '#{path.empty? ? '/' : path}' is outside the supported subset: #{problem}."
       end
-      private_class_method :check_at, :check_keyword, :subschemas, :compile, :refuse
+      private_class_method :patterns_in, :check_keyword, :subschemas, :compile, :refuse
     end
     private_constant :SchemaSubset
   end

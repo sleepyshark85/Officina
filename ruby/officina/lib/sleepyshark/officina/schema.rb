@@ -9,16 +9,17 @@ module Sleepyshark
     # A pattern is a Ruby regular expression, found anywhere in the string as JSON Schema says, so its `^` and `$`
     # match at line ends too, unlike JavaScript's.
     class Schema
-      # The keywords that check a value of one kind alone: the kind, and the problem the value has, nil for none.
+      # The keywords that check one value alone: the kind of value each checks, any other passing it, and the problem
+      # the value has, nil for none.
       RULES = {
-        'type' => [BasicObject, lambda { |rule, value|
+        'type' => [Object, lambda { |rule, value|
           types = Array(rule)
           "must be #{types.join(' or ')}" if types.none? { |type| SchemaSubset::TYPES.fetch(type).call(value) }
         }],
-        'enum' => [BasicObject, lambda { |rule, value|
+        'enum' => [Object, lambda { |rule, value|
           "must be one of #{JSON.generate(rule)}" unless rule.include?(value)
         }],
-        'const' => [BasicObject, ->(rule, value) { "must be #{JSON.generate(rule)}" unless rule == value }],
+        'const' => [Object, ->(rule, value) { "must be #{JSON.generate(rule)}" unless rule == value }],
         'minLength' => [String, ->(rule, value) { "must have at least #{rule} characters" if value.length < rule }],
         'maxLength' => [String, ->(rule, value) { "must have at most #{rule} characters" if value.length > rule }],
         'minItems' => [Array, ->(rule, value) { "must have at least #{rule} items" if value.length < rule }],
@@ -26,16 +27,14 @@ module Sleepyshark
         'minimum' => [Numeric, ->(rule, value) { "must be at least #{rule}" if value < rule }],
         'maximum' => [Numeric, ->(rule, value) { "must be at most #{rule}" if value > rule }]
       }.transform_values(&:freeze).freeze
-      # Seconds a pattern may take on one value; one that takes longer is that value's problem.
-      PATTERN_TIMEOUT = 0.1
-      private_constant :RULES, :PATTERN_TIMEOUT
+      private_constant :RULES
 
       # @param json [String] the schema as JSON text.
       # @raise [SchemaError] when it is not JSON, or uses anything outside the subset.
       def initialize(json)
         @text = -json
         @root = parse(json)
-        @patterns = SchemaSubset.check(@root, timeout: PATTERN_TIMEOUT)
+        @patterns = SchemaSubset.check(@root)
         freeze
       end
 

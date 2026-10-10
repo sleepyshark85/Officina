@@ -12,15 +12,19 @@ class InputTest < Minitest::Test
   def test_tool01_options_are_written_in_dotnets_key_order_and_names_in_camel_case
     input = Input.define do
       integer :copies, minimum: 0
+      integer :shelf, nullable: true
       number :unit_price, 'Each.', nullable: true, minimum: 1
       boolean :gift, nullable: true
       number :weight
+      string :wrap, enum: %w[paper box], optional: true
     end
 
     assert_equal '{"type":"object","properties":{"copies":{"type":"integer","minimum":0},' \
+                 '"shelf":{"type":["integer","null"]},' \
                  '"unitPrice":{"description":"Each.","type":["number","null"],"minimum":1},' \
-                 '"gift":{"type":["boolean","null"]},"weight":{"type":"number"}},' \
-                 '"required":["copies","unitPrice","gift","weight"],"additionalProperties":false}', input.schema.to_s
+                 '"gift":{"type":["boolean","null"]},"weight":{"type":"number"},"wrap":{"enum":["paper","box"]}},' \
+                 '"required":["copies","shelf","unitPrice","gift","weight"],"additionalProperties":false}',
+                 input.schema.to_s
   end
 
   def test_tool01_arrays_of_scalars_and_of_objects_may_be_nullable_and_optional
@@ -89,13 +93,25 @@ class InputTest < Minitest::Test
     -> { number :price, minimum: 0.5 } => 'price: minimum must be an Integer',
     -> { array :tags } => EITHER,
     -> { array(:tags, of: :string) { string :name } } => EITHER,
-    -> { array :tags, of: :object } => 'tags: of: must be one of string, integer, number, boolean'
+    -> { array :tags, of: :object } => 'tags: of: must be one of string, integer, number, boolean',
+    lambda {
+      string :title
+      string :title
+    } => 'title: title is declared twice',
+    lambda {
+      integer :max_price
+      integer :maxPrice
+    } => 'maxPrice: maxPrice is declared twice'
   }.freeze
 
   def test_test08_a_malformed_declaration_is_refused_when_it_is_defined
     MALFORMED.each do |declaration, message|
       assert_equal message, assert_raises(ArgumentError) { Input.define(&declaration) }.message
     end
+  end
+
+  def test_test08_a_declaration_reaches_only_the_member_methods
+    assert_raises(NoMethodError) { Input.define { type 'string', true } }
   end
 
   private
