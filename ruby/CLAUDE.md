@@ -21,9 +21,10 @@ would do) is rewritten.
 
 ## Tooling (enforced by hooks and CI)
 
-- `bundle exec rubocop` and `bundle exec steep check` before a commit; `bundle exec rake test`, with warnings on and
+- `bundle exec rubocop` and `bundle exec rake steep` before a commit; `bundle exec rake test`, with warnings on and
   any warning about the workspace's own files failing them, before a push, as for .NET and Go. `bundler-audit` runs in
   `ruby-quality`, as it needs the network.
+  The Rake task also fails on a FATAL or ERROR line in Steep's log, as Steep exits 0 after skipping a file.
 - Every file starts with `# frozen_string_literal: true`.
 - No monkey patching or refinements of classes Officina does not own; no `method_missing` or `respond_to_missing?`;
   no `eval`, `instance_eval` or `class_eval` of strings; no global variables, class variables (`@@`) or mutable

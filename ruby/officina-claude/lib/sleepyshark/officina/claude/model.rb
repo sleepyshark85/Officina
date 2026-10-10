@@ -10,8 +10,9 @@ module Sleepyshark
       # Every request streams, on the SDK's beta messages API, with adaptive thinking and an explicit effort. It is
       # laid out for the cache: the tools in the order given (the core sorts them), the memory tool as Claude's own,
       # then the instructions with a cache point on them, then the conversation, which automatic caching follows to its
-      # end; an operator message, such as the run context, goes as a system message where the conversation has it.
-      # Each block of a reply is kept as the gem writes it, in the canonical form, and sent back byte for byte.
+      # end; an operator message, such as the run context, goes as a system message where the conversation has it. An
+      # output schema goes as the structured output format, adjusted to what the API accepts; tool choice is never
+      # forced. Each block of a reply is kept as the gem writes it, in the canonical form, and sent back byte for byte.
       #
       # Transient failures (rate limits, overload, server and network errors, also mid-stream) are retried, waiting as
       # long as Retry-After asks or backing off; what remains is raised as a TransientError, an AuthenticationError
@@ -84,6 +85,8 @@ module Sleepyshark
         # the context window is a reply that stops for +:context_full+.
         # @return [Reply, nil] nil when +cancel+ stopped the call
         # @raise [TransientError, AuthenticationError, InvalidRequestError] when no attempt passed
+        # @raise [InvalidRequestError] before any attempt, when the output schema has an open object, such as a map's,
+        #   which structured output cannot express
         def stream(request, cancel:, &)
           params = params(request)
           attempt = 1
@@ -135,11 +138,18 @@ module Sleepyshark
         def params(request)
           { **@fixed,
             max_tokens: [@fixed.fetch(:max_tokens), request.max_output_tokens].compact.min,
+            output_config: output_config(request.output_schema),
             tools: request.tools.map { tool(it) },
             system: [{ type: :text, text: request.instructions,
                        cache_control: { type: :ephemeral, ttl: @prefix_cache } }],
             request_options: { extra_body: { messages: request.messages.map { JSON::Fragment.new(message(it)) } } } }
             .merge(ContextEditing.params(request.context_management))
+        end
+
+        # The effort, and the output format when the request has an output schema.
+        def output_config(schema)
+          effort = @fixed.fetch(:output_config)
+          schema ? { **effort, format: OutputFormat.of(schema) } : effort
         end
 
         # The memory tool is Claude's own, which the model is trained on: it carries no schema or description of ours.

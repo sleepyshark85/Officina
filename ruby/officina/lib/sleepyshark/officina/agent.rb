@@ -4,8 +4,8 @@ require 'digest'
 
 module Sleepyshark
   module Officina
-    # What an agent is: a model, instructions and optionally tools. It is frozen once built, so any number of runs, in
-    # any number of threads, may share it.
+    # What an agent is: a model, instructions and optionally tools and an output type. It is frozen once built, so any
+    # number of runs, in any number of threads, may share it.
     class Agent
       # @return [_Model]
       attr_reader :model
@@ -13,9 +13,12 @@ module Sleepyshark
       attr_reader :instructions
       # @return [Array<Tool>] sorted by name
       attr_reader :tools
-      # @return [String] a hash of everything in the prefix that reaches the model (its settings, the instructions and
-      #   the tools), which a conversation binds on its first append. It is the hash every implementation of Officina
-      #   computes, so a conversation one stored resumes in another.
+      # @return [Class, nil] the class from Input.define whose value a completed run returns as its output, its schema
+      #   sent as the provider's structured output format; nil when a run's result is text
+      attr_reader :output
+      # @return [String] a hash of everything in the prefix that reaches the model (its settings, the instructions, the
+      #   tools, the output schema and the context management), which a conversation binds on its first append. It is
+      #   the hash every implementation of Officina computes, so a conversation one stored resumes in another.
       attr_reader :fingerprint
       # @return [_Approver, nil] answers approval requests; without one, runs are unattended and a call that needs
       #   approval is denied
@@ -34,6 +37,7 @@ module Sleepyshark
       # @param model [_Model]
       # @param instructions [String]
       # @param tools [Array<Tool>] in any order
+      # @param output [Class, nil] a class from Input.define
       # @param approver [_Approver, nil]
       # @param audit_sink [_AuditSink, nil]
       # @param name [String, nil]
@@ -46,9 +50,9 @@ module Sleepyshark
       #   (ModelInfo). Without compaction, a run that fills the model's context window stops with +:context_full+
       # @raise [Error] when the instructions are blank, two tools share a name, or the model's provider cannot manage
       #   the context as asked
-      def initialize(model:, instructions:, tools: [], approver: nil, audit_sink: nil, name: nil, secrets: [],
-                     clock: nil, telemetry: nil, context_management: nil)
-        keep_prefix(model, instructions, tools, context_management)
+      def initialize(model:, instructions:, tools: [], output: nil, approver: nil, audit_sink: nil, name: nil,
+                     secrets: [], clock: nil, telemetry: nil, context_management: nil)
+        keep_prefix(model, instructions, tools, output, context_management)
         @approver = approver
         @audit_sink = audit_sink
         @name = name && -name
@@ -114,10 +118,11 @@ module Sleepyshark
       end
 
       # Keeps what the prefix holds, and its fingerprint.
-      def keep_prefix(model, instructions, tools, context_management)
+      def keep_prefix(model, instructions, tools, output, context_management)
         @tools = sorted(tools)
         @model = model
         @instructions = given(instructions)
+        @output = output
         @context_management = supported(context_management, model.info)
         @fingerprint = prefix_fingerprint(model.settings)
       end
@@ -149,18 +154,20 @@ module Sleepyshark
       end
 
       # The bytes every implementation hashes, which must never change: {"model":…,"instructions":…,"tools":[{"name":…,
-      # "description":…,"inputSchema":…},…],"contextManagement":{…}}, with the strings escaped as .NET's default JSON
-      # encoder escapes them, each schema as given, and the context management only when it asks for something.
+      # "description":…,"inputSchema":…},…],"output":…,"contextManagement":{…}}, with the strings escaped as .NET's
+      # default JSON encoder escapes them, each schema as given, the output only when there is one, and the context
+      # management only when it asks for something.
       def prefix_fingerprint(settings)
         tools = @tools.map do |tool|
           name = DotnetJson.string(tool.name)
           description = DotnetJson.string(tool.description)
           %({"name":#{name},"description":#{description},"inputSchema":#{tool.input_schema}})
         end
-        model = DotnetJson.string(settings)
-        instructions = DotnetJson.string(@instructions)
-        Digest::SHA256.hexdigest(%({"model":#{model},"instructions":#{instructions},"tools":[#{tools.join(',')}]) +
-                                 "#{@context_management&.fingerprint}}")
+        parts = [%("model":#{DotnetJson.string(settings)}), %("instructions":#{DotnetJson.string(@instructions)}),
+                 %("tools":[#{tools.join(',')}])]
+        output = @output
+        parts << %("output":#{output.schema}) if output
+        Digest::SHA256.hexdigest("{#{parts.join(',')}#{@context_management&.fingerprint}}")
       end
     end
   end

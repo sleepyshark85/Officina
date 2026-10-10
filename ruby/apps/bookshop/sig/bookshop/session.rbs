@@ -1,16 +1,35 @@
 module Bookshop
   class Session
-    Appended: singleton(Sleepyshark::Officina::ConversationAppended)
+    Officina: singleton(Sleepyshark::Officina)
 
     @agent: Sleepyshark::Officina::Agent
-    @staff_member: String
+    @store: SessionStore
     @clock: ^() -> Time
+    @owner: String
     @conversation: Sleepyshark::Officina::Conversation
+    @saved: String?
     @context: String?
+    @spent: Sleepyshark::Officina::Usage
+    @told: bool
 
-    def initialize: (agent: Sleepyshark::Officina::Agent, staff_member: String, clock: ^() -> Time) -> void
+    attr_reader staff_member: String
+    attr_reader usage: Sleepyshark::Officina::Usage
+    attr_reader cost: BigDecimal
+
+    def initialize: (agent: Sleepyshark::Officina::Agent, store: SessionStore, clock: ^() -> Time,
+                     staff_member: String, stored: StoredSession) -> void
     def id: () -> String
-    def reply: (String message, cancel: Sleepyshark::Officina::Cancellation)
-                { (Sleepyshark::Officina::run_event event) -> void } -> Sleepyshark::Officina::result
+    def length: () -> Integer
+    def reply: (String message, cancel: Sleepyshark::Officina::Cancellation, budget: Sleepyshark::Officina::Budget)
+               { (Sleepyshark::Officina::run_event | SessionNotSaved event) -> void } -> Sleepyshark::Officina::result
+
+    private
+
+    def add: (Sleepyshark::Officina::result result) { (SessionNotSaved event) -> void } -> Sleepyshark::Officina::result
+    def follow: (Sleepyshark::Officina::run_event event, String context)
+                { (SessionNotSaved event) -> void } -> void
+    def priced: (Sleepyshark::Officina::Usage usage) -> BigDecimal
+    def save: (Sleepyshark::Officina::Usage usage, BigDecimal cost) { (SessionNotSaved event) -> void } -> void
+    def tell: (String problem) { (SessionNotSaved event) -> void } -> void
   end
 end

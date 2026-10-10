@@ -42,7 +42,7 @@ class ConsoleInterruptsTest < Minitest::Test
 
     transcript = session(model, 'Sam', nil, 'Not read.', interrupt_on: 'you> ')
 
-    assert_match(/Hello, Sam\.\nyou> \z/, transcript)
+    assert_match(/Hello, Sam\.\nSession \h{12}\.\nyou> \z/, transcript)
     assert_empty model.requests
   end
 

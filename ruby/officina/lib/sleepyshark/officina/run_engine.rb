@@ -6,8 +6,8 @@ module Sleepyshark
     # the tools it asked for, and decides the result.
     class RunEngine
       MAX_MODEL_CALLS = 25
-      PREFIX_MISMATCH = "The agent's tools, instructions or model settings differ from those the conversation was " \
-                        'started with; start a new conversation'
+      PREFIX_MISMATCH = "The agent's tools, instructions, output type or model settings differ from those the " \
+                        'conversation was started with; start a new conversation'
 
       # @param trace [RunTrace] the run's, whose span has started
       # @param budget [Budget, nil]
@@ -23,12 +23,13 @@ module Sleepyshark
         @tool_step = ToolStep.new(agent:, audit: @audit, trace:, cancel:, reporter: @reporter)
       end
 
-      # The run's result, its text and detail without the agent's secrets, with what the run used, between the run's
-      # two audit entries, and its span's end; a run the host left has none, and its end is recorded as abandoned.
+      # The run's result, its text and detail without the agent's secrets, its typed output read from that text, with
+      # what the run used, between the run's two audit entries, and its span's end; a run the host left has none, and
+      # its end is recorded as abandoned.
       def run(input, context)
         # @type var result: result?
         @audit.record(:run_started)
-        result = @spending.report(redacted(decide(input, context)))
+        result = @spending.report(TypedOutput.read(redacted(decide(input, context)), @agent.output))
       ensure
         @audit.record_end(result, @spending.usage, @spending.cost)
         @trace.finish(result)

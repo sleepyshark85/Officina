@@ -2,22 +2,25 @@
 
 module Bookshop
   # Shows one reply on the terminal as its run's events come: the text as it streams, each tool call with its input and
-  # outcome, and a note when the reply starts again. It asks the staff member about each call that needs approval, and
-  # ends with how the reply ended when that is not its text.
+  # outcome, a note when the reply starts again, and one when the session could not be saved. It asks the staff member
+  # about each call that needs approval, and ends with how the reply ended when that is not its text, and a status
+  # line of the reply's tokens and cost and the session's cost.
   class ReplyView
     Officina = Sleepyshark::Officina
     DECLINED = Officina::Approval.new(approved: false, reason: 'the staff member declined')
     private_constant :Officina, :DECLINED
 
     # @param cancel [Sleepyshark::Officina::Cancellation] the reply's: once cancelled, an approval prompt stops waiting
-    def initialize(terminal:, approvals:, cancel:)
+    # @param budget_reached [String] which budget a budget stop reached, and what to do
+    def initialize(terminal:, approvals:, cancel:, budget_reached:)
       @terminal = terminal
       @approvals = approvals
       @cancel = cancel
+      @budget_reached = budget_reached
       @labelled = false
     end
 
-    # @param event [Sleepyshark::Officina::run_event]
+    # @param event [Sleepyshark::Officina::run_event, SessionNotSaved]
     def show(event)
       case event
       in Officina::TextDelta(text:) then stream(text)
@@ -25,16 +28,20 @@ module Bookshop
       in Officina::ToolCallStarted(call:) then @terminal.write_line("  > #{call.name} #{call.input}")
       in Officina::ApprovalAsked(call:) then ask(call)
       in Officina::ToolCallFinished(call:, result:) then @terminal.write_line("  < #{call.name}: #{outcome(result)}")
+      in SessionNotSaved(message:) then @terminal.write_line(message)
       else nil # usage and appends show nothing yet
       end
     end
 
-    # Ends the reply with how it ended, unless with its text, already shown.
+    # Ends the reply with how it ended, unless with its text, already shown, and its status line.
     #
     # @param result [Sleepyshark::Officina::Completed, Sleepyshark::Officina::Stopped, Sleepyshark::Officina::Failed]
-    def finish(result)
+    # @param session_cost [BigDecimal] what the session has cost, this reply included, in US dollars
+    def finish(result, session_cost:)
       ending = ending(result)
-      ending ? @terminal.write_line(ending) : @terminal.end_line
+      @terminal.write_line(ending) if ending
+      @terminal.write_line("[#{Spent.tokens(result.usage)} · reply $#{Spent.dollars(result.cost)} · " \
+                           "session $#{Spent.dollars(session_cost)}]")
     end
 
     private
@@ -69,9 +76,16 @@ module Bookshop
     def ending(result)
       case result
       in Officina::Completed(text:) then ('[The reply has no text. Please ask again.]' if text.strip.empty?)
-      in Officina::Stopped(reason: :cancelled) then '[Cancelled.]'
-      in Officina::Stopped(reason:) then "[Stopped: #{reason.to_s.tr('_', ' ')}.]"
+      in Officina::Stopped(reason:) then stopped(reason)
       in Officina::Failed(detail:) then "[Failed: #{detail}]"
+      end
+    end
+
+    def stopped(reason)
+      case reason
+      when :cancelled then '[Cancelled.]'
+      when :budget then "[Stopped: #{@budget_reached}]"
+      else "[Stopped: #{reason.to_s.tr('_', ' ')}.]"
       end
     end
   end
