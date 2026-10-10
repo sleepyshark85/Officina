@@ -24,6 +24,9 @@ jobs:
     timeout-minutes: 15
     env:
       DOTNET_NOLOGO: true
+      # Testcontainers' reaper is pulled from Docker Hub, which rate-limits these runners; a runner is thrown away after
+      # the job, so nothing is left behind without it. Local runs keep it, as the shared database relies on it.
+      TESTCONTAINERS_RYUK_DISABLED: true
       DOTNET_CLI_TELEMETRY_OPTOUT: true
     steps:
       - uses: actions/checkout@v7
