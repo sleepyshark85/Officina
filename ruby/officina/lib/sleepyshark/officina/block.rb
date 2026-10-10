@@ -22,7 +22,9 @@ module Sleepyshark
       def initialize(text: nil, raw: nil, tool_call: nil, tool_result: nil)
         raise Error, 'A block needs text, raw JSON or a tool result' unless text || raw || tool_result
 
-        super(text: text && -text, raw: raw && -raw, tool_call:, tool_result:)
+        # Empty text is no text in a block that holds anything else, as the JSON form leaves it out.
+        text = nil if text == '' && (raw || tool_result)
+        super(text: frozen(text), raw: frozen(raw), tool_call:, tool_result:)
       end
 
       # The canonical form in which a provider adapter stores a block's JSON: compact, with <, > and & escaped, and
@@ -32,6 +34,10 @@ module Sleepyshark
       def self.canonical(json)
         -json.gsub(TOKEN) { Regexp.last_match(1)&.gsub(/[<>&]/, HTML) || '' }
       end
+
+      private
+
+      def frozen(string) = string && -string
     end
   end
 end

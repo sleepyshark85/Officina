@@ -12,6 +12,10 @@ module Sleepyshark
       def initialize: (?text: String?, ?raw: String?, ?tool_call: ToolCall?, ?tool_result: ToolResult?) -> void
 
       def self.canonical: (String json) -> String
+
+      private
+
+      def frozen: (String? string) -> String?
     end
   end
 end

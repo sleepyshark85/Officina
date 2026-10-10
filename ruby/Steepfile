@@ -7,5 +7,8 @@ target :lib do
             'apps/bookshop/sig'
   check 'officina/lib', 'officina-claude/lib', 'officina-mcp/lib', 'officina-testing/lib', 'apps/bookshop/lib'
 
+  # Standard libraries that are not gems, so the collection does not list them.
+  library 'digest'
+
   configure_code_diagnostics(Steep::Diagnostic::Ruby.strict)
 end

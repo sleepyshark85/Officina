@@ -1,0 +1,11 @@
+module Sleepyshark
+  module Officina
+    class Stopped < Data
+      attr_reader reason: Symbol
+      attr_reader detail: String?
+      attr_reader usage: Usage
+
+      def initialize: (reason: Symbol, detail: String?, usage: Usage) -> void
+    end
+  end
+end

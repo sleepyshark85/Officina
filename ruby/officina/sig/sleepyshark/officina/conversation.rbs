@@ -1,0 +1,39 @@
+module Sleepyshark
+  module Officina
+    class Conversation
+      @lock: Thread::Mutex
+
+      attr_reader id: String
+      attr_reader fingerprint: String?
+      attr_reader messages: Array[Message]
+
+      def initialize: (?id: String, ?fingerprint: String?, ?messages: Array[Message]) -> void
+
+      def self.from_json: (String json) -> Conversation
+
+      def to_json: (*untyped) -> String
+
+      def hold: [T] () { (^(Array[Message], String) -> void append) -> T } -> T
+
+      private
+
+      def self.read_message: (untyped json) -> Message
+
+      def self.read_block: (untyped json) -> Block
+
+      def self.read_call: (untyped json) -> ToolCall?
+
+      def self.read_result: (untyped json) -> ToolResult?
+
+      def append: (Array[Message] appended, String fingerprint) -> void
+
+      def message_json: (Message message) -> Hash[Symbol, untyped]
+
+      def block_json: (Block block) -> Hash[Symbol, untyped]
+
+      def call_json: (ToolCall call) -> Hash[Symbol, String]
+
+      def result_json: (ToolResult result) -> Hash[Symbol, String | bool]
+    end
+  end
+end

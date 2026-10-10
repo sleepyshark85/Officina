@@ -2,6 +2,8 @@
 
 require 'sleepyshark/officina'
 require_relative 'testing/thread_leak_check'
+require_relative 'testing/scripted_model'
+require_relative 'testing/prefix_assertions'
 
 module Sleepyshark
   module Officina

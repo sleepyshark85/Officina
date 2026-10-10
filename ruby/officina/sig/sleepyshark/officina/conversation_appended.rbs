@@ -1,0 +1,9 @@
+module Sleepyshark
+  module Officina
+    class ConversationAppended < Data
+      attr_reader message: Message
+
+      def initialize: (message: Message) -> void
+    end
+  end
+end

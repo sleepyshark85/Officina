@@ -12,7 +12,8 @@ module Sleepyshark
 
       # Sends one request and yields its events as they arrive. Returns the reply once the model has stopped, or nil
       # when the cancellation cut the reply off. Retries transient failures itself; raises a StandardError for a
-      # failure that remains, or a stream that ends without a stop reason.
+      # failure that remains, or a stream that ends without a stop reason. What the block raises, or a break from it,
+      # passes through: it is the host's, never a failure of the model, and the stream releases what it holds.
       def stream: (Request request, cancel: Cancellation) { (model_event event) -> void } -> Reply?
     end
   end
