@@ -1,0 +1,72 @@
+module Sleepyshark
+  module Officina
+    module Testing
+      class FakeMcpServer
+        type message = Hash[String, untyped]
+
+        NOTIFICATION: String
+
+        @tools: Array[FakeMcpTool]
+        @protocol_version: String?
+        @mutex: Thread::Mutex
+        @calls: Array[Array[untyped]]
+        @session: String
+        @down: bool
+
+        def initialize: (tools: Array[FakeMcpTool], ?protocol_version: String?) -> void
+
+        def calls: () -> Array[Array[untyped]]
+
+        def go_down: () -> void
+
+        def end_session: () -> void
+
+        def serve: (IO input, IO output) -> void
+
+        def serve_http: () { (String url) -> void } -> void
+
+        def answer: (message request) -> message?
+
+        def session: () -> String
+
+        def down?: () -> bool
+
+        private
+
+        def result: (untyped method, message params) -> message?
+
+        def initialized: (message params) -> message
+
+        def page: (Integer index) -> message
+
+        def call: (untyped name, Hash[String, untyped] arguments) -> message?
+
+        class Http
+          type reply = [Integer, Hash[String, String], String]
+
+          STATUS: Hash[Integer, String]
+
+          @server: FakeMcpServer
+
+          def initialize: (FakeMcpServer server) -> void
+
+          def accept: (TCPServer listener) -> void
+
+          private
+
+          def serve: (TCPSocket connection) -> void
+
+          def respond: (TCPSocket connection) -> void
+
+          def read: (TCPSocket connection) -> [Hash[String, String], String]
+
+          def reply: (Hash[String, String] headers, message request) -> reply
+
+          def accepts?: (Hash[String, String] headers) -> bool
+
+          def content: (untyped method, String body) -> reply
+        end
+      end
+    end
+  end
+end

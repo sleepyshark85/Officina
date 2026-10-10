@@ -1,0 +1,64 @@
+module Sleepyshark
+  module Officina
+    module Mcp
+      class Client
+        # What a transport hands back for a message: something to wait on for its answer.
+        interface _Pending
+          def take: (Float? timeout) -> Hash[String, json]?
+          def release: () -> void
+        end
+
+        # Stdio or Streamable HTTP.
+        interface _Transport
+          def post: (String text, Integer? id, String version) -> _Pending
+          def close: () -> void
+        end
+
+        PROTOCOL_VERSION: String
+        PROTOCOL_VERSIONS: Array[String]
+        CONNECT_TIMEOUT: Integer
+
+        @name: String
+        @clock: clock
+        @mutex: Thread::Mutex
+        @last_id: Integer
+        @version: String
+        @transport: _Transport
+
+        def initialize: (Server server, cancel: _Cancellation?, clock: clock) -> void
+
+        def list_tools: (?cancel: _Cancellation?) -> Array[Tool]
+
+        def call_tool: (String name, Hash[String, untyped] arguments, ?cancel: _Cancellation?) -> CallResult
+
+        def close: () -> void
+
+        private
+
+        def handshake: (_Cancellation? cancel) -> void
+
+        def agreed: (json version) -> String
+
+        def listed: (Hash[String, json] page) -> Array[Tool]
+
+        def next_cursor: (Hash[String, json] page) -> String?
+
+        def listed?: (json tool) -> bool
+
+        def request: (String method, Hash[String, untyped]? params, cancel: _Cancellation?, ?deadline: Numeric?)
+                   -> Hash[String, json]
+
+        def unreadable: (String method) -> bot
+
+        def exchange: (String method, Hash[String, untyped]? params, Integer? id, cancel: _Cancellation?,
+                       deadline: Numeric?) -> Hash[String, json]
+
+        def wait: (_Pending pending, String method, _Cancellation? cancel, Numeric? deadline) -> Hash[String, json]
+
+        def check: (String method, _Cancellation? cancel, Numeric? deadline) -> void
+
+        def late?: (Numeric? deadline) -> bool
+      end
+    end
+  end
+end

@@ -1,0 +1,50 @@
+module Sleepyshark
+  module Officina
+    module Mcp
+      class StreamableHttp
+        FAILURES: Array[singleton(Exception)]
+
+        class Pending < Data
+          attr_reader transport: StreamableHttp
+          attr_reader http: Net::HTTP
+          attr_reader worker: Thread
+
+          def self.new: (StreamableHttp transport, Net::HTTP http, Thread worker) -> instance
+
+          def take: (Float? timeout) -> Hash[String, json]?
+
+          def release: () -> void
+        end
+
+        @name: String
+        @uri: URI::HTTP
+        @headers: Hash[String, String?]
+        @mutex: Thread::Mutex
+        @session: String?
+        @lost: String?
+
+        def initialize: (Server server) -> void
+
+        def post: (String text, Integer? id, String version) -> Pending
+
+        def lose: (String reason) -> String
+
+        def close: () -> void
+
+        private
+
+        def lost_reason: () -> String
+
+        def build: (String text, String version) -> Net::HTTP::Post
+
+        def open: () -> Net::HTTP
+
+        def exchange: (Net::HTTP http, Net::HTTP::Post request, Integer? id) -> Hash[String, json]
+
+        def check: (Net::HTTPResponse response, Net::HTTP::Post request) -> void
+
+        def answer: (Net::HTTPResponse response, Integer id) -> Hash[String, json]
+      end
+    end
+  end
+end

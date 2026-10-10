@@ -1,0 +1,14 @@
+module Sleepyshark
+  module Officina
+    module Mcp
+      class CallResult < Data
+        attr_reader text: String
+        attr_reader error: bool
+
+        def self.new: (text: String, error: bool) -> instance
+
+        def error?: () -> bool
+      end
+    end
+  end
+end
