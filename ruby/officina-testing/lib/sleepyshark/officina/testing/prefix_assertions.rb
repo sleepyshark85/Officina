@@ -17,9 +17,12 @@ module Sleepyshark
 
         def assert_same_prefix(previous, request, number)
           since = "request #{number}, from request #{number - 1}"
-          # As named pairs: a failure's diff names the part, and the nil output schema of an agent without an output
-          # type compares too, which assert_equal refuses alone.
-          assert_equal fixed_parts(previous).to_a, fixed_parts(request).to_a, "The prefix changed in #{since}"
+          parts = fixed_parts(request)
+          fixed_parts(previous).each do |part, value|
+            # Wrapped, so the nil output schema of an agent without an output type compares too, which assert_equal
+            # refuses alone.
+            assert_equal({ part => value }, { part => parts.fetch(part) }, "The #{part_name(part)} changed in #{since}")
+          end
           assert_equal previous.messages, request.messages.first(previous.messages.size),
                        "An earlier message changed in #{since}"
         end
@@ -30,6 +33,8 @@ module Sleepyshark
           { tools: request.tools.map { |tool| [tool.name, tool.description, tool.input_schema] },
             instructions: request.instructions, output_schema: request.output_schema }
         end
+
+        def part_name(part) = part.to_s.tr('_', ' ')
       end
     end
   end

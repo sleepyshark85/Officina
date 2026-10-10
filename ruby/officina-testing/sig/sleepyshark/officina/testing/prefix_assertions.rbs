@@ -9,6 +9,8 @@ module Sleepyshark
         def assert_same_prefix: (Request previous, Request request, Integer number) -> void
 
         def fixed_parts: (Request request) -> Hash[Symbol, untyped]
+
+        def part_name: (Symbol part) -> String
       end
     end
   end

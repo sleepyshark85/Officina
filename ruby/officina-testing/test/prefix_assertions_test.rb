@@ -21,15 +21,14 @@ class PrefixAssertionsTest < Minitest::Test
 
   def test_test02_each_changed_part_of_the_prefix_fails_naming_it_and_the_requests
     first = request(output_schema: SCHEMA)
-    changes = { tools: first.with(tools: [tool('search', 'Searches better.')]),
-                instructions: first.with(instructions: 'You help more.'),
-                output_schema: first.with(output_schema: '{"type":"object"}') }
+    changes = { 'The tools changed' => first.with(tools: [tool('search', 'Searches better.')]),
+                'The instructions changed' => first.with(instructions: 'You help more.'),
+                'The output schema changed' => first.with(output_schema: '{"type":"object"}') }
 
-    changes.each do |part, changed|
+    changes.each do |named, changed|
       error = assert_raises(Minitest::Assertion) { assert_stable_prefix [first, first, changed] }
 
-      assert_match(/\AThe prefix changed in request 3, from request 2\.\n/, error.message)
-      assert_match(/\[:#{part}, /, error.message)
+      assert_equal "#{named} in request 3, from request 2.", error.message.lines.first.chomp
     end
   end
 
