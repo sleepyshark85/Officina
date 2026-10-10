@@ -123,11 +123,13 @@ class AgentUsageTest(unittest.TestCase):
                          "| lead | 1 | 999 |\n"
                          "| reviewer | 1 | 1,235k |\n"
                          "\n"
-                         "| Agent | Role | Task | Calls | Input processed | Of which cache reads | Peak context "
-                         "| Active minutes |\n"
-                         "|---|---|---|---|---|---|---|---|\n"
-                         "| lead | lead | This session's main conversation | 1,200 | 999 | 1k | 1k | 12 |\n"
-                         "| a1234567 | reviewer | Review a/b | 3 | 1,235k | 0 | 999 | 2 |\n")
+                         "| Agent | Role | Task | Start (UTC) | End (UTC) | Calls | Input processed "
+                         "| Of which cache reads | Peak context | Active minutes |\n"
+                         "|---|---|---|---|---|---|---|---|---|---|\n"
+                         "| lead | lead | This session's main conversation "
+                         "| 2026-10-05 10:00 | 2026-10-05 10:30 | 1,200 | 999 | 1k | 1k | 12 |\n"
+                         "| a1234567 | reviewer | Review a/b "
+                         "| 2026-10-05 10:05 | 2026-10-05 11:40 | 3 | 1,235k | 0 | 999 | 2 |\n")
 
     def test_a_directory_without_transcripts_exits_with_an_error_and_leaves_the_doc_as_it_was(self):
         doc = self.directory / "doc.md"
