@@ -1,0 +1,24 @@
+# Mutation testing of the MCP client with its own tests (test/), run from this directory: bundle exec mutant run.
+usage: opensource
+integration:
+  name: minitest
+includes:
+  - lib
+  - ../test
+  - ../officina/lib
+  - ../officina-testing/lib
+# As the core's: see ../officina/mutant.yml.
+coverage_criteria:
+  process_abort: true
+  timeout: true
+hooks:
+  - ../test/mutant_hooks.rb
+requires:
+  - sleepyshark/officina/mcp
+matcher:
+  subjects:
+    - Sleepyshark::Officina::Mcp*
+mutation:
+  # The gem's tests take about a second; a mutation that leaves them waiting on a process or a socket stops at this
+  # many.
+  timeout: 10.0

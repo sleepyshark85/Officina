@@ -40,7 +40,7 @@ bundle exec rake test                # the tests alone: one process, one test at
 A property test that fails prints its seed; `PROPERTY_SEED=<seed> bundle exec rake test` runs it again with the same
 inputs (CI always uses one fixed seed). `SEED=<n>` repeats Minitest's test order. `COVERAGE=1` writes a SimpleCov
 report to `coverage/`. Mutation testing runs from the directory of each gem with a `mutant.yml` (`officina`,
-`officina-claude`), with CI's property seed:
+`officina-claude`, `officina-mcp`), with CI's property seed:
 
 ```sh
 cd officina

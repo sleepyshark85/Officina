@@ -1,6 +1,21 @@
 module Sleepyshark
   module Officina
     module Mcp
+      # What a request takes to be cancelled while it waits: anything that says whether it was.
+      interface _Cancellation
+        def cancelled?: () -> bool
+      end
+
+      type clock = ^() -> Numeric
+
+      # A parsed JSON value. Untyped: Steep cannot narrow a recursive union of every JSON type by is_a? checks.
+      type json = untyped
+
+      POLL: Float
+      MONOTONIC: clock
+      ACCEPTED: Hash[String, json]
+
+      def self.connect: (Server server, ?cancel: _Cancellation?, ?clock: clock) -> Client
     end
   end
 end
