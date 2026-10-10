@@ -2,6 +2,7 @@ package officina_test
 
 import (
 	"context"
+	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"strings"
 	"sync/atomic"
@@ -39,6 +40,49 @@ func typedAgent[T any](t *testing.T, model officina.Model) *officina.Agent {
 		t.Fatalf("NewAgent() error = %v", err)
 	}
 	return agent
+}
+
+// dotnetLine and dotnetOrder mirror the .NET tests' Line and Order, whose schema .NET exported into the shared
+// testdata/claude/output-exported.json.
+type (
+	dotnetLine struct {
+		BookID int `json:"bookId" jsonschema:"The book's id."`
+		Copies int `json:"copies"`
+	}
+	dotnetOrder struct {
+		Customer string       `json:"customer"`
+		Mood     string       `json:"mood" enum:"Calm,Busy"`
+		Lines    []dotnetLine `json:"lines"`
+		Gift     *dotnetLine  `json:"gift"`
+		Total    float64      `json:"total"`
+	}
+)
+
+func TestNewOutput_OUT01_TheSchemaOfATypeLikeDotNetsIsTheSchemaDotNetExportsByteForByte(t *testing.T) {
+	t.Parallel()
+	var exported struct {
+		Format struct {
+			Schema jsontext.Value `json:"schema"`
+		} `json:"format"`
+	}
+	if err := json.Unmarshal([]byte(sharedFile(t, "claude", "output-exported.json")), &exported); err != nil {
+		t.Fatalf("read the exported schema: %v", err)
+	}
+	// The file is indented; compacting keeps every string's escapes as .NET wrote them.
+	want := exported.Format.Schema
+	if err := want.Compact(); err != nil {
+		t.Fatalf("Compact() error = %v", err)
+	}
+	model := officinatest.NewModel("scripted", officinatest.TextReply(`{"customer":"Ana","mood":"Busy","lines":[],`+
+		`"gift":null,"total":0}`))
+
+	if _, err := typedAgent[dotnetOrder](t, model).Run(t.Context(), nil, "Hi", officina.RunOptions{}); err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+
+	if got := string(model.Requests()[0].OutputSchema); got != string(want) {
+		t.Errorf("schema = %s\nwant .NET's %s", got, want)
+	}
 }
 
 func TestNewOutput_OUT01_SendsTheSchemaDerivedFromTheTypeAndReturnsTheReplyAsAValueOfIt(t *testing.T) {

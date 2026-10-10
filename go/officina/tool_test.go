@@ -63,7 +63,7 @@ func TestNewTool_TOOL01_DerivesTheSchemaFromTheInputType(t *testing.T) {
 		`"due":{"type":"string","format":"date-time"},` +
 		`"Exact":{"type":"integer"},` +
 		`"nested":{"type":"array","items":{"type":"object","additionalProperties":{"type":"boolean"}}},` +
-		`"cover":{"type":"string","enum":["paperback","hardback"]}},` +
+		`"cover":{"enum":["paperback","hardback"]}},` +
 		`"required":["isbn","price","note","tags","pair","none","extra","ship","due","Exact","cover"],"additionalProperties":false}`
 	if diff := cmp.Diff(want, string(got.InputSchema)); diff != "" {
 		t.Errorf("schema mismatch (-want +got):\n%s", diff)

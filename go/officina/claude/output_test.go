@@ -88,9 +88,10 @@ type line struct {
 	Copies int `json:"copies"`
 }
 
-// order is the .NET test's Order but its mood, an enum, which Go has no type for.
+// order is the .NET test's Order; its mood, an enum there, is a string limited by its enum tag.
 type order struct {
 	Customer string  `json:"customer"`
+	Mood     string  `json:"mood" enum:"Calm,Busy"`
 	Lines    []line  `json:"lines"`
 	Gift     *line   `json:"gift"`
 	Total    float64 `json:"total"`
@@ -98,7 +99,7 @@ type order struct {
 
 func TestModel_OUT01_GEN05_ATypesSchemaGoesOutAsDotNetsAndTheStructuredReplyComesBackAsTheTypedOutput(t *testing.T) {
 	t.Parallel()
-	reply := `{"customer":"Ana","lines":[{"bookId":144,"copies":2}],"gift":null,"total":12.56}`
+	reply := `{"customer":"Ana","mood":"Busy","lines":[{"bookId":144,"copies":2}],"gift":null,"total":12.56}`
 	api := serve(t, sse(textReply("end_turn", reply[:20], reply[20:])))
 	m, err := claude.New(claude.Opus55, claude.EffortLow, api.options(claude.Options{}))
 	if err != nil {
@@ -121,7 +122,7 @@ func TestModel_OUT01_GEN05_ATypesSchemaGoesOutAsDotNetsAndTheStructuredReplyCome
 	if res.Status != officina.Completed {
 		t.Fatalf("result = %+v, want Completed", res)
 	}
-	want := order{Customer: "Ana", Lines: []line{{BookID: 144, Copies: 2}}, Total: 12.56}
+	want := order{Customer: "Ana", Mood: "Busy", Lines: []line{{BookID: 144, Copies: 2}}, Total: 12.56}
 	if diff := cmp.Diff(any(want), res.Output); diff != "" {
 		t.Errorf("output mismatch (-want +got):\n%s", diff)
 	}
@@ -129,11 +130,8 @@ func TestModel_OUT01_GEN05_ATypesSchemaGoesOutAsDotNetsAndTheStructuredReplyCome
 	if err := json.Unmarshal([]byte(api.Requests()[0]), &body); err != nil {
 		t.Fatalf("unmarshal the request: %v", err)
 	}
-	// The same schema as .NET's for its Order, but the mood.
+	// The same schema as .NET's for its Order.
 	exported := golden(t, "claude/output-exported.json")
-	schema := exported["format"].(map[string]any)["schema"].(map[string]any)
-	delete(schema["properties"].(map[string]any), "mood")
-	schema["required"] = slices.DeleteFunc(schema["required"].([]any), func(name any) bool { return name == "mood" })
 	if diff := cmp.Diff(exported, body["output_config"]); diff != "" {
 		t.Errorf("output_config mismatch (-want +got):\n%s", diff)
 	}
