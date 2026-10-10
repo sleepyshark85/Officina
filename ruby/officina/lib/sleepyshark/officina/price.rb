@@ -11,12 +11,15 @@ module Sleepyshark
     # for the cache writes kept for the short default time and +cache_write_hour+ for those kept for an hour.
     class Price
       # @return [BigDecimal] what the tokens cost, in US dollars
-      def cost(usage) = (read(usage) + written(usage)) / 1_000_000
+      def cost(usage) = (plain(usage) + cache_reads(usage) + written(usage)) / 1_000_000
 
       private
 
-      # What the input, output and cache reads cost, per million.
-      def read(usage) = (input * usage.input) + (output * usage.output) + (cache_read * usage.cache_read)
+      # What the input and output tokens cost, per million.
+      def plain(usage) = (input * usage.input) + (output * usage.output)
+
+      # What the cache reads cost, per million.
+      def cache_reads(usage) = cache_read * usage.cache_read
 
       # What the cache writes cost, per million: those kept an hour at their rate, the rest at five minutes'.
       def written(usage)

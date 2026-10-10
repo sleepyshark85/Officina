@@ -15,7 +15,9 @@ module Sleepyshark
 
       private
 
-      def read: (Usage usage) -> BigDecimal
+      def plain: (Usage usage) -> BigDecimal
+
+      def cache_reads: (Usage usage) -> BigDecimal
 
       def written: (Usage usage) -> BigDecimal
     end
