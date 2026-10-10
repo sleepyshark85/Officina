@@ -19,13 +19,14 @@ class ConsoleSummarySavesTest < Minitest::Test
   end
 
   def test_app20_a_summary_that_cannot_be_saved_is_logged_as_a_warning_in_its_trace
-    first, logged = left_with_unsavable_summary
+    first, logged, spans = left_with_unsavable_summary
 
-    warning = logged.find { it.body.include?('not saved') }
+    warning, *more = logged.select { it.body.include?('not saved') }
 
+    assert_empty more
     assert_equal 'WARN', warning.severity_text
     assert_includes warning.body, "Session #{session_id(first)} summary not saved: #{UNSAVABLE}"
-    refute_equal OpenTelemetry::Trace::INVALID_SPAN_ID, warning.span_id
+    assert_equal spans.find { it.name == 'summary' }.span_id, warning.span_id
   end
 
   UNSAVABLE = 'ERROR:  column "summarized" of relation "sessions" does not exist'
@@ -33,15 +34,17 @@ class ConsoleSummarySavesTest < Minitest::Test
   private
 
   # A session left with /new whose summary cannot be saved, as the column is missing; returns its console's
-  # transcript and the log records written by then.
+  # transcript and the log records and spans written by then.
   def left_with_unsavable_summary
     gone = -> { execute('alter table sessions rename column summarized to summarized_gone') }
     telemetry = MemoryTelemetry.new
     logged = []
+    spans = []
+    seen = -> { logged.concat(telemetry.logs).then { spans.concat(telemetry.spans) } }
     transcript = session(ScriptedModel.new(ScriptedModel.text('Hello.')), 'Sam', 'Hi.', gone, '/new',
-                         -> { logged.concat(telemetry.logs) }, '/quit',
+                         seen, '/quit',
                          summarizer: ScriptedModel.new(summary_reply('Greeting', 'Sam said hello.')), telemetry:)
     execute('alter table sessions rename column summarized_gone to summarized')
-    [transcript, logged]
+    [transcript, logged, spans]
   end
 end

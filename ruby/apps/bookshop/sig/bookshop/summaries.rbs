@@ -21,6 +21,7 @@ module Bookshop
     def stored_summary: (String id) -> SessionSummary?
     def unread: (String id, StandardError error) -> nil
     def summarize: (String id, Sleepyshark::Officina::Conversation conversation) -> SessionSummary?
+    def summary_of: (String id, Sleepyshark::Officina::Conversation conversation) -> SessionSummary?
     def store: (String id, SessionSummary summary, Sleepyshark::Officina::result result) -> SessionSummary
     def failed: (String id, String reason) -> nil
   end

@@ -57,24 +57,23 @@ module Bookshop
     #   the block returns
     def reply(conversation, &run) = traced('reply', run) { log(conversation, it) }
 
-    # Runs the block, the summary of a session, in a span of its own, as #reply does, and logs how the summary ended:
-    # a summary that failed as a warning, since the session goes on without one.
+    # Runs the block, the summary of a session, in a span of its own, current while it runs so that the summarizer's run
+    # and what the block logs are in its trace.
     #
-    # @param session [String] the session's id
-    # @return [Sleepyshark::Officina::Completed, Sleepyshark::Officina::Stopped, Sleepyshark::Officina::Failed] what
-    #   the block returns
-    def summary(session, &) = traced('summary', -> { refusal_logged(session, &) }) { log_summary(session, it) }
+    # @return [Object] what the block returns
+    def summary = @traces.tracer(SCOPE).in_span('summary') { |_span| yield }
 
-    # Logs, as a warning in a span of its own, a summary the database failed to store.
+    # Logs, in the current span, that something went as it should.
     #
-    # @param session [String] the session's id
-    # @param error [StandardError] what the database raised
+    # @param message [String]
     # @return [void]
-    def summary_not_saved(session, error)
-      @traces.tracer(SCOPE).in_span('summary.save') do
-        @logger.warn("Session #{session} summary not saved: #{error.message.strip}")
-      end
-    end
+    def info(message) = @logger.info(message)
+
+    # Logs, in the current span, a failure the application goes on from, such as a summary that is not written.
+    #
+    # @param message [String]
+    # @return [void]
+    def warn(message) = @logger.warn(message)
 
     # Sends what is left and stops exporting. The three providers shut down at once, and closing returns once they
     # have or the timeout has passed, whichever is first; a shutdown still waiting on its exporter ends with the
@@ -98,30 +97,12 @@ module Bookshop
       @traces.tracer(SCOPE).in_span(name) { run.call.tap { yield it } }
     end
 
-    # Runs the block, and logs a run the core refuses, which is raised and not returned, before it goes on.
-    def refusal_logged(session)
-      yield
-    rescue Officina::Error => e
-      @logger.warn("Session #{session} could not be summarized: #{e.message}")
-      raise
-    end
-
     def log(conversation, result)
       case result
       in Officina::Failed(reason:, detail:)
         @logger.error("Reply in conversation #{conversation} failed (#{reason}): #{detail}")
       in Officina::Completed(usage:) then ended(conversation, 'completed', usage)
       in Officina::Stopped(reason:, usage:) then ended(conversation, "stopped (#{reason})", usage)
-      end
-    end
-
-    def log_summary(session, result)
-      case result
-      in Officina::Completed(usage:)
-        @logger.info("Session #{session} summarized: #{usage.all_input} input tokens, #{usage.output} output tokens")
-      in Officina::Stopped(reason:) then @logger.warn("Session #{session} could not be summarized: stopped (#{reason})")
-      in Officina::Failed(reason:, detail:)
-        @logger.warn("Session #{session} could not be summarized (#{reason}): #{detail}")
       end
     end
 

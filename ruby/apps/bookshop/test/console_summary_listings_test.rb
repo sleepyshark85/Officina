@@ -91,16 +91,18 @@ class ConsoleSummaryListingsTest < Minitest::Test
     summaries = ScriptedModel.new
     telemetry = MemoryTelemetry.new
     logged = []
+    spans = []
+    seen = -> { logged.concat(telemetry.logs).then { spans.concat(telemetry.spans) } }
 
-    transcript = session(ScriptedModel.new, 'Sam', '/sessions', -> { logged.concat(telemetry.logs) }, '/sessions',
-                         '/quit', summarizer: summaries, telemetry:)
+    transcript = session(ScriptedModel.new, 'Sam', '/sessions', seen, '/sessions', '/quit',
+                         summarizer: summaries, telemetry:)
 
     assert_in_order transcript, "[Session empty could not be summarized: A run needs a message]\n",
                     '  empty  ', '  Sam  (no title yet)  $'
     warnings = logged.map { it.to_h.values_at(:severity_text, :body) }
 
     assert_equal [['WARN', 'Session empty could not be summarized: A run needs a message']], warnings
-    refute_equal OpenTelemetry::Trace::INVALID_SPAN_ID, logged.first.span_id
+    assert_equal spans.find { it.name == 'summary' }.span_id, logged.first.span_id
     assert_equal 1, transcript.scan('Summarizing').size
     assert_empty summaries.requests
   end

@@ -63,23 +63,17 @@ class TelemetryTest < Minitest::Test
     assert_equal(replies.map { [it.trace_id, it.span_id] }, @memory.logs.map { [it.trace_id, it.span_id] })
   end
 
-  def test_app20_each_summary_is_a_span_over_its_run_logged_in_its_trace_a_failure_as_a_warning
-    summarize(ScriptedModel.text('{"title":"Greeting","summary":"Hi.","changes":[]}', usage: Officina::Usage.new(
-      input: 10, output: 5
-    )))
-    summarize(ScriptedModel.stop(:max_tokens))
-    summarize(ScriptedModel.text('{"title":"Greeting"}'))
+  def test_app20_what_is_logged_in_a_summary_is_in_its_span_with_the_severity_of_its_kind
+    @telemetry.summary do
+      @telemetry.info('done')
+      @telemetry.warn('not done')
+    end
 
-    summaries = @memory.spans.select { it.name == 'summary' }
-    runs = @memory.spans.select { it.name.start_with?('invoke_agent') }
+    span = @memory.spans.find { it.name == 'summary' }
 
-    assert_equal([['INFO', 9, 'Session c1 summarized: 10 input tokens, 5 output tokens'],
-                  ['WARN', 13, 'Session c1 could not be summarized: stopped (output_limit)'],
-                  ['WARN', 13, 'Session c1 could not be summarized (invalid_output): The output does not match its ' \
-                               'schema: /summary: is required; /changes: is required']],
+    assert_equal([['INFO', 9, 'done'], ['WARN', 13, 'not done']],
                  @memory.logs.map { it.to_h.values_at(:severity_text, :severity_number, :body) })
-    assert_equal(summaries.map { [it.trace_id, it.span_id] }, @memory.logs.map { [it.trace_id, it.span_id] })
-    assert_equal(summaries.map { [it.trace_id, it.span_id] }, runs.map { [it.trace_id, it.parent_span_id] })
+    assert_equal([[span.trace_id, span.span_id]] * 2, @memory.logs.map { [it.trace_id, it.span_id] })
   end
 
   def test_app20_logger_records_carry_logger_severities_and_respect_its_level
@@ -126,13 +120,6 @@ class TelemetryTest < Minitest::Test
     agent = Officina::Agent.new(name: 'bookshop', model: ScriptedModel.new(steps), instructions: 'Help.',
                                 telemetry: @telemetry.officina)
     @telemetry.reply('c1') { agent.run(Officina::Conversation.new, 'Hi.') { nil } }
-  end
-
-  # Runs a summarizer agent of the model's one reply as the summary of session c1, and returns its result.
-  def summarize(steps)
-    agent = Officina::Agent.new(name: 'summarizer', model: ScriptedModel.new(steps), instructions: 'Summarize.',
-                                output: Bookshop.const_get(:SessionSummary), telemetry: @telemetry.officina)
-    @telemetry.summary('c1') { agent.run(Officina::Conversation.new, 'Staff: Hi.') { nil } }
   end
 
   def exported = @exported ||= OpenTelemetry::SDK::Logs::Export::InMemoryLogRecordExporter.new

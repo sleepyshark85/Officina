@@ -13,7 +13,7 @@ module Bookshop
     # @param budgets [Budgets] which /cost shows
     # @param terminal [Terminal] where the commands answer
     # @param summarizer [Summarizer, nil] which summarizes the sessions left; nil for none
-    # @param telemetry [Telemetry] which logs a summary that could not be saved
+    # @param telemetry [Telemetry] which traces and logs each summary
     def initialize(agent:, store:, clock:, budgets:, terminal:, summarizer:, telemetry:)
       @agent = agent
       @store = store

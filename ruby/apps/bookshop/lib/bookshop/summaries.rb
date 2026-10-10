@@ -14,7 +14,7 @@ module Bookshop
     # @param summarizer [Summarizer, nil]
     # @param store [SessionStore] where the summaries are kept
     # @param terminal [Terminal] where they are said
-    # @param telemetry [Telemetry] which logs a summary that could not be saved
+    # @param telemetry [Telemetry] which traces and logs each summary
     def initialize(summarizer:, store:, terminal:, telemetry:)
       @summarizer = summarizer
       @store = store
@@ -86,9 +86,13 @@ module Bookshop
       nil
     end
 
-    # Summarizes the conversation and stores the summary, adding its cost to the session's. Returns the summary, also
-    # when it could not be stored; nil, and says why, when there is none.
+    # Summarizes the conversation and stores the summary, adding its cost to the session's, all in a span of its own.
+    # Returns the summary, also when it could not be stored; nil, and says why, when there is none.
     def summarize(id, conversation)
+      @telemetry.summary { summary_of(id, conversation) }
+    end
+
+    def summary_of(id, conversation)
       case (result = @summarizer.summarize(conversation))
       in Officina::Completed(output: SessionSummary => summary) then store(id, summary, result)
       in Officina::Stopped(reason:) then failed(id, "stopped: #{reason}")
@@ -100,15 +104,18 @@ module Bookshop
 
     def store(id, summary, result)
       @store.save_summary(id, summary, usage: result.usage, cost: result.cost)
+      usage = result.usage
+      @telemetry.info("Session #{id} summarized: #{usage.all_input} input tokens, #{usage.output} output tokens")
       summary
     rescue PG::Error => e
-      @telemetry.summary_not_saved(id, e)
+      @telemetry.warn("Session #{id} summary not saved: #{e.message.strip}")
       @terminal.write_line("[The summary of session #{id} could not be saved: #{e.message.strip}]")
       summary
     end
 
     def failed(id, reason)
       @failed << id
+      @telemetry.warn("Session #{id} could not be summarized: #{reason}")
       @terminal.write_line("[Session #{id} could not be summarized: #{reason}]")
       nil
     end

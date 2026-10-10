@@ -5,7 +5,6 @@ module Bookshop
     BUDGET: Sleepyshark::Officina::Budget
 
     @agent: Sleepyshark::Officina::Agent
-    @telemetry: Telemetry
 
     def self.claude: () -> Sleepyshark::Officina::Claude::Model
 

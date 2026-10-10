@@ -30,11 +30,10 @@ module Bookshop
 
     # @param model [Sleepyshark::Officina::_Model] one with a price, as each summary has a cost budget
     # @param clock [#call] returns the current Time
-    # @param telemetry [Telemetry] which traces and logs each summary
+    # @param telemetry [Telemetry] which traces the summarizer's runs
     def initialize(model:, clock:, telemetry:)
       @agent = Officina::Agent.new(name: 'summarizer', model:, instructions: INSTRUCTIONS, output: SessionSummary,
                                    clock:, telemetry: telemetry.officina)
-      @telemetry = telemetry
       freeze
     end
 
@@ -45,9 +44,7 @@ module Bookshop
     #   completed run's output is a SessionSummary
     # @raise [Sleepyshark::Officina::Error] when the conversation holds nothing to summarize
     def summarize(conversation)
-      @telemetry.summary(conversation.id) do
-        @agent.run(Officina::Conversation.new, Transcript.of(conversation), budget: BUDGET)
-      end
+      @agent.run(Officina::Conversation.new, Transcript.of(conversation), budget: BUDGET)
     end
   end
   private_constant :Summarizer
