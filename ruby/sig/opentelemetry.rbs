@@ -1,0 +1,68 @@
+# The few parts of the OpenTelemetry API the core calls (opentelemetry-api and opentelemetry-metrics-api, R6), which
+# ship no signatures and have none in the collection; the core's telemetry tests check them against the SDK.
+module OpenTelemetry
+  class Context
+    def self.current: () -> Context
+  end
+
+  module Trace
+    def self.context_with_span: (Span span, ?parent_context: Context) -> Context
+
+    class TracerProvider
+      def tracer: (?String? name, ?String? version) -> Tracer
+    end
+
+    class Tracer
+      def start_span: (String name, ?with_parent: Context?, ?attributes: Hash[String, untyped]?,
+                       ?start_timestamp: Time?, ?kind: Symbol?) -> Span
+    end
+
+    class Span
+      def context: () -> SpanContext
+
+      def set_attribute: (String key, untyped value) -> self
+
+      def add_attributes: (Hash[String, untyped] attributes) -> self
+
+      def add_event: (String name, ?attributes: Hash[String, untyped]?, ?timestamp: Time?) -> self
+
+      def status=: (Status status) -> void
+
+      def finish: (?end_timestamp: Time?) -> self
+    end
+
+    class SpanContext
+      def valid?: () -> bool
+
+      def hex_trace_id: () -> String
+
+      def hex_span_id: () -> String
+    end
+
+    class Status
+      def self.error: (?String description) -> Status
+    end
+  end
+
+  module Metrics
+    class MeterProvider
+      def meter: (String name, ?version: String?) -> Meter
+    end
+
+    class Meter
+      def create_counter: (String name, ?unit: String?, ?description: String?) -> Instrument::Counter
+
+      def create_histogram: (String name, ?unit: String?, ?description: String?) -> Instrument::Histogram
+    end
+
+    module Instrument
+      class Counter
+        def add: (Integer increment, ?attributes: Hash[String, untyped]) -> void
+      end
+
+      class Histogram
+        def record: (Numeric amount, ?attributes: Hash[String, untyped]) -> void
+      end
+    end
+  end
+end

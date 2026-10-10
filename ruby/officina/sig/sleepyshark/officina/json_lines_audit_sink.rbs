@@ -1,6 +1,8 @@
 module Sleepyshark
   module Officina
     class JsonLinesAuditSink
+      CAMEL_CASE: Hash[Symbol, Symbol]
+
       @path: String
       @lock: Thread::Mutex
 

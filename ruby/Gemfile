@@ -15,6 +15,10 @@ group :development do
   gem 'minitest', '~> 6.0'
   gem 'mutant', '~> 0.17.0'
   gem 'mutant-minitest', '~> 0.17.0'
+  # The SDK's in-memory span exporter and metric reader, which collect the core's telemetry in tests only (R16); the
+  # metrics SDK is pre-1.0, so pinned exactly.
+  gem 'opentelemetry-metrics-sdk', '= 0.20.0'
+  gem 'opentelemetry-sdk', '~> 1.13'
   gem 'pbt', '~> 0.7'
   gem 'rake', '~> 13.3'
   gem 'rbs', '~> 4.2'

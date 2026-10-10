@@ -7,7 +7,7 @@ module Sleepyshark
 
       def initialize: (approver: _Approver?, cancel: Cancellation, report: CallReport) -> void
 
-      def denial: (Tool tool, ToolCall call) -> String?
+      def denial: (Tool tool, ToolCall call, ToolCallTrace step) -> String?
 
       private
 

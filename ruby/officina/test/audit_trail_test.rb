@@ -16,13 +16,17 @@ class AuditTrailTest < Minitest::Test
   def test_aud03_each_entry_carries_its_time_sequence_run_conversation_and_agent
     sink = Sink.new
     conversation = Conversation.new(id: 'session-7')
+    ticks = []
     agent = Agent.new(model: Model.new(Model.text('Hello')), instructions: 'You help.', audit_sink: sink,
-                      name: 'shop', clock: clock)
+                      name: 'shop', clock: clock(ticks))
 
     agent.run(conversation, 'Hi')
+    times = sink.entries.map(&:time)
 
-    assert_equal([[1, START + 1], [2, START + 2]], sink.entries.map { [it.sequence, it.time] })
-    assert_equal [%w[session-7 shop]], sink.entries.map { [it.conversation, it.agent] }.uniq
+    assert_equal([[1, 'session-7', 'shop'], [2, 'session-7', 'shop']],
+                 sink.entries.map { [it.sequence, it.conversation, it.agent] })
+    assert_empty times - ticks
+    assert_operator times.first, :<, times.last
     assert_equal 1, sink.entries.map(&:run).uniq.size
     assert_match(/\A\h{32}\z/, sink.entries.first.run)
   end
@@ -128,9 +132,10 @@ class AuditTrailTest < Minitest::Test
   private
 
   # A clock that moves one second on each reading.
-  def clock
+  # A clock a second later at each call, which keeps what it told in +ticks+.
+  def clock(ticks = [])
     now = START
     lock = Mutex.new
-    -> { lock.synchronize { now += 1 } }
+    -> { lock.synchronize { (ticks << (now += 1)).last } }
   end
 end

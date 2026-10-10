@@ -13,9 +13,9 @@ module Sleepyshark
       NOT_STARTED = 'The call was cancelled before it started.'
       private_constant :MAX_RESULT, :NOT_STARTED
 
-      def initialize(agent:, audit:, cancel:, calls:)
+      def initialize(agent:, audit:, trace:, cancel:, calls:)
         @agent = agent
-        @audit = audit
+        @trace = trace
         @cancel = cancel
         @calls = calls
         @results = {}
@@ -44,7 +44,7 @@ module Sleepyshark
       def answer
         @calls.each_with_index { |call, index| start(call, index) unless @cancel.cancelled? }
         @results.merge!(@reads.join)
-        @calls.each_with_index.map { |call, index| @results[index] || finish(call, NOT_STARTED, error: true) }
+        @calls.each_with_index.map { |call, index| @results[index] || finish(call, NOT_STARTED, :error) }
       ensure
         begin
           @reads.stop
@@ -56,55 +56,62 @@ module Sleepyshark
       def start(call, index)
         tool = @agent.tool(call.name)
         @results.merge!(@reads.join) if tool&.write?
+        step = @trace.tool_call(tool, call)
         @events << ToolCallStarted.new(call: shown(call))
-        return run_if_allowed(tool, call, index) if tool
+        return run_if_allowed(tool, step, index) if tool
 
-        @results[index] = finish(call, "There is no tool named #{call.name}.", error: true)
+        @results[index] = finish(call, "There is no tool named #{call.name}.", :error, step:)
       end
 
-      def run_if_allowed(tool, call, index)
-        refusal = tool.input_problem(call.input) || (@approvals.denial(tool, shown(call)) if tool.needs_approval?)
-        return @results[index] = finish(call, refusal, error: true) if refusal
+      def run_if_allowed(tool, step, index)
+        call = step.call
+        refusal = tool.input_problem(call.input) || (@approvals.denial(tool, shown(call), step) if tool.needs_approval?)
+        return @results[index] = finish(call, refusal, :error, step:) if refusal
         # The host may have cancelled while the approver decided, or while this write waited for the reads.
         return if @cancel.cancelled?
 
         if tool.write?
-          @results[index] = write(tool, call)
+          @results[index] = write(tool, step)
         else
-          read(tool, call, index)
+          read(tool, step, index)
         end
       end
 
       # Runs the write once its attempt is in the trail.
-      def write(tool, call)
-        return invoke(tool, call) if @audit.record(:tool_started, call:)
+      def write(tool, step)
+        return invoke(tool, step) if @report.attempt(step)
 
-        finish(call, 'The call was not run: its attempt could not be recorded in the audit trail.', error: true)
+        finish(step.call, 'The call was not run: its attempt could not be recorded in the audit trail.', :blocked,
+               step:)
       end
 
       # Starts the read on a thread of its own; its attempt is recorded, but it runs without.
-      def read(tool, call, index)
-        @audit.record(:tool_started, call:)
-        @reads.start(index) { invoke(tool, call) }
+      def read(tool, step, index)
+        @report.attempt(step)
+        @reads.start(index) { invoke(tool, step) }
       end
 
-      def invoke(tool, call)
+      def invoke(tool, step)
         started = @agent.clock.call
-        content = tool.invoke(call.input, @cancel)
+        content = tool.invoke(step.call.input, @cancel)
       rescue StandardError => e
         why = @cancel.cancelled? ? 'The call was cancelled while it ran' : 'The tool failed'
-        finish(call, "#{why}: #{e}", error: true, started:)
+        finish(step.call, "#{why}: #{e}", :error, step:, started:)
       else
-        finish(call, content, error: false, started:)
+        finish(step.call, content, :ok, step:, started:)
       end
 
-      # Redacts and cuts the call's result, records its outcome and reports it. +started+ is when the tool started
-      # running, nil when it did not run.
-      def finish(call, content, error:, started: nil)
-        result = ToolResult.new(call_id: call.id, content: cut(@agent.redact(content)), error:)
-        duration = started && (@agent.clock.call - started)
-        @report.call(:tool_ended, ToolCallFinished.new(call: shown(call), result:),
-                     outcome: error ? 'error' : 'ok', detail: result.content, duration:)
+      # Redacts and cuts the call's result, records its outcome, ends its step, if it started, and reports it.
+      # +outcome+ is +:ok+, +:error+ or +:blocked+; +started+ is when the tool started running, nil when it did not
+      # run.
+      def finish(call, content, outcome, step: nil, started: nil)
+        redacted = @agent.redact(content)
+        result = ToolResult.new(call_id: call.id, content: cut(redacted), error: outcome != :ok)
+        ran = started && (@agent.clock.call - started)
+        @report.ended(ToolCallFinished.new(call: shown(call), result:), span: step&.span, duration: ran) do
+          step&.finish(outcome, ran:, length: redacted.length, truncated: redacted.length > MAX_RESULT,
+                                result: result.content)
+        end
         result
       end
 

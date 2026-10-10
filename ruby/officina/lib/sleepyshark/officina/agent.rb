@@ -24,8 +24,10 @@ module Sleepyshark
       attr_reader :audit_sink
       # @return [String, nil] names the agent in the audit trail; it is not sent to the model
       attr_reader :name
-      # @return [#call] returns the current Time, for the audit trail's times and durations
+      # @return [#call] returns the current Time, for the audit trail's and telemetry's times and durations
       attr_reader :clock
+      # @return [Telemetry] where the agent's traces and metrics go
+      attr_reader :telemetry
 
       # @param model [_Model]
       # @param instructions [String]
@@ -37,18 +39,17 @@ module Sleepyshark
       #   result's text and detail or the audit trail, such as a tool's database password; redacted there, as written
       #   and as a JSON string may escape them
       # @param clock [#call, nil] the real time unless given
+      # @param telemetry [Telemetry, nil] none unless given: no spans or metrics
       # @raise [Error] when the instructions are blank or two tools share a name
       def initialize(model:, instructions:, tools: [], approver: nil, audit_sink: nil, name: nil, secrets: [],
-                     clock: nil)
-        @tools = sorted(tools)
-        @model = model
-        @instructions = given(instructions)
-        @fingerprint = prefix_fingerprint(model.settings)
+                     clock: nil, telemetry: nil)
+        keep_prefix(model, instructions, tools)
         @approver = approver
         @audit_sink = audit_sink
         @name = name && -name
         @secrets = Secrets.new(secrets)
         @clock = clock || -> { Time.now }
+        @telemetry = telemetry || Telemetry.new
         freeze
       end
 
@@ -79,12 +80,21 @@ module Sleepyshark
         raise Error, 'A run context cannot be blank' unless context.nil? || context.match?(/\S/)
 
         conversation.hold do |append|
-          RunEngine.new(agent: self, conversation:, append:, cancel: cancel || Cancellation.new, on_event:)
+          trace = RunTrace.new(agent: self, conversation:, input:)
+          RunEngine.new(agent: self, conversation:, append:, cancel: cancel || Cancellation.new, on_event:, trace:)
                    .run(input, context)
         end
       end
 
       private
+
+      # Keeps what the prefix holds, and its fingerprint.
+      def keep_prefix(model, instructions, tools)
+        @tools = sorted(tools)
+        @model = model
+        @instructions = given(instructions)
+        @fingerprint = prefix_fingerprint(model.settings)
+      end
 
       def given(instructions)
         raise Error, 'An agent needs instructions' unless instructions.match?(/\S/)

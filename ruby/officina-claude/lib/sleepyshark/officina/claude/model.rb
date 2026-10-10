@@ -30,7 +30,13 @@ module Sleepyshark
           cancel.on_cancel { woken.close }
           woken.pop(timeout: seconds)
         }.freeze
-        private_constant :ATTEMPTS, :WAIT
+        # Prices by model, in US dollars per million tokens. A cache write is priced at five minutes' rate, 1.25 times
+        # input; an hour's costs twice input.
+        PRICES = {
+          'claude-opus-5-5' => Price.new(input: BigDecimal(4), output: BigDecimal(20), cache_read: BigDecimal('0.20'),
+                                         cache_write: BigDecimal(5))
+        }.freeze
+        private_constant :ATTEMPTS, :WAIT, :PRICES
 
         # The model and every setting that shapes its requests, in the words .NET's and Go's use, such as
         # "claude model=claude-opus-5-5 effort=medium max_tokens=64000 cache=5m thinking=adaptive"; the cache
@@ -64,6 +70,12 @@ module Sleepyshark
           @client = Anthropic::Client.new(api_key:, base_url:, max_retries: 0)
           @wait = wait
           freeze
+        end
+
+        # The model as telemetry names it, with its price when this gem knows it.
+        def info
+          name = @fixed.fetch(:model)
+          ModelInfo.new(provider: 'anthropic', name:, price: PRICES[name])
         end
 
         # Sends the request as one streamed call and yields its events, as the core's model contract says: text

@@ -1,0 +1,38 @@
+module Sleepyshark
+  module Officina
+    class Telemetry
+      NAME: String
+      class Instrument < Data
+        attr_reader name: String
+        attr_reader unit: String
+        attr_reader description: String
+
+        def self.new: (String name, String unit, String description) -> instance
+
+        def histogram: (OpenTelemetry::Metrics::Meter meter) -> OpenTelemetry::Metrics::Instrument::Histogram
+
+        def counter: (OpenTelemetry::Metrics::Meter meter) -> OpenTelemetry::Metrics::Instrument::Counter
+      end
+
+      HISTOGRAMS: Hash[Symbol, Instrument]
+      COUNTERS: Hash[Symbol, Instrument]
+
+      @tracer: OpenTelemetry::Trace::Tracer
+      @histograms: Hash[Symbol, OpenTelemetry::Metrics::Instrument::Histogram]
+      @counters: Hash[Symbol, OpenTelemetry::Metrics::Instrument::Counter]
+      @content: bool
+
+      def initialize: (?tracer_provider: OpenTelemetry::Trace::TracerProvider?,
+                       ?meter_provider: OpenTelemetry::Metrics::MeterProvider?, ?content: bool) -> void
+
+      def content?: () -> bool
+
+      def start_span: (String name, parent: OpenTelemetry::Context, kind: Symbol, attributes: Hash[String, untyped],
+                       at: Time) -> OpenTelemetry::Trace::Span
+
+      def add: (Symbol counter, Integer value, Hash[String, untyped] attributes) -> void
+
+      def record: (Symbol histogram, Numeric value, Hash[String, untyped] attributes) -> void
+    end
+  end
+end

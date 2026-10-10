@@ -11,9 +11,12 @@ module Sleepyshark
 
         include _Model
 
-        attr_reader settings: String
+        INFO: ModelInfo
 
-        def initialize: (*Array[step] replies, ?settings: String) -> void
+        attr_reader settings: String
+        attr_reader info: ModelInfo
+
+        def initialize: (*Array[step] replies, ?settings: String, ?info: ModelInfo) -> void
 
         def self.text: (String text, ?usage: Usage?) -> Array[step]
 

@@ -1,0 +1,30 @@
+module Sleepyshark
+  module Officina
+    class ModelCallTrace
+      @run: RunTrace
+      @started: Time
+      @span: OpenTelemetry::Trace::Span
+      @usage: Usage
+      @retries: Integer
+      @first_text: Float?
+
+      def initialize: (RunTrace run, String model) -> void
+
+      def observe: (model_event event) -> void
+
+      def finish: ((Reply | Failed)? outcome) -> void
+
+      private
+
+      def retried: () -> void
+
+      def measure: (String? error_type) -> void
+
+      def tokens: (Hash[String, String] dimensions, Hash[String, String] chat, Integer input) -> void
+
+      def ended: (Hash[String, untyped] attributes, ?String? error_type, ?String? description) -> void
+
+      def replied: (Reply reply) -> Hash[String, untyped]
+    end
+  end
+end

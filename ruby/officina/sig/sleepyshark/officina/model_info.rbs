@@ -1,0 +1,14 @@
+module Sleepyshark
+  module Officina
+    class ModelInfo < Data
+      attr_reader provider: String
+      attr_reader name: String
+      attr_reader price: Price?
+
+      def self.new: (provider: String, name: String, ?price: Price?) -> instance
+
+
+      def initialize: (provider: String, name: String, ?price: Price?) -> void
+    end
+  end
+end

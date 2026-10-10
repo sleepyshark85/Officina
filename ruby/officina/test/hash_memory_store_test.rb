@@ -22,7 +22,7 @@ class HashMemoryStoreTest < Minitest::Test
     store.write(scope, path, text)
     store.rename(scope, path, new_path)
     store.write(scope, path, text)
-    [scope, path, text, new_path].each { it << 'x' }
+    [scope, path, text, new_path].each { |string| string << 'x' }
 
     assert_equal({ 'a.md' => 'tea', 'b.md' => 'tea' }, contents('alice'))
     assert_predicate store.read('alice', 'b.md'), :frozen?

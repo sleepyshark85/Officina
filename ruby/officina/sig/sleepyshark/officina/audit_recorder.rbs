@@ -8,16 +8,20 @@ module Sleepyshark
       @run: String
       @sequence: Integer
       @lock: Thread::Mutex
+      @trace: RunTrace
 
-      def initialize: (agent: Agent, conversation: Conversation) -> void
+      def initialize: (agent: Agent, conversation: Conversation, trace: RunTrace) -> void
 
-      def record: (Symbol kind, ?call: ToolCall?, ?detail: String?, **untyped fields) -> bool
+      def record: (Symbol kind, ?call: ToolCall?, ?span: OpenTelemetry::Trace::Span?, ?detail: String?,
+                   **untyped fields) -> bool
 
       def record_end: (result? result, Usage usage) -> bool
 
       private
 
-      def written?: (_AuditSink sink, AuditEntry entry) -> bool
+      def written?: (_AuditSink sink, OpenTelemetry::Trace::Span span, AuditEntry entry) -> bool
+
+      def ids: (OpenTelemetry::Trace::Span span) -> Hash[Symbol, String]
 
       def clean: (String? text) -> String?
 

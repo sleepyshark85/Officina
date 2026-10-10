@@ -11,13 +11,20 @@ module Sleepyshark
       # stream that ends without a stop reason). It stops early, returning nil, once the run is cancelled. Like the
       # provider's API, it rejects a request whose messages the API would reject.
       class ScriptedModel
+        # The provider and name it has unless given, with no price.
+        INFO = ModelInfo.new(provider: 'scripted', name: 'scripted')
+
         # @return [String] the settings it was made with, which enter the prefix fingerprint
         attr_reader :settings
+        # @return [ModelInfo] the provider, name and price it was made with, which telemetry reports
+        attr_reader :info
 
         # @param replies [Array<Array>] each the steps of one reply
         # @param settings [String]
-        def initialize(*replies, settings: 'scripted')
+        # @param info [ModelInfo]
+        def initialize(*replies, settings: 'scripted', info: INFO)
           @settings = -settings
+          @info = info
           @replies = replies.map { |reply| reply.dup.freeze }
           @requests = []
           @lock = Mutex.new

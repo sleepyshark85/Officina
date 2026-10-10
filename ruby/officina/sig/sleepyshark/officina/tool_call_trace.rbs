@@ -1,0 +1,26 @@
+module Sleepyshark
+  module Officina
+    class ToolCallTrace
+      ERRORS: Hash[Symbol, String]
+
+      @run: RunTrace
+      @started: Time
+      @asked: Time
+
+      attr_reader call: ToolCall
+      attr_reader span: OpenTelemetry::Trace::Span
+
+      def initialize: (RunTrace run, Tool? tool, ToolCall call) -> void
+
+      def asked: () -> Time
+
+      def answered: (bool approved, cancelled: bool) -> void
+
+      def finish: (Symbol outcome, ran: Float?, length: Integer, truncated: bool, result: String) -> void
+
+      private
+
+      def started: (Tool? tool) -> Hash[String, untyped]
+    end
+  end
+end
