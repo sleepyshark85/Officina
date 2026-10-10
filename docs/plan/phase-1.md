@@ -93,7 +93,7 @@ How each implementation realizes a slice, where it differs from the shared crite
 | S08 | Merged | Merged (#68) | Part A in review (#112) |
 | S09 | Merged | Merged (#71) | Part A in review (#95) |
 | S10 | Merged | Merged (#70) | Part A in review (#115) |
-| S11 | Merged | Merged (#69) | Part A in review (#92) |
+| S11 | Merged | Merged (#69) | Part A merged (#92); part B step 1, the tool source through the pipeline, in review |
 | S12 | Merged | Merged (#72) | Not started |
 | S13 | Merged | Merged (#73) | Not started |
 
