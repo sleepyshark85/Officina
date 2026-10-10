@@ -19,6 +19,13 @@ module Sleepyshark
         private_constant :SCALAR, :BETWEEN, :OPENING, :CLOSING
 
         # @param text [String] an object's JSON text
+        # @return [String] the text of its member called name
+        # @raise [JSON::ParserError] when it finds no such member
+        def self.member(text, name)
+          members(text).fetch(name) { raise JSON::ParserError, "no member #{name} can be read" }
+        end
+
+        # @param text [String] an object's JSON text
         # @return [Hash{String => String}] its members' names to their values' text
         def self.members(text)
           scanner = opened(text)

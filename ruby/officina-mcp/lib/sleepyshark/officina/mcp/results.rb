@@ -12,7 +12,7 @@ module Sleepyshark
           tools = page.result['tools']
           return unless tools.instance_of?(Array)
 
-          written = RawJson.elements(RawJson.members(RawJson.members(page.text).fetch('result')).fetch('tools'))
+          written = RawJson.elements(RawJson.member(RawJson.member(page.text, 'result'), 'tools'))
           written.zip(tools).map { |text, item| tool(item, text) or return nil }
         rescue JSON::ParserError
           # Text the reader cannot follow, which only a parser that accepts more than JSON lets through.
@@ -41,7 +41,7 @@ module Sleepyshark
           name, input_schema, description = item.values_at('name', 'inputSchema', 'description')
           return unless name.instance_of?(String) && input_schema.instance_of?(Hash)
 
-          Tool.new(name:, description: description.to_s, input_schema: RawJson.members(text).fetch('inputSchema'))
+          Tool.new(name:, description: description.to_s, input_schema: RawJson.member(text, 'inputSchema'))
         end
 
         def self.content_text(item)

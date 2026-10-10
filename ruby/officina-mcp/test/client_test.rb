@@ -30,8 +30,9 @@ class ClientTest < Minitest::Test
   end
 
   def test_mcp04_a_tool_list_with_a_tool_that_has_no_name_or_input_schema_is_refused
-    pages = [{}, { 'tools' => 'echo' }, { 'tools' => [5] }, { 'tools' => [{ 'inputSchema' => SCHEMA }] },
-             { 'tools' => [{ 'name' => 5, 'inputSchema' => SCHEMA }] }, { 'tools' => [{ 'name' => 'echo' }] },
+    pages = [{}, { 'tools' => 'echo' }, { 'tools' => {} }, { 'tools' => [5] },
+             { 'tools' => [{ 'inputSchema' => SCHEMA }] }, { 'tools' => [{ 'name' => 5, 'inputSchema' => SCHEMA }] },
+             { 'tools' => [{ 'name' => 'echo' }] },
              { 'tools' => [{ 'name' => 'echo', 'inputSchema' => 'object' }] }]
     with_client(Scripted.results(*pages)) do |client|
       messages = pages.map { assert_raises(Mcp::Error) { client.list_tools }.message }

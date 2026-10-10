@@ -34,26 +34,32 @@ class RawJsonRefusalTest < Minitest::Test
   end
 
   def test_mcp04_brackets_in_a_comment_are_refused_not_looped_on
-    assert_raises(JSON::ParserError) { RawJson.members('{"a":{"x":1} /*{*/}') }
+    assert_equal 'no JSON value can be read at byte 19',
+                 assert_raises(JSON::ParserError) { RawJson.members('{"a":{"x":1} /*{*/}') }.message
     assert_raises(JSON::ParserError) { RawJson.members('{"a": /* ] */ 1}') }
   end
 
-  def test_mcp04_a_tool_list_with_comments_is_read_as_written_or_not_at_all
+  def test_mcp04_a_member_the_reader_does_not_find_is_refused
+    assert_equal 'no member b can be read', assert_raises(JSON::ParserError) { RawJson.member('{"a": 1}', 'b') }.message
+  end
+
+  def test_mcp04_a_tool_list_with_comments_is_read_or_found_unreadable
     Pbt.assert do
       insert = Pbt.tuple(Pbt.integer(min: 1, max: PAGE.size - 1), Pbt.integer(min: 0, max: COMMENTS.size - 1))
       Pbt.property(Pbt.array(insert, max: 3)) do |drawn|
-        text = commented(drawn)
-        response = Response.new(message: JSON.parse(text, allow_comments: true, freeze: true), text:)
+        tools = Results.tools(page(commented(drawn)))
 
-        assert_includes [Array, NilClass], Results.tools(response).class
+        assert_includes [Array, NilClass], tools.class
       end
     end
   end
 
+  # The first text cannot be followed to its end; in the second, a line comment hides "result" from the reader.
   def test_mcp04_a_tool_list_whose_text_cannot_be_followed_cannot_be_read
-    text = '{"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"echo","inputSchema":{"type":"object"} /*{*/}]}}'
+    texts = ['{"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"echo","inputSchema":{"type":"object"} /*{*/}]}}',
+             commented([[14, 0], [3, 3]])]
 
-    assert_nil Results.tools(Response.new(message: JSON.parse(text, allow_comments: true), text:))
+    assert_equal([nil, nil], texts.map { Results.tools(page(it)) })
   end
 
   private
@@ -63,6 +69,9 @@ class RawJsonRefusalTest < Minitest::Test
   rescue JSON::ParserError => e
     e
   end
+
+  # A page of text, parsed as a JSON parser that accepts comments would.
+  def page(text) = Response.new(message: JSON.parse(text, allow_comments: true, freeze: true), text:)
 
   # The page with each drawn comment before the token at its position.
   def commented(inserts)
