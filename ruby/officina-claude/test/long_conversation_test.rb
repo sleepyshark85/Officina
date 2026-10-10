@@ -61,8 +61,9 @@ class LongConversationTest < ClaudeTestCase
 
     events, reply = collect(model(api), hi)
 
-    assert_equal [ToolResultsCleared.new(tokens: 4_892, tool_calls: 2)],
-                 events.grep(ToolResultsCleared) + events.grep(ConversationCompacted)
+    assert_equal [ToolResultsCleared.new(tokens: 4_892, tool_calls: 2),
+                  UsageReported.new(usage: Usage.new(input: 2, output: 47, cache_read: 3_035, cache_write: 2_808))],
+                 events
     assert_equal :tool_use, reply.stop
   end
 

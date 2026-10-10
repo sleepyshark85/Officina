@@ -6,10 +6,9 @@ module Sleepyshark
         CLEARING_BETA: String
         COMPACTION: String
         COMPACTION_BETA: String
+        READ: Array[Symbol]
 
         def self.params: (ContextManagement? settings) -> Hash[Symbol, untyped]
-
-        READ: Array[Symbol]
 
         def self.reported: (untyped message) -> Array[ConversationCompacted | ToolResultsCleared]
 
