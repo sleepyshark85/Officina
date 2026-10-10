@@ -133,12 +133,13 @@ module Sleepyshark
         # management. The messages go through the SDK's one raw field, each as a JSON fragment it writes as it is: its
         # typed messages parameter would write stored blocks anew.
         def params(request)
-          { **@fixed, **ContextEditing.params(request.context_management),
+          { **@fixed,
             max_tokens: [@fixed.fetch(:max_tokens), request.max_output_tokens].compact.min,
             tools: request.tools.map { tool(it) },
             system: [{ type: :text, text: request.instructions,
                        cache_control: { type: :ephemeral, ttl: @prefix_cache } }],
             request_options: { extra_body: { messages: request.messages.map { JSON::Fragment.new(message(it)) } } } }
+            .merge(ContextEditing.params(request.context_management))
         end
 
         def tool(tool)

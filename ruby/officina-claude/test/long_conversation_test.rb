@@ -55,7 +55,9 @@ class LongConversationTest < ClaudeTestCase
   end
 
   def test_hist04_a_clearing_is_reported_from_the_applied_edits
-    api = serve(FakeApi.recorded(testdata('claude/clearing.sse')))
+    # With an edit of another kind, which is no clearing of tool results.
+    thinking = '{"type":"clear_thinking_20251015","cleared_input_tokens":100,"cleared_thinking_turns":1},'
+    api = serve(FakeApi.recorded(testdata('claude/clearing.sse').sub('"applied_edits":[', "\\0#{thinking}")))
 
     events, reply = collect(model(api), hi)
 

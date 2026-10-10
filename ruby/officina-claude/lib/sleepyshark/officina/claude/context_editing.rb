@@ -51,20 +51,21 @@ module Sleepyshark
         end
 
         # The clearing edit and its beta, or nil for none. Clearing at least nothing is the API's default, so it is
-        # left out.
+        # left out. The SDK writes the only type a setting's count may have (+tool_uses+ for what it keeps,
+        # +input_tokens+ for how much it clears), not the trigger's, which has two.
         def self.clearing(clearing)
           return unless clearing
 
           edit = { type: CLEARING, trigger: { type: :tool_uses, value: clearing.after },
-                   keep: { type: :tool_uses, value: clearing.keep } }
+                   keep: { value: clearing.keep } }
           at_least = clearing.at_least_tokens
-          edit[:clear_at_least] = { type: :input_tokens, value: at_least } if at_least.positive?
+          edit[:clear_at_least] = { value: at_least } if at_least.positive?
           [edit, CLEARING_BETA]
         end
 
-        # The compaction edit and its beta, or nil for none.
+        # The compaction edit and its beta, or nil for none. The SDK writes its trigger's only type, +input_tokens+.
         def self.compaction(threshold)
-          [{ type: COMPACTION, trigger: { type: :input_tokens, value: threshold } }, COMPACTION_BETA] if threshold
+          [{ type: COMPACTION, trigger: { value: threshold } }, COMPACTION_BETA] if threshold
         end
         private_class_method :compactions, :clearings, :clearing, :compaction
       end
