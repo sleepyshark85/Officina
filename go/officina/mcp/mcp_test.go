@@ -406,15 +406,15 @@ func TestConnect_MCP04_AConnectCancelledWhileTheServerStartsLeavesNoServerRunnin
 	})
 
 	// The server has started and will never answer: the connect is cancelled while it waits.
-	pid := waitForPID(t, pidFile)
+	proc := waitForProcess(t, pidFile)
 	cancel()
 	connecting.Wait()
 
 	if got.source != nil || !errors.Is(got.err, context.Canceled) {
 		t.Errorf("Connect() = %v, %v; want context.Canceled", got.source, got.err)
 	}
-	if !exited(pid) {
-		t.Errorf("the server process %d outlived the cancelled connect", pid)
+	if !proc.exited() {
+		t.Errorf("the server process %d outlived the cancelled connect", proc.pid)
 	}
 }
 
@@ -430,10 +430,11 @@ func TestClose_MCP01_ClosingStopsTheServerAndItsToolsThenGiveErrorResults(t *tes
 	if err != nil {
 		t.Fatalf("the pid tool answered %q", results(t, model, 1)[0].Content)
 	}
+	proc := watch(t, pid)
 
 	source.Close()
 
-	if !exited(pid) {
+	if !proc.exited() {
 		t.Errorf("the server process %d outlived Close", pid)
 	}
 	echo := source.Tools()[1]
@@ -446,26 +447,27 @@ func TestClose_MCP01_ClosingStopsTheServerAndItsToolsThenGiveErrorResults(t *tes
 	}
 }
 
-// waitForPID waits for a fake server to write its process id to file.
-func waitForPID(t *testing.T, file string) int {
+// waitForProcess waits for a fake server to write its process id to file, and watches the process.
+func waitForProcess(t *testing.T, file string) process {
 	t.Helper()
-	return waitForPIDs(t, file)[0]
+	return waitForProcesses(t, file)[0]
 }
 
-// waitForPIDs waits for a fake server to write process ids to file, and returns them.
-func waitForPIDs(t *testing.T, file string) []int {
+// waitForProcesses waits for a fake server to write process ids to file, and watches the processes, which are
+// running until the test stops them.
+func waitForProcesses(t *testing.T, file string) []process {
 	t.Helper()
 	for {
 		if data, err := os.ReadFile(file); err == nil {
-			var pids []int
+			var procs []process
 			for field := range strings.FieldsSeq(string(data)) {
 				pid, err := strconv.Atoi(field)
 				if err != nil {
 					t.Fatalf("the pid file holds %q", data)
 				}
-				pids = append(pids, pid)
+				procs = append(procs, watch(t, pid))
 			}
-			return pids
+			return procs
 		}
 		select {
 		case <-t.Context().Done():
@@ -475,14 +477,14 @@ func waitForPIDs(t *testing.T, file string) []int {
 	}
 }
 
-// waitExited waits for the process pid to have exited and been waited for: a process the server started is waited
+// waitExited waits for the process to have exited and been waited for: a process the server started is waited
 // for by the system once its parent has gone, which takes a moment.
-func waitExited(t *testing.T, pid int) {
+func waitExited(t *testing.T, p process) {
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)
-	for !exited(pid) {
+	for !p.exited() {
 		if time.Now().After(deadline) {
-			t.Errorf("process %d is still running", pid)
+			t.Errorf("process %d is still running", p.pid)
 			return
 		}
 		time.Sleep(10 * time.Millisecond)
