@@ -1,7 +1,7 @@
 module Sleepyshark
   module Officina
     # What a model streams while it replies.
-    type model_event = TextDelta | UsageReported
+    type model_event = TextDelta | UsageReported | Retried
 
     # A provider's model with fixed settings: the only way the core reaches a model. Many runs may stream from one
     # model at once.

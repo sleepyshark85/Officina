@@ -19,9 +19,9 @@ Layout (R2, R3); each gem has `lib/`, `sig/` (its RBS signatures), `test/` and i
 | `officina-mcp/` | Gem `sleepyshark-officina-mcp`: the MCP client (stdio and Streamable HTTP) |
 | `officina-testing/` | Gem `sleepyshark-officina-testing`: the thread-leak check every test runs; scripted model and approver, fake MCP server, prefix stability check |
 | `test/` | `test_helper.rb`, which every test loads first (with `workspace_warnings.rb`: a warning about a workspace file fails the tests, a gem's is printed), the dependency check `dependencies_test.rb` (TEST-05), with fixture gems in `test/fixtures/dependencies/`, and the core's line budget `core_budget_test.rb` (R14) |
-| `sig/` | The workspace's corrections to Ruby's core signatures, which Steep reads with the gems' own |
+| `sig/` | The workspace's corrections to Ruby's core signatures, and the few signatures of the `anthropic` gem and `JSON::Fragment` that the Claude gem calls, which Steep reads with the gems' own |
 | `apps/bookshop/` | Bookshop Assistant (from Ruby S06), run by `exe/bookshop` |
-| `examples/` | `hello`, a live chat; the GEN-06 samples `extraction`, `chat` and `background` (planned) |
+| `examples/` | `hello`, a live chat on Claude (with its test on a fake API); the GEN-06 samples `extraction`, `chat` and `background` (planned) |
 | `docs/` | Design notes ([`design.md`](docs/design.md): choices, and how Ruby realizes ARCHITECTURE's runtime model), spike notes and traceability |
 | `.rubocop.yml` (with `.rubocop_tests.yml`, which each `test/` inherits), `Steepfile`, `rbs_collection.yaml`, `Rakefile` | RuboCop, Steep and the gems' signatures it reads (R13, R18); the tasks |
 
@@ -39,12 +39,20 @@ bundle exec rake test                # the tests alone: one process, one test at
 
 A property test that fails prints its seed; `PROPERTY_SEED=<seed> bundle exec rake test` runs it again with the same
 inputs (CI always uses one fixed seed). `SEED=<n>` repeats Minitest's test order. `COVERAGE=1` writes a SimpleCov
-report to `coverage/`. Mutation testing of the core runs from its directory, with CI's property seed:
+report to `coverage/`. Mutation testing runs from the directory of each gem with a `mutant.yml` (`officina`,
+`officina-claude`), with CI's property seed:
 
 ```sh
 cd officina
 PROPERTY_SEED=20261010 bundle exec mutant run               # every method, as on a push to main and weekly
 PROPERTY_SEED=20261010 bundle exec mutant run --since main  # the methods changed since main, as on a pull request
+```
+
+The `hello` sample chats live with Claude Opus 5.5 and shows each call's tokens, cache reads from the second message
+on. It needs an API key in `ANTHROPIC_API_KEY`; the tests run it on a fake API instead:
+
+```sh
+bundle exec ruby examples/hello/hello.rb
 ```
 
 The hooks in `../.claude/` run RuboCop and Steep before a commit that stages anything under `ruby/` but docs, and

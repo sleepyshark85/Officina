@@ -1,0 +1,34 @@
+# The few parts of the anthropic gem the Claude gem calls. The gem ships signatures of its own, but with them Steep
+# takes over two minutes instead of seconds, so the workspace declares only these; the Claude gem's tests check them.
+module Anthropic
+  class Client
+    def initialize: (?api_key: String?, ?base_url: String?, ?max_retries: Integer) -> void
+
+    # The beta API, whose messages stream: typed loosely here, as its parameters and events are the gem's models.
+    def beta: () -> untyped
+  end
+
+  module Errors
+    class Error < StandardError
+    end
+
+    class ConfigurationError < Error
+    end
+
+    class APIError < Error
+      def headers: () -> Hash[String, String]?
+    end
+
+    class APIConnectionError < APIError
+    end
+
+    class APIStatusError < APIError
+      def status: () -> Integer
+      def type: () -> Symbol?
+      def body: () -> untyped
+    end
+
+    class BadRequestError < APIStatusError
+    end
+  end
+end

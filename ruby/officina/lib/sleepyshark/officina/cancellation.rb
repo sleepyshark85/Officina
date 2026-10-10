@@ -9,17 +9,34 @@ module Sleepyshark
       def initialize
         @lock = Mutex.new
         @cancelled = false
+        @callbacks = []
       end
 
-      # Asks the run to stop; calling it again changes nothing.
+      # Asks the run to stop, and calls each callback given to #on_cancel; calling it again changes nothing.
       # @return [void]
       def cancel
-        @lock.synchronize { @cancelled = true }
-        nil
+        callbacks = @lock.synchronize do
+          waiting = @callbacks
+          @callbacks = []
+          @cancelled = true
+          waiting
+        end
+        callbacks.each(&:call)
       end
 
       def cancelled?
         @lock.synchronize { @cancelled }
+      end
+
+      # Calls the block once the run is cancelled, on the thread that cancels it, or at once when it already is. For
+      # what waits and must wake when the run stops; the block must be quick and must not raise.
+      # @return [void]
+      def on_cancel(&callback)
+        already = @lock.synchronize do
+          @callbacks << callback unless @cancelled
+          @cancelled
+        end
+        yield if already
       end
     end
   end

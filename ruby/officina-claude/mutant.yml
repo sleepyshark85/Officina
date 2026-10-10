@@ -1,0 +1,18 @@
+# Mutation testing of the Claude gem with its own tests (test/), run from this directory: bundle exec mutant run.
+usage: opensource
+integration:
+  name: minitest
+includes:
+  - lib
+  - ../test
+# As the core's: see ../officina/mutant.yml.
+coverage_criteria:
+  process_abort: true
+  timeout: true
+hooks:
+  - ../test/mutant_hooks.rb
+requires:
+  - sleepyshark/officina/claude
+matcher:
+  subjects:
+    - Sleepyshark::Officina::Claude*
