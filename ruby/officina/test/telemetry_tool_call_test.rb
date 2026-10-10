@@ -49,6 +49,23 @@ class TelemetryToolCallTest < Minitest::Test
                  ended(collector.span('execute_tool lookup'))
   end
 
+  def test_tool05_evt02_a_failure_the_handler_returns_ends_its_span_as_a_tool_error_after_running
+    collector = Collector.new
+    clock = FakeClock.new
+    order = tool('order') do |_, _|
+      clock.advance(2)
+      ToolFailure.new(message: 'Not enough stock.')
+    end
+
+    traced(collector, Model.new(Model.tool_use(call('1', 'order')), Model.text('Sorry.')), tools: [order], clock:)
+      .run(Conversation.new, 'Order.')
+
+    assert_equal ['error', 'tool_error', 2.0, OpenTelemetry::Trace::Status::ERROR, ''],
+                 ended(collector.span('execute_tool order'))
+    assert_equal([[{ 'gen_ai.tool.name' => 'order', 'officina.tool.outcome' => 'error' }, 1]],
+                 collector.points_of('officina.tool.calls', SCRIPTED).map { [it.attributes, it.sum] })
+  end
+
   def test_tool06_evt02_a_result_of_exactly_the_limit_is_kept_whole_and_one_longer_is_marked_truncated
     collector = Collector.new
     tools = [tool('exact') { |_, _| 'x' * 64_000 }, tool('over') { |_, _| 'x' * 64_001 }]

@@ -70,7 +70,7 @@ class ConsoleToolsTest < Minitest::Test
     refused = results(model, 1).first
 
     assert_predicate refused, :error?
-    assert_includes refused.content, "Not enough stock for \"#{book_title(310)}\" (id 310)"
+    assert_match(/\ANot enough stock for "#{Regexp.escape(book_title(310))}" \(id 310\)/, refused.content)
     assert_in_order transcript, '  < place_order: error: ', 'Not enough stock', "Only #{copies} are in stock",
                     '  < place_order: ok', "Ordered all #{copies} copies."
     assert_equal 0, stock(310)
@@ -106,6 +106,7 @@ class ConsoleToolsTest < Minitest::Test
     assert_in_order transcript, '  < get_book: error: ', "I can't reach the database", '  < get_book: ok',
                     'The Winter Archive is in stock.'
     assert_predicate results(model, 1).first, :error?
+    assert_match(/\AThe tool failed: /, results(model, 1).first.content)
     refute_predicate results(model, -1).first, :error?
   end
 

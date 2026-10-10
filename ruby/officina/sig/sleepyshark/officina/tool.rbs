@@ -29,7 +29,7 @@ module Sleepyshark
 
       def input_problem: (String input) -> String?
 
-      def invoke: (String input, Cancellation cancel) -> String
+      def invoke: (String input, Cancellation cancel) -> (String | ToolFailure)
 
       private
 

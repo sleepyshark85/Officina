@@ -43,6 +43,19 @@ class ToolCallResultsTest < Minitest::Test
                  ran.results[0]
   end
 
+  def test_tool05_a_failure_the_handler_returns_reaches_the_model_as_written_redacted_and_cut_and_the_run_goes_on
+    tools = [tool('order') { |_, _| ToolFailure.new(message: 'Not enough stock for s3cret.') },
+             tool('long') { |_, _| ToolFailure.new(message: 'x' * 64_001) }]
+
+    ran = run_calls(tools, call('1', 'order'), call('2', 'long'), secrets: ['s3cret'])
+
+    assert_equal 'Done.', ran.result.text
+    assert_equal ToolResult.new(call_id: '1', content: 'Not enough stock for [redacted].', error: true), ran.results[0]
+    assert_equal "#{'x' * 64_000}\n[Truncated: the result had 64001 characters; only the first 64000 are shown.]",
+                 ran.results[1].content
+    assert_predicate ran.results[1], :error?
+  end
+
   def test_tool06_a_result_over_64000_characters_is_cut_with_a_note_and_one_at_the_limit_is_not
     tools = [tool('long') { |_, _| 'é' * 70_000 }, tool('limit') { |_, _| 'x' * 64_000 }]
 

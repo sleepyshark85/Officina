@@ -29,8 +29,9 @@ module Sleepyshark
       # @param needs_approval [Boolean] whether the agent's approver must approve each call before it runs
       # @yieldparam input [Data, Object] the call's input, valid against the schema
       # @yieldparam cancel [Cancellation] the run's, to stop at the next check once the host cancels
-      # @yieldreturn [String, Object] the result for the model: a String as it is, anything else as JSON.generate
-      #   writes it. An exception is the call's error result, with its message; the run goes on.
+      # @yieldreturn [String, ToolFailure, Object] the result for the model: a String as it is, a ToolFailure as an
+      #   error result with its message as written, anything else as JSON.generate writes it. An exception is an error
+      #   result saying the tool failed, with its message; the run goes on either way.
       # @raise [Error] when the name is blank, the kind unknown, the handler missing or the schema not an object's
       def initialize(name:, description:, input:, kind:, needs_approval: false, &handler)
         @input = input
@@ -63,11 +64,11 @@ module Sleepyshark
       # Runs the handler on the input.
       # @param input [String] JSON text that #input_problem accepts
       # @param cancel [Cancellation]
-      # @return [String] the result for the model
+      # @return [String, ToolFailure] the result for the model, or the failure the handler returned
       # @raise [StandardError] whatever the handler raises
       def invoke(input, cancel)
         case @handler.call(@input.from_json(JSON.parse(input)), cancel)
-        in String => text then text
+        in String | ToolFailure => given then given
         in output then JSON.generate(output)
         end
       end
