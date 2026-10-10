@@ -1,0 +1,17 @@
+module Sleepyshark
+  module Officina
+    module Testing
+      class ScriptedApprover
+        @answers: Array[Approval]
+        @asked: Array[ToolCall]
+        @lock: Thread::Mutex
+
+        def initialize: (*(bool | String) answers) -> void
+
+        def asked: () -> Array[ToolCall]
+
+        def approve: (Tool tool, ToolCall call, cancel: Cancellation) -> Approval
+      end
+    end
+  end
+end
