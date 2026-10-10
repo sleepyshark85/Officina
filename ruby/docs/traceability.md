@@ -26,6 +26,10 @@ Tests are under `ruby/`, shortened as:
 | CRetry | `officina-claude/test/retry_test.rb` (`RetryTest`) |
 | CClass | `officina-claude/test/classification_test.rb` (`ClassificationTest`) |
 | Hello | `examples/hello/hello_test.rb` (`HelloTest`) |
+| Stores | `officina/test/memory_store_contract.rb`, `memory_scope_contract.rb` and `memory_concurrency_contract.rb`, the tests every memory store passes, run by both `HashMemoryStoreTest` and `FileMemoryStoreTest` |
+| HashStore | `officina/test/hash_memory_store_test.rb` (`HashMemoryStoreTest`) |
+| FileStore | `officina/test/file_memory_store_test.rb` (`FileMemoryStoreTest`) |
+| Rules | `officina/test/memory_rules_test.rb` (`MemoryRulesTest`) |
 | Core | `officina/test/` |
 | App | `apps/bookshop/test/`: `CatalogueTest`, `CustomersTest`, `OrdersTest`, `DatabaseTest` (against the seeded database in Docker, Linux only, skipping elsewhere with the reason) and `SqlTest` (static) |
 
@@ -70,6 +74,13 @@ Tests are under `ruby/`, shortened as:
 | CTX-05 | CStream: `test_mdl01_mdl05_ctx05_text_streams_and_the_reply_keeps_each_block_with_the_calls_usage`, `test_ctx05_a_message_delta_without_input_counts_keeps_those_the_call_started_with`, `test_ctx05_a_message_deltas_counts_replace_those_the_call_started_with` (usage per call, cache reads and writes; the telemetry part comes in S07) | |
 | CTX-06 | CReq: `test_ctx06_tool_results_go_out_as_one_user_message_of_tool_result_blocks` | |
 
+## Memory (MEM)
+
+| ID | Tests | Also checked by |
+|---|---|---|
+| MEM-02 | Stores: `test_mem02_a_written_file_reads_back_and_is_listed_with_its_size_in_bytes`, `test_mem02_writing_again_replaces_the_text`, `test_mem02_a_missing_file_reads_as_nil_and_an_unwritten_scope_lists_nothing`, `test_mem02_paths_with_dots_spaces_and_letters_beyond_ascii_are_accepted`, `test_mem02_the_longest_scope_and_parts_the_rules_allow_are_kept`, `test_mem02_deleting_removes_the_file_and_deleting_a_missing_one_does_nothing`, `test_mem02_a_deleted_files_directory_can_become_a_file`, `test_mem02_renaming_moves_the_file_and_leaves_no_directory_behind`, `test_mem02_renaming_a_missing_file_or_onto_a_taken_path_is_refused_and_changes_nothing`, `test_mem02_a_path_that_is_a_directory_or_runs_through_a_file_is_refused`, `test_mem02_text_that_is_not_valid_utf8_is_refused`, `test_mem02_concurrent_writers_lose_no_file`, `test_mem02_concurrent_writes_lists_and_deletes_in_one_directory_never_fail`, `test_mem02_writes_renames_and_lists_interleaved_inside_each_call_lose_no_file`; FileStore: `test_mem02_each_scope_is_a_directory_named_by_the_hex_of_its_utf8_bytes`, `test_mem02_directories_left_empty_are_removed_up_to_the_scopes`, `test_mem02_a_file_that_is_not_utf8_text_is_refused_on_read`, `test_mem02_files_put_there_under_names_no_path_may_have_are_not_listed`; HashStore: `test_mem02_changing_the_callers_strings_after_a_write_or_rename_changes_nothing_stored` | |
+| MEM-03 | Stores: `test_mem03_scopes_never_see_each_others_files`, `test_mem03_a_scopes_files_never_clash_with_anothers_paths`, `test_mem03_every_operation_refuses_a_path_outside_the_rules`, `test_mem03_every_operation_refuses_a_scope_outside_the_rules`; FileStore: `test_mem03_a_linked_directory_in_the_scope_is_never_followed`, `test_mem03_a_linked_file_in_the_scope_is_never_followed`, `test_mem03_a_scope_whose_directory_is_a_link_is_refused`; Rules: `test_mem03_a_path_is_at_most_1024_utf8_bytes`, `test_mem03_a_part_is_at_most_255_utf8_bytes`, `test_mem03_a_scope_is_at_most_127_utf8_bytes`, `test_mem03_only_utf8_strings_are_scopes_or_paths`, `test_mem03_a_scope_is_one_part_of_a_path`, `test_mem03_a_string_of_a_subclass_is_a_string`, `test_mem03_device_names_are_refused_whatever_their_case_or_extension`, `test_mem03_check_names_what_it_refuses` | The link tests skip where the system lets no test make a symbolic link (Windows without developer mode) |
+
 ## Events and observability (EVT)
 
 | ID | Tests | Also checked by |
@@ -111,4 +122,5 @@ The data layer so far (Ruby S06 part A); the tools, console and end-to-end tests
 | TEST-02 | Prefix: `test_test02_the_prefix_is_stable_across_the_calls_of_a_run_and_across_runs`, `test_test02_the_prefix_is_stable_across_a_save_a_new_process_and_a_resume`, `test_test02_the_check_finds_a_changed_prefix` | |
 | TEST-03 | — | The Ruby workflow (`.github/workflows/ruby.yml`): `ruby-ubuntu` and `ruby-windows`, offline; the App database tests run on `ruby-ubuntu` (in CI, a missing Docker fails them) and skip on Windows, saying why |
 | TEST-05 | Deps: `test_test05_the_workspace_keeps_the_rule`, `test_test05_a_fixture_keeping_the_rule_passes`, `test_test05_the_anthropic_sdk_used_anywhere_but_the_claude_gem_fails`, `test_test05_the_core_using_more_than_its_rule_allows_fails` (the core's own rule, D15 and R6, and the other gems', as well) | |
+| TEST-07 | Stores: `test_test07_generated_paths_never_leave_their_scope` (memory paths never leave their scope); Rules: `test_test07_a_valid_path_is_relative_and_never_climbs` | CI runs the properties with a fixed `PROPERTY_SEED` |
 | TEST-08 | Core/SchemaPropertyTest: `test_test08_on_generated_schemas_and_values_it_accepts_and_rejects_as_json_schemer_does`, `test_test08_a_generated_schema_with_any_keyword_outside_the_subset_is_refused_where_it_is`; Core/SchemaRefusalTest: `test_test08_a_schema_outside_the_subset_is_refused_when_it_is_defined_saying_where_and_why`, `test_test08_a_schema_that_is_not_json_is_refused_with_the_parsers_detail`; Core/InputDeclarationTest: `test_test08_a_malformed_declaration_is_refused_when_it_is_defined`, `test_test08_a_declaration_reaches_only_the_member_methods` | |

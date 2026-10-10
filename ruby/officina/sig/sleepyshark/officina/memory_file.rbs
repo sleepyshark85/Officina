@@ -1,0 +1,12 @@
+module Sleepyshark
+  module Officina
+    class MemoryFile < Data
+      attr_reader path: String
+      attr_reader size: Integer
+
+      def self.new: (path: String, size: Integer) -> instance
+
+      def initialize: (path: String, size: Integer) -> void
+    end
+  end
+end
