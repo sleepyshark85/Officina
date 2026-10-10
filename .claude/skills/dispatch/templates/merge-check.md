@@ -10,6 +10,7 @@ survive; where a side's intent is unclear, stop and report the conflict instead.
 both sides' changes touch, then push.
 Scratch prefix: `{{prefix}}-`. No live calls.
 
-Report whether it merged cleanly, each conflict and how you resolved it, and the new head, which needs a new verdict.
+Report whether it merged cleanly, each conflict and how you resolved it, the new head, and its `review` status: the
+gate carries an approval over a clean merge, and anything else needs a new verdict.
 Follow .claude/skills/dispatch/agent-rules.md.
 ```
