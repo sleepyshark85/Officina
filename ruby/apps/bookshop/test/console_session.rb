@@ -11,18 +11,20 @@ module ConsoleSession
   include DatabaseServer
 
   Officina = Sleepyshark::Officina
-  # A model priced as Claude Opus 5.5 is, in dollars per million tokens.
+  # A model priced as Claude Opus 5.5 is, in dollars per million tokens, whose provider compacts and clears as
+  # Claude's does.
   PRICED = Officina::ModelInfo.new(provider: 'scripted', name: 'scripted', price: Officina::Price.new(
     input: BigDecimal('5'), output: BigDecimal('25'), cache_read: BigDecimal('0.5'), cache_write: BigDecimal('6.25'),
     cache_write_hour: BigDecimal('10')
-  ))
+  ), compacts: true, clears_tool_results: true)
 
   # A restock of book 320, the input of a call that needs approval.
   RESTOCK = '{"bookId":320,"quantity":2}'
   # What one summary uses: at the scripted price, $0.0075.
   SUMMARY_USAGE = Officina::Usage.new(input: 1000, output: 100)
 
-  # The test kit's scripted model, priced unless told otherwise, as the console gives each reply a cost budget.
+  # The test kit's scripted model, priced unless told otherwise, as the console gives each reply a cost budget, and
+  # compacting and clearing, as the chat agent asks its provider to.
   class ScriptedModel < Officina::Testing::ScriptedModel
     def initialize(*replies, settings: 'scripted', info: PRICED)
       super
@@ -107,11 +109,11 @@ module ConsoleSession
   # Its telemetry is kept in memory, cleared when the session ends. +env+ adds to the settings. Sessions are not
   # summarized unless a model for the summarizer is given.
   def session(model, *script, interrupt_on: nil, clock: -> { Time.now }, telemetry: MemoryTelemetry.new, env: {},
-              summarizer: nil)
+              summarizer: nil, demo: false)
     staff = Staff.new(script, interrupt_on:)
     application = Bookshop.build(input: staff.input, output: staff, model:, summarizer:,
                                  env: { 'BOOKSHOP_DATABASE' => database_url, **env }, clock:,
-                                 telemetry: telemetry.telemetry)
+                                 telemetry: telemetry.telemetry, demo:)
     begin
       application.run
     ensure

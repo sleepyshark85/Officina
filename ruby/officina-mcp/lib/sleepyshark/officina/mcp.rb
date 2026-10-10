@@ -5,12 +5,15 @@ require_relative 'mcp/error'
 require_relative 'mcp/tool'
 require_relative 'mcp/call_result'
 require_relative 'mcp/server'
+require_relative 'mcp/raw_json'
 require_relative 'mcp/wire'
 require_relative 'mcp/results'
 require_relative 'mcp/child_process'
 require_relative 'mcp/stdio'
 require_relative 'mcp/streamable_http'
 require_relative 'mcp/client'
+require_relative 'mcp/allowed_tool'
+require_relative 'mcp/tool_source'
 
 module Sleepyshark
   module Officina
@@ -20,9 +23,9 @@ module Sleepyshark
       POLL = 0.05
       # The time waits are measured by, in seconds.
       MONOTONIC = -> { Process.clock_gettime(Process::CLOCK_MONOTONIC) }
-      # What a transport answers a notification with, once the server has it. Steep asks a type of an empty literal,
-      # which its annotation cannot give inside an expression.
-      ACCEPTED = {}.freeze # steep:ignore
+      # What a transport answers a notification with, once the server has it: an empty response. Steep asks a type of
+      # an empty literal, which its annotation cannot give inside an expression.
+      ACCEPTED = Wire::Response.new(message: {}.freeze, text: '{}') # steep:ignore
       private_constant :POLL, :MONOTONIC, :ACCEPTED
 
       # Connects to server: starts its command and speaks over the process's standard input and output, or reaches

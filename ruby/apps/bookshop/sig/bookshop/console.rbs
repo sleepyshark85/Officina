@@ -2,6 +2,7 @@ module Bookshop
   class Console
     HELP: String
 
+    @demo: bool
     @audit: AuditView
     @telemetry: Telemetry
     @approvals: Approvals
@@ -12,7 +13,7 @@ module Bookshop
 
     def initialize: (agent: Sleepyshark::Officina::Agent, approvals: Approvals, input: IO, output: IO,
                      clock: ^() -> Time, store: SessionStore, budgets: Budgets, audit: AuditView,
-                     telemetry: Telemetry, summarizer: Summarizer?) -> void
+                     telemetry: Telemetry, summarizer: Summarizer?, demo: bool) -> void
     def run: () -> void
 
     private

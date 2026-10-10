@@ -4,7 +4,9 @@ module Bookshop
   # The session in use: a conversation with the chat agent, saved after every step of a reply and at its end with
   # what the session has spent, so a crash loses at most the step in flight. Each reply runs the agent with the run
   # context when the conversation has none yet or it has changed since (a new day): the context enters the
-  # conversation only with a reply that answers it, so one a cancelled reply never sent is sent again.
+  # conversation only with a reply that answers it, so one a cancelled reply never sent is sent again. The provider
+  # clears old tool results again on every later call, as each sends the whole conversation: the session passes a
+  # clearing on only when it differs from the last one.
   class Session
     Officina = Sleepyshark::Officina
     private_constant :Officina
@@ -41,8 +43,8 @@ module Bookshop
     # Whether the conversation grew since this console took it up, so leaving the session needs a new summary.
     def changed? = @changed
 
-    # Runs the chat agent on the message, yielding each event of the run, and a SessionNotSaved the first time in the
-    # reply that a save fails.
+    # Runs the chat agent on the message, yielding each event of the run but a clearing that repeats the session's
+    # last, and a SessionNotSaved the first time in the reply that a save fails.
     #
     # @param cancel [Sleepyshark::Officina::Cancellation]
     # @param budget [Sleepyshark::Officina::Budget]
@@ -53,8 +55,9 @@ module Bookshop
       @told = false
       result = @agent.run(@conversation, message, context: (context unless context == @context), cancel:,
                                                   budget:) do |event|
+        repeated = repeated_clearing?(event)
         follow(event, context, &)
-        yield event
+        yield event unless repeated
       end
       add(result, &)
     end
@@ -80,11 +83,15 @@ module Bookshop
       result
     end
 
-    # Keeps up with the run: what the reply has spent so far, so every save stores the session's whole spend, and the
-    # context, held once its operator message is appended.
+    # Whether the event is a clearing of as many tool calls as the session's last.
+    def repeated_clearing?(event) = event.is_a?(Officina::ToolResultsCleared) && event.tool_calls == @cleared
+
+    # Keeps up with the run: what the reply has spent so far, so every save stores the session's whole spend, the
+    # context, held once its operator message is appended, and how many tool calls the last clearing cleared.
     def follow(event, context, &)
       case event
       in Officina::UsageReported(usage:) then @spent += usage
+      in Officina::ToolResultsCleared(tool_calls:) then @cleared = tool_calls
       in Officina::ConversationAppended(message:)
         @changed = true
         @context = context if message.role == :operator

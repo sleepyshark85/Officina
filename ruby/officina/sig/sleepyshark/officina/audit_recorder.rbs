@@ -13,7 +13,7 @@ module Sleepyshark
       def initialize: (agent: Agent, conversation: Conversation, trace: RunTrace) -> void
 
       def record: (Symbol kind, ?call: ToolCall?, ?span: OpenTelemetry::Trace::Span?, ?detail: String?,
-                   **untyped fields) -> bool
+                   ?tool: String?, **untyped fields) -> bool
 
       def record_end: (result? result, Usage usage, BigDecimal cost) -> bool
 

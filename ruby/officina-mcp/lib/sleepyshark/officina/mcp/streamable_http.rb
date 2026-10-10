@@ -32,9 +32,12 @@ module Sleepyshark
           # The response, ACCEPTED for a notification the server accepted, or nil if none came within timeout
           # seconds. Raises Mcp::Error when the request failed, which loses the connection.
           def take(timeout)
-            worker.value if worker.join(timeout)
-          rescue *FAILURES => e
-            raise Error, transport.lose(e)
+            return unless worker.join(timeout)
+
+            case worker.value
+            in Exception => failure then raise Error, transport.lose(failure)
+            in answer then answer
+            end
           end
 
           # Waits for the request's thread, ending its connection until it has ended. A connection still opening cannot
@@ -42,9 +45,6 @@ module Sleepyshark
           # connection of a request that has ended.
           def release
             stop until worker.join(POLL)
-          rescue *FAILURES
-            # Taken already, or abandoned: either way, how it ended no longer matters.
-            nil
           end
 
           private
@@ -65,7 +65,7 @@ module Sleepyshark
         def initialize(server)
           @name = server.name
           # Mcp.connect makes this transport only for a server with a url.
-          @uri = URI(server.url) # steep:ignore ArgumentTypeMismatch
+          @uri = parse(server.url) # steep:ignore ArgumentTypeMismatch
           # Without the brackets of an IPv6 address, which Net::HTTP would take for part of a name.
           @host = @uri.hostname.to_s
           raise ArgumentError, "MCP server #{@name}: #{@uri} is not an http or https URL" unless http?
@@ -91,10 +91,20 @@ module Sleepyshark
           end
         end
 
+        # Whether the connection is lost.
+        # mutant:disable -- see the class: the lock
+        def lost? = @mutex.synchronize { !@lost.nil? }
+
         # Nothing to stop: each request has its own connection, closed when it ends.
         def close = lose('the connection was closed')
 
         private
+
+        def parse(url)
+          URI(url)
+        rescue URI::InvalidURIError
+          raise ArgumentError, "MCP server #{@name}: #{url} is not an http or https URL"
+        end
 
         def lost_reason = "MCP server #{@name} could not be reached: #{@lost}"
 
@@ -139,16 +149,19 @@ module Sleepyshark
         end
 
         # Runs on the request's own thread: opens the connection (Net::HTTP#request does, as it is not open yet),
-        # sends the request and reads the answer. Net::HTTP#request's signature has its block return nothing, so Steep
-        # takes the method's value for a response, and refuses the break.
+        # sends the request and reads the answer, or returns why it failed. A failure is returned, not raised: a thread
+        # that ends with an exception raises it in the main thread too where Thread.abort_on_exception is set, as a
+        # host may set it, and mutant does. Net::HTTP#request's signature has its block return nothing, so Steep takes
+        # the method's value for a response, and refuses the break.
         def exchange(http, request, id) # steep:ignore MethodBodyTypeMismatch
-          Thread.current.report_on_exception = false
           # Breaking out of the block leaves the rest of the body unread, as a stream may stay open after the response.
           http.request(request) do |response|
             raise_unless_ok(response, request)
             keep_session(response)
             break id ? answer(response, id) : ACCEPTED # steep:ignore BreakTypeMismatch
           end
+        rescue *FAILURES => e
+          e
         end
 
         # A 404 to a request in a session means the server ended the session; to one before, that the URL is wrong.

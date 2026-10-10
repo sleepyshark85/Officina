@@ -72,7 +72,7 @@ module Bookshop
   #
   # @param input [IO] the staff member's lines
   # @param output [IO] where the console writes
-  # @param model [Sleepyshark::Officina::_Model, nil] the chat agent's model; Claude (ChatAgent.claude) if nil
+  # @param model [Sleepyshark::Officina::_Model, nil] the chat agent's model; Claude (the mode's) if nil
   # @param summarizer [Sleepyshark::Officina::_Model, nil] the session summarizer's model, which needs a price; Claude
   #   (Summarizer.claude) unless given, and nil for none: sessions then keep no title
   # @param env [#fetch] the settings: BOOKSHOP_DATABASE, a PostgreSQL URL, the compose file's database if not set;
@@ -80,26 +80,29 @@ module Bookshop
   #   BOOKSHOP_REPLY_BUDGET, a reply's budget in US dollars, $0.50 if not set or empty
   # @param clock [#call] returns the current Time, for the run context, the audit trail and telemetry
   # @param telemetry [Telemetry, nil] where traces, metrics and logs go; OTLP to the compose file's dashboard if nil
+  # @param demo [Boolean] demo mode: compaction and clearing early enough to see in a short session, which the console
+  #   says at the start, and Claude's caches kept five minutes
   # @return [Application]
   # @raise [SettingError] when BOOKSHOP_REPLY_BUDGET is not an amount above zero
   # rubocop:disable-next Metrics/AbcSize, Metrics/MethodLength -- the composition root names every part in one place
   def self.build(input:, output:, model: nil, summarizer: Summarizer.claude, env: ENV, clock: -> { Time.now },
-                 telemetry: nil)
+                 telemetry: nil, demo: false)
     budgets = Budgets.from(env)
     url = env.fetch('BOOKSHOP_DATABASE', COMPOSE_DATABASE)
     database = Database.new(url)
-    model ||= ChatAgent.claude
+    mode = ChatAgent.mode(demo:)
+    model ||= mode.claude
     telemetry ||= Telemetry.otlp
     approvals = Approvals.new
     audit = AuditTable.new(database:)
     agent = Sleepyshark::Officina::Agent.new(
       name: 'bookshop', model:, instructions: ChatAgent::INSTRUCTIONS, tools: Tools.all(Shop.new(database:)),
       approver: approvals, audit_sink: audit, secrets: [Database.password(url)].compact, clock:,
-      telemetry: telemetry.officina
+      telemetry: telemetry.officina, context_management: mode.context_management
     )
     view = AuditView.new(table: audit, dashboard: env.fetch('BOOKSHOP_DASHBOARD', COMPOSE_DASHBOARD))
     console = Console.new(agent:, approvals:, input:, output:, clock:, store: SessionStore.new(database:),
-                          budgets:, audit: view, telemetry:,
+                          budgets:, audit: view, telemetry:, demo:,
                           summarizer: summarizer && Summarizer.new(model: summarizer, clock:, telemetry:))
     Application.new(database:, telemetry:, console:)
   end

@@ -12,6 +12,7 @@ module Bookshop
     @spent: Sleepyshark::Officina::Usage
     @told: bool
     @changed: bool
+    @cleared: Integer?
 
     attr_reader staff_member: String
     attr_reader usage: Sleepyshark::Officina::Usage
@@ -30,6 +31,7 @@ module Bookshop
 
     def take_up: (StoredSession stored) -> void
     def add: (Sleepyshark::Officina::result result) { (SessionNotSaved event) -> void } -> Sleepyshark::Officina::result
+    def repeated_clearing?: (Sleepyshark::Officina::run_event event) -> bool
     def follow: (Sleepyshark::Officina::run_event event, String context)
                 { (SessionNotSaved event) -> void } -> void
     def priced: (Sleepyshark::Officina::Usage usage) -> BigDecimal

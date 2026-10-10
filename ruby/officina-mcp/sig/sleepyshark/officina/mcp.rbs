@@ -13,7 +13,7 @@ module Sleepyshark
 
       POLL: Float
       MONOTONIC: clock
-      ACCEPTED: Hash[String, json]
+      ACCEPTED: Wire::Response
 
       def self.connect: (Server server, ?cancel: _Cancellation?, ?clock: clock) -> Client
     end

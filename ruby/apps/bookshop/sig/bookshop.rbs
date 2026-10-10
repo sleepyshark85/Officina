@@ -4,7 +4,7 @@ module Bookshop
 
   def self.build: (input: IO, output: IO, ?model: Sleepyshark::Officina::_Model?,
                    ?summarizer: Sleepyshark::Officina::_Model?, ?env: _Settings,
-                   ?clock: ^() -> Time, ?telemetry: Telemetry?) -> Application
+                   ?clock: ^() -> Time, ?telemetry: Telemetry?, ?demo: bool) -> Application
 
   # The settings build reads: ENV, or a Hash in tests.
   interface _Settings

@@ -42,19 +42,16 @@ module Sleepyshark
 
         # Sends text, a request with that id, or a notification when id is nil, and returns what to wait on.
         # Raises Mcp::Error once the server has gone.
-        # mutant:disable -- see the class: the lock, and the table's entries (a notification's under nil, or a
-        #   request's forgotten under nil)
         def post(text, id, _version)
-          queue = Queue.new
-          @mutex.synchronize do
-            raise Error, lost_reason if @lost
-
-            @waiting[id] = queue if id
-          end
+          pending = register(id)
           write(text)
-          queue.push(ACCEPTED) unless id
-          Pending.new(self, id, queue)
+          pending.queue.push(ACCEPTED) unless id
+          pending
         end
+
+        # Whether the server can no longer be reached.
+        # mutant:disable -- see the class: the lock
+        def lost? = @mutex.synchronize { !@lost.nil? }
 
         # Why the server can no longer be reached, once it cannot.
         # mutant:disable -- see the class: the lock
@@ -71,6 +68,20 @@ module Sleepyshark
         end
 
         private
+
+        # What request id waits on, its queue in the table where its response finds it; raises Mcp::Error once the
+        # server has gone.
+        # mutant:disable -- see the class: the lock, and the table's entries (a notification's under nil, or a
+        #   request's forgotten under nil)
+        def register(id)
+          queue = Queue.new
+          @mutex.synchronize do
+            raise Error, lost_reason if @lost
+
+            @waiting[id] = queue if id
+          end
+          Pending.new(self, id, queue)
+        end
 
         # A server that cannot be written to is lost, for the reason its output gave when it ended, if it has by now.
         def write(text)

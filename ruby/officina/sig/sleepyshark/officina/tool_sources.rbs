@@ -1,0 +1,14 @@
+module Sleepyshark
+  module Officina
+    class ToolSources
+      @sources: Array[_ToolSource]
+      @audit: AuditRecorder
+
+      def initialize: (agent: Agent, audit: AuditRecorder) -> void
+
+      def connect: (Cancellation cancel) -> String?
+
+      def record_changes: () -> void
+    end
+  end
+end

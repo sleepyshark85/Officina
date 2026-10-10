@@ -41,6 +41,9 @@ module Sleepyshark
         bound = @conversation.fingerprint
         return failed(:prefix_mismatch, PREFIX_MISMATCH) unless bound.nil? || bound == @agent.fingerprint
 
+        unavailable = @tool_step.connect_sources
+        return failed(:tool_source_unavailable, unavailable) if unavailable
+
         interrupted = InterruptedCalls.answer(@conversation.messages, @audit)
         @reporter.append(interrupted) if interrupted
         pending = [text_message(:user, input)]

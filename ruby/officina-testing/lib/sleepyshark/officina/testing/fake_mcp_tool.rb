@@ -9,7 +9,8 @@ module Sleepyshark
 
       # Reopened rather than given a block, which Steep would not read as the class's body.
       class FakeMcpTool
-        # The description is "The <name> tool." unless given; the input schema, an object with a string text.
+        # The description is "The <name> tool." unless given; the input schema, an object with a string text unless
+        # given, as a Hash or as JSON text, which the server sends as it is written.
         def initialize(name:, handler:, description: "The #{name} tool.",
                        input_schema: Ractor.make_shareable({ 'type' => 'object',
                                                              'properties' => { 'text' => { 'type' => 'string' } } }))

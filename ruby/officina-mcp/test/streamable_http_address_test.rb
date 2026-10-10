@@ -49,8 +49,8 @@ class StreamableHttpAddressTest < Minitest::Test
     listener.close
   end
 
-  def test_mcp01_a_url_that_is_not_http_or_has_no_host_is_refused
-    urls = ['ftp://127.0.0.1/mcp', 'http://:8080/mcp', 'http:/mcp']
+  def test_mcp01_a_url_that_is_not_http_has_no_host_or_cannot_be_read_is_refused
+    urls = ['ftp://127.0.0.1/mcp', 'http://:8080/mcp', 'http:/mcp', 'http://exa mple/mcp']
     messages = urls.map { |url| assert_raises(ArgumentError) { connect(url) }.message }
 
     assert_equal(urls.map { "MCP server web: #{it} is not an http or https URL" }, messages)

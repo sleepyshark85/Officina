@@ -22,24 +22,29 @@ module Sleepyshark
       # @return [Symbol] +:read+ (a reply's read calls run concurrently) or +:write+ (a write runs alone, in call order,
       #   and only once its attempt is in the audit trail, when the agent has one)
       attr_reader :kind
+      # @return [_ToolSource, nil] the source the tool comes from, such as an MCP server, which each run connects; nil
+      #   for the application's own tools
+      attr_reader :source
 
       # @param input [Class, Schema] the input's type: a class from Input.define, whose value the handler gets, or a
       #   Schema, whose JSON value (as JSON.parse returns it) it gets
       # @param kind [Symbol] one of KINDS
       # @param needs_approval [Boolean] whether the agent's approver must approve each call before it runs
+      # @param source [_ToolSource, nil]
       # @yieldparam input [Data, Object] the call's input, valid against the schema
       # @yieldparam cancel [Cancellation] the run's, to stop at the next check once the host cancels
       # @yieldreturn [String, ToolFailure, Object] the result for the model: a String as it is, a ToolFailure as an
       #   error result with its message as written, anything else as JSON.generate writes it. An exception is an error
       #   result saying the tool failed, with its message; the run goes on either way.
       # @raise [Error] when the name is blank, the kind unknown, the handler missing or the schema not an object's
-      def initialize(name:, description:, input:, kind:, needs_approval: false, &handler)
+      def initialize(name:, description:, input:, kind:, needs_approval: false, source: nil, &handler)
         @input = input
         check(name, kind, handler)
         @name = -name
         @description = -description
         @kind = kind
         @needs_approval = needs_approval
+        @source = source
         @handler = handler
         freeze
       end

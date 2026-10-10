@@ -60,9 +60,8 @@ module Sleepyshark
 
         # Returns this side's ends of the server's input, output and error output, and the thread that reaps it.
         def spawn_server(server)
+          # Server.new refuses an empty command.
           program, *arguments = server.command
-          raise Error, "MCP server #{server.name} could not be started: its command is empty" unless program
-
           # [program, program] runs it without a shell, even with no arguments; Open3's signature leaves that form out.
           Open3.popen3(server.env, [program, program], *arguments, **GROUP) # steep:ignore
         rescue SystemCallError => e
