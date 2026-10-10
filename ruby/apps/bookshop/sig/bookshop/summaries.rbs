@@ -1,0 +1,26 @@
+module Bookshop
+  class Summaries
+    Officina: singleton(Sleepyshark::Officina)
+    PER_LISTING: Integer
+
+    @summarizer: Summarizer?
+    @store: SessionStore
+    @terminal: Terminal
+    @failed: Set[String]
+
+    def initialize: (summarizer: Summarizer?, store: SessionStore, terminal: Terminal) -> void
+    def leave: (Session session) -> void
+    def fill: (Array[SessionListing] listed, Session current) -> Array[SessionListing]
+
+    private
+
+    def left_without_summary?: (SessionListing listing, Session current) -> bool
+    def summarized: (SessionListing listing, SessionSummary summary) -> SessionListing
+    def announce: (Integer summarizing, Integer left) -> void
+    def stored_summary: (String id) -> SessionSummary?
+    def unread: (String id, StandardError error) -> nil
+    def summarize: (String id, Sleepyshark::Officina::Conversation conversation) -> SessionSummary?
+    def store: (String id, SessionSummary summary, Sleepyshark::Officina::result result) -> SessionSummary
+    def failed: (String id, String reason) -> nil
+  end
+end

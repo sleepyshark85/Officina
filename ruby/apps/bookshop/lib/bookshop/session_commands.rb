@@ -2,7 +2,7 @@
 
 module Bookshop
   # The console's session commands, /new, /sessions, /resume <id> and /cost, with the texts .NET and Go show. The
-  # commands that change the session in use return the one to go on with.
+  # commands that change the session in use return the one to go on with, and summarize the one they leave.
   class SessionCommands
     # How many sessions /sessions lists.
     LISTED = 20
@@ -12,12 +12,14 @@ module Bookshop
     # @param clock [#call] returns the current Time, for the sessions' run context
     # @param budgets [Budgets] which /cost shows
     # @param terminal [Terminal] where the commands answer
-    def initialize(agent:, store:, clock:, budgets:, terminal:)
+    # @param summarizer [Summarizer, nil] which summarizes the sessions left; nil for none
+    def initialize(agent:, store:, clock:, budgets:, terminal:, summarizer:)
       @agent = agent
       @store = store
       @clock = clock
       @budgets = budgets
       @terminal = terminal
+      @summaries = Summaries.new(summarizer:, store:, terminal:)
       freeze
     end
 
@@ -33,13 +35,26 @@ module Bookshop
       Session.new(agent: @agent, store: @store, clock: @clock, staff_member:, stored:)
     end
 
-    # Shows the sessions changed last, the latest first, marking the one in use.
+    # Leaves the session in use, and starts a new one of its staff member.
+    #
+    # @return [Session]
+    def start_new(left)
+      leave(left)
+      start(left.staff_member, announced: 'New session')
+    end
+
+    # Summarizes the session as it is left, unless nothing was said in it since this console took it up.
+    def leave(session) = @summaries.leave(session)
+
+    # Shows the sessions changed last, the latest first, marking the one in use, after summarizing a few of those
+    # left without a summary.
     def list(current)
       listed = @store.list(LISTED)
       return @terminal.write_line('No sessions yet.') if listed.empty?
 
+      listed = @summaries.fill(listed, current)
       @terminal.write_line('Sessions, most recent first:')
-      listed.each { @terminal.write_line(line(it, current)) }
+      listed.each { show(it, current) }
     rescue PG::Error => e
       @terminal.write_line("The sessions could not be read: #{e.message.strip}")
     end
@@ -68,6 +83,12 @@ module Bookshop
 
     private
 
+    def show(listing, current)
+      @terminal.write_line(line(listing, current))
+      @terminal.write_line("    #{listing.summary}") if listing.summary
+      @terminal.write_line("    Changes: #{listing.changes.join('; ')}") unless listing.changes.empty?
+    end
+
     def line(listing, current)
       mark = listing.id == current.id ? '*' : ' '
       updated = listing.updated.localtime.strftime('%a %-d %b %H:%M')
@@ -78,10 +99,15 @@ module Bookshop
     # A conversation no agent has appended to yet, or this agent's.
     def continues?(stored) = [nil, @agent.fingerprint].include?(stored.conversation.fingerprint)
 
+    # The stored session, told as resumed, leaving the one in use; resuming the one in use reloads it without
+    # leaving it.
     def resumed(stored, current)
-      session = Session.new(agent: @agent, store: @store, clock: @clock, staff_member: current.staff_member, stored:)
+      again = stored.conversation.id == current.id
+      session = Session.new(agent: @agent, store: @store, clock: @clock, staff_member: current.staff_member, stored:,
+                            changed: again && current.changed?)
       @terminal.write_line("Resumed session #{session.id}: #{session.length} messages, " \
                            "$#{Spent.dollars(session.cost)} so far.")
+      leave(current) unless again
       session
     end
 

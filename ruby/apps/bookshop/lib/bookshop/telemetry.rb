@@ -55,13 +55,15 @@ module Bookshop
     # @param conversation [String] the conversation's id
     # @return [Sleepyshark::Officina::Completed, Sleepyshark::Officina::Stopped, Sleepyshark::Officina::Failed] what
     #   the block returns
-    def reply(conversation)
-      @traces.tracer(SCOPE).in_span('reply') do
-        result = yield
-        log(conversation, result)
-        result
-      end
-    end
+    def reply(conversation, &run) = traced('reply', run) { log(conversation, it) }
+
+    # Runs the block, the summary of a session, in a span of its own, as #reply does, and logs how the summary ended:
+    # a summary that failed as a warning, since the session goes on without one.
+    #
+    # @param session [String] the session's id
+    # @return [Sleepyshark::Officina::Completed, Sleepyshark::Officina::Stopped, Sleepyshark::Officina::Failed] what
+    #   the block returns
+    def summary(session, &run) = traced('summary', run) { log_summary(session, it) }
 
     # Sends what is left and stops exporting. The three providers shut down at once, and closing returns once they
     # have or the timeout has passed, whichever is first; a shutdown still waiting on its exporter ends with the
@@ -79,12 +81,28 @@ module Bookshop
 
     def now = Process.clock_gettime(Process::CLOCK_MONOTONIC)
 
+    # Calls the run in a span of the name, current while it runs, and yields its result before the span ends, so what
+    # the block logs is in its trace.
+    def traced(name, run)
+      @traces.tracer(SCOPE).in_span(name) { run.call.tap { yield it } }
+    end
+
     def log(conversation, result)
       case result
       in Officina::Failed(reason:, detail:)
         @logger.error("Reply in conversation #{conversation} failed (#{reason}): #{detail}")
       in Officina::Completed(usage:) then ended(conversation, 'completed', usage)
       in Officina::Stopped(reason:, usage:) then ended(conversation, "stopped (#{reason})", usage)
+      end
+    end
+
+    def log_summary(session, result)
+      case result
+      in Officina::Completed(usage:)
+        @logger.info("Session #{session} summarized: #{usage.all_input} input tokens, #{usage.output} output tokens")
+      in Officina::Stopped(reason:) then @logger.warn("Session #{session} could not be summarized: stopped (#{reason})")
+      in Officina::Failed(reason:, detail:)
+        @logger.warn("Session #{session} could not be summarized (#{reason}): #{detail}")
       end
     end
 

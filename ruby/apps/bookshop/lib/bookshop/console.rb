@@ -29,23 +29,25 @@ module Bookshop
     # @param budgets [Budgets]
     # @param audit [AuditView] what /audit shows
     # @param telemetry [Telemetry] which traces and logs each reply
-    def initialize(agent:, approvals:, input:, output:, clock:, store:, budgets:, audit:, telemetry:)
+    # @param summarizer [Summarizer, nil] which summarizes each session left; nil for none
+    def initialize(agent:, approvals:, input:, output:, clock:, store:, budgets:, audit:, telemetry:, summarizer:)
       @audit = audit
       @telemetry = telemetry
       @approvals = approvals
       @budgets = budgets
       @terminal = Terminal.new(input:, output:)
-      @sessions = SessionCommands.new(agent:, store:, clock:, budgets:, terminal: @terminal)
+      @sessions = SessionCommands.new(agent:, store:, clock:, budgets:, terminal: @terminal, summarizer:)
       # Ending the input ends the session, as its end does.
       @interrupts = Interrupts.new(idle: -> { @terminal.end_input })
     end
 
-    # Runs until /quit or the end of the input.
+    # Runs until /quit or the end of the input, and summarizes each session it leaves: with /new, /resume, /quit or
+    # the end of the input.
     def run
       @interrupts.watch do
         @terminal.write_line('Bookshop Assistant. Type /help for commands.')
         staff_member = ask_staff_member
-        converse(@sessions.start(staff_member)) if staff_member
+        @sessions.leave(converse(@sessions.start(staff_member))) if staff_member
       end
     ensure
       @terminal.close
@@ -63,21 +65,23 @@ module Bookshop
       end
     end
 
+    # Converses until /quit or the end of the input, and returns the session in use then.
     def converse(session)
       while (line = @terminal.read('you> '))
         case line.strip
         when '' then next
-        when '/quit' then return
+        when '/quit' then return session
         when %r{\A/} then session = command(line.strip, session)
         else reply(session, line)
         end
       end
+      session
     end
 
     # Answers the command and returns the session to go on with.
     def command(command, session)
       case command
-      when '/new' then return @sessions.start(session.staff_member, announced: 'New session')
+      when '/new' then return @sessions.start_new(session)
       when %r{\A/resume(\s|\z)} then return @sessions.resume(argument(command), session)
       when '/sessions' then @sessions.list(session)
       when '/cost' then @sessions.cost(session)

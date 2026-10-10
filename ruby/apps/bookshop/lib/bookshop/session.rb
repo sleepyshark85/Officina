@@ -13,17 +13,14 @@ module Bookshop
     # @param clock [#call] returns the current Time, in the shop's time zone
     # @param staff_member [String] who is at the counter, whom the run context names
     # @param stored [StoredSession] the session to go on with, or a new one, not saved yet
-    def initialize(agent:, store:, clock:, staff_member:, stored:)
+    # @param changed [Boolean] whether its conversation grew since this console took it up
+    def initialize(agent:, store:, clock:, staff_member:, stored:, changed: false)
       @agent = agent
       @store = store
       @clock = clock
       @staff_member = staff_member
-      @owner = stored.staff_member
-      @conversation = stored.conversation
-      @usage = stored.usage
-      @cost = stored.cost
-      @saved = stored.saved
-      @context = @conversation.messages.rfind { it.role == :operator }&.text
+      @changed = changed
+      take_up(stored)
     end
 
     # @return [String] who is at the counter
@@ -32,12 +29,17 @@ module Bookshop
     attr_reader :usage
     # @return [BigDecimal] what they cost, in US dollars
     attr_reader :cost
+    # @return [Sleepyshark::Officina::Conversation] the conversation, which only a reply appends to
+    attr_reader :conversation
 
     # @return [String] the session's id, its conversation's
     def id = @conversation.id
 
     # @return [Integer] how many messages the conversation holds
     def length = @conversation.messages.size
+
+    # Whether the conversation grew since this console took it up, so leaving the session needs a new summary.
+    def changed? = @changed
 
     # Runs the chat agent on the message, yielding each event of the run, and a SessionNotSaved the first time in the
     # reply that a save fails.
@@ -59,6 +61,17 @@ module Bookshop
 
     private
 
+    # Takes up the stored session: who started it, its conversation and the last run context it holds, its totals,
+    # and the text it is stored as.
+    def take_up(stored)
+      @owner = stored.staff_member
+      @conversation = stored.conversation
+      @context = @conversation.messages.rfind { it.role == :operator }&.text
+      @usage = stored.usage
+      @cost = stored.cost
+      @saved = stored.saved
+    end
+
     # Adds what the reply spent to the session's totals, and saves the session with them.
     def add(result, &)
       @usage += result.usage
@@ -73,6 +86,7 @@ module Bookshop
       case event
       in Officina::UsageReported(usage:) then @spent += usage
       in Officina::ConversationAppended(message:)
+        @changed = true
         @context = context if message.role == :operator
         save(@usage + @spent, @cost + priced(@spent), &)
       else nil
