@@ -25,7 +25,7 @@ import (
 // The database tests share one PostgreSQL container per run of this package, made like the compose file's: its
 // image, user and password, and the application's schema and seed, which .NET reads too.
 const (
-	image    = "postgres:17"
+	image    = "mirror.gcr.io/library/postgres:17"
 	user     = "bookshop"
 	password = "shelf-demo-41"
 	seeded   = "bookshop"

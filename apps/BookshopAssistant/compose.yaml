@@ -5,7 +5,8 @@
 # `docker compose down -v` deletes the data, so the next start seeds afresh.
 services:
   postgres:
-    image: postgres:17
+    # Docker Hub's official image through Google's public mirror, which CI pulls without Docker Hub's rate limit.
+    image: mirror.gcr.io/library/postgres:17
     environment:
       POSTGRES_USER: bookshop
       # Distinct from the user and database names, so redacting it (EVT-03) leaves those readable.
