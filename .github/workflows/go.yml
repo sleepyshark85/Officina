@@ -8,6 +8,10 @@ on:
   push:
     branches: [main]
   pull_request:
+  # For the full mutation run; the other jobs run as well, which also catches a newly published vulnerability.
+  schedule:
+    - cron: '0 4 * * 1'
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -116,22 +120,37 @@ jobs:
     # Skipped only when the detector says false: if it fails, its output is empty and the jobs run.
     if: ${{ !cancelled() && needs.changes.outputs.go != 'false' }}
     runs-on: ubuntu-latest
-    # About 26 minutes usually; a slow runner has taken 55, so leave room before it is cancelled.
+    # A full run takes about 26 minutes usually; a slow runner has taken 55, so leave room before it is cancelled.
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v7
         with:
+          # Comparing with the base branch needs its history.
           fetch-depth: 0
 
+      - name: Scope
+        id: scope
+        # A pull request that changes no code under officina/ (only tests, docs or other packages) has nothing to
+        # mutate; gremlins would take its empty diff to mean everything.
+        run: |
+          if [ "${{ github.event_name }}" = pull_request ] &&
+            git diff --quiet --merge-base "origin/${{ github.base_ref }}" -- 'officina/*.go' ':!*_test.go'; then
+            echo "No code under go/officina changed: nothing to mutate."
+            echo "mutate=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - uses: actions/setup-go@v7
+        if: steps.scope.outputs.mutate != 'false'
         with:
           go-version-file: go/go.mod
           cache-dependency-path: go/go.sum
 
       - name: Install gremlins
+        if: steps.scope.outputs.mutate != 'false'
         run: go install github.com/go-gremlins/gremlins/cmd/gremlins@v0.6.0
 
       - name: Free disk space
+        if: steps.scope.outputs.mutate != 'false'
         # Each mutant is built anew into the build cache, about 10 GB for one run, more than the runner has free:
         # a full disk ended the job as "cancelled". The toolchains removed here are ones this job never uses.
         run: |
@@ -139,15 +158,29 @@ jobs:
           df -h /
 
       - name: Mutate
-        # Every run mutates everything under officina/ whole (the core, the test kit, the Claude package and the MCP
-        # client): they are small, and `--diff` cannot work from go/ (its
-        # paths are relative to the repository, so it skipped every mutant). It fails below the thresholds in
-        # go/.gremlins.yaml, set from Go S08's baseline (G12); gremlins v0.6.0 ignores the threshold flags. The default
-        # timeout counts most mutants as timed out, hence the coefficient. gremlins tests each mutant in a copy of go/
-        # alone, so the tests find the repository's shared testdata through OFFICINA_TESTDATA; without it every test
-        # that reads a fixture fails, and every mutant counts as killed.
+        if: steps.scope.outputs.mutate != 'false'
+        # Everything under officina/ (the core, the test kit, the Claude package and the MCP client) on a push to main,
+        # weekly and on demand; on a pull request, only the lines it changed there. Either fails below the thresholds
+        # in go/.gremlins.yaml (G12); gremlins v0.6.0 ignores the threshold flags. gremlins names a mutant's file
+        # relative to the folder it mutates and matches it against the paths of the `git diff` it runs where it is
+        # started, so the diff run starts in officina/ with git's paths made relative to it. Changed lines that hold
+        # no mutant (only comments or deletions) pass. The default timeout counts most mutants as timed out, hence
+        # the coefficient. gremlins tests each mutant in a copy of go/ alone, so the tests find the repository's
+        # shared testdata through OFFICINA_TESTDATA; without it every test that reads a fixture fails, and every
+        # mutant counts as killed.
         env:
           OFFICINA_TESTDATA: ${{ github.workspace }}/testdata
           # Mutant timeouts come from the coverage run's duration, which a cached test result would make near zero.
           GOFLAGS: -count=1
-        run: gremlins unleash --coverpkg ./officina/... --timeout-coefficient 20 ./officina
+        run: |
+          if [ "${{ github.event_name }}" != pull_request ]; then
+            gremlins unleash --coverpkg ./officina/... --timeout-coefficient 20 ./officina
+            exit
+          fi
+          cd officina
+          git config diff.relative true
+          gremlins unleash --coverpkg ./officina/... --timeout-coefficient 20 --output-statuses lctkv \
+            --diff "origin/${{ github.base_ref }}" 2>&1 | tee "$RUNNER_TEMP/gremlins.log" || {
+            grep -qx 'Killed: 0, Lived: 0, Not covered: 0' "$RUNNER_TEMP/gremlins.log"
+            echo "No mutant on the changed lines was killed, lived or left uncovered, so the threshold error above does not count."
+          }
