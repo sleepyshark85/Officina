@@ -15,6 +15,10 @@ class UsageTest < Minitest::Test
     assert_equal Usage.new(input: 11, output: 22, cache_read: 33, cache_write: 44, cache_write_hour: 6), first + second
   end
 
+  def test_agt03_all_input_counts_the_input_tokens_cached_or_not
+    assert_equal 7, Usage.new(input: 1, output: 8, cache_read: 2, cache_write: 4, cache_write_hour: 3).all_input
+  end
+
   def test_agt03_a_new_usage_counts_no_tokens
     assert_equal Usage.new(input: 0, output: 0, cache_read: 0, cache_write: 0, cache_write_hour: 0), Usage.new
   end

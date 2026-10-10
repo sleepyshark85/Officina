@@ -15,8 +15,8 @@ module Bookshop
     METRICS_INTERVAL = 5_000
     # The metrics and logs exporters gzip by default, which the dashboard cannot read; the traces exporter does not.
     UNCOMPRESSED = 'none'
-    # Seconds closing waits for each provider to send what is left: an exporter whose dashboard is down retries until
-    # then, which delays leaving the console.
+    # Seconds closing waits, in all, for the providers to send what is left: an exporter whose dashboard is down
+    # retries for its own ten seconds, and the metrics SDK ignores the timeout it is given.
     CLOSE_TIMEOUT = 2
     private_constant :SDK, :Officina, :SCOPE, :SERVICE, :METRICS_INTERVAL, :UNCOMPRESSED, :CLOSE_TIMEOUT
 
@@ -63,12 +63,21 @@ module Bookshop
       end
     end
 
-    # Sends what is left and stops exporting, waiting at most a few seconds for each kind.
-    def close
-      [@traces, @metrics, @logs].each { it.shutdown(timeout: CLOSE_TIMEOUT) }
+    # Sends what is left and stops exporting. The three providers shut down at once, and closing returns once they
+    # have or the timeout has passed, whichever is first; a shutdown still waiting on its exporter ends with the
+    # process.
+    #
+    # @param timeout [Numeric] seconds to wait at most
+    def close(timeout: CLOSE_TIMEOUT)
+      deadline = now + timeout
+      # A join whose time has passed returns at once.
+      [@traces, @metrics, @logs].map { |provider| Thread.new { provider.shutdown(timeout:) } }
+                                .each { it.join(deadline - now) }
     end
 
     private
+
+    def now = Process.clock_gettime(Process::CLOCK_MONOTONIC)
 
     def log(conversation, result)
       case result
@@ -81,7 +90,7 @@ module Bookshop
 
     def ended(conversation, how, usage)
       @logger.info("Reply in conversation #{conversation} #{how}: " \
-                   "#{usage.input + usage.cache_read + usage.cache_write} input tokens, #{usage.output} output tokens")
+                   "#{usage.all_input} input tokens, #{usage.output} output tokens")
     end
   end
   private_constant :Telemetry

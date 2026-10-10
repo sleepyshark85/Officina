@@ -57,7 +57,7 @@ module Bookshop
 
     # A run's tokens and cost.
     def spent(record, usage)
-      "tokens: #{thousands(usage.input + usage.cache_read + usage.cache_write)} in " \
+      "tokens: #{thousands(usage.all_input)} in " \
         "(#{thousands(usage.cache_read)} cached), #{thousands(usage.output)} out, $#{dollars(record.cost)}"
     end
 

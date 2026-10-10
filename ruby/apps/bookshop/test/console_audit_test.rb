@@ -8,6 +8,8 @@ require_relative 'console_session'
 class ConsoleAuditTest < Minitest::Test
   include ConsoleSession
 
+  # Private to the application, which hands it only to the agent and the console.
+  AuditTable = Bookshop.const_get(:AuditTable)
   START = Time.new(2026, 10, 10, 8)
   ADD = '{"name":"Jo Bloggs","email":"jo@example.com"}'
   # A model priced as Claude Opus 5.5 is, in dollars per million tokens.
@@ -28,6 +30,22 @@ class ConsoleAuditTest < Minitest::Test
 
     assert_in_order transcript, trail(*spans.select { it.name == 'reply' }.map(&:hex_trace_id)),
                     "you> /audit nobody\nNo audit entries for session nobody.\n"
+    assert_empty telemetry.spans, 'Leaving sends the telemetry, which clears what the exporters hold'
+  end
+
+  def test_app16_audit_shows_why_a_call_was_denied_and_a_run_without_a_trace
+    untraced = untraced_conversation
+    telemetry = MemoryTelemetry.new
+    spans = []
+    model = ScriptedModel.new(say_then_call('Adding Jo.', call('c1', 'add_customer', ADD)), ScriptedModel.text('No.'))
+
+    transcript = session(model, 'Sam', 'Add Jo Bloggs, jo@example.com.', 'n', -> { spans = telemetry.spans }, '/audit',
+                         "/audit #{untraced}", '/quit', telemetry:, env: { 'BOOKSHOP_DASHBOARD' => 'http://dash/' })
+    trace = spans.find { it.name == 'reply' }.hex_trace_id
+
+    assert_in_order transcript, "Run 1, trace: http://dash/traces/detail/#{trace}\n",
+                    "  ApprovalAnswered  add_customer          denied: the staff member declined\n",
+                    "Audit of session #{untraced}:\nRun 1, trace: none recorded\n"
   end
 
   def test_app20_a_reply_is_one_trace_of_its_run_model_and_tool_calls_with_its_log_record
@@ -77,6 +95,16 @@ class ConsoleAuditTest < Minitest::Test
         #{at(30)}  RunStarted
         #{at(36)}  RunEnded                                completed  tokens: 5,200 in (4,000 cached), 300 out, $0.0155
     TEXT
+  end
+
+  # The id of a conversation whose one run an agent without telemetry audited, so that its rows have no trace.
+  def untraced_conversation
+    database = Bookshop::Database.new(database_url)
+    agent = Officina::Agent.new(name: 'bookshop', model: ScriptedModel.new(ScriptedModel.text('Hello.'), info: PRICED),
+                                instructions: 'Help.', audit_sink: AuditTable.new(database:, price: PRICED.price))
+    Officina::Conversation.new.tap { agent.run(it, 'Hi.') { nil } }.id
+  ensure
+    database&.close
   end
 
   # A clock that ticks a second each time it is read.

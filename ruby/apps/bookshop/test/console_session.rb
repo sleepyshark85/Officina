@@ -87,11 +87,11 @@ module ConsoleSession
   private
 
   # Runs a console session on the test's database, the staff member following the script, and returns its transcript.
-  # Its telemetry is kept in memory, cleared when the session ends.
-  def session(model, *script, interrupt_on: nil, clock: -> { Time.now }, telemetry: MemoryTelemetry.new)
+  # Its telemetry is kept in memory, cleared when the session ends. +env+ adds to the settings.
+  def session(model, *script, interrupt_on: nil, clock: -> { Time.now }, telemetry: MemoryTelemetry.new, env: {})
     staff = Staff.new(script, interrupt_on:)
     application = Bookshop.build(input: staff.input, output: staff, model:,
-                                 env: { 'BOOKSHOP_DATABASE' => database_url }, clock:,
+                                 env: { 'BOOKSHOP_DATABASE' => database_url, **env }, clock:,
                                  telemetry: telemetry.telemetry)
     begin
       application.run

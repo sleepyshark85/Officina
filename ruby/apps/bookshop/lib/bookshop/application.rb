@@ -14,9 +14,10 @@ module Bookshop
     # goes on.
     def run = @console.run
 
-    # Closes the database's connections, and sends the telemetry not yet sent.
+    # Closes the database's connections, and sends the telemetry not yet sent, even when the database fails to close.
     def close
       @database.close
+    ensure
       @telemetry.close
     end
   end

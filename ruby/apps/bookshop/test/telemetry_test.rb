@@ -10,6 +10,20 @@ class TelemetryTest < Minitest::Test
   ScriptedModel = Officina::Testing::ScriptedModel
   # Private to the application, which hands it only to the telemetry.
   TelemetryLogger = Bookshop.const_get(:TelemetryLogger)
+  SDK = OpenTelemetry::SDK
+
+  # An exporter whose dashboard does not answer: each export waits until the gate closes, or a second at most.
+  class UnansweredExporter
+    def initialize(gate) = @gate = gate
+
+    def export(*, **)
+      @gate.pop(timeout: 1)
+      SDK::Metrics::Export::SUCCESS
+    end
+
+    def force_flush(**) = SDK::Metrics::Export::SUCCESS
+    def shutdown(**) = SDK::Metrics::Export::SUCCESS
+  end
 
   def setup
     super
@@ -57,11 +71,33 @@ class TelemetryTest < Minitest::Test
     logger.warn { 'two' }
     logger.add(nil, nil, 'three')
     logger.add(Logger::FATAL, 'four')
+    logger.error(42)
     logger.level = Logger::ERROR
     logger.info('not sent')
 
-    assert_equal([['DEBUG', 5, 'one'], ['WARN', 13, 'two'], ['UNKNOWN', 0, 'three'], ['FATAL', 21, 'four']],
+    assert_equal([['DEBUG', 5, 'one'], ['WARN', 13, 'two'], ['UNKNOWN', 0, 'three'], ['FATAL', 21, 'four'],
+                  ['ERROR', 17, '42']],
                  exported.emitted_log_records.map { it.to_h.values_at(:severity_text, :severity_number, :body) })
+  end
+
+  def test_app20_closing_waits_at_most_its_timeout_for_a_dashboard_that_does_not_answer
+    before = Thread.list
+    gate = Thread::Queue.new
+    exporter = UnansweredExporter.new(gate)
+    @telemetry = Bookshop.const_get(:Telemetry).new(
+      spans: SDK::Trace::Export::BatchSpanProcessor.new(exporter),
+      metrics: SDK::Metrics::Export::PeriodicMetricReader.new(exporter:, export_interval_millis: 60_000),
+      logs: SDK::Logs::Export::BatchLogRecordProcessor.new(exporter)
+    )
+    reply(ScriptedModel.text('Hello.'))
+
+    started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+    @telemetry.close(timeout: 0.1)
+    took = Process.clock_gettime(Process::CLOCK_MONOTONIC) - started
+    gate.close
+    (Thread.list - before).each(&:join)
+
+    assert_in_delta 0.1, took, 0.1
   end
 
   private

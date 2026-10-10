@@ -22,7 +22,6 @@ module Bookshop
       return true if severity < level
 
       message = block_given? ? yield : progname if message.nil?
-      severity = UNKNOWN if severity > UNKNOWN
       @logger.on_emit(timestamp: Time.now, severity_text: NAMES.fetch(severity),
                       severity_number: NUMBERS.fetch(severity), body: message.to_s)
       true

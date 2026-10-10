@@ -14,6 +14,8 @@ module Sleepyshark
                        ?cache_write_hour: Integer) -> void
 
       def +: (Usage other) -> Usage
+
+      def all_input: () -> Integer
     end
   end
 end
