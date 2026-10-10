@@ -16,6 +16,8 @@ class ClaudeTestCase < Minitest::Test
   START = '{"type":"message_start","message":{"id":"msg_01","type":"message","role":"assistant",' \
           '"model":"claude-opus-5-5","content":[],"stop_reason":null,"stop_sequence":null,' \
           '"usage":{"input_tokens":10,"output_tokens":1}}}'
+  # A message delta with no stop reason yet.
+  PARTIAL = '{"type":"message_delta","delta":{"stop_reason":null,"stop_sequence":null},"usage":{"output_tokens":3}}'
 
   def setup
     @apis = []
@@ -67,5 +69,12 @@ class ClaudeTestCase < Minitest::Test
     FakeApi.sse(START, *text_events(text),
                 %({"type":"message_delta","delta":{"stop_reason":"#{stop}"},"usage":{"output_tokens":5}}),
                 '{"type":"message_stop"}', ending:)
+  end
+
+  # A reply that streams "Hel" and reports 3 output tokens, then fails mid-stream with an error event of the type
+  # given, under the response's status, 200.
+  def cut_off(type = 'overloaded_error')
+    FakeApi.sse(START, *text_events('Hel')[0..1], PARTIAL,
+                JSON.generate({ type: 'error', error: { type:, message: 'Failed.' } }))
   end
 end

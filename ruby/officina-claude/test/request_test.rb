@@ -86,17 +86,15 @@ class RequestTest < ClaudeTestCase
   end
 
   def test_ctx06_tool_results_go_out_as_one_user_message_of_tool_result_blocks
-    use = '{"id":"toolu_01","input":{"q":"Emma"},"name":"search","type":"tool_use"}'
     call = ToolCall.new(id: 'toolu_01', name: 'search', input: '{"q":"Emma"}')
+    use = Block.new(raw: '{"id":"toolu_01","input":{"q":"Emma"},"name":"search","type":"tool_use"}', tool_call: call)
     results = [ToolResult.new(call_id: 'toolu_01', content: '3 copies <new>', error: false),
                ToolResult.new(call_id: 'toolu_02', content: 'failed', error: true)]
     api = serve(text_reply)
+    messages = [*hi.messages, Message.new(role: :assistant, blocks: [use]),
+                Message.new(role: :user, blocks: results.map { Block.new(tool_result: it) })]
 
-    collect(model(api), Request.new(tools: [], instructions: 'Answer briefly.', messages: [
-                                      *hi.messages,
-                                      Message.new(role: :assistant, blocks: [Block.new(raw: use, tool_call: call)]),
-                                      Message.new(role: :user, blocks: results.map { Block.new(tool_result: it) })
-                                    ]))
+    collect(model(api), Request.new(tools: [], instructions: 'Answer briefly.', messages:))
 
     expected = { 'role' => 'user', 'content' => [
       { 'type' => 'tool_result', 'tool_use_id' => 'toolu_01', 'content' => '3 copies <new>' },

@@ -51,7 +51,7 @@ module Hello
   def self.status(result)
     outcome = case result
               in Completed then 'completed'
-              in Stopped(reason:, detail:) then "stopped (#{reason}) #{detail}"
+              in Stopped(reason:, detail:) then ["stopped (#{reason})", detail].compact.join(' ')
               in Failed(reason:, detail:) then "failed (#{reason}): #{detail}"
               end
     usage = result.usage
