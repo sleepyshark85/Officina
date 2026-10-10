@@ -1,7 +1,7 @@
 module Sleepyshark
   module Officina
     # Where an agent's memory files are kept: every operation is within one scope, which never sees another's files.
-    # A store refuses, with an Error, any scope or path MemoryPath refuses, so no path leaves its scope. Directories
+    # A store refuses, with an Error, any scope or path MemoryRules refuses, so no path leaves its scope. Directories
     # are implied by the files' paths. Many runs may share one store, so it guards its own state.
     interface _MemoryStore
       # Every file of the scope, in no particular order; none for a scope never written to.

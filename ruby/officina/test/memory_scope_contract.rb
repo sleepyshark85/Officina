@@ -5,7 +5,7 @@
 # (#files_outside).
 module MemoryScopeContract
   Error = Sleepyshark::Officina::Error
-  MemoryPath = Sleepyshark::Officina::MemoryPath
+  MemoryRules = Sleepyshark::Officina::MemoryRules
 
   REFUSED_PATHS = [
     '', '.', '..', '../x', 'a/../../x', './a', 'a/./b', '/etc/passwd', '/a', 'a/', 'a//b', 'a\\b', '..\\x',
@@ -79,7 +79,7 @@ module MemoryScopeContract
 
   # Every operation on the path is refused, as the rules refuse it, or stays in the scope.
   def stays_in_scope(path)
-    return refuse_every_operation('alice', path) unless MemoryPath.valid?(path)
+    return refuse_every_operation('alice', path) unless MemoryRules.valid_path?(path)
 
     store.write('alice', path, 'x')
     store.rename('alice', path, 'moved.md')

@@ -1,13 +1,13 @@
 module Sleepyshark
   module Officina
-    module MemoryPath
-      MAX_LENGTH: Integer
+    module MemoryRules
+      MAX_PATH_BYTES: Integer
       MAX_PART_BYTES: Integer
       MAX_SCOPE_BYTES: Integer
       FORBIDDEN: Regexp
       DEVICES: Set[String]
 
-      def self.valid?: (untyped path) -> bool
+      def self.valid_path?: (untyped path) -> bool
 
       def self.valid_scope?: (untyped scope) -> bool
 

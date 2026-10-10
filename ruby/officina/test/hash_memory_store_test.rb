@@ -8,7 +8,7 @@ class HashMemoryStoreTest < Minitest::Test
   include MemoryStoreContract
 
   cover 'Sleepyshark::Officina::HashMemoryStore*'
-  cover 'Sleepyshark::Officina::MemoryPath*'
+  cover 'Sleepyshark::Officina::MemoryRules*'
 
   def setup
     @store = Sleepyshark::Officina::HashMemoryStore.new

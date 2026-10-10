@@ -22,14 +22,14 @@ module Sleepyshark
       # Every file of the scope, in no particular order; none for a scope never written to.
       # @raise [Error] when the scope is invalid, or its directory is a link
       def list(scope)
-        MemoryPath.check(scope)
+        MemoryRules.check(scope)
         directory = directory(scope)
         @lock.synchronize do
           # Nothing for a directory that is not there; ** never descends into a linked directory; a linked file is
           # not a file to lstat.
           Dir.glob('**/*', File::FNM_DOTMATCH, base: directory).filter_map do |path|
             file = File.join(directory, path)
-            MemoryFile.new(path:, size: File.size(file)) if MemoryPath.valid?(path) && File.lstat(file).file?
+            MemoryFile.new(path:, size: File.size(file)) if MemoryRules.valid_path?(path) && File.lstat(file).file?
           end
         end
       end
@@ -45,7 +45,7 @@ module Sleepyshark
       #   UTF-8, or the path is a directory or runs through a file
       def write(scope, path, text)
         within(scope, path) do |file, directory|
-          MemoryPath.check_text(text)
+          MemoryRules.check_text(text)
           refuse_clash(directory, path)
           FileUtils.mkdir_p(File.dirname(file))
           File.binwrite(file, text)
@@ -97,7 +97,7 @@ module Sleepyshark
 
       # Checks the scope and paths, then yields the first path's file and the scope's directory, holding the lock.
       def within(scope, path, *other_paths)
-        MemoryPath.check(scope, path, *other_paths)
+        MemoryRules.check(scope, path, *other_paths)
         directory = directory(scope)
         @lock.synchronize do
           refuse_links(directory, path)

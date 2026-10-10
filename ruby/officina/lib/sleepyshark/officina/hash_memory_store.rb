@@ -14,7 +14,7 @@ module Sleepyshark
       # Every file of the scope, in no particular order; none for a scope never written to.
       # @raise [Error] when the scope is invalid
       def list(scope)
-        MemoryPath.check(scope)
+        MemoryRules.check(scope)
         @lock.synchronize do
           @files.filter_map { |(at, path), text| MemoryFile.new(path:, size: text.bytesize) if at == scope }
         end
@@ -23,7 +23,7 @@ module Sleepyshark
       # The file's text, or nil when there is no such file.
       # @raise [Error] when the scope or the path is invalid
       def read(scope, path)
-        MemoryPath.check(scope, path)
+        MemoryRules.check(scope, path)
         @lock.synchronize { @files[[scope, path]] }
       end
 
@@ -31,8 +31,8 @@ module Sleepyshark
       # @raise [Error] when the scope or the path is invalid, the text is not valid UTF-8, or the path is a directory
       #   or runs through a file
       def write(scope, path, text)
-        MemoryPath.check(scope, path)
-        MemoryPath.check_text(text)
+        MemoryRules.check(scope, path)
+        MemoryRules.check_text(text)
 
         @lock.synchronize do
           refuse_clash(scope, path)
@@ -43,7 +43,7 @@ module Sleepyshark
       # Deletes the file; does nothing when there is none.
       # @raise [Error] when the scope or the path is invalid
       def delete(scope, path)
-        MemoryPath.check(scope, path)
+        MemoryRules.check(scope, path)
         @lock.synchronize { @files.delete([scope, path]) }
       end
 
@@ -51,7 +51,7 @@ module Sleepyshark
       # @raise [Error] when the scope or a path is invalid, there is no file at the path, or the new path is taken,
       #   is a directory or runs through a file
       def rename(scope, path, new_path)
-        MemoryPath.check(scope, path, new_path)
+        MemoryRules.check(scope, path, new_path)
         @lock.synchronize do
           text = @files.fetch([scope, path]) { raise Error, "There is no memory file #{path}." }
           raise Error, "There is already a memory file #{new_path}." if @files.key?([scope, new_path])

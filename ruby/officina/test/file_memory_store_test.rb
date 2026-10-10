@@ -9,7 +9,7 @@ class FileMemoryStoreTest < Minitest::Test
   include MemoryStoreContract
 
   cover 'Sleepyshark::Officina::FileMemoryStore*'
-  cover 'Sleepyshark::Officina::MemoryPath*'
+  cover 'Sleepyshark::Officina::MemoryRules*'
 
   SCOPE_LINK_REFUSAL = /\AThe memory scope "alice" is a link, which memory does not follow\.\z/
 
@@ -44,6 +44,9 @@ class FileMemoryStoreTest < Minitest::Test
     store.delete('alice', 'e/f.md')
 
     assert_equal ['d.md'], Dir.children(scope_directory('alice'))
+    store.delete('alice', 'd.md')
+
+    assert_empty Dir.children(scope_directory('alice'))
   end
 
   def test_mem02_a_file_that_is_not_utf8_text_is_refused_on_read

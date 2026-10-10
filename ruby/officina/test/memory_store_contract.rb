@@ -1,11 +1,13 @@
 # frozen_string_literal: true
 
+require_relative 'memory_concurrency_contract'
 require_relative 'memory_scope_contract'
 
 # The tests every memory store passes, run against each built-in store by a test class that includes them and gives
 # the store (#store) and the files it keeps on disk outside a scope's own (#files_outside).
 module MemoryStoreContract
   include MemoryScopeContract
+  include MemoryConcurrencyContract
 
   MemoryFile = Sleepyshark::Officina::MemoryFile
 
@@ -101,23 +103,5 @@ module MemoryStoreContract
 
     assert_equal ['Memory text must be a valid UTF-8 string.'], messages
     assert_empty store.list('alice')
-  end
-
-  def test_mem02_concurrent_writers_lose_no_file
-    Array.new(8) { |writer| Thread.new { write_and_rename(writer, 20) } }.each(&:join)
-
-    assert_equal 161, store.list('alice').size
-    assert_match(/\A\d-\d+\z/, store.read('alice', 'shared.md'))
-  end
-
-  private
-
-  # Writes files, moves each, and overwrites one file every writer shares.
-  def write_and_rename(writer, count)
-    count.times do |n|
-      store.write('alice', "w#{writer}/#{n}.md", "#{writer}-#{n}")
-      store.rename('alice', "w#{writer}/#{n}.md", "done/#{writer}-#{n}.md")
-      store.write('alice', 'shared.md', "#{writer}-#{n}")
-    end
   end
 end
