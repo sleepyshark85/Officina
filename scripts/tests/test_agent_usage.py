@@ -2,11 +2,9 @@
 scripts/tests"""
 import importlib.util
 import json
-import subprocess
-import sys
 import tempfile
 import unittest
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 SCRIPT = Path(__file__).resolve().parent.parent / "agent-usage.py"
@@ -73,9 +71,15 @@ class AgentUsageTest(unittest.TestCase):
         self.assertEqual([(agent.name, agent.role, agent.usage.processed) for agent in session.agents],
                          [("lead", "lead", 7)])
 
-    def test_a_session_whose_lead_made_no_model_call_is_left_out(self):
+    def test_a_session_without_any_model_call_is_left_out(self):
         self.lead("empty", user(0))
         self.assertEqual(agent_usage.read_sessions(self.directory), [])
+
+    def test_a_session_whose_lead_made_no_model_call_is_kept_with_its_subagents(self):
+        self.lead("s", user(0))
+        self.subagent("s", "a1234567890", {"agentType": "developer", "description": "Build"}, assistant("d", 5, 1))
+        [session] = agent_usage.read_sessions(self.directory)
+        self.assertEqual([agent.name for agent in session.agents], ["a1234567"])
 
     def test_subagents_follow_the_lead_in_the_order_they_started(self):
         self.lead("s", assistant("m1", 0, 1))
@@ -101,12 +105,39 @@ class AgentUsageTest(unittest.TestCase):
                                      agent("reviewer", 4)])
         self.assertEqual(list(roles.items()), [("lead", (1, 1)), ("reviewer", (2, 6)), ("developer", (1, 3))])
 
-    def test_a_directory_without_transcripts_exits_with_an_error_and_writes_nothing(self):
-        result = subprocess.run([sys.executable, "-B", str(SCRIPT), str(self.directory / "missing")],
-                                capture_output=True, text=True)
-        self.assertEqual(result.returncode, 1)
-        self.assertIn(f"No session transcripts with model calls in {self.directory / 'missing'}", result.stderr)
-        self.assertEqual(result.stdout, "")
+    def test_a_session_renders_as_a_role_table_and_one_row_per_agent(self):
+        def at(hour, minute):
+            return datetime(2026, 10, 5, hour, minute, tzinfo=timezone.utc)
+
+        lead = agent_usage.Agent("lead", "lead", "This session's main conversation", agent_usage.Usage(
+            calls=1200, processed=999, cache_reads=1000, peak_context=1400, first=at(10, 0), last=at(10, 30),
+            active=timedelta(minutes=12)))
+        reviewer = agent_usage.Agent("a1234567", "reviewer", "Review a|b", agent_usage.Usage(
+            calls=3, processed=2600, cache_reads=0, peak_context=999, first=at(10, 5), last=at(11, 40),
+            active=timedelta(seconds=100)))
+        self.assertEqual(agent_usage.render_session(agent_usage.Session("abcdef12-0000", [lead, reviewer])),
+                         "## Session abcdef12 (2026-10-05 10:00 to 2026-10-05 11:40 UTC)\n"
+                         "\n"
+                         "| Role | Agents | Input processed |\n"
+                         "|---|---|---|\n"
+                         "| lead | 1 | 999 |\n"
+                         "| reviewer | 1 | 3k |\n"
+                         "\n"
+                         "| Agent | Role | Task | Calls | Input processed | Of which cache reads | Peak context "
+                         "| Active minutes |\n"
+                         "|---|---|---|---|---|---|---|---|\n"
+                         "| lead | lead | This session's main conversation | 1,200 | 999 | 1k | 1k | 12 |\n"
+                         "| a1234567 | reviewer | Review a/b | 3 | 3k | 0 | 999 | 2 |\n")
+
+    def test_a_directory_without_transcripts_exits_with_an_error_and_leaves_the_doc_as_it_was(self):
+        doc = self.directory / "doc.md"
+        doc.write_text("previous content", encoding="utf-8")
+        missing = self.directory / "missing"
+        with self.assertRaises(SystemExit) as raised:
+            agent_usage.main(missing, doc)
+        self.assertEqual(raised.exception.code,
+                         f"No session transcripts with model calls in {missing}; {doc} is left as it was.")
+        self.assertEqual(doc.read_text(encoding="utf-8"), "previous content")
 
 
 if __name__ == "__main__":

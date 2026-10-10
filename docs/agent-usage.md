@@ -106,19 +106,19 @@ python3 -B scripts/agent-usage.py
 |---|---|---|---|---|---|---|---|
 | lead | lead | This session's main conversation | 13 | 598k | 572k | 49k | 7 |
 
-## Session 882087f6 (2026-10-10 02:00 to 2026-10-10 10:08 UTC)
+## Session 882087f6 (2026-10-10 02:00 to 2026-10-10 10:12 UTC)
 
 | Role | Agents | Input processed |
 |---|---|---|
-| lead | 1 | 192,048k |
-| reviewer | 34 | 116,146k |
-| developer | 26 | 698,741k |
-| fixer | 3 | 2,089k |
+| lead | 1 | 201,186k |
+| reviewer | 34 | 116,738k |
+| developer | 26 | 707,016k |
+| fixer | 3 | 2,139k |
 | claude-code-guide | 2 | 115k |
 
 | Agent | Role | Task | Calls | Input processed | Of which cache reads | Peak context | Active minutes |
 |---|---|---|---|---|---|---|---|
-| lead | lead | This session's main conversation | 443 | 192,048k | 191,153k | 755k | 361 |
+| lead | lead | This session's main conversation | 455 | 201,186k | 200,275k | 771k | 365 |
 | a8eb4164 | reviewer | Review Ruby plan and licence PRs | 190 | 41,017k | 38,076k | 384k | 152 |
 | a033fe44 | developer | Ruby S02 Claude features spike | 96 | 18,555k | 18,276k | 279k | 19 |
 | a9bee389 | reviewer | Review PR #83 Ruby S02 | 28 | 1,676k | 1,593k | 83k | 5 |
@@ -154,7 +154,7 @@ python3 -B scripts/agent-usage.py
 | a8c62d46 | reviewer | Review PR 98 | 36 | 2,548k | 2,363k | 109k | 15 |
 | adca4233 | fixer | Fix #89 discarded wait error | 23 | 951k | 856k | 49k | 14 |
 | a546a966 | reviewer | Review PR 89 new head | 8 | 116k | 90k | 17k | 10 |
-| a7dc3e8f | developer | Fix #92 strict review findings | 240 | 72,131k | 70,760k | 513k | 99 |
+| a7dc3e8f | developer | Fix #92 strict review findings | 241 | 72,645k | 70,776k | 514k | 109 |
 | a0e09729 | reviewer | Review PR 93 round 2 | 66 | 6,395k | 6,101k | 163k | 17 |
 | ac3d145a | reviewer | Owner-approved round 4 for #95 | 19 | 854k | 796k | 63k | 4 |
 | a206ee6e | developer | Conventions single source of truth | 57 | 6,358k | 6,225k | 151k | 14 |
@@ -178,9 +178,9 @@ python3 -B scripts/agent-usage.py
 | acd00305 | reviewer | Merge-check verdict for #102 | 5 | 88k | 67k | 23k | 1 |
 | ac530fe0 | fixer | Run hook tests in CI | 7 | 254k | 232k | 39k | 1 |
 | aa6d9fad | reviewer | Review PR #104 hook tests in CI | 13 | 276k | 253k | 28k | 2 |
-| a85c2558 | reviewer | Review PR #105 agent usage doc | 12 | 321k | 283k | 37k | 2 |
-| a12e48db | developer | Continue Ruby S07 part A telemetry | 30 | 2,502k | 2,402k | 117k | 3 |
-| ad2244a5 | fixer | Hook warning tells agents to save work | 20 | 884k | 834k | 50k | 3 |
-| aa4d313a | developer | Continue Ruby S06 part B console | 30 | 2,338k | 2,246k | 109k | 2 |
-| a89d31b4 | developer | Fix #105 agent-usage review findings | 12 | 600k | 557k | 61k | 2 |
-| a359b6d0 | reviewer | Review PR #106 hook hand-over text | 10 | 192k | 171k | 26k | 1 |
+| a85c2558 | reviewer | Review PR #105 agent usage doc | 21 | 795k | 738k | 58k | 7 |
+| a12e48db | developer | Continue Ruby S07 part A telemetry | 56 | 6,051k | 5,915k | 152k | 7 |
+| ad2244a5 | fixer | Hook warning tells agents to save work | 21 | 934k | 884k | 50k | 3 |
+| aa4d313a | developer | Continue Ruby S06 part B console | 52 | 5,259k | 5,127k | 149k | 7 |
+| a89d31b4 | developer | Fix #105 agent-usage review findings | 30 | 1,892k | 1,827k | 83k | 6 |
+| a359b6d0 | reviewer | Review PR #106 hook hand-over text | 14 | 310k | 283k | 31k | 3 |

@@ -42,7 +42,8 @@ class Agent(NamedTuple):
 
 
 class Session(NamedTuple):
-    """One Claude Code session: its lead first, then its subagents in the order they started."""
+    """One Claude Code session: its lead first (when it made a model call), then its subagents in the order they
+    started."""
     id: str
     agents: list[Agent]
 
@@ -97,15 +98,14 @@ def read_subagent(transcript):
 
 
 def read_session(lead_transcript):
-    """The session whose main transcript this is, or None when its lead made no model call."""
+    """The session whose main transcript this is, or None when neither its lead nor a subagent made a model call."""
     lead_usage = read_usage(lead_transcript)
-    if lead_usage is None:
-        return None
+    lead = [] if lead_usage is None else [Agent("lead", "lead", "This session's main conversation", lead_usage)]
     subagent_dir = lead_transcript.with_suffix("") / "subagents"
     subagents = [read_subagent(path) for path in sorted(subagent_dir.glob("agent-*.jsonl"))]
     started = sorted((agent for agent in subagents if agent), key=lambda agent: agent.usage.first)
-    lead = Agent("lead", "lead", "This session's main conversation", lead_usage)
-    return Session(lead_transcript.stem, [lead, *started])
+    agents = lead + started
+    return Session(lead_transcript.stem, agents) if agents else None
 
 
 def read_sessions(directory):
@@ -136,9 +136,8 @@ def render_session(session):
              "| Role | Agents | Input processed |", "|---|---|---|"]
     lines += [f"| {role} | {count} | {tokens(processed)} |"
               for role, (count, processed) in by_role(session.agents).items()]
-    lines += ["",
-              "| Agent | Role | Task | Calls | Input processed | Of which cache reads | Peak context | Active minutes |",
-              "|---|---|---|---|---|---|---|---|"]
+    lines += ["", "| Agent | Role | Task | Calls | Input processed | Of which cache reads | Peak context "
+              "| Active minutes |", "|---|---|---|---|---|---|---|---|"]
     for agent in session.agents:
         usage = agent.usage
         lines.append(f"| {agent.name} | {agent.role} | {agent.task.replace('|', '/')} | {usage.calls:,} "
@@ -170,13 +169,14 @@ python3 -B scripts/agent-usage.py
     return "\n".join([intro, *map(render_session, sessions)])
 
 
-def main():
-    directory = Path(sys.argv[1]) if len(sys.argv) > 1 else default_transcripts_dir()
+def main(directory, doc=DOC):
+    """Writes the doc from the transcripts in the directory, or exits with a message and leaves it as it was when
+    there are none."""
     sessions = read_sessions(directory)
     if not sessions:
-        sys.exit(f"No session transcripts with model calls in {directory}; {DOC} is left as it was.")
-    DOC.write_text(render(sessions), encoding="utf-8")
+        sys.exit(f"No session transcripts with model calls in {directory}; {doc} is left as it was.")
+    doc.write_text(render(sessions), encoding="utf-8")
 
 
 if __name__ == "__main__":
-    main()
+    main(Path(sys.argv[1]) if len(sys.argv) > 1 else default_transcripts_dir())
