@@ -7,8 +7,10 @@ require 'bookshop'
 # while the dashboard is not running, would land in the middle of it.
 OpenTelemetry.logger = Logger.new(File::NULL)
 
+# --demo compacts and clears early enough to see in a short session.
+abort 'Usage: bookshop [--demo]' unless (ARGV - ['--demo']).empty?
 begin
-  application = Bookshop.build(input: $stdin, output: $stdout)
+  application = Bookshop.build(input: $stdin, output: $stdout, demo: ARGV.include?('--demo'))
 rescue Bookshop::SettingError => e
   abort e.message
 end
