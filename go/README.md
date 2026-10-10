@@ -150,5 +150,6 @@ OFFICINA_TESTDATA=$PWD/../testdata GOFLAGS=-count=1 gremlins unleash --coverpkg 
 ```
 
 CI is [`.github/workflows/go.yml`](../.github/workflows/go.yml), on every pull request: `go-ubuntu` and `go-windows`
-(the tests, with the race detector), `go-quality` (the gates above) and `go-mutation`. Before a commit that stages Go
+(the tests, with the race detector), `go-quality` (the gates above) and `go-mutation` (only the lines the pull
+request changed; everything on a push to `main`, weekly and on demand). Before a commit that stages Go
 code, a hook runs `gofmt`, `go vet`, `golangci-lint` and `go build`; before a push that changes Go code, the tests.
