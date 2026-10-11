@@ -18,3 +18,18 @@ Improvements noted, not adopted yet.
 - **Cheaper agents where the work allows:** the fixer (Sonnet) for any well-bounded follow-up, the developer only for
   slices.
 - **A session-end reminder hook** that prompts the agent-usage regeneration.
+
+## Owner-triggered follow-ups
+
+The lead never starts these on its own; the owner asks for them by name.
+
+- **MCP ping:** a refused `ping` is an answer. Keep the client, record nothing, and reconnect only on a loss or a
+  timeout (MCP-04). .NET and Go already do (`McpConnection.PingAsync`, `conn.ping`); only Ruby records `disconnected`
+  and reconnects, which the lead fixes in normal Ruby work. Owner-triggered: a test in .NET and one in Go that pin
+  this behaviour. Found in #119's review.
+- **Streamable HTTP close:** closing sends no DELETE in Ruby, Go or .NET, so each Bookshop session leaves the compose
+  file's filesystem MCP server with one more child process (the count went from 4 to 5 after one `/quit`). Fix all
+  three together. Found in #123's review.
+- **The strict .NET and Go audit against the code quality bar.** Findings so far: a dead prefix-mismatch branch in Go's
+  console.go; .NET's MCP parsing has no generated-input tests; and a flake to watch, .NET windows-latest
+  BookshopAssistant.Tests "Catastrophic failure: Test process did not return valid JSON" (seen once, on #114).
