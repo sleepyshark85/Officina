@@ -39,4 +39,11 @@ Kind asked for: `$0` (`developer`, `fix`, `review` or `merge-check`).
   Start a new session per batch of parallel slices.
 - Review rounds run without the lead: the fixer sends each next round to the PR's reviewer ([fix](templates/fix.md)).
   Only the lead dispatches a new reviewer, takes round 3's outcome to the owner and sets auto-merge.
+- Resume an agent (`SendMessage`) only for the same PR, and only while its context is under the context hook's 150k
+  warning (`python3 .claude/hooks/context-size.py --report` shows each agent's size). Otherwise dispatch a fresh
+  agent, fixer or developer by the size of the findings (templates/fix.md), briefed with the verdict's link. A
+  resumed agent re-sends its whole context each step (cheap cache reads, but they grow); a fresh one pays only for
+  the files it re-reads. #121's fixer reached about 167k and #119's developer about 239k across rounds.
+- The PR's reviewer is resumed for that PR's rounds, whatever its size, except a strict re-review, which gets a new
+  reviewer (docs/conventions.md, *Who codes and reviews*).
 - Noted improvements, not adopted: [later.md](later.md).
