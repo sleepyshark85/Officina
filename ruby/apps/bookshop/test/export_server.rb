@@ -8,7 +8,7 @@ require_relative 'docker'
 # application's exports-server image, which the .NET and Go tests build too, and started with Docker once per run. The
 # tests write files of their own names, and read them back from its container.
 module ExportServer
-  CONTEXT = File.expand_path('../../../../apps/BookshopAssistant/exports-server', __dir__)
+  CONTEXT = File.expand_path('../../../../bookshop/exports-server', __dir__)
   # Go's tests build it under this name too, so each run reuses Docker's layer cache.
   IMAGE = 'bookshop-exports-server:test'
   # Unique per run, so runs side by side, or the compose file's own server, do not clash.

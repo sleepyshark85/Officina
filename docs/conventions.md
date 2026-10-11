@@ -67,10 +67,10 @@ R15).
   or "carried over clean merges of"), or why it waits. It runs from `main` and reads the PR's commits as git data
   only, never running them.
 - **Each implementation's CI runs only when the pull request changes it**: `.github/changes.py` says what belongs to
-  which (Go's and Ruby's folders, spikes and workflows; the shared `testdata/` to all; the rest to .NET). The other
-  implementations' jobs are skipped, which their required checks count as passing; never add a path filter, as a
-  required check that never reports blocks the merge. A job is skipped only when the script says false, so a failed
-  detector runs everything rather than passing it untested.
+  which (Go's and Ruby's folders, spikes and workflows; the shared `testdata/` and `bookshop/` to all; the rest to
+  .NET). The other implementations' jobs are skipped, which their required checks count as passing; never add a path
+  filter, as a required check that never reports blocks the merge. A job is skipped only when the script says false,
+  so a failed detector runs everything rather than passing it untested.
 
 ## Tests
 

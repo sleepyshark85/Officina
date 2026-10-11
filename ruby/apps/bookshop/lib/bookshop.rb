@@ -66,7 +66,7 @@ require_relative 'bookshop/application'
 
 # Bookshop Assistant, Officina's reference application: a console chatbot for the staff of a bookshop.
 module Bookshop
-  # The compose file's database (apps/BookshopAssistant/compose.yaml), with its demo password.
+  # The compose file's database (bookshop/compose.yaml), with its demo password.
   COMPOSE_DATABASE = 'postgres://bookshop:shelf-demo-41@localhost:5432/bookshop'
   # The compose file's telemetry dashboard.
   COMPOSE_DASHBOARD = 'http://localhost:18888'

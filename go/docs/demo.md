@@ -17,12 +17,12 @@ reply shows what was spent.
 
 | # | Do | Expect |
 |---|---|---|
-| 0.1 | `cd apps/BookshopAssistant` then `./start.sh` | `postgres`, `dashboard` and `filesystem` (the export server, APP-12) healthy, and their addresses. The schema and seed (480 books, 40 customers, 80 orders) are created on first start; `docker compose down -v` resets them. |
+| 0.1 | `bookshop/start.sh` | `postgres`, `dashboard` and `filesystem` (the export server, APP-12) healthy, and their addresses. The schema and seed (480 books, 40 customers, 80 orders) are created on first start; `docker compose down -v` resets them. |
 | 0.2 | Open http://localhost:18888 | The telemetry dashboard (APP-20): Traces, Metrics and Structured logs, empty for now. |
 | 0.3 | `export ANTHROPIC_API_KEY=sk-ant-…` | |
-| 0.4 | `cd ../../go` then `go run ./cmd/bookshop` | `Bookshop Assistant. Type /help for commands.` and `Who is using the assistant? Your name: ` |
+| 0.4 | `cd go` then `go run ./cmd/bookshop` | `Bookshop Assistant. Type /help for commands.` and `Who is using the assistant? Your name: ` |
 
-If a port is taken, set another in a `.env` file beside `compose.yaml` (`BOOKSHOP_DB_PORT`, `BOOKSHOP_DASHBOARD_PORT`,
+If a port is taken, set another in `bookshop/.env`, beside `compose.yaml` (`BOOKSHOP_DB_PORT`, `BOOKSHOP_DASHBOARD_PORT`,
 `BOOKSHOP_OTLP_PORT` or `BOOKSHOP_EXPORTS_PORT`), as `compose.yaml` explains, and give the application the matching
 address: `BOOKSHOP_DATABASE` (such as `postgres://bookshop:shelf-demo-41@localhost:5433/bookshop`),
 `BOOKSHOP_DASHBOARD`, `OTEL_EXPORTER_OTLP_ENDPOINT` or `BOOKSHOP_EXPORTS`.
@@ -65,7 +65,7 @@ address: `BOOKSHOP_DATABASE` (such as `postgres://bookshop:shelf-demo-41@localho
 
 | Do | Expect |
 |---|---|
-| In another terminal, in `apps/BookshopAssistant`: `docker compose stop postgres` | |
+| In another terminal, in `bookshop`: `docker compose stop postgres` | |
 | `Is The Glass Tide in stock?` | `< search_books: error: …`, possibly `[The session could not be saved: …]` (the session is saved after every step), and the model says plainly that the database cannot be reached and to try again shortly. |
 | `docker compose start postgres`, then `Try again, please.` | `< search_books: ok` and the answer: the session goes on, and is saved again. |
 
@@ -95,7 +95,7 @@ address: `BOOKSHOP_DATABASE` (such as `postgres://bookshop:shelf-demo-41@localho
 | Type | Expect |
 |---|---|
 | `Export Alice Martin's order history as CSV.` | `> list_customer_orders`, then `? filesystem__write_file needs your approval.` with the path `/projects/exports/order-history-alice-martin.csv` and the CSV text. |
-| `y` | `< filesystem__write_file: ok` and the file's name. `cat ../apps/BookshopAssistant/exports/order-history-alice-martin.csv` shows it: a header row and one line per order. |
+| `y` | `< filesystem__write_file: ok` and the file's name. `cat ../bookshop/exports/order-history-alice-martin.csv` shows it: a header row and one line per order. |
 
 ## 11. `/audit` and the dashboard (APP-16, APP-20)
 

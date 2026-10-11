@@ -36,10 +36,10 @@ bundle exec rbs collection install   # into .gem_rbs_collection/ (git-ignored), 
 ## The compose stack
 
 Bookshop Assistant needs three services, started by one script from the shared
-[`apps/BookshopAssistant/`](../../apps/BookshopAssistant/) folder (the .NET and Go applications use the same stack):
+[`bookshop/`](../../bookshop/) folder (the .NET and Go applications use the same stack):
 
 ```sh
-(cd ../apps/BookshopAssistant && ./start.sh)
+../bookshop/start.sh
 ```
 
 It stops with *Docker is not running, or this user cannot reach it.* when Docker is not up; otherwise it runs
@@ -50,9 +50,9 @@ changed, and prints the host port each one got.
 |---|---|---|---|
 | `postgres` | PostgreSQL 17: schema, seed, audit and sessions tables, created on its first start | 5432 | `BOOKSHOP_DB_PORT` |
 | `dashboard` | The Aspire dashboard: traces, metrics and logs, in memory | 18888 (web), 4318 (OTLP/HTTP, which Ruby sends), 4317 (OTLP/gRPC, .NET's and Go's) | `BOOKSHOP_DASHBOARD_PORT`, `BOOKSHOP_OTLP_HTTP_PORT`, `BOOKSHOP_OTLP_PORT` |
-| `filesystem` | The reference filesystem MCP server, over Streamable HTTP at `/mcp`, seeing only `apps/BookshopAssistant/exports/`; on 127.0.0.1 only | 18800 | `BOOKSHOP_EXPORTS_PORT` |
+| `filesystem` | The reference filesystem MCP server, over Streamable HTTP at `/mcp`, seeing only `bookshop/exports/`; on 127.0.0.1 only | 18800 | `BOOKSHOP_EXPORTS_PORT` |
 
-When a port is taken, put another in `apps/BookshopAssistant/.env` (git-ignored), which Docker Compose reads beside
+When a port is taken, put another in `bookshop/.env` (git-ignored), which Docker Compose reads beside
 `compose.yaml`, and point the application's matching setting at it ([Settings](#settings)). Find who holds a port with
 `docker ps --format '{{.Names}} {{.Ports}}'` (a container) or `ss -ltnp` (any process). On the owner's machine
 another project's PostgreSQL holds 5432 and another project's collector holds 4317 and 4318, so that file sets:
@@ -101,7 +101,7 @@ The assistant's memory of each staff member is kept as files under `data/memory/
 ### The console app
 
 ```sh
-(cd ../apps/BookshopAssistant && ./start.sh)
+../bookshop/start.sh
 bundle exec apps/bookshop/exe/bookshop          # Claude Opus 5.5; a reply costs a few cents
 bundle exec apps/bookshop/exe/bookshop --demo   # compaction from 50,000 input tokens, clearing above 12 tool calls
 ```
@@ -113,7 +113,7 @@ session's. Things to try:
 | Try | What you see |
 |---|---|
 | *Order the two cheapest fantasy books in stock for Alice Martin and tell me the total* | Searches, then `? place_order needs your approval. Its exact input:` and `Approve? [y/N]`; `y` or `yes` approves, anything else declines |
-| *Export Alice Martin's order history as CSV* | `? filesystem__write_file needs your approval`; once approved, the file appears in `apps/BookshopAssistant/exports/` |
+| *Export Alice Martin's order history as CSV* | `? filesystem__write_file needs your approval`; once approved, the file appears in `bookshop/exports/` |
 | Ctrl+C during a reply | `[Cancelled.]`; the session goes on. Ctrl+C at the prompt leaves |
 | `BOOKSHOP_REPLY_BUDGET=0.01` | The reply stops at its budget and says so |
 | `--demo` and a few broad searches | `~ Conversation compacted: …` and `~ Old tool results cleared: …` as they happen |
@@ -284,8 +284,8 @@ the stack's port:
 
 ```sh
 docker ps --filter publish=5432 --format '{{.Names}} {{.Ports}}'
-echo BOOKSHOP_DB_PORT=5433 >> ../apps/BookshopAssistant/.env
-(cd ../apps/BookshopAssistant && ./start.sh)
+echo BOOKSHOP_DB_PORT=5433 >> ../bookshop/.env
+../bookshop/start.sh
 ```
 
 and set `BOOKSHOP_DATABASE=postgres://bookshop:shelf-demo-41@localhost:5433/bookshop` in `apps/bookshop/.env`.
@@ -320,7 +320,7 @@ The application stops before asking your name:
 
 ```text
 The export server at http://localhost:18800/mcp cannot be used: MCP server filesystem could not be reached: …
-If it is not running, start it with ./start.sh (or pwsh -File start.ps1) in apps/BookshopAssistant; or set BOOKSHOP_EXPORTS to its endpoint, or to nothing to go without exports.
+If it is not running, start it with ./start.sh (or pwsh -File start.ps1) in bookshop/; or set BOOKSHOP_EXPORTS to its endpoint, or to nothing to go without exports.
 ```
 
 Run `./start.sh`, set `BOOKSHOP_EXPORTS` to the endpoint it printed, or set it empty to run without exports.
@@ -332,12 +332,12 @@ Ruby sends OTLP over HTTP, to port 4318 unless you move it. Two causes leave the
 - **Another stack holds the port.** `docker ps --filter publish=4318` (or `ss -ltnp | grep 4318`) names the holder.
   `./start.sh` then fails with *port is already allocated*, and meanwhile the default endpoint sends the telemetry to
   the holder's collector without any error. Before `./start.sh`, move the port and point the application at it. With
-  5433 / 4319 / 4320 as the free ports, `apps/BookshopAssistant/.env` gets `BOOKSHOP_DB_PORT=5433`,
+  5433 / 4319 / 4320 as the free ports, `bookshop/.env` gets `BOOKSHOP_DB_PORT=5433`,
   `BOOKSHOP_OTLP_PORT=4319` and `BOOKSHOP_OTLP_HTTP_PORT=4320`, and `ruby/apps/bookshop/.env` gets
   `BOOKSHOP_DATABASE=postgres://bookshop:shelf-demo-41@localhost:5433/bookshop` and
   `OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4320` (and `BOOKSHOP_EXPORTS` if the export server's port moved too).
 - **An old dashboard container.** One started from a `compose.yaml` older than the HTTP port lacks it:
-  `docker compose port dashboard 18890` (in `apps/BookshopAssistant`) says *no port 18890/tcp*. `./start.sh` recreates
+  `docker compose port dashboard 18890` (in `bookshop`) says *no port 18890/tcp*. `./start.sh` recreates
   it with the current file (emptying it).
 
 ### A leftover test container

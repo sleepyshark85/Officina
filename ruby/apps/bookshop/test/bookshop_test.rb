@@ -73,7 +73,7 @@ class BookshopTest < Minitest::Test
     assert_match(/\AThe export server at #{NO_SERVER} cannot be used: MCP server filesystem could not be reached: /o,
                  why)
     assert_equal 'If it is not running, start it with ./start.sh (or pwsh -File start.ps1) in ' \
-                 'apps/BookshopAssistant; or set BOOKSHOP_EXPORTS to its endpoint, or to nothing to go without ' \
+                 'bookshop/; or set BOOKSHOP_EXPORTS to its endpoint, or to nothing to go without ' \
                  "exports.\n", how
   end
 

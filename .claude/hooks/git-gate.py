@@ -68,8 +68,9 @@ def is_dotnet(path):
 
 
 def is_shared(path):
-    """Whether the path is test data every implementation reads, which every test suite must see."""
-    return path.startswith("testdata/")
+    """Whether the path is shared by every implementation (test data, the Bookshop environment), whose tests must all
+    see it."""
+    return path.startswith(("testdata/", "bookshop/"))
 
 
 def require_dotnet():
@@ -141,7 +142,7 @@ def before_commit(here):
 
 def before_push(here, branch):
     """The tests of each implementation the push's commits change beyond docs: .NET's outside go/ and ruby/, Go's
-    under go/, Ruby's under ruby/, and Go's and Ruby's for the shared testdata/."""
+    under go/, Ruby's under ruby/, and Go's and Ruby's for the shared testdata/ and bookshop/."""
     base = git(here, "merge-base", "origin/main", branch or "HEAD")
     changed = git(here, "diff", "--no-renames", "--name-only", base, branch or "HEAD").splitlines() if base else ["?", "go/?", "ruby/?"]
     code = [path for path in changed if not DOCS.search(path)]
