@@ -1,7 +1,7 @@
 # .NET implementation
 
-The phase 1 implementation, at the repository root (`src/`, `tests/`, `apps/`, `samples/`). Its platform decisions
-fill in the language-agnostic ones of [`REQUIREMENTS.md`](../../REQUIREMENTS.md) §7. Working rules:
+The phase 1 implementation, in [`dotnet/`](../../dotnet/) (`src/`, `tests/`, `apps/`, `samples/`). Its platform
+decisions fill in the language-agnostic ones of [`REQUIREMENTS.md`](../../REQUIREMENTS.md) §7. Working rules:
 [`CLAUDE.md`](../../CLAUDE.md). Status: phase 1 complete ([`docs/plan/phase-1.md`](../plan/phase-1.md)).
 
 | # | Fills in | Decision | Status |

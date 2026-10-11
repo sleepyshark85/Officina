@@ -7,8 +7,8 @@
 
   <!-- Conversation JSON and sessions shared with the Go implementation, which neither rewrites. -->
   <ItemGroup>
-    <None Include="..\..\testdata\conversation\**" LinkBase="Fixtures" CopyToOutputDirectory="PreserveNewest" />
-    <None Include="..\..\testdata\session\**" LinkBase="Fixtures" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\..\testdata\conversation\**" LinkBase="Fixtures" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\..\testdata\session\**" LinkBase="Fixtures" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <!-- Test only: property tests (TEST-07), a reference schema validator (TEST-08) and a fake clock. -->

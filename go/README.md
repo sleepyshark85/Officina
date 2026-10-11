@@ -1,7 +1,7 @@
 # Officina for Go
 
 The Go implementation of Officina: the same requirements ([`REQUIREMENTS.md`](../REQUIREMENTS.md)) and architecture
-([`ARCHITECTURE.md`](../ARCHITECTURE.md)) as the .NET one at the repository root, written as idiomatic Go.
+([`ARCHITECTURE.md`](../ARCHITECTURE.md)) as the .NET one in [`dotnet/`](../dotnet/), written as idiomatic Go.
 
 Status: phase 1 complete: every slice of the plan is in, Bookshop Assistant runs the demo script as written, and a
 session either implementation saved resumes in the other. See

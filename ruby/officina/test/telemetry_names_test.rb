@@ -12,7 +12,8 @@ class TelemetryNamesTest < Minitest::Test
   cover 'Sleepyshark::Officina*'
 
   ROOT = File.expand_path('../../..', __dir__)
-  DOTNET = %w[src/Sleepyshark.Officina/Telemetry/Telemetry.cs src/Sleepyshark.Officina/Runs/RunEngine.cs].freeze
+  DOTNET = %w[dotnet/src/Sleepyshark.Officina/Telemetry/Telemetry.cs
+              dotnet/src/Sleepyshark.Officina/Runs/RunEngine.cs].freeze
   GO = %w[go/officina/telemetry.go go/officina/run.go].freeze
   # An instrument as .NET makes one: kind, name, unit and description.
   DOTNET_INSTRUMENT = /Create(Histogram|Counter)<\w+>\(\s*"([^"]+)",\s*"([^"]+)",\s*"([^"]+)"\)/

@@ -9,7 +9,7 @@
   <ItemGroup>
     <!-- Hand-written in the Claude API's documented SSE format, with the shapes spikes S00b and S02 observed. Shared
          with the Go implementation in the repository's testdata/, which neither rewrites. -->
-    <None Include="..\..\testdata\claude\**" LinkBase="Fixtures" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\..\testdata\claude\**" LinkBase="Fixtures" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <!-- Test only: a container, to check each package's registrations. -->

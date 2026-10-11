@@ -102,7 +102,7 @@ Left untested on purpose: killing a stdio MCP server that will not exit (a 5 s w
 
 | What | Where or how |
 |---|---|
-| Tests | `dotnet test` |
+| Tests | `dotnet test`, in `dotnet/` like every `dotnet` command here |
 | Coverage | `dotnet test --collect "Code Coverage" --settings coverage.runsettings --results-directory coverage`; in CI, the Linux job's summary and `coverage-report` artifact |
 | Mutation | `cd src/<package> && dotnet stryker`, report in `StrykerOutput/`; in CI, the Mutation workflow's `mutation-reports` artifact (weekly, or run it by hand) |
 | Live smoke test | `OFFICINA_LIVE_TESTS=1 dotnet test tests/BookshopAssistant.Tests --filter Category=Live`, with `ANTHROPIC_API_KEY` set |

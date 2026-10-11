@@ -17,7 +17,7 @@ import (
 )
 
 // dotnetApp is the .NET application's project.
-const dotnetApp = "../../../apps/BookshopAssistant"
+const dotnetApp = "../../../dotnet/apps/BookshopAssistant"
 
 // A session the .NET application saved resumes in this one, with the same prefix and cache reads: the .NET
 // application, built here and run headless with its settings pointing at the test's database and export server,

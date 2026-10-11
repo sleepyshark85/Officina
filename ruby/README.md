@@ -1,7 +1,7 @@
 # Officina for Ruby
 
 The Ruby implementation of Officina: the same requirements ([`REQUIREMENTS.md`](../REQUIREMENTS.md)) and architecture
-([`ARCHITECTURE.md`](../ARCHITECTURE.md)) as the .NET one at the repository root and the Go one in [`go/`](../go/),
+([`ARCHITECTURE.md`](../ARCHITECTURE.md)) as the .NET one in [`dotnet/`](../dotnet/) and the Go one in [`go/`](../go/),
 written as idiomatic Ruby.
 
 Status: in progress, from the skeleton (Ruby S01). See [`docs/plan/phase-1.md`](../docs/plan/phase-1.md) for the

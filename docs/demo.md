@@ -17,7 +17,7 @@ offline tests (TEST-09): see [What was checked live](#what-was-checked-live).
 | 0.1 | `bookshop/start.sh` (or `pwsh -File bookshop/start.ps1`) | `postgres`, `dashboard` and `filesystem` (the export server, APP-12) healthy, and their addresses. The schema and seed (480 books, 40 customers, 80 orders) are created on first start; `docker compose down -v` in `bookshop/` resets them. |
 | 0.2 | Open http://localhost:18888 | The telemetry dashboard (APP-20): Traces, Metrics and Structured logs, empty for now. |
 | 0.3 | Put the API key in `appsettings.Local.json` beside `appsettings.json`: `{ "AnthropicApiKey": "sk-ant-…" }`, or run `ant auth login` | |
-| 0.4 | `cd apps/BookshopAssistant` then `dotnet run` | `Bookshop Assistant. Type /help for commands.` and `Who is using the assistant? Your name:` |
+| 0.4 | `cd dotnet/apps/BookshopAssistant` then `dotnet run` | `Bookshop Assistant. Type /help for commands.` and `Who is using the assistant? Your name:` |
 
 If a port is taken, set another in `bookshop/.env`, beside `compose.yaml` (`BOOKSHOP_DB_PORT`, `BOOKSHOP_DASHBOARD_PORT`,
 `BOOKSHOP_OTLP_PORT` or `BOOKSHOP_EXPORTS_PORT`) and change the matching setting (`Database`, `DashboardUrl`,

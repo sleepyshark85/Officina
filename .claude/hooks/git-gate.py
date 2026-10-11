@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 """Before a Bash command: blocks pushing to main, committing on main and branches without an allowed prefix, as
 docs/conventions.md asks. Before a commit that stages code it runs that implementation's format check and build (.NET
-in the folder holding the solution, Go under go/) or lint and type check (Ruby under ruby/), and shows the staged files so an unexpected one is
+under dotnet/, Go under go/) or lint and type check (Ruby under ruby/), and shows the staged files so an unexpected one is
 caught; before a push of more than docs
 it runs the tests of each implementation it changes. CI runs the same checks; these find a failure before the commit
 or push instead of after it."""
-import glob
 import json
 import os
 import re
@@ -64,7 +63,7 @@ def is_ruby(path):
 
 
 def is_dotnet(path):
-    """Whether the path is .NET's: anything outside the other implementations' folders."""
+    """Whether the path is .NET's: its dotnet/ folder and the root's own files, as .github/changes.py has it."""
     return not is_go(path) and not is_ruby(path)
 
 
@@ -78,13 +77,6 @@ def require_dotnet():
     """Blocks when the .NET checks cannot run: a missing command would crash the hook, which lets the command through."""
     if not shutil.which("dotnet"):
         block("Blocked: the .NET checks need the dotnet command on PATH (README.md).")
-
-
-def dotnet_folder(root):
-    """The folder holding the solution: dotnet/ once the .NET code has moved there, otherwise the root. A bridge for
-    that move, to be removed with the root fallback."""
-    folder = os.path.join(root, "dotnet")
-    return folder if glob.glob(os.path.join(folder, "*.slnx")) else root
 
 
 def go_env():
@@ -128,9 +120,10 @@ def before_commit(here):
     root = git(here, "rev-parse", "--show-toplevel")
     if dotnet:
         require_dotnet()
-        folder = dotnet_folder(root)
-        check(folder, ["dotnet", "format", "--verify-no-changes"], "Blocked: the format check fails; run 'dotnet format', then commit again.")
-        check(folder, ["dotnet", "build", "--configuration", "Release", "--nologo", "--verbosity", "quiet"],
+        solution = os.path.join(root, "dotnet")
+        check(solution, ["dotnet", "format", "--verify-no-changes"],
+              "Blocked: the format check fails; run 'dotnet format' in dotnet/, then commit again.")
+        check(solution, ["dotnet", "build", "--configuration", "Release", "--nologo", "--verbosity", "quiet"],
               "Blocked: the build fails (warnings are errors); fix it, then commit again.")
     if go:
         env, module = go_env(), os.path.join(root, "go")
@@ -158,7 +151,7 @@ def before_push(here, branch):
     root = git(here, "rev-parse", "--show-toplevel")
     if any(is_dotnet(path) for path in code):
         require_dotnet()
-        check(dotnet_folder(root), ["dotnet", "test", "--configuration", "Release", "--nologo",
+        check(os.path.join(root, "dotnet"), ["dotnet", "test", "--configuration", "Release", "--nologo",
               "--verbosity", "quiet", "--blame-hang-timeout", "2m"], "Blocked: the tests fail; fix them, then push again.")
     if any(is_go(path) or is_shared(path) for path in code):
         check(os.path.join(root, "go"), ["go", "test", "-race", "-shuffle=on", "./..."],

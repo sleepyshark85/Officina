@@ -8,7 +8,7 @@ unless a block says otherwise. What the code is and why: [`../README.md`](../REA
 
 | Tool | What it is for | .NET counterpart |
 |---|---|---|
-| [mise](https://mise.jdx.dev) | Installs and selects the Ruby version, 4.0.7 (`ruby/.ruby-version`) | The SDK version in `global.json` |
+| [mise](https://mise.jdx.dev) | Installs and selects the Ruby version, 4.0.7 (`ruby/.ruby-version`) | The SDK version in `dotnet/global.json` |
 | Bundler (`bundle`) | Installs the gems in `Gemfile.lock` and runs commands with exactly those (`bundle exec …`) | `dotnet restore` and the central package versions |
 | Docker | The compose stack, and the database and export server the application's tests start | The same |
 

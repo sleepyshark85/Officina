@@ -1,7 +1,8 @@
 name: Mutation
 
-# Stryker.NET on the library packages, each set up by its stryker-config.json. A pull request mutates only the files it
-# changed and fails below the package's break threshold; the weekly and manual runs mutate everything and only report.
+# Stryker.NET on the library packages in dotnet/src/, each set up by its stryker-config.json. A pull request mutates
+# only the files it changed and fails below the package's break threshold; the weekly and manual runs mutate everything
+# and only report.
 # The test runner is Stryker's Microsoft Testing Platform one, as the default runner does not reach xunit v3's tests.
 # A pull request that changes only another implementation skips it, as ci.yml does.
 on:
@@ -54,10 +55,12 @@ jobs:
           dotnet-version: 10.0.x
 
       - name: Restore tools
+        working-directory: dotnet
         run: dotnet tool restore
 
       - name: Mutate
         shell: bash
+        working-directory: dotnet
         run: |
           status=0
           for package in Sleepyshark.Officina Sleepyshark.Officina.Claude Sleepyshark.Officina.Mcp; do
@@ -76,5 +79,5 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: mutation-reports
-          path: src/*/StrykerOutput/*/reports/
+          path: dotnet/src/*/StrykerOutput/*/reports/
           if-no-files-found: ignore
