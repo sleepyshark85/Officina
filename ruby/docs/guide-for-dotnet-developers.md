@@ -121,7 +121,7 @@ agent = Sleepyshark::Officina::Agent.new(
 )
 ```
 
-`model:` alone is Ruby 3.1's shorthand for `model: model`. The method carries the only `rubocop:disable` of its kind,
+`model:` alone is Ruby 3.1's shorthand for `model: model`. The method carries the only `rubocop:disable` of a `Metrics` cop,
 with its reason: "the composition root names every part in one place"
 ([`bookshop.rb:96`](../apps/bookshop/lib/bookshop.rb#L96)).
 
@@ -131,7 +131,8 @@ One public class or module per file, named after it in snake case (R3), as .NET'
 autoloading** (no Zeitwerk): each gem's entry file lists its files with `require_relative` in load order, so the
 order is visible ([`officina.rb:3-72`](../officina/lib/sleepyshark/officina.rb#L3)). Internals are hidden with
 `private_constant` ([`run_engine.rb:113`](../officina/lib/sleepyshark/officina/run_engine.rb#L113)), Ruby's nearest
-thing to `internal`, but scoped to the enclosing module only (see §5).
+thing to `internal`, but it hides a constant only from outside its enclosing module, so every class in
+`Sleepyshark::Officina` sees every other (§5.14).
 
 ---
 
@@ -216,7 +217,7 @@ Step by step, with the code:
    ([`model_call.rb:18-24`](../officina/lib/sleepyshark/officina/model_call.rb#L18)). Each streamed event goes to the
    spending, the audit (for compaction and clearing), the trace, then the host, in `relay`
    ([`model_call.rb:38-50`](../officina/lib/sleepyshark/officina/model_call.rb#L38)).
-7. **The model's failure versus the host's.** `stream` rescues `StandardError` around the model, the boundary
+7. **The model's failure versus the host's.** `stream` rescues `StandardError` around the model, one of the boundaries
    ruby/CLAUDE.md allows, and turns it into `Failed(:model_error)`, unless the exception came from the host's own
    block, which `relay` marks with `@host_raised` and which passes through
    ([`model_call.rb:30-36`](../officina/lib/sleepyshark/officina/model_call.rb#L30)).
@@ -308,14 +309,17 @@ sequenceDiagram
             P->>R: join every read before it
             P->>AU: tool_started (must succeed)
             P->>P: invoke on this thread
+            P->>AU: finish: tool_ended
+            P->>Q: ToolCallFinished
         else read
             P->>AU: tool_started (failure ignored)
             P->>R: start a thread for invoke
+            R->>AU: finish, when the read ends: tool_ended
+            R->>Q: ToolCallFinished
         end
     end
     P->>R: join all reads
-    P->>AU: tool_ended per call
-    P->>Q: ToolCallFinished per call
+    P->>Q: calls never started: finish as cancelled
     P->>Q: close (ensure)
     RT->>Q: pop until closed, yield each to host
     RT->>P: results = thread.value
@@ -336,7 +340,7 @@ The steps in the code:
 | Redact and cut | `finish`, `cut` ([`tool_pipeline.rb:116-132`](../officina/lib/sleepyshark/officina/tool_pipeline.rb#L116)) | Cut at 64,000 characters with a note |
 
 **Errors go back to the model.** A handler has two ways to fail. Raising is the unexpected one: the pipeline
-rescues `StandardError` at the handler boundary, the only place ruby/CLAUDE.md allows it, and the model reads "The
+rescues `StandardError` at the handler boundary, one of the three places ruby/CLAUDE.md allows it, and the model reads "The
 tool failed: …". Returning a `ToolFailure` is the meant one, a business rule: the model reads the message as written
 ([`tool_failure.rb:5-18`](../officina/lib/sleepyshark/officina/tool_failure.rb#L5)). Bookshop's tools do the second in
 one place: `ShopTool.define` rescues the shop's `RefusedError` and returns a `ToolFailure`, while a database that is
@@ -723,7 +727,7 @@ sequenceDiagram
     participant T as ModelCallTrace
     participant S as Session / ReplyView
     CM->>API: request with context_management, betas
-    API-->>CM: reply; usage.iterations has a compaction; applied_edits has a clearing
+    API-->>CM: reply, usage.iterations has a compaction, applied_edits has a clearing
     CM-->>MC: ConversationCompacted(tokens, summary_tokens)
     MC->>AU: record_edit -> :compacted "N tokens summarized into M."
     MC->>T: observe -> officina.model.compactions +1, span attributes
@@ -878,7 +882,7 @@ which is why tests run one at a time (R11). Concurrency itself is proven by test
 
 ### 3.1 SOLID
 
-| Principle | Applied | Where it was not, and why |
+| Principle | Applied | Notes |
 |---|---|---|
 | **Single responsibility** | The run engine is the loop alone; `ModelCall`, `ReplyOutcome`, `ToolStep`, `Reporter` each hold one concern (design.md "The run engine is the loop alone"). In the pipeline, `ApprovalDesk`, `CallReport`, `RunningReads` and `ToolCallTrace` split approval, audit-then-event, read threads and telemetry | `Agent` both holds the definition and starts the run: `run` is three lines that hand over to `RunEngine` ([`agent.rb:96-104`](../officina/lib/sleepyshark/officina/agent.rb#L96)) |
 | **Open/closed** | A new provider, store, sink or approver is a new object with the contract's methods; the core does not change. A tool's behaviour is its block | Event handling is `case … in` over event classes in each host, not a visitor; Ruby's idiom, and an unknown event falls to `else` |
@@ -897,7 +901,7 @@ Every boundary is a duck type the core consumes, an RBS interface, with a real a
 | The human | `_Approver` ([`approver.rbs:5`](../officina/sig/sleepyshark/officina/approver.rbs#L5)) | `Bookshop::Approvals` | `Testing::ScriptedApprover` |
 | Memory storage | `_MemoryStore` | `FileMemoryStore` | `HashMemoryStore` |
 | Audit storage | `_AuditSink` | `JsonLinesAuditSink`, `Bookshop::AuditTable` | `Testing::RecordingAuditSink` |
-| Clock | `clock:` a callable returning `Time` ([`agent.rb:60`](../officina/lib/sleepyshark/officina/agent.rb#L60)); MCP's monotonic `clock:` ([`mcp.rb:25`](../officina-mcp/lib/sleepyshark/officina/mcp.rb#L25)); Claude's `wait:` | `-> { Time.now }` | A lambda that moves one second per reading |
+| Clock | `clock:` a callable returning `Time` ([`agent.rb:60`](../officina/lib/sleepyshark/officina/agent.rb#L60)); MCP's monotonic `clock:` ([`mcp.rb:25`](../officina-mcp/lib/sleepyshark/officina/mcp.rb#L25)); Claude's `wait:` | `-> { Time.now }` | `FakeClock` ([`fake_clock.rb`](../officina/test/support/fake_clock.rb)), which the test moves with `advance`; MCP's tests use a lambda that steps on each reading |
 | Telemetry | The OpenTelemetry API | The SDK with OTLP exporters | The SDK's in-memory exporter and reader |
 
 A callable (`#call`) is Ruby's one-method port: a lambda satisfies it, so the clock needs no interface at all.
@@ -957,8 +961,9 @@ nothing in the core is a template method. The only subclasses are:
 | A model failure after retries | Raised by the adapter, turned into `Failed(:model_error)` by `ModelCall` | [`model_call.rb:30-36`](../officina/lib/sleepyshark/officina/model_call.rb#L30) |
 | A bad MCP server mid-run | `Mcp::Error` raised by the client, turned into a `ToolFailure` by the source | [`tool_source.rb:170-172`](../officina-mcp/lib/sleepyshark/officina/mcp/tool_source.rb#L170) |
 
-`rescue StandardError` appears only at the boundaries ruby/CLAUDE.md names (handler, stream, sink write) and two it
-does not: the approver, as it runs on the pipeline's thread where the host cannot rescue it
+`rescue StandardError` appears only at the boundaries ruby/CLAUDE.md names (handler, stream, sink write), at `relay`'s
+mark-and-re-raise of the host's exception ([`model_call.rb:47`](../officina/lib/sleepyshark/officina/model_call.rb#L47)),
+and at two places it does not name: the approver, as it runs on the pipeline's thread where the host cannot rescue it
 ([`approval_desk.rb:33-37`](../officina/lib/sleepyshark/officina/approval_desk.rb#L33)), and a tool source's connect,
 whose failure is the run's result ([`tool_sources.rb:19`](../officina/lib/sleepyshark/officina/tool_sources.rb#L19)).
 
@@ -984,7 +989,7 @@ From [`docs/implementations/ruby.md`](../../docs/implementations/ruby.md); each 
 |---|---|---|
 | R1 | Ruby 4.0.x pinned in `.ruby-version`, gemspecs `>= 4.0`, `Gemfile.lock` committed, CI on Linux and Windows | One pinned version, the same reach as .NET and Go |
 | R2 | One Bundler workspace; four gems named `sleepyshark-officina[-…]`; Bookshop in `apps/bookshop` | The owner prefix in Ruby's naming convention |
-| R3 | The core is one gem, one file per public class, `require_relative`, internals `private_constant`, no autoloading | Load order visible without Zeitwerk |
+| R3 | The core is one gem, one file per public class, `require_relative`, internals `private_constant`, no autoloading | Load order visible (§1.4) |
 | R4 | The official `anthropic` gem, pinned exactly, in the Claude gem only; a Prism-based dependency test | Prism finds `require`s without running the code |
 | R5 | No DI container; keyword constructors; one composition root, `Bookshop.build` | Ruby's convention is explicit wiring |
 | R6 | What each gem may require; OpenTelemetry API only in the core, providers passed in; `dotenv` in the app | Libraries depend on the API only; EVT-02 needs metrics |
@@ -1094,12 +1099,12 @@ forbids the C# reflex: no abstract base class whose methods raise `NotImplemente
 
 | Ruby | Is | C# nearest |
 |---|---|---|
-| `do |x| … end` / `{ |x| … }` after a call | A **block**: one anonymous callback passed to the method, outside the argument list | A trailing `Action<T>` parameter |
+| `do \|x\| … end` / `{ \|x\| … }` after a call | A **block**: one anonymous callback passed to the method, outside the argument list | A trailing `Action<T>` parameter |
 | `yield x` | Calls the method's block | `callback(x)` |
 | `&handler` in the parameters | Captures the block as a `Proc` object | Storing the delegate |
 | `&` alone | Forwards the block to another call | Passing the delegate on |
 | `->(a, b) { }` | A **lambda**: a `Proc` that checks its argument count and where `return` returns from itself | A lambda expression |
-| `proc { |a, b| }` / a block | A loose `Proc`: missing arguments are `nil`, extras dropped; `return` returns from the *enclosing method* | No equivalent |
+| `proc { \|a, b\| }` / a block | A loose `Proc`: missing arguments are `nil`, extras dropped; `return` returns from the *enclosing method* | No equivalent |
 
 Why it matters here:
 
@@ -1185,7 +1190,7 @@ enough, its licence and that it is maintained (conventions, *Dependencies*).
 RuboCop is the analyzers plus `dotnet format` in one: style, layout, metrics (method and class length, ABC size,
 parameter lists) and lint, with plugins for Minitest, performance and Rake ([`.rubocop.yml`](../.rubocop.yml)). Test
 code inherits `.rubocop_tests.yml`, which lets a test method run to 15 lines and five assertions. A rule is turned off
-only on its line, with `# rubocop:disable Department/Cop -- <reason>`, which the reviewer must accept; the one
+only on its line or the line before, with `# rubocop:disable Department/Cop -- <reason>`, which the reviewer must accept; the one
 workspace-wide change is that keyword arguments do not count towards `Metrics/ParameterLists`, because the rules ask
 for a keyword per setting ([`.rubocop.yml:17-20`](../.rubocop.yml#L17)). Ruby has no "warnings as errors" switch, so a
 module prepended to `Warning.warn` fails the tests on any warning about a workspace file
@@ -1215,12 +1220,8 @@ signatures ([`sig/anthropic.rbs`](../sig/anthropic.rbs)), as the gem's full ones
 | `Assert.Throws<T>` | `assert_raises(T) { }` |
 | Fixture `IDisposable` | `setup` / `teardown` |
 | Parallel by default | Random order, one at a time (no `parallelize_me!`), for the thread-leak check |
-| CsCheck `Gen…Sample` | `Pbt.assert { Pbt.property(Pbt.array(…)) { |x| … } }` ([`interrupted_calls_test.rb:51-52`](../officina/test/interrupted_calls_test.rb#L51)) |
-| Seed in the failure | `pbt` prints its seed; `PROPERTY_SEED` sets it ([`test_helper.rb:21`](../test/test_helper.rb#L21)) |
-
-The brief that asked for this guide names `prop_check`; the code does not use it. Ruby S01 found that `prop_check`
-draws from an unseeded `Random` and prints no seed, so a failure could not be replayed, and its fallback `rantly`
-takes no seed either; `pbt` replaced both (R12).
+| CsCheck `Gen…Sample` | `Pbt.assert { Pbt.property(Pbt.array(…)) { \|x\| … } }` ([`interrupted_calls_test.rb:51-52`](../officina/test/interrupted_calls_test.rb#L51)) |
+| Seed in the failure | `pbt` prints its seed, which replays the failure (§6.4) |
 
 ### 5.13 mutant versus Stryker
 
@@ -1229,7 +1230,7 @@ Both change the code (a mutant) and run the tests that cover it; a mutant no tes
 | Stryker.NET | mutant |
 |---|---|
 | Mutates by file | Mutates by *subject*, a method, and needs each test class to say which subjects it covers: `cover 'Sleepyshark::Officina*'` ([`conversation_refusal_test.rb:9`](../officina/test/conversation_refusal_test.rb#L9)) |
-| Thresholds in `stryker-config.json` | `mutant.yml` per gem; on a PR `--since` the base, and any survivor fails; on `main` the whole gem, 99% bar |
+| Thresholds in `stryker-config.json` | `mutant.yml` per gem; the gate is in §6.3 |
 | Ignore by comment or config | `# mutant:disable -- <why>` on the method, which the review judges ([`tool_pipeline.rb:30`](../officina/lib/sleepyshark/officina/tool_pipeline.rb#L30)) |
 | — | Sets `Thread.abort_on_exception`, so a mutation that makes a thread raise ends the process: counted as a kill (`process_abort`), as is a timeout ([`mutant.yml:11-13`](../officina/mutant.yml#L11)) |
 
@@ -1239,9 +1240,7 @@ mutant re-parses and unparses each mutated method, which is how it met the patte
 
 A module is a namespace and an object at runtime; reopening `module Sleepyshark; module Officina` in each file adds to
 it. `require 'json'` loads a gem's entry file once per process (the assembly reference); `require_relative 'x'`
-loads a file of the same gem by path. Nothing is loaded by convention (no Zeitwerk, R3), and nothing is private to a
-gem: `private_constant` hides a constant from outside its module, but every class in `Sleepyshark::Officina` sees every
-other. Hence a few methods are public with a comment saying only the core calls them, such as
+loads a file of the same gem by path. Loading and what `private_constant` hides are in §1.4; so nothing is private to a gem. Hence a few methods are public with a comment saying only the core calls them, such as
 `Conversation#hold` ([`conversation.rb:65-68`](../officina/lib/sleepyshark/officina/conversation.rb#L65)) and
 `Telemetry#start_span` ([`telemetry.rb:72-80`](../officina/lib/sleepyshark/officina/telemetry.rb#L72)).
 
@@ -1263,14 +1262,15 @@ other. Hence a few methods are public with a comment saying only the core calls 
 | Job (required check) | Runs | Where |
 |---|---|---|
 | `ruby-changes` | `.github/changes.py ruby`: does the PR touch Ruby (`ruby/`, its spike, its workflow, shared `testdata/`)? Others are skipped, which counts as passing | [`ruby.yml:41-44`](../../.github/workflows/ruby.yml#L41) |
-| `ruby-ubuntu`, `ruby-windows` | The tests, `PROPERTY_SEED=20261010`; Docker tests run on Linux | [`ruby.yml:48-79`](../../.github/workflows/ruby.yml#L48) |
+| `ruby-ubuntu`, `ruby-windows` | The tests, with a fixed seed (§6.4); Docker tests run on Linux | [`ruby.yml:48-79`](../../.github/workflows/ruby.yml#L48) |
 | `ruby-quality` | RuboCop, `rbs collection install --frozen` and `rake steep`, `bundle-audit`, coverage reported | [`ruby.yml:80-114`](../../.github/workflows/ruby.yml#L80) |
-| `ruby-mutation` | mutant per gem with a `mutant.yml`: changed subjects on a PR, any survivor fails; everything on `main`, 99% bar | [`ruby.yml:140-163`](../../.github/workflows/ruby.yml#L140) |
+| `ruby-mutation` | mutant per gem with a `mutant.yml` (§6.3) | [`ruby.yml:140-163`](../../.github/workflows/ruby.yml#L140) |
 
 ### 6.3 Mutation testing as a gate
 
-The core, the Claude gem and the MCP gem each have a `mutant.yml`; the application has none. On a pull request a
-survivor in a changed method fails `ruby-mutation`. The answer is to kill it with a test, or remove the code that makes
+The core, the Claude gem and the MCP gem each have a `mutant.yml`; the application has none. On a pull request mutant
+runs `--since` the base, and a survivor in a changed method fails `ruby-mutation`; on `main` it covers the whole gem
+against a 99% bar. The answer is to kill it with a test, or remove the code that makes
 it equivalent; an exclusion needs a `mutant:disable` comment with a reason the reviewer accepts. Examples of each:
 
 | Kind | Example |
