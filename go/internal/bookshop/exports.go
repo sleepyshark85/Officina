@@ -26,7 +26,7 @@ func connectExports(ctx context.Context, url string) (*mcp.Source, error) {
 	source, err := mcp.Connect(ctx, mcp.Server{Name: exportsServer, URL: url}, exportTools())
 	if err != nil {
 		return nil, fmt.Errorf("the export server at %s is not available (start it with start.sh in "+
-			"apps/BookshopAssistant): %w", url, err)
+			"bookshop/): %w", url, err)
 	}
 	return source, nil
 }

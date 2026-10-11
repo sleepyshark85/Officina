@@ -1,6 +1,6 @@
 // Bookshop Assistant, the reference application: a console chatbot for bookshop staff over the PostgreSQL database in
-// compose.yaml, with telemetry to the compose file's dashboard and exports through its filesystem MCP server; start.sh
-// starts all three. Its settings are in appsettings.json. --demo compacts and clears early enough to see in a short session.
+// bookshop/compose.yaml, with telemetry to the compose file's dashboard and exports through its filesystem MCP server;
+// bookshop/start.sh starts all three. Its settings are in appsettings.json. --demo compacts and clears early enough to see in a short session.
 using System.Globalization;
 using BookshopAssistant;
 using Microsoft.Extensions.DependencyInjection;
@@ -32,7 +32,7 @@ catch (Exception exception) when (exception is IOException or InvalidOperationEx
 {
     await Console.Error.WriteLineAsync(
         $"The export server at {settings.ExportsUrl} could not be reached: {exception.Message}\n"
-        + "Start it with ./start.sh (or pwsh -File start.ps1) in the application's folder, or change ExportsUrl in appsettings.Local.json.");
+        + "Start it with ./start.sh (or pwsh -File start.ps1) in bookshop/, or change ExportsUrl in appsettings.Local.json.");
     return 1;
 }
 

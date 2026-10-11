@@ -49,12 +49,12 @@ bundle exec ruby examples/hello/hello.rb
 ## Bookshop Assistant
 
 The reference application: a console chatbot for bookshop staff over the same PostgreSQL database as the .NET and Go
-ones, from the compose file, schema and seed in [`apps/BookshopAssistant/`](../apps/BookshopAssistant/). It needs
+ones, from the compose file, schema and seed in [`bookshop/`](../bookshop/). It needs
 Docker and an API key in `ANTHROPIC_API_KEY`, or a sign-in with `ant auth login`; a reply costs a few cents. From this
 directory:
 
 ```sh
-(cd ../apps/BookshopAssistant && ./start.sh)
+../bookshop/start.sh
 bundle exec apps/bookshop/exe/bookshop
 ```
 
@@ -79,5 +79,5 @@ clears old tool results above 12 tool calls, so a short session shows both; the 
 record; the application sends its traces, metrics and logs there over OTLP/HTTP, port 4318 unless you move it (see
 [running and testing](docs/running-and-testing.md#settings)).
 Asked to export a report, such as *Export Alice Martin's order history as CSV*, the assistant writes it, once you
-approve, into `apps/BookshopAssistant/exports/` through the compose file's filesystem MCP server, which the
+approve, into `bookshop/exports/` through the compose file's filesystem MCP server, which the
 application connects to at the start and stops with a message if it cannot.

@@ -74,6 +74,7 @@ The `mutation` workflow runs this on every pull request, weekly and on demand, a
 | `src/Sleepyshark.Officina.Mcp` | The MCP tool source: our own client, over stdio and Streamable HTTP |
 | `src/Sleepyshark.Officina.Testing` | The test kit |
 | `apps/BookshopAssistant` | The reference application |
+| `bookshop` | The reference application's environment, shared by every implementation: the compose file and its start scripts, the database's schema and seed, and the export server |
 | `samples/hello` | A live chat with Claude (needs `ANTHROPIC_API_KEY`); not part of `dotnet test` |
 | `samples/extraction` | GEN-06: a stateless classifier with typed output and no tools |
 | `samples/chat-assistant` | GEN-06: a chat assistant with a conversation and memory per user, and a tool |
@@ -88,13 +89,13 @@ Needs Docker and an Anthropic API key: put it in `apps/BookshopAssistant/appsett
 as `{ "AnthropicApiKey": "sk-ant-…" }`, or sign in with `ant auth login`.
 
 ```sh
+bookshop/start.sh                  # or pwsh -File bookshop/start.ps1
 cd apps/BookshopAssistant
-./start.sh                         # or pwsh -File start.ps1
 dotnet run                         # add -- --demo to compact and clear early (APP-17); sessions of one mode don't resume in the other
 ```
 
 All settings are in `appsettings.json`, with a comment on each; `appsettings.Local.json` overrides any of them on this
-machine. If a port is taken, set another in a `.env` file beside `compose.yaml`, such as `BOOKSHOP_DB_PORT=5433`, and
+machine. If a port is taken, set another in `bookshop/.env`, beside `compose.yaml`, such as `BOOKSHOP_DB_PORT=5433`, and
 change the matching setting (here `Database`) in `appsettings.Local.json`, as `compose.yaml` explains.
 
 Try: *Order the two cheapest fantasy books in stock for Alice Martin and tell me the total.* The demo script,
@@ -103,7 +104,7 @@ Try: *Order the two cheapest fantasy books in stock for Alice Martin and tell me
 `start.sh` starts the database, the telemetry dashboard and the export server in Docker, and leaves them running if
 they already are.
 
-Exports (APP-12) go to `exports/`, through the reference filesystem MCP server, which runs in Docker behind a bridge
+Exports (APP-12) go to `bookshop/exports/`, through the reference filesystem MCP server, which runs in Docker behind a bridge
 that serves it over Streamable HTTP. Try: *Export Alice Martin's order history as CSV.* The server runs as root in its container,
 so on Linux the exported files are owned by root: readable, and deletable from the folder, but not editable in place.
 

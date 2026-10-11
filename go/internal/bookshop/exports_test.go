@@ -25,7 +25,7 @@ import (
 // staff member are scripted.
 
 // exportsImage is the export server's build context, which the .NET tests build too.
-const exportsImage = "../../../apps/BookshopAssistant/exports-server"
+const exportsImage = "../../../bookshop/exports-server"
 
 // exports is the export server of this run, started by the first test that needs it and shared by the others,
 // which write files of their own names; TestMain stops it.

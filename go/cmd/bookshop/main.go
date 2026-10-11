@@ -17,7 +17,7 @@ import (
 	"github.com/sleepyshark85/officina/go/officina"
 )
 
-// The compose file's services, in apps/BookshopAssistant: the database, with its demo password, the telemetry
+// The compose file's services, in bookshop/: the database, with its demo password, the telemetry
 // dashboard, with its OTLP endpoint, and the export server.
 const (
 	composeDatabase  = "postgres://bookshop:shelf-demo-41@localhost:5432/bookshop"

@@ -13,7 +13,7 @@ module DatabaseServer
   USER = 'bookshop'
   PASSWORD = 'shelf-demo-41'
   SEEDED = 'bookshop'
-  SCRIPTS = File.expand_path('../../../../apps/BookshopAssistant/database', __dir__)
+  SCRIPTS = File.expand_path('../../../../bookshop/database', __dir__)
   # Unique per run, so runs side by side, or the compose file's own database, do not clash.
   CONTAINER = "officina-ruby-bookshop-test-#{Process.pid}".freeze
   # Seconds the server may take to start, the image's download included.

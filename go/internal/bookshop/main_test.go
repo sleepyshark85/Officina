@@ -29,7 +29,7 @@ const (
 	user     = "bookshop"
 	password = "shelf-demo-41"
 	seeded   = "bookshop"
-	scripts  = "../../../apps/BookshopAssistant/database"
+	scripts  = "../../../bookshop/database"
 )
 
 // server is the PostgreSQL server of this run, or why there is none; TestMain sets it before any test runs.

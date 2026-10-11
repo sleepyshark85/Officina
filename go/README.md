@@ -75,12 +75,12 @@ resume that session here, checking the prefix and the cache reads (a few cents).
 ## Bookshop Assistant
 
 The reference application: a console chatbot for bookshop staff over the same PostgreSQL database as the .NET one,
-from the compose file, schema and seed in [`apps/BookshopAssistant/`](../apps/BookshopAssistant/). It needs Docker
+from the compose file, schema and seed in [`bookshop/`](../bookshop/). It needs Docker
 and `ANTHROPIC_API_KEY`; a reply costs a few cents. The demo script, [`docs/demo.md`](docs/demo.md), walks through
 every capability with what to type and what to expect, and resumes a session the .NET application saved.
 
 ```sh
-(cd ../apps/BookshopAssistant && ./start.sh)
+../bookshop/start.sh
 go run ./cmd/bookshop
 ```
 
@@ -88,7 +88,7 @@ It asks your name, then takes messages, such as *Order the two cheapest fantasy 
 tell me the total*. Replies stream with each tool call shown; a change asks for your approval with its exact input.
 Ctrl+C stops a reply in progress, and the session goes on; `/help` lists the commands, `/quit` leaves.
 Asked to export a report, such as *Export Alice Martin's order history as CSV*, it writes the file, after your
-approval, through the compose file's filesystem MCP server, into `apps/BookshopAssistant/exports/`. The application
+approval, through the compose file's filesystem MCP server, into `bookshop/exports/`. The application
 does not start without that server.
 
 Each conversation is a session, saved in the database's `sessions` table after every step of a reply, so a restart or
