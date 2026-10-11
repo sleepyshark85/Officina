@@ -16,6 +16,8 @@ Gem::Specification.new do |spec|
 
   spec.add_dependency 'bigdecimal', '~> 4.0'
   spec.add_dependency 'connection_pool', '~> 3.0'
+  # The settings in apps/bookshop/.env, under the shell's.
+  spec.add_dependency 'dotenv', '~> 3.2'
   # Telemetry to the compose file's dashboard over OTLP/HTTP (R16); the pre-1.0 gems pinned exactly.
   spec.add_dependency 'opentelemetry-exporter-otlp', '= 0.37.0'
   spec.add_dependency 'opentelemetry-exporter-otlp-logs', '= 0.6.0'

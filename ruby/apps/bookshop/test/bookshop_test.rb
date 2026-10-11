@@ -1,8 +1,10 @@
 # frozen_string_literal: true
 
+require 'fileutils'
 require 'open3'
 require 'rbconfig'
 require 'test_helper'
+require 'tmpdir'
 
 # The Bookshop Assistant command.
 class BookshopTest < Minitest::Test
@@ -30,6 +32,7 @@ class BookshopTest < Minitest::Test
               'BOOKSHOP_EXPORTS' => '' }.freeze
   # An export server's endpoint where nothing listens.
   NO_SERVER = 'http://127.0.0.1:1/mcp'
+  COMMAND = File.expand_path('../exe/bookshop', __dir__)
 
   def test_app02_the_command_runs_the_console_without_reaching_the_database_or_the_model_until_a_reply_needs_them
     output, status = bookshop(stdin_data: "Sam\n/help\n/quit\n")
@@ -82,10 +85,41 @@ class BookshopTest < Minitest::Test
                  "an http or https URL\n", output
   end
 
+  def test_the_command_reads_the_env_file_beside_it
+    beside_env_file("BOOKSHOP_REPLY_BUDGET=abc\n") do |command|
+      output, status = bookshop(command:, env: { 'BOOKSHOP_REPLY_BUDGET' => nil }, stdin_data: '')
+
+      assert_equal 1, status.exitstatus
+      assert_equal %(BOOKSHOP_REPLY_BUDGET "abc" is not an amount of US dollars above zero\n), output
+    end
+  end
+
+  def test_a_variable_set_in_the_shell_wins_over_the_env_file
+    beside_env_file("BOOKSHOP_REPLY_BUDGET=abc\n") do |command|
+      output, status = bookshop(command:, env: { 'BOOKSHOP_REPLY_BUDGET' => '0.01' }, stdin_data: "Sam\n/quit\n")
+
+      assert_predicate status, :success?, output
+      assert_includes output, "Hello, Sam.\n"
+    end
+  end
+
   private
 
-  # Runs exe/bookshop with the arguments, offline unless +env+ says otherwise, and returns its output and status.
-  def bookshop(*, stdin_data:, env: {})
-    Open3.capture2e(OFFLINE.merge(env), RbConfig.ruby, File.expand_path('../exe/bookshop', __dir__), *, stdin_data:)
+  # Runs the command, exe/bookshop unless given, with the arguments, offline unless +env+ says otherwise, and returns
+  # its output and status.
+  def bookshop(*, stdin_data:, env: {}, command: COMMAND)
+    Open3.capture2e(OFFLINE.merge(env), RbConfig.ruby, command, *, stdin_data:)
+  end
+
+  # Yields a copy of the command in a temporary application folder whose .env holds the settings, so the tests never
+  # touch the application's own .env.
+  def beside_env_file(settings)
+    Dir.mktmpdir do |folder|
+      command = File.join(folder, 'exe', 'bookshop')
+      FileUtils.mkdir(File.dirname(command))
+      FileUtils.cp(COMMAND, command)
+      File.write(File.join(folder, '.env'), settings)
+      yield command
+    end
   end
 end
