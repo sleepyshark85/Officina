@@ -1,8 +1,10 @@
 # frozen_string_literal: true
 
+require 'fileutils'
 require 'open3'
 require 'rbconfig'
 require 'test_helper'
+require 'tmpdir'
 
 # The Bookshop Assistant command.
 class BookshopTest < Minitest::Test
@@ -30,6 +32,7 @@ class BookshopTest < Minitest::Test
               'BOOKSHOP_EXPORTS' => '' }.freeze
   # An export server's endpoint where nothing listens.
   NO_SERVER = 'http://127.0.0.1:1/mcp'
+  COMMAND = File.expand_path('../exe/bookshop', __dir__)
 
   def test_app02_the_command_runs_the_console_without_reaching_the_database_or_the_model_until_a_reply_needs_them
     output, status = bookshop(stdin_data: "Sam\n/help\n/quit\n")
@@ -82,10 +85,34 @@ class BookshopTest < Minitest::Test
                  "an http or https URL\n", output
   end
 
+  def test_the_command_reads_the_env_file_beside_it
+    output, status = bookshop(env: { 'BOOKSHOP_REPLY_BUDGET' => nil }, dot_env: "BOOKSHOP_REPLY_BUDGET=abc\n",
+                              stdin_data: '')
+
+    assert_equal 1, status.exitstatus
+    assert_equal %(BOOKSHOP_REPLY_BUDGET "abc" is not an amount of US dollars above zero\n), output
+  end
+
+  def test_a_variable_set_in_the_shell_wins_over_the_env_file
+    output, status = bookshop(env: { 'BOOKSHOP_REPLY_BUDGET' => '0.01' }, dot_env: "BOOKSHOP_REPLY_BUDGET=abc\n",
+                              stdin_data: "Sam\n/quit\n")
+
+    assert_predicate status, :success?, output
+    assert_includes output, "Hello, Sam.\n"
+  end
+
   private
 
-  # Runs exe/bookshop with the arguments, offline unless +env+ says otherwise, and returns its output and status.
-  def bookshop(*, stdin_data:, env: {})
-    Open3.capture2e(OFFLINE.merge(env), RbConfig.ruby, File.expand_path('../exe/bookshop', __dir__), *, stdin_data:)
+  # Runs a copy of exe/bookshop with the arguments, offline unless +env+ says otherwise, and returns its output and
+  # status. The copy is in a temporary application folder, with a .env holding +dot_env+ if given, so a developer's
+  # own .env never reaches the tests.
+  def bookshop(*, stdin_data:, env: {}, dot_env: nil)
+    Dir.mktmpdir do |folder|
+      command = File.join(folder, 'exe', 'bookshop')
+      FileUtils.mkdir(File.dirname(command))
+      FileUtils.cp(COMMAND, command)
+      File.write(File.join(folder, '.env'), dot_env) if dot_env
+      Open3.capture2e(OFFLINE.merge(env), RbConfig.ruby, command, *, stdin_data:)
+    end
   end
 end

@@ -60,12 +60,19 @@ bundle exec ruby examples/hello/hello.rb
 
 The reference application: a console chatbot for bookshop staff over the same PostgreSQL database as the .NET and Go
 ones, from the compose file, schema and seed in [`apps/BookshopAssistant/`](../apps/BookshopAssistant/). It needs
-Docker and `ANTHROPIC_API_KEY`; a reply costs a few cents. From this directory:
+Docker and an API key in `ANTHROPIC_API_KEY`, or a sign-in with `ant auth login`; a reply costs a few cents. From this
+directory:
 
 ```sh
 (cd ../apps/BookshopAssistant && ./start.sh)
 bundle exec apps/bookshop/exe/bookshop
 ```
+
+Its settings default to the compose file's services. To change one on this machine, copy `apps/bookshop/.env.example`
+to `apps/bookshop/.env` and uncomment its line: the example lists every setting with its default. The file is
+git-ignored, so it is never committed, and a variable of the same name set in the shell wins over it. Keep the API key
+in the shell's `ANTHROPIC_API_KEY` or sign in with `ant auth login`, where every tool finds it; an `ANTHROPIC_API_KEY`
+line in `.env` works too.
 
 It asks your name, then takes messages, such as *Order the two cheapest fantasy books in stock for Alice Martin and
 tell me the total*. Replies stream with each tool call shown; a change asks for your approval with its exact input.
@@ -76,22 +83,22 @@ loses at most the step in flight: `/sessions` lists the latest, `/resume <id>` g
 `/new`, `/resume`, `/quit` or the end of the input is summarized by a second agent, on Opus 5.5 at low effort, at most
 $0.05 a summary, added to the session's cost: `/sessions` shows each title, summary and changes, and first summarizes
 up to three sessions left without one, as after a crash. After each reply a status line shows its tokens, the share read from the cache, its cost and the session's; `/cost` shows the session's. A
-reply may spend $0.50 and a session $5; reaching either stops the reply and says why. `BOOKSHOP_REPLY_BUDGET`, in US
-dollars, such as `0.01`, lowers the reply's budget to show a stop; a value that is not an amount above zero stops the
-start with a message.
+reply may spend $0.50 and a session $5; reaching either stops the reply and says why. The setting
+`BOOKSHOP_REPLY_BUDGET`, in US dollars, such as `0.01`, lowers the reply's budget to show a stop; a value that is not
+an amount above zero stops the start with a message.
 `--demo` (`bundle exec apps/bookshop/exe/bookshop --demo`) compacts the conversation from 50,000 input tokens and
 clears old tool results above 12 tool calls, so a short session shows both; the console says when each happens.
 `/audit` shows the session's audit trail, each run with a link to its trace on the compose file's telemetry dashboard,
 <http://localhost:18888>, where each reply is one trace (the reply, its run, model calls and tool calls) with its log
 record; the application sends its traces, metrics and logs there over OTLP/HTTP, port 4318.
-`BOOKSHOP_DATABASE`, a PostgreSQL URL, names another database than the compose file's, such as one on another port:
-`postgres://bookshop:shelf-demo-41@localhost:5433/bookshop`; `BOOKSHOP_DASHBOARD` another dashboard for `/audit`'s
-links, and OpenTelemetry's own `OTEL_EXPORTER_OTLP_ENDPOINT` another OTLP/HTTP endpoint, such as
+The setting `BOOKSHOP_DATABASE`, a PostgreSQL URL, names another database than the compose file's, such as one on
+another port: `postgres://bookshop:shelf-demo-41@localhost:5433/bookshop`; `BOOKSHOP_DASHBOARD` another dashboard for
+`/audit`'s links, and OpenTelemetry's own `OTEL_EXPORTER_OTLP_ENDPOINT` another OTLP/HTTP endpoint, such as
 `http://localhost:4328`.
 Asked to export a report, such as *Export Alice Martin's order history as CSV*, the assistant writes it, once you
 approve, into `apps/BookshopAssistant/exports/` through the compose file's filesystem MCP server, which the
-application connects to at the start and stops with a message if it cannot. `BOOKSHOP_EXPORTS` names another
-endpoint than `http://localhost:18800/mcp`; set to nothing, the assistant runs without exports.
+application connects to at the start and stops with a message if it cannot. The setting `BOOKSHOP_EXPORTS` names
+another endpoint than `http://localhost:18800/mcp`; set to nothing, the assistant runs without exports.
 
 The hooks in `../.claude/` run RuboCop and Steep before a commit that stages anything under `ruby/` but docs, and
 the tests before a push that changes it; they find `bundle` on `PATH`, or else in mise's shims

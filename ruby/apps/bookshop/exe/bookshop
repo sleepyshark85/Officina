@@ -2,6 +2,10 @@
 # frozen_string_literal: true
 
 require 'bookshop'
+require 'dotenv'
+
+# This machine's settings, from the .env beside exe/ if there is one; a variable set in the shell wins.
+Dotenv.load(File.expand_path('../.env', __dir__))
 
 # The terminal is the staff member's conversation: the OpenTelemetry SDK's own complaints, such as each failed export
 # while the dashboard is not running, would land in the middle of it.
