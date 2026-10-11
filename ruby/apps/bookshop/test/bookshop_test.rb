@@ -86,40 +86,33 @@ class BookshopTest < Minitest::Test
   end
 
   def test_the_command_reads_the_env_file_beside_it
-    beside_env_file("BOOKSHOP_REPLY_BUDGET=abc\n") do |command|
-      output, status = bookshop(command:, env: { 'BOOKSHOP_REPLY_BUDGET' => nil }, stdin_data: '')
+    output, status = bookshop(env: { 'BOOKSHOP_REPLY_BUDGET' => nil }, dot_env: "BOOKSHOP_REPLY_BUDGET=abc\n",
+                              stdin_data: '')
 
-      assert_equal 1, status.exitstatus
-      assert_equal %(BOOKSHOP_REPLY_BUDGET "abc" is not an amount of US dollars above zero\n), output
-    end
+    assert_equal 1, status.exitstatus
+    assert_equal %(BOOKSHOP_REPLY_BUDGET "abc" is not an amount of US dollars above zero\n), output
   end
 
   def test_a_variable_set_in_the_shell_wins_over_the_env_file
-    beside_env_file("BOOKSHOP_REPLY_BUDGET=abc\n") do |command|
-      output, status = bookshop(command:, env: { 'BOOKSHOP_REPLY_BUDGET' => '0.01' }, stdin_data: "Sam\n/quit\n")
+    output, status = bookshop(env: { 'BOOKSHOP_REPLY_BUDGET' => '0.01' }, dot_env: "BOOKSHOP_REPLY_BUDGET=abc\n",
+                              stdin_data: "Sam\n/quit\n")
 
-      assert_predicate status, :success?, output
-      assert_includes output, "Hello, Sam.\n"
-    end
+    assert_predicate status, :success?, output
+    assert_includes output, "Hello, Sam.\n"
   end
 
   private
 
-  # Runs the command, exe/bookshop unless given, with the arguments, offline unless +env+ says otherwise, and returns
-  # its output and status.
-  def bookshop(*, stdin_data:, env: {}, command: COMMAND)
-    Open3.capture2e(OFFLINE.merge(env), RbConfig.ruby, command, *, stdin_data:)
-  end
-
-  # Yields a copy of the command in a temporary application folder whose .env holds the settings, so the tests never
-  # touch the application's own .env.
-  def beside_env_file(settings)
+  # Runs a copy of exe/bookshop with the arguments, offline unless +env+ says otherwise, and returns its output and
+  # status. The copy is in a temporary application folder, with a .env holding +dot_env+ if given, so a developer's
+  # own .env never reaches the tests.
+  def bookshop(*, stdin_data:, env: {}, dot_env: nil)
     Dir.mktmpdir do |folder|
       command = File.join(folder, 'exe', 'bookshop')
       FileUtils.mkdir(File.dirname(command))
       FileUtils.cp(COMMAND, command)
-      File.write(File.join(folder, '.env'), settings)
-      yield command
+      File.write(File.join(folder, '.env'), dot_env) if dot_env
+      Open3.capture2e(OFFLINE.merge(env), RbConfig.ruby, command, *, stdin_data:)
     end
   end
 end
