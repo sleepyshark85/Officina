@@ -17,7 +17,7 @@ reply shows what was spent.
 
 | # | Do | Expect |
 |---|---|---|
-| 0.1 | `bookshop/start.sh` | `postgres`, `dashboard` and `filesystem` (the export server, APP-12) healthy, and their addresses. The schema and seed (480 books, 40 customers, 80 orders) are created on first start; `docker compose down -v` resets them. |
+| 0.1 | `bookshop/start.sh` | `postgres`, `dashboard` and `filesystem` (the export server, APP-12) healthy, and their addresses. The schema and seed (480 books, 40 customers, 80 orders) are created on first start; `docker compose down -v` in `bookshop/` resets them. |
 | 0.2 | Open http://localhost:18888 | The telemetry dashboard (APP-20): Traces, Metrics and Structured logs, empty for now. |
 | 0.3 | `export ANTHROPIC_API_KEY=sk-ant-…` | |
 | 0.4 | `cd go` then `go run ./cmd/bookshop` | `Bookshop Assistant. Type /help for commands.` and `Who is using the assistant? Your name: ` |
