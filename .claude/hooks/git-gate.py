@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Before a Bash command: blocks pushing to main, committing on main and branches without an allowed prefix, as
 docs/conventions.md asks. Before a commit that stages code it runs that implementation's format check and build (.NET
-at the root, Go under go/) or lint and type check (Ruby under ruby/), and shows the staged files so an unexpected one is
+in the folder holding the solution, Go under go/) or lint and type check (Ruby under ruby/), and shows the staged files so an unexpected one is
 caught; before a push of more than docs
 it runs the tests of each implementation it changes. CI runs the same checks; these find a failure before the commit
 or push instead of after it."""
