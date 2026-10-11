@@ -76,7 +76,8 @@ $5; reaching either stops the reply and says why.
 clears old tool results above 12 tool calls, so a short session shows both; the console says when each happens.
 `/audit` shows the session's audit trail, each run with a link to its trace on the compose file's telemetry dashboard,
 <http://localhost:18888>, where each reply is one trace (the reply, its run, model calls and tool calls) with its log
-record; the application sends its traces, metrics and logs there over OTLP/HTTP, port 4318.
+record; the application sends its traces, metrics and logs there over OTLP/HTTP, port 4318 unless you move it (see
+[running and testing](docs/running-and-testing.md#settings)).
 Asked to export a report, such as *Export Alice Martin's order history as CSV*, the assistant writes it, once you
 approve, into `apps/BookshopAssistant/exports/` through the compose file's filesystem MCP server, which the
 application connects to at the start and stops with a message if it cannot.

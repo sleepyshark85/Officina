@@ -53,12 +53,19 @@ changed, and prints the host port each one got.
 | `filesystem` | The reference filesystem MCP server, over Streamable HTTP at `/mcp`, seeing only `apps/BookshopAssistant/exports/`; on 127.0.0.1 only | 18800 | `BOOKSHOP_EXPORTS_PORT` |
 
 When a port is taken, put another in `apps/BookshopAssistant/.env` (git-ignored), which Docker Compose reads beside
-`compose.yaml`, and point the application's matching setting at it ([Settings](#settings)). On the owner's machine
-another project's PostgreSQL holds 5432, so that file sets:
+`compose.yaml`, and point the application's matching setting at it ([Settings](#settings)). Find who holds a port with
+`docker ps --format '{{.Names}} {{.Ports}}'` (a container) or `ss -ltnp` (any process). On the owner's machine
+another project's PostgreSQL holds 5432 and another project's collector holds 4317 and 4318, so that file sets:
 
 ```sh
 BOOKSHOP_DB_PORT=5433
+BOOKSHOP_OTLP_PORT=4319
+BOOKSHOP_OTLP_HTTP_PORT=4320
 ```
+
+Moving a port without pointing the application at it fails silently: Ruby's default endpoint, `localhost:4318`, sends
+its telemetry to the other project's collector, and the dashboard stays empty. `BOOKSHOP_DASHBOARD_PORT` and
+`BOOKSHOP_EXPORTS_PORT` move the same way.
 
 `docker compose down -v` (in that folder) deletes the database's volume, so the next start seeds it afresh.
 
@@ -72,7 +79,7 @@ example, which lists every setting commented out at its default, and uncomment w
 cp apps/bookshop/.env.example apps/bookshop/.env
 ```
 
-A variable set in the shell wins over the file. Every default is the compose stack's.
+A variable set in the shell wins over the file. Every address default is the compose stack's.
 
 | Setting | Default | What it does |
 |---|---|---|
@@ -80,7 +87,7 @@ A variable set in the shell wins over the file. Every default is the compose sta
 | `BOOKSHOP_DASHBOARD` | `http://localhost:18888` | The dashboard `/audit` links each run's trace to |
 | `BOOKSHOP_EXPORTS` | `http://localhost:18800/mcp` | The export server's MCP endpoint, connected to at the start. Empty: the assistant runs without exports. Not an http or https URL: the start stops with a message |
 | `BOOKSHOP_REPLY_BUDGET` | `0.50` | A reply's budget in US dollars; `0.01` shows a budget stop. Not an amount above zero: the start stops with a message. The session's budget, $5, is fixed |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://localhost:4318` | OpenTelemetry's own setting: where traces, metrics and logs go, over OTLP/HTTP |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://localhost:4318` | OpenTelemetry's own setting: where traces, metrics and logs go, over OTLP/HTTP. With `BOOKSHOP_OTLP_HTTP_PORT=4320`, set it to `http://localhost:4320` |
 | `ANTHROPIC_API_KEY` | none | The Claude API key, read by the Anthropic SDK |
 
 Keep the API key out of `.env` where you can: set `ANTHROPIC_API_KEY` in the shell, or sign in once with
@@ -134,7 +141,7 @@ log record. The dashboard keeps them in memory only, so a restart of its contain
 ### The whole workspace
 
 ```sh
-bundle exec rake        # RuboCop, then Steep, then the tests: what CI's ruby-quality and ruby-ubuntu run
+bundle exec rake        # RuboCop, then Steep, then the tests: the RuboCop, Steep and test steps of CI's ruby-quality and ruby-ubuntu
 bundle exec rake test   # the tests alone
 ```
 
@@ -296,8 +303,9 @@ above it, which names the file:
 
 - First rule out stale gem signatures, as after a pull that changed `Gemfile.lock` or `rbs_collection.lock.yaml`:
   run `bundle exec rbs collection install`, then `bundle exec rake steep` again.
-- If the line remains, Steep crashed on a construct in that file. Check the file alone with `bundle exec steep check <file>`,
-  and rewrite the construct; `officina/lib/sleepyshark/officina/memory_tool.rb` has one such rewrite, with its reason.
+- If the line remains, Steep crashed on a construct in that file. Check the file alone with
+  `bundle exec steep check <file>`, and rewrite the construct; `officina/lib/sleepyshark/officina/memory_tool.rb` has one such
+  rewrite, with its reason.
 
 ### A stale Gemfile.lock
 
@@ -315,13 +323,22 @@ The export server at http://localhost:18800/mcp cannot be used: MCP server files
 If it is not running, start it with ./start.sh (or pwsh -File start.ps1) in apps/BookshopAssistant; or set BOOKSHOP_EXPORTS to its endpoint, or to nothing to go without exports.
 ```
 
-Run `./start.sh`, set `BOOKSHOP_EXPORTS` to the port it printed, or set it empty to run without exports.
+Run `./start.sh`, set `BOOKSHOP_EXPORTS` to the endpoint it printed, or set it empty to run without exports.
 
 ### No traces on the dashboard
 
-Ruby sends OTLP over HTTP, port 4318, which the compose file added after the gRPC one. A dashboard container started
-from an older `compose.yaml` lacks it: `docker compose port dashboard 18890` (in `apps/BookshopAssistant`) says
-*No port 18890/tcp*. `./start.sh` recreates it with the current file (emptying it).
+Ruby sends OTLP over HTTP, to port 4318 unless you move it. Two causes leave the dashboard empty:
+
+- **Another stack holds the port.** `docker ps --filter publish=4318` (or `ss -ltnp | grep 4318`) names the holder.
+  `./start.sh` then fails with *port is already allocated*, and meanwhile the default endpoint sends the telemetry to
+  the holder's collector without any error. Before `./start.sh`, move the port and point the application at it. With
+  5433 / 4319 / 4320 as the free ports, `apps/BookshopAssistant/.env` gets `BOOKSHOP_DB_PORT=5433`,
+  `BOOKSHOP_OTLP_PORT=4319` and `BOOKSHOP_OTLP_HTTP_PORT=4320`, and `ruby/apps/bookshop/.env` gets
+  `BOOKSHOP_DATABASE=postgres://bookshop:shelf-demo-41@localhost:5433/bookshop` and
+  `OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4320` (and `BOOKSHOP_EXPORTS` if the export server's port moved too).
+- **An old dashboard container.** One started from a `compose.yaml` older than the HTTP port lacks it:
+  `docker compose port dashboard 18890` (in `apps/BookshopAssistant`) says *no port 18890/tcp*. `./start.sh` recreates
+  it with the current file (emptying it).
 
 ### A leftover test container
 
