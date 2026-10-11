@@ -22,32 +22,22 @@ Layout (R2, R3); each gem has `lib/`, `sig/` (its RBS signatures), `test/` and i
 | `sig/` | The workspace's corrections to Ruby's core signatures, and the few signatures of the `anthropic` gem and `JSON::Fragment` that the Claude gem calls, which Steep reads with the gems' own |
 | `apps/bookshop/` | Bookshop Assistant (from Ruby S06), run by `exe/bookshop` |
 | `examples/` | `hello`, a live chat on Claude (with its test on a fake API); the GEN-06 samples `extraction`, `chat` and `background` (planned) |
-| `docs/` | Design notes ([`design.md`](docs/design.md): choices, and how Ruby realizes ARCHITECTURE's runtime model), spike notes and traceability |
+| `docs/` | Design notes ([`design.md`](docs/design.md): choices, and how Ruby realizes ARCHITECTURE's runtime model), [running and testing](docs/running-and-testing.md), spike notes and traceability |
 | `.rubocop.yml` (with `.rubocop_tests.yml`, which each `test/` inherits), `Steepfile`, `rbs_collection.yaml`, `Rakefile` | RuboCop, Steep and the gems' signatures it reads (R13, R18); the tasks |
 
 ## Build and test
 
-Needs the Ruby version in `.ruby-version` and Bundler. The tests need no API key and no network; Bookshop
-Assistant's tests (from Ruby S06) need Docker on Linux and skip elsewhere. From this directory:
+How to install Ruby, run the application and run each check, with troubleshooting:
+[`docs/running-and-testing.md`](docs/running-and-testing.md). In short, with the Ruby in `.ruby-version` and Bundler,
+from this directory:
 
 ```sh
 bundle install
 bundle exec rbs collection install   # the gems' signatures Steep reads, once and after Gemfile.lock changes
 bundle exec rake                     # rubocop, steep, then the tests
-bundle exec rake steep               # Steep alone; fails also when its log has a FATAL or ERROR line
-bundle exec rake test                # the tests alone: one process, one test at a time, random order
 ```
 
-A property test that fails prints its seed; `PROPERTY_SEED=<seed> bundle exec rake test` runs it again with the same
-inputs (CI always uses one fixed seed). `SEED=<n>` repeats Minitest's test order. `COVERAGE=1` writes a SimpleCov
-report to `coverage/`. Mutation testing runs from the directory of each gem with a `mutant.yml` (`officina`,
-`officina-claude`, `officina-mcp`), with CI's property seed:
-
-```sh
-cd officina
-PROPERTY_SEED=20261010 bundle exec mutant run               # every method, as on a push to main and weekly
-PROPERTY_SEED=20261010 bundle exec mutant run --since main  # the methods changed since main, as on a pull request
-```
+The tests need no API key and no network; Bookshop Assistant's tests need Docker on Linux and skip elsewhere.
 
 The `hello` sample chats live with Claude Opus 5.5 and shows each call's tokens, cache reads from the second message
 on. It needs an API key in `ANTHROPIC_API_KEY`; the tests run it on a fake API instead:
@@ -68,11 +58,8 @@ directory:
 bundle exec apps/bookshop/exe/bookshop
 ```
 
-Its settings default to the compose file's services. To change one on this machine, copy `apps/bookshop/.env.example`
-to `apps/bookshop/.env` and uncomment its line: the example lists every setting with its default. The file is
-git-ignored, so it is never committed, and a variable of the same name set in the shell wins over it. Keep the API key
-in the shell's `ANTHROPIC_API_KEY` or sign in with `ant auth login`, where every tool finds it; an `ANTHROPIC_API_KEY`
-line in `.env` works too.
+Its settings default to the compose file's services; [Settings](docs/running-and-testing.md#settings) lists each,
+and how to change it in the git-ignored `apps/bookshop/.env`.
 
 It asks your name, then takes messages, such as *Order the two cheapest fantasy books in stock for Alice Martin and
 tell me the total*. Replies stream with each tool call shown; a change asks for your approval with its exact input.
@@ -82,24 +69,14 @@ loses at most the step in flight: `/sessions` lists the latest, `/resume <id>` g
 (a call a crash left unanswered is told to the model as interrupted), `/new` starts another. A session left with
 `/new`, `/resume`, `/quit` or the end of the input is summarized by a second agent, on Opus 5.5 at low effort, at most
 $0.05 a summary, added to the session's cost: `/sessions` shows each title, summary and changes, and first summarizes
-up to three sessions left without one, as after a crash. After each reply a status line shows its tokens, the share read from the cache, its cost and the session's; `/cost` shows the session's. A
-reply may spend $0.50 and a session $5; reaching either stops the reply and says why. The setting
-`BOOKSHOP_REPLY_BUDGET`, in US dollars, such as `0.01`, lowers the reply's budget to show a stop; a value that is not
-an amount above zero stops the start with a message.
+up to three sessions left without one, as after a crash. After each reply a status line shows its tokens, the share
+read from the cache, its cost and the session's; `/cost` shows the session's. A reply may spend $0.50 and a session
+$5; reaching either stops the reply and says why.
 `--demo` (`bundle exec apps/bookshop/exe/bookshop --demo`) compacts the conversation from 50,000 input tokens and
 clears old tool results above 12 tool calls, so a short session shows both; the console says when each happens.
 `/audit` shows the session's audit trail, each run with a link to its trace on the compose file's telemetry dashboard,
 <http://localhost:18888>, where each reply is one trace (the reply, its run, model calls and tool calls) with its log
 record; the application sends its traces, metrics and logs there over OTLP/HTTP, port 4318.
-The setting `BOOKSHOP_DATABASE`, a PostgreSQL URL, names another database than the compose file's, such as one on
-another port: `postgres://bookshop:shelf-demo-41@localhost:5433/bookshop`; `BOOKSHOP_DASHBOARD` another dashboard for
-`/audit`'s links, and OpenTelemetry's own `OTEL_EXPORTER_OTLP_ENDPOINT` another OTLP/HTTP endpoint, such as
-`http://localhost:4328`.
 Asked to export a report, such as *Export Alice Martin's order history as CSV*, the assistant writes it, once you
 approve, into `apps/BookshopAssistant/exports/` through the compose file's filesystem MCP server, which the
-application connects to at the start and stops with a message if it cannot. The setting `BOOKSHOP_EXPORTS` names
-another endpoint than `http://localhost:18800/mcp`; set to nothing, the assistant runs without exports.
-
-The hooks in `../.claude/` run RuboCop and Steep before a commit that stages anything under `ruby/` but docs, and
-the tests before a push that changes it; they find `bundle` on `PATH`, or else in mise's shims
-(`~/.local/share/mise/shims`), which run the Ruby in `.ruby-version`.
+application connects to at the start and stops with a message if it cannot.
