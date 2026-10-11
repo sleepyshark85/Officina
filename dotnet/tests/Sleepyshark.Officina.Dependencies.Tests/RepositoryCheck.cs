@@ -43,7 +43,7 @@ internal static class RepositoryCheck
             }
         }
 
-        throw new InvalidOperationException("Could not find the repository root above " + AppContext.BaseDirectory);
+        throw new InvalidOperationException("Could not find the solution folder (dotnet/) above " + AppContext.BaseDirectory);
     }
 
     private static readonly string[] ProjectFolders = ["src", "apps", "samples", "tests"];

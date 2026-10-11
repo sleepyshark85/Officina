@@ -2,7 +2,7 @@
 
 Officina is a purpose-neutral library for building agentic applications. Phase 1 is accepted against one reference
 application, **Bookshop Assistant**: an interactive console chatbot over PostgreSQL in Docker. It has three
-implementations: **.NET 10** at the repository root (done), **Go** in [`go/`](go/) (done) and **Ruby** in
+implementations: **.NET 10** in [`dotnet/`](dotnet/) (done), **Go** in [`go/`](go/) (done) and **Ruby** in
 [`ruby/`](ruby/) (in progress), each tracked in [`docs/plan/phase-1.md`](docs/plan/phase-1.md). Working in `go/` loads
 [`go/CLAUDE.md`](go/CLAUDE.md) as well, and working in `ruby/` loads [`ruby/CLAUDE.md`](ruby/CLAUDE.md).
 
@@ -22,7 +22,7 @@ The conventions every implementation follows (workflow, tests, design rules, Cla
 
 ## The .NET implementation
 
-Code in `src/`, `tests/`, `apps/` and `samples/`; packages named under `Sleepyshark.Officina`. Decisions:
+Code in `dotnet/`: `src/`, `tests/`, `apps/` and `samples/`, beside the solution; packages named under `Sleepyshark.Officina`. Decisions:
 [`docs/implementations/dotnet.md`](docs/implementations/dotnet.md). It replaces `~/sources/agentic-core` (the first
 Officina, now archived), whose Claude provider, MCP client, test kit and spike findings (`docs/spikes/` there) were
 reused (ARCHITECTURE §13).
@@ -33,8 +33,8 @@ reused (ARCHITECTURE §13).
 - Prerequisites: Docker, the .NET 10 SDK, an Anthropic API key or `ant auth login` for live tests.
 - Required checks before a merge: [the conventions' table](docs/conventions.md#required-checks), every
   implementation's included.
-- Hooks: before a commit that stages .NET code, `dotnet format --verify-no-changes` and the Release build (warnings
-  are errors), and the staged files shown; before a push that changes more than docs outside `go/` and `ruby/`, the
+- Hooks: before a commit that stages .NET code, `dotnet format --verify-no-changes` and the Release build in `dotnet/`
+  (warnings are errors), and the staged files shown; before a push that changes more than docs outside `go/` and `ruby/`, the
   tests. After an edit to a `.cs` file, one type per file named after it, and no requirement IDs in comments. The Go
   checks run only for files under `go/` ([`go/README.md`](go/README.md)). The Ruby ones only for files under `ruby/`
   ([`ruby/README.md`](ruby/README.md)): RuboCop and Steep before a commit, the tests before a push, and after an edit

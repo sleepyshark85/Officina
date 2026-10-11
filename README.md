@@ -1,7 +1,7 @@
 # Officina
 
 A purpose-neutral library for building agentic applications: agents that call models, use tools and follow control
-flow. Implemented in .NET 10 at the repository root (packages named under `Sleepyshark.Officina`), with a Go
+flow. Implemented in .NET 10 in [`dotnet/`](dotnet/) (packages named under `Sleepyshark.Officina`), with a Go
 implementation in [`go/`](go/), phase 1 complete (how to build and test it: [`go/README.md`](go/README.md)).
 
 Phase 1 is accepted against one reference application, **Bookshop Assistant**: an interactive console chatbot over
@@ -24,9 +24,11 @@ Status: phase 1 complete; see [`docs/demo.md`](docs/demo.md) and [`docs/traceabi
 ## Build and test
 
 Needs the .NET 10 SDK. The tests need no API key and no network. The Bookshop Assistant tests run against PostgreSQL in
-Docker (Linux only); without Docker they are skipped.
+Docker (Linux only); without Docker they are skipped. The `dotnet` commands in this section run in `dotnet/`, beside
+the solution:
 
 ```sh
+cd dotnet
 dotnet build
 dotnet test
 ```
@@ -69,28 +71,28 @@ The `mutation` workflow runs this on every pull request, weekly and on demand, a
 
 | Path | Holds |
 |---|---|
-| `src/Sleepyshark.Officina` | The core, with built-in file and in-memory memory stores and a JSON-lines audit sink, used only when the host picks them; depends on the .NET base library and the DI abstractions only |
-| `src/Sleepyshark.Officina.Claude` | The Claude adapter; the only project that may reference the Anthropic SDK |
-| `src/Sleepyshark.Officina.Mcp` | The MCP tool source: our own client, over stdio and Streamable HTTP |
-| `src/Sleepyshark.Officina.Testing` | The test kit |
-| `apps/BookshopAssistant` | The reference application |
+| `dotnet/src/Sleepyshark.Officina` | The core, with built-in file and in-memory memory stores and a JSON-lines audit sink, used only when the host picks them; depends on the .NET base library and the DI abstractions only |
+| `dotnet/src/Sleepyshark.Officina.Claude` | The Claude adapter; the only project that may reference the Anthropic SDK |
+| `dotnet/src/Sleepyshark.Officina.Mcp` | The MCP tool source: our own client, over stdio and Streamable HTTP |
+| `dotnet/src/Sleepyshark.Officina.Testing` | The test kit |
+| `dotnet/apps/BookshopAssistant` | The reference application |
 | `bookshop` | The reference application's environment, shared by every implementation: the compose file and its start scripts, the database's schema and seed, and the export server |
-| `samples/hello` | A live chat with Claude (needs `ANTHROPIC_API_KEY`); not part of `dotnet test` |
-| `samples/extraction` | GEN-06: a stateless classifier with typed output and no tools |
-| `samples/chat-assistant` | GEN-06: a chat assistant with a conversation and memory per user, and a tool |
-| `samples/background-agent` | GEN-06: an unattended job with app tools, an MCP server over HTTP, the JSON-lines audit sink and a budget |
-| `tests/Samples.Tests` | The GEN-06 samples, offline with the scripted model |
-| `tests/BookshopAssistant.Tests` | The application's tools and console flows against the real database (TEST-09) |
-| `tests/` | Tests; `Sleepyshark.Officina.Dependencies.Tests` enforces the dependency rules (TEST-05) |
+| `dotnet/samples/hello` | A live chat with Claude (needs `ANTHROPIC_API_KEY`); not part of `dotnet test` |
+| `dotnet/samples/extraction` | GEN-06: a stateless classifier with typed output and no tools |
+| `dotnet/samples/chat-assistant` | GEN-06: a chat assistant with a conversation and memory per user, and a tool |
+| `dotnet/samples/background-agent` | GEN-06: an unattended job with app tools, an MCP server over HTTP, the JSON-lines audit sink and a budget |
+| `dotnet/tests/Samples.Tests` | The GEN-06 samples, offline with the scripted model |
+| `dotnet/tests/BookshopAssistant.Tests` | The application's tools and console flows against the real database (TEST-09) |
+| `dotnet/tests/` | Tests; `Sleepyshark.Officina.Dependencies.Tests` enforces the dependency rules (TEST-05) |
 
 ## Run Bookshop Assistant
 
-Needs Docker and an Anthropic API key: put it in `apps/BookshopAssistant/appsettings.Local.json`, which git ignores,
-as `{ "AnthropicApiKey": "sk-ant-…" }`, or sign in with `ant auth login`.
+Needs Docker and an Anthropic API key: put it in `dotnet/apps/BookshopAssistant/appsettings.Local.json`, which git
+ignores, as `{ "AnthropicApiKey": "sk-ant-…" }`, or sign in with `ant auth login`.
 
 ```sh
 bookshop/start.sh                  # or pwsh -File bookshop/start.ps1
-cd apps/BookshopAssistant
+cd dotnet/apps/BookshopAssistant
 dotnet run                         # add -- --demo to compact and clear early (APP-17); sessions of one mode don't resume in the other
 ```
 

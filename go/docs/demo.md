@@ -137,11 +137,11 @@ Its sessions do not resume in normal mode, nor the other way round.
 
 Both applications store sessions in the same table, with the same prefix fingerprint, so one goes on in the other with
 its cache intact. This needs the .NET 10 SDK; the .NET application reads its settings from `appsettings.json` and
-`appsettings.Local.json` in `apps/BookshopAssistant` (step 0.3 of [`docs/demo.md`](../../docs/demo.md)).
+`appsettings.Local.json` in `dotnet/apps/BookshopAssistant` (step 0.3 of [`docs/demo.md`](../../docs/demo.md)).
 
 | Do | Expect |
 |---|---|
-| In `apps/BookshopAssistant`: `dotnet run`, `Sam`, `How many orders has Alice Martin placed?` | The .NET console's answer. Note the session id; `/quit`. |
+| In `dotnet/apps/BookshopAssistant`: `dotnet run`, `Sam`, `How many orders has Alice Martin placed?` | The .NET console's answer. Note the session id; `/quit`. |
 | In `go/`: `go run ./cmd/bookshop`, `Sam`, `/resume <that id>` | `Resumed session <id>: N messages, $… so far.`: the Go chat agent's tools, instructions, model settings and context management give .NET's fingerprint. |
 | `And when was the latest?` | The answer from the .NET session's lookups; the status line shows most of the input read from the cache (written by the .NET application's calls). |
 

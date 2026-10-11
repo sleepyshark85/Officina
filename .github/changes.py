@@ -5,7 +5,8 @@ request and skips its jobs on false, which a required check counts as passing. O
 
 A path belongs to Go or Ruby when it is under its folder, its spike or its workflow; the shared testdata/, the
 Bookshop environment in bookshop/ (compose file, schema and seed, export server) and this script belong to every
-implementation; anything else belongs to .NET, at the repository root."""
+implementation; anything else belongs to .NET: its dotnet/ folder, and the root's own files (.github/, .claude/,
+scripts/, the docs), whose tests run in .NET's quality job."""
 import os
 import subprocess
 import sys

@@ -3,7 +3,7 @@
 Each phase 1 requirement of [`REQUIREMENTS.md`](../REQUIREMENTS.md) (§2, §4) and the tests that check it, or how it is
 checked otherwise. AGT-07 and TOOL-07 moved to the north star (NS-18) and are not listed.
 
-Test files are under `tests/`, shortened as:
+Test files are under `dotnet/tests/`, shortened as:
 
 | Short | Project |
 |---|---|

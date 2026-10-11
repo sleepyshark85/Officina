@@ -58,7 +58,7 @@ public partial class NoSqlTextTests
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
         while (!File.Exists(Path.Combine(directory.FullName, "Sleepyshark.Officina.slnx")))
         {
-            directory = directory.Parent ?? throw new InvalidOperationException("The repository root was not found.");
+            directory = directory.Parent ?? throw new InvalidOperationException("The solution folder (dotnet/) was not found.");
         }
 
         return directory.FullName;

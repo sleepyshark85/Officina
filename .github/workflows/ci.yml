@@ -1,9 +1,9 @@
 name: CI
 
-# TEST-03: the suite runs offline, on Linux and Windows. Warnings are errors (Directory.Build.props). It runs on every
-# pull request, with no path filter, so its required checks always report; when a pull request changes only another
-# implementation (go/, ruby/, their spikes and workflows), every job after `changes` is skipped, which a required check
-# counts as passing.
+# TEST-03: the suite, in dotnet/, runs offline, on Linux and Windows. Warnings are errors (Directory.Build.props). It
+# runs on every pull request, with no path filter, so its required checks always report; when a pull request changes
+# only another implementation (go/, ruby/, their spikes and workflows), every job after `changes` is skipped, which a
+# required check counts as passing.
 on:
   push:
     branches: [main]
@@ -48,6 +48,9 @@ jobs:
       # the job, so nothing is left behind without it. Local runs keep it, as the shared database relies on it.
       TESTCONTAINERS_RYUK_DISABLED: true
       DOTNET_CLI_TELEMETRY_OPTOUT: true
+    defaults:
+      run:
+        working-directory: dotnet
     steps:
       - uses: actions/checkout@v7
 
@@ -69,13 +72,13 @@ jobs:
           --collect "Code Coverage" --settings coverage.runsettings --results-directory coverage
 
       - name: Coverage summary
-        run: python3 .github/coverage-summary.py coverage >> "$GITHUB_STEP_SUMMARY"
+        run: python3 ../.github/coverage-summary.py coverage >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload coverage
         uses: actions/upload-artifact@v7
         with:
           name: coverage-report
-          path: coverage/**/*.cobertura.xml
+          path: dotnet/coverage/**/*.cobertura.xml
 
   windows:
     name: windows-latest
@@ -88,6 +91,9 @@ jobs:
       DOTNET_NOLOGO: true
       TESTCONTAINERS_RYUK_DISABLED: true
       DOTNET_CLI_TELEMETRY_OPTOUT: true
+    defaults:
+      run:
+        working-directory: dotnet
     steps:
       - uses: actions/checkout@v7
 
@@ -134,15 +140,18 @@ jobs:
           dotnet-version: 10.0.x
 
       - name: Restore
+        working-directory: dotnet
         run: dotnet restore
 
       - name: Format
+        working-directory: dotnet
         run: dotnet format --no-restore --verify-no-changes
 
       - name: Vulnerable packages
         # bash here runs with pipefail, so a failing list command fails the step. The negated grep must stay last:
         # set -e ignores a negated command's status, so only the step's final status counts.
         shell: bash
+        working-directory: dotnet
         run: |
           dotnet list package --vulnerable --include-transitive | tee vulnerable.txt
           ! grep -q "has the following vulnerable packages" vulnerable.txt
